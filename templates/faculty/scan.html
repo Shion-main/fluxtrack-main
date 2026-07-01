@@ -1,0 +1,73 @@
+{% extends "base.html" %}
+{% block title %}Check in · FluxTrack{% endblock %}
+{% block head %}
+<script src="https://cdn.jsdelivr.net/npm/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+{% endblock %}
+{% block content %}
+<div class="max-w-md mx-auto px-4 pt-4 pb-24">
+  <div class="flex items-center gap-2 mb-4">
+    <a href="/" class="uk-btn uk-btn-ghost uk-btn-icon" aria-label="Back">
+      <uk-icon icon="arrow-left" class="size-5"></uk-icon></a>
+    <h1 class="uk-h3">Check in</h1>
+  </div>
+
+  <div class="uk-card uk-card-body">
+    <button id="cam-btn" class="uk-btn uk-btn-primary w-full h-12 text-base" onclick="startCamera()">
+      <uk-icon icon="camera" class="size-5"></uk-icon> Scan room QR
+    </button>
+    <div id="qr-reader" class="mt-3"></div>
+    <p id="cam-status" class="uk-text-small uk-text-muted mt-2"></p>
+
+    <div class="flex items-center gap-3 my-4">
+      <div class="h-px flex-1 bg-border"></div>
+      <span class="uk-text-small uk-text-muted">or</span>
+      <div class="h-px flex-1 bg-border"></div>
+    </div>
+
+    <label class="uk-text-small font-medium" for="manual-code">Six-digit room code</label>
+    <form class="mt-2 space-y-2"
+          hx-post="/scan/resolve" hx-target="#outcome" hx-swap="innerHTML">
+      {% csrf_token %}
+      <input id="manual-code" name="payload" class="uk-input h-12 text-center text-xl tracking-widest"
+             inputmode="numeric" pattern="\d{6}" placeholder="000000" maxlength="6" required/>
+      <button class="uk-btn uk-btn-secondary w-full h-11" type="submit">Resolve code</button>
+    </form>
+  </div>
+
+  <div id="outcome" class="mt-4"></div>
+</div>
+
+<script>
+  const CSRF = "{{ csrf_token }}";
+  let scanner = null;
+
+  async function postPayload(payload) {
+    const body = new FormData();
+    body.append("payload", payload);
+    const r = await fetch("/scan/resolve", {
+      method: "POST", headers: {"X-CSRFToken": CSRF}, body,
+    });
+    const el = document.getElementById("outcome");
+    el.innerHTML = await r.text();
+    if (window.htmx) window.htmx.process(el);
+    el.scrollIntoView({behavior: "smooth", block: "nearest"});
+  }
+
+  function startCamera() {
+    if (scanner) return;
+    scanner = new Html5Qrcode("qr-reader");
+    scanner.start({facingMode: "environment"}, {fps: 10, qrbox: 220},
+      (text) => { scanner.stop().then(() => { scanner = null; }); postPayload(text); },
+      () => {}
+    ).catch((e) => {
+      scanner = null;
+      document.getElementById("cam-status").textContent =
+        "Camera unavailable (" + e + "). Use the six-digit code instead.";
+    });
+  }
+
+  // Deep-link landing: auto-resolve the QR token (SCAN-07).
+  const AUTO = "{{ auto_payload|escapejs }}";
+  if (AUTO) window.addEventListener("DOMContentLoaded", () => postPayload(AUTO));
+</script>
+{% endblock %}

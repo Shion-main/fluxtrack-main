@@ -15,8 +15,8 @@ User = get_user_model()
 # Role → home-screen surface cards (Phase 1 stubs; real surfaces land in Phase 4).
 SURFACES = {
     Role.FACULTY: [
-        {"title": "My schedule", "desc": "Today and this week.", "icon": "calendar", "href": "#"},
-        {"title": "Check in", "desc": "Scan a room QR or enter the code.", "icon": "scan-line", "href": "#"},
+        {"title": "My schedule", "desc": "Today and this week.", "icon": "calendar", "href": "/faculty/schedule"},
+        {"title": "Check in", "desc": "Scan a room QR or enter the code.", "icon": "scan-line", "href": "/faculty/scan"},
     ],
     Role.CHECKER: [
         {"title": "Floor view", "desc": "Coverage and priority queue.", "icon": "layout-grid", "href": "#"},

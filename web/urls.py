@@ -1,11 +1,18 @@
 from django.urls import path
 
-from . import ifo, views
+from . import faculty, ifo, scan, views
 
 urlpatterns = [
     path("", views.home, name="home"),
     path("login", views.login_view, name="login"),
     path("logout", views.logout_view, name="logout"),
+    # Scan resolver (SCAN)
+    path("scan", scan.deep_link, name="scan_deep_link"),
+    path("scan/resolve", scan.resolve, name="scan_resolve"),
+    path("scan/confirm", scan.confirm, name="scan_confirm"),
+    # Faculty surfaces
+    path("faculty/schedule", faculty.schedule, name="faculty_schedule"),
+    path("faculty/scan", faculty.scan_page, name="faculty_scan"),
     # IFO Admin surfaces
     path("ifo/rooms", ifo.rooms_list, name="ifo_rooms"),
     path("ifo/rooms/<str:code>", ifo.room_detail, name="ifo_room_detail"),

@@ -71,15 +71,17 @@ def live_rows(request):
 
 
 # --- QR poster (IFO-01) ---
-def _deep_link(room):
-    return f"fluxtrack://scan?room={room.code}&t={room.qr_token}"
+def _deep_link(request, room):
+    # A real URL (SCAN-07): the phone camera opens the scan flow, which
+    # signs the user in if needed and auto-resolves the token.
+    return request.build_absolute_uri(f"/scan?t={room.qr_token}")
 
 
 @ifo_required
 def room_qr(request, code):
     import qrcode
     room = get_object_or_404(Room, code=code)
-    img = qrcode.make(_deep_link(room))
+    img = qrcode.make(_deep_link(request, room))
     buf = io.BytesIO()
     img.save(buf, format="PNG")
     return HttpResponse(buf.getvalue(), content_type="image/png")

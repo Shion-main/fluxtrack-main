@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+{% block title %}My schedule · FluxTrack{% endblock %}
+{% block content %}
+<div class="max-w-md mx-auto px-4 pt-4 pb-24">
+  <div class="flex items-center gap-2 mb-4">
+    <a href="/" class="uk-btn uk-btn-ghost uk-btn-icon" aria-label="Back">
+      <uk-icon icon="arrow-left" class="size-5"></uk-icon></a>
+    <h1 class="uk-h3">My schedule</h1>
+    <a href="/faculty/scan" class="uk-btn uk-btn-primary uk-btn-sm ml-auto">
+      <uk-icon icon="scan-line" class="size-4"></uk-icon> Check in</a>
+  </div>
+
+  <h3 class="uk-h4 mb-2">Today · {{ today|date:"D, M j" }}</h3>
+  {% for s in todays %}
+  <div class="uk-card uk-card-body mb-2">
+    <div class="flex items-center justify-between">
+      <div>
+        <p class="font-semibold">{{ s.schedule.course_code }}-{{ s.schedule.section }}</p>
+        <p class="uk-text-small uk-text-muted">
+          {{ s.scheduled_start|time:"g:i A" }}–{{ s.scheduled_end|time:"g:i A" }} · {{ s.room.code }}
+        </p>
+      </div>
+      {% if s.status == "active" %}<span class="uk-label uk-label-primary">In session</span>
+      {% elif s.status == "completed" %}<span class="uk-label uk-label-secondary">Done</span>
+      {% elif s.status == "absent" %}<span class="uk-label uk-label-destructive">Absent</span>
+      {% else %}<span class="uk-label">{{ s.get_status_display }}</span>{% endif %}
+    </div>
+  </div>
+  {% empty %}
+  <p class="uk-text-small uk-text-muted mb-4">No classes today.</p>
+  {% endfor %}
+
+  <h3 class="uk-h4 mt-6 mb-2">This week</h3>
+  {% for s in upcoming %}
+  <div class="flex items-center gap-3 py-2 border-b border-border uk-text-small">
+    <span class="uk-label uk-label-secondary w-20 justify-center">{{ s.date|date:"D M j" }}</span>
+    <span>{{ s.scheduled_start|time:"g:i A" }}</span>
+    <span class="font-medium">{{ s.schedule.course_code }}-{{ s.schedule.section }}</span>
+    <span class="uk-text-muted ml-auto">{{ s.room.code }}</span>
+  </div>
+  {% empty %}
+  <p class="uk-text-small uk-text-muted">Nothing else scheduled this week.</p>
+  {% endfor %}
+</div>
+{% endblock %}
