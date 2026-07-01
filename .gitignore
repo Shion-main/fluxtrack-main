@@ -1,0 +1,27 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+
+# Django
+db.sqlite3
+db.sqlite3-journal
+/media/
+/staticfiles/
+.env
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+
+# POC scratch screenshots/artifacts (keep app.py as reference)
+poc/*.png
+poc/*.pdf
+
+# Raw source datasets (may contain PII / be large) — never committed
+/data/raw/
+.gstack/

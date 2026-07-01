@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+{% block title %}{{ room.code }} poster{% endblock %}
+{% block head %}
+<style>
+  @media print {
+    /* Strip the app chrome — print only the poster content. */
+    body { background: #fff !important; }
+    body > header, .no-print { display: none !important; }
+    main { margin: 0 !important; padding: 0 !important; }
+    #poster {
+      border: none !important;
+      box-shadow: none !important;
+      background: transparent !important;
+      max-width: none !important;
+    }
+    @page { margin: 1.5cm; }
+  }
+</style>
+{% endblock %}
+{% block content %}
+<div class="uk-container max-w-md pt-10 pb-16 text-center">
+  <div id="poster" class="uk-card uk-card-body">
+    <p class="uk-text-muted uk-text-small">{{ room.floor.building.name }} · Floor {{ room.floor.number }}</p>
+    <h1 class="text-4xl font-bold my-2">{{ room.code }}</h1>
+    <p class="uk-text-muted mb-4">Scan to check in</p>
+    <img src="/ifo/rooms/{{ room.code }}/qr.png" width="240" height="240"
+         alt="QR for {{ room.code }}" class="mx-auto border border-border rounded"/>
+    <p class="mt-4 uk-text-small uk-text-muted">Or enter this room code:</p>
+    <p class="text-3xl font-mono tracking-widest my-1">{{ room.manual_code }}</p>
+    <p class="uk-text-small uk-text-muted mt-4 no-print">
+      Open the FluxTrack app, tap Check in, and scan this code or type the six digits.
+    </p>
+    <button onclick="window.print()" class="uk-btn uk-btn-secondary uk-btn-sm mt-6 no-print">
+      <uk-icon icon="printer" class="size-4"></uk-icon> Print
+    </button>
+  </div>
+</div>
+{% endblock %}

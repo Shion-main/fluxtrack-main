@@ -1,0 +1,21 @@
+# FluxTrack — Python dependencies
+# Core
+Django>=5.0,<7.0
+djangorestframework>=3.15
+python-dotenv>=1.0
+whitenoise>=6.6              # static file serving on EC2
+
+# Media / reports
+qrcode[pil]>=7.4            # room QR posters (IFO-01)
+Pillow>=10.0
+
+# Scheduled jobs (JOB-01/02/03)
+APScheduler>=3.10
+
+# Identity (Entra ID token verification) — wired in Phase 2
+PyJWT>=2.8
+cryptography>=42.0
+requests>=2.31
+
+# Production database (local dev uses SQLite by default)
+# mysqlclient>=2.2          # uncomment for MySQL 8.0 on AWS RDS

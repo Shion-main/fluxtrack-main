@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+{% block title %}Sign in · FluxTrack{% endblock %}
+{% block content %}
+<div class="uk-container max-w-md pt-16 pb-16">
+  <div class="uk-card uk-card-body">
+    <h1 class="uk-h3 mb-1">FluxTrack</h1>
+    <p class="uk-text-muted uk-text-small mb-6">Faculty Attendance &amp; Facility Utilization</p>
+
+    {% if dev_mode %}
+    <div class="uk-alert uk-alert-secondary mb-4">
+      <div class="uk-alert-description uk-text-small">
+        Dev login (Entra ID SSO wired in Phase 2). Pick a role to sign in.
+      </div>
+    </div>
+    <div class="space-y-2">
+      {% for u in dev_users %}
+      <form method="post" action="/login">
+        {% csrf_token %}
+        <input type="hidden" name="username" value="{{ u.username }}">
+        <button class="uk-btn uk-btn-default w-full h-11 justify-between" type="submit">
+          <span>{{ u.get_full_name|default:u.username }}</span>
+          <span class="uk-label uk-label-secondary">{{ u.get_role_display }}</span>
+        </button>
+      </form>
+      {% empty %}
+      <p class="uk-text-small uk-text-muted">No users seeded yet. Run
+        <code>py -3.12 manage.py seed_demo</code>.</p>
+      {% endfor %}
+    </div>
+    {% else %}
+    <a href="#" class="uk-btn uk-btn-primary w-full h-11">Sign in with Microsoft</a>
+    {% endif %}
+
+    {% if error %}<p class="uk-text-small text-destructive mt-3">{{ error }}</p>{% endif %}
+  </div>
+</div>
+{% endblock %}

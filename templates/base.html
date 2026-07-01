@@ -1,0 +1,40 @@
+{% load static %}<!doctype html>
+<html lang="en" class="uk-theme-neutral uk-radii-md uk-shadows-sm uk-font-sm">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>{% block title %}FluxTrack{% endblock %}</title>
+  <link rel="manifest" href="/manifest.webmanifest">
+  <meta name="theme-color" content="#0a0a0a">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <link rel="apple-touch-icon" href="/icon-192.png">
+  <!-- Franken UI (Tailwind) — CDN for dev; standalone-CLI build wired later (SRS §2.4) -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/franken-ui@2.1.2/dist/css/core.min.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/franken-ui@2.1.2/dist/css/utilities.min.css"/>
+  <script src="https://cdn.jsdelivr.net/npm/franken-ui@2.1.2/dist/js/core.iife.js" defer></script>
+  <script src="https://cdn.jsdelivr.net/npm/franken-ui@2.1.2/dist/js/icon.iife.js" defer></script>
+  <script src="https://cdn.jsdelivr.net/npm/htmx.org@2.0.6/dist/htmx.min.js" defer></script>
+  <script>
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => navigator.serviceWorker.register('/sw.js'));
+    }
+  </script>
+  {% block head %}{% endblock %}
+</head>
+<body class="bg-background text-foreground" hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'>
+  {% if user.is_authenticated %}
+  <header class="border-b border-border sticky top-0 z-10 bg-background/95 backdrop-blur">
+    <div class="uk-container max-w-5xl h-14 flex items-center gap-3">
+      <a href="/" class="font-semibold">FluxTrack</a>
+      <span class="uk-label uk-label-secondary">{{ user.get_role_display }}</span>
+      <nav class="ml-auto flex items-center gap-1">
+        {% if user.is_staff %}<a href="/admin/" class="uk-btn uk-btn-ghost uk-btn-sm">Admin</a>{% endif %}
+        <span class="uk-text-small uk-text-muted hidden sm:inline">{{ user.get_full_name|default:user.username }}</span>
+        <a href="/logout" class="uk-btn uk-btn-secondary uk-btn-sm">Sign out</a>
+      </nav>
+    </div>
+  </header>
+  {% endif %}
+  <main>{% block content %}{% endblock %}</main>
+</body>
+</html>

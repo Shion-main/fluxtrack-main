@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+{% block title %}Rooms · FluxTrack{% endblock %}
+{% block content %}
+<div class="uk-container max-w-5xl pt-8 pb-16">
+  <div class="flex items-center gap-2 mb-1">
+    <h1 class="uk-h2">Rooms</h1>
+    <span class="uk-label uk-label-secondary">{{ total }} rooms</span>
+    <a href="/ifo/live" class="uk-btn uk-btn-secondary uk-btn-sm ml-auto">
+      <uk-icon icon="radio" class="size-4"></uk-icon> Live today</a>
+  </div>
+  <p class="uk-text-muted mb-8">Per-room schedules, QR posters, and status (IFO-01, IFO-11).</p>
+
+  {% for group, rooms in groups.items %}
+  <h3 class="uk-h4 mt-6 mb-2">{{ group }}</h3>
+  <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+    {% for room, today in rooms %}
+    <a href="/ifo/rooms/{{ room.code }}" class="uk-card uk-card-body hover:border-foreground/30 block">
+      <div class="flex items-center justify-between">
+        <div>
+          <h4 class="font-semibold">{{ room.code }}</h4>
+          <p class="uk-text-small uk-text-muted">{{ room.name|default:"—" }}</p>
+        </div>
+        {% if today %}<span class="uk-label uk-label-primary">{{ today }} today</span>
+        {% else %}<span class="uk-label uk-label-secondary">idle</span>{% endif %}
+      </div>
+    </a>
+    {% endfor %}
+  </div>
+  {% empty %}
+  <div class="uk-card uk-card-body">
+    <p class="uk-text-muted">No rooms yet. Import some:
+      <code>py -3.12 manage.py import_offerings --building R --floor 3</code></p>
+  </div>
+  {% endfor %}
+</div>
+{% endblock %}

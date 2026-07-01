@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+{% block title %}Live today · FluxTrack{% endblock %}
+{% block content %}
+<div class="uk-container max-w-4xl pt-8 pb-16">
+  <div class="flex items-center gap-2 mb-1">
+    <a href="/ifo/rooms" class="uk-btn uk-btn-ghost uk-btn-icon"><uk-icon icon="arrow-left" class="size-5"></uk-icon></a>
+    <h1 class="uk-h2">Live today</h1>
+    <span class="uk-label uk-label-primary">polling</span>
+  </div>
+  <p class="uk-text-muted mb-6">Today's sessions across rooms, refreshed automatically (IFO-07).</p>
+
+  <div class="uk-card uk-card-body">
+    <div id="live-rows" hx-get="/ifo/live/rows" hx-trigger="load, every {{ poll_ms }}ms" hx-swap="innerHTML">
+      <p class="uk-text-muted uk-text-small">Loading…</p>
+    </div>
+  </div>
+</div>
+{% endblock %}

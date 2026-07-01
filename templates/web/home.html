@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+{% block title %}Home · FluxTrack{% endblock %}
+{% block content %}
+<div class="uk-container max-w-5xl pt-8 pb-16">
+  <h1 class="uk-h2 mb-1">Welcome, {{ user.get_full_name|default:user.username }}</h1>
+  <p class="uk-text-muted mb-8">Signed in as <strong>{{ user.get_role_display }}</strong>{% if user.department %} · {{ user.department.name }}{% endif %}.</p>
+
+  <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+    {% for card in surfaces %}
+    <div class="uk-card uk-card-body">
+      <div class="flex items-center gap-2 mb-2">
+        <uk-icon icon="{{ card.icon }}" class="size-5"></uk-icon>
+        <h3 class="uk-card-title">{{ card.title }}</h3>
+      </div>
+      <p class="uk-text-small uk-text-muted mb-4">{{ card.desc }}</p>
+      <a href="{{ card.href }}" class="uk-btn uk-btn-primary uk-btn-sm w-full">Open</a>
+    </div>
+    {% endfor %}
+  </div>
+
+  <div class="uk-card uk-card-body mt-8">
+    <h3 class="uk-card-title mb-2">Phase 1 — Foundation</h3>
+    <p class="uk-text-small uk-text-muted">
+      Data model (§5), admin, base UI, and PWA shell are live. Role surfaces, the scan
+      resolver, reporting, and scheduled jobs land in later phases.
+    </p>
+    <div class="mt-3 flex flex-wrap gap-2">
+      <span class="uk-label uk-label-primary">Django</span>
+      <span class="uk-label uk-label-secondary">htmx</span>
+      <span class="uk-label uk-label-secondary">Franken UI</span>
+      <span class="uk-label uk-label-secondary">PWA</span>
+    </div>
+  </div>
+</div>
+{% endblock %}
