@@ -44,10 +44,12 @@ Decimal phases appear between their surrounding integers in numeric order.
   2. A timezone-aware attendance timestamp written then read back on SQL Server shows the same Asia/Manila instant — proven by an explicit aware-datetime round-trip test (no 8-hour drift).
   3. Case-variant values that were distinct on SQLite (opaque QR tokens, faculty emails) do not silently collide or duplicate on SQL Server — proven by a collation round-trip test.
   4. Registrar CSV import + session materialization produce the same sessions on MSSQL as on SQLite at the R3-slice scale.
-**Plans**: TBD
+**Plans**: 3 plans
 
 Plans:
-- [ ] 01-01: TBD (MSSQL runtime spike — settings branch, collation + datetime2 round-trip tests)
+- [ ] 01-01-PLAN.md — MSSQL settings branch, dependency pins & environment bring-up (migrate + seed on SQL Server) [Wave 1]
+- [ ] 01-02-PLAN.md — Datetime round-trip (no 8h drift) & R3 import/materialize parity tests [Wave 2]
+- [ ] 01-03-PLAN.md — Case-sensitive collation on qr_token/manual_code & collation round-trip tests [Wave 2]
 
 ### Phase 2: Correctness Foundations
 **Goal**: "Absent" is trustworthy without relying on scans, rooms release on a timer, every event flows through one notification write path, and all jobs run from one scheduler process.
