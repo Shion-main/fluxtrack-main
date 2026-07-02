@@ -30,8 +30,11 @@ class Room(models.Model):
     capacity = models.PositiveIntegerField(default=0)
 
     # Resolver-only credentials — never rendered client-side (SCAN-07, §6.2)
-    qr_token = models.CharField(max_length=64, unique=True)
-    manual_code = models.CharField(max_length=6, unique=True)
+    # Case-SENSITIVE collation on the two opaque token columns ONLY: case-variant
+    # tokens must never collide (a real security bug). Rest of the DB stays CI so
+    # faculty emails dedupe. See campus/migrations/0002_cs_collation_tokens.py.
+    qr_token = models.CharField(max_length=64, unique=True, db_collation="Latin1_General_100_CS_AS")
+    manual_code = models.CharField(max_length=6, unique=True, db_collation="Latin1_General_100_CS_AS")
     code_rotated_at = models.DateTimeField(null=True, blank=True)
     code_rotated_by = models.ForeignKey(
         settings.AUTH_USER_MODEL, null=True, blank=True,
