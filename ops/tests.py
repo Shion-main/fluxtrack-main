@@ -18,7 +18,7 @@ from pathlib import Path
 
 from django.conf import settings
 from django.contrib.auth import get_user_model
-from django.test import TestCase
+from django.test import SimpleTestCase, TestCase
 
 from accounts.models import Role
 from ops.models import AuditLog, Notification
@@ -183,3 +183,116 @@ class ReleaseRoomTests(TestCase):
         log = AuditLog.objects.filter(
             event_type="session.room_released", target_id=str(s.pk)).get()
         self.assertEqual(log.payload["released_at"], instant.isoformat())
+
+
+# ---------------------------------------------------------------------------
+# ENV-04 scheduler observability: run_job / JobRun + no-implicit-scheduler guard.
+# run_job wraps every scheduled job: it records a JobRun row per execution and
+# notifies System Admins on FAILURE ONLY (never on success/heartbeat), and never
+# re-raises so one bad run cannot kill the dedicated BlockingScheduler process.
+# NoImplicitSchedulerTests proves the scheduler is constructed only in
+# runscheduler.build_scheduler() — never in an AppConfig.ready() (per-worker
+# double-fire is the exact failure ENV-04 prohibits). Imports of ops.jobrun /
+# JobRun are method-local so ONLY these ENV-04 classes go RED before Task 2.
+# ---------------------------------------------------------------------------
+from pathlib import Path as _Path  # noqa: E402  (Path already imported above)
+
+
+class JobRunTests(TestCase):
+    """ENV-04: `ops.jobrun.run_job` records a JobRun per run and alerts on failure only.
+
+    A success run records status="ok", rows_affected, a non-null finished_at, and
+    writes NO job_failed Notification. A failing run records status="failed" with a
+    non-empty detail, creates a job_failed Notification for every active
+    SYSTEM_ADMIN, and does NOT re-raise (the scheduler must survive a bad run).
+    SYS-04 (Phase 7) will later read the latest JobRun per job_name.
+
+    Imports are method-local (mirrors ReleaseRoomTests) so only the ENV-04 classes
+    go RED before ops/jobrun.py + JobRun exist; the 02-02/02-04 classes stay green.
+    """
+
+    def setUp(self):
+        User = get_user_model()
+        self.admin = User.objects.create(
+            username="sysadmin1", email="sa1@mcm.edu.ph",
+            role=Role.SYSTEM_ADMIN, is_active=True)
+        # An inactive admin and a non-admin must never receive a failure alert.
+        self.admin_inactive = User.objects.create(
+            username="sysadmin2", email="sa2@mcm.edu.ph",
+            role=Role.SYSTEM_ADMIN, is_active=False)
+        self.faculty = User.objects.create(
+            username="fac_jr", email="fac_jr@mcm.edu.ph", role=Role.FACULTY)
+
+    def test_success_records_ok_rows_and_no_failure_notice(self):
+        from ops.jobrun import run_job
+        from ops.models import JobRun
+        run = run_job("demo", lambda: 7)
+        self.assertEqual(run.status, "ok")
+        self.assertEqual(run.rows_affected, 7)
+        self.assertIsNotNone(run.finished_at)
+        row = JobRun.objects.get(pk=run.pk)
+        self.assertEqual(row.status, "ok")
+        self.assertEqual(row.rows_affected, 7)
+        # success/heartbeat runs NEVER notify.
+        self.assertEqual(Notification.objects.filter(type="job_failed").count(), 0)
+
+    def test_success_with_none_return_records_zero_rows(self):
+        from ops.jobrun import run_job
+        run = run_job("demo", lambda: None)
+        self.assertEqual(run.status, "ok")
+        self.assertEqual(run.rows_affected, 0)
+
+    def test_failure_records_failed_detail_and_notifies_active_sysadmins_only(self):
+        from ops.jobrun import run_job
+        from ops.models import JobRun
+
+        def boom():
+            raise ValueError("kaboom")
+
+        run = run_job("demo", boom)   # must NOT re-raise
+        self.assertEqual(run.status, "failed")
+        self.assertTrue(run.detail)                 # non-empty detail
+        self.assertIn("kaboom", run.detail)
+        self.assertIsNotNone(run.finished_at)
+        row = JobRun.objects.get(pk=run.pk)
+        self.assertEqual(row.status, "failed")
+        # Exactly one job_failed notice, to the ACTIVE system admin only.
+        notes = Notification.objects.filter(type="job_failed")
+        self.assertEqual(notes.count(), 1)
+        self.assertEqual(notes.first().user_id, self.admin.pk)
+
+    def test_failure_does_not_reraise(self):
+        from ops.jobrun import run_job
+        # If run_job re-raised, this call would error the test out.
+        run = run_job("demo", lambda: (_ for _ in ()).throw(RuntimeError("x")))
+        self.assertEqual(run.status, "failed")
+
+
+class NoImplicitSchedulerTests(SimpleTestCase):
+    """T-02-12 (ENV-04): no project app's `apps.py` may construct or start a
+    scheduler. A BlockingScheduler started from an AppConfig.ready() runs once per
+    Gunicorn worker -> the exact double-fire ENV-04 forbids. The scheduler is
+    constructed ONLY in runscheduler.build_scheduler().
+
+    The searched tokens are assembled from parts so this guard can never match its
+    own source text; only the named project apps' apps.py files are read.
+    """
+
+    PROJECT_APPS = ["accounts", "campus", "scheduling", "verification", "ops", "web"]
+    # Assembled from parts so the guard cannot self-match.
+    _FORBIDDEN_TOKENS = ["Blocking" + "Scheduler",
+                         "Background" + "Scheduler",
+                         "ap" + "scheduler"]
+
+    def test_no_app_config_constructs_or_imports_a_scheduler(self):
+        for app in self.PROJECT_APPS:
+            path = _Path(settings.BASE_DIR) / app / "apps.py"
+            if not path.exists():
+                continue
+            src = path.read_text(encoding="utf-8")
+            for token in self._FORBIDDEN_TOKENS:
+                self.assertNotIn(
+                    token, src,
+                    f"{app}/apps.py references '{token}' — the scheduler must be "
+                    "constructed only in runscheduler.build_scheduler(), never in "
+                    "an AppConfig.ready() (per-worker double-fire, ENV-04)")

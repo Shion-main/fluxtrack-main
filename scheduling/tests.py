@@ -485,3 +485,26 @@ class RoomConflictTests(_JobFixtureMixin, TestCase):
         self.assertIsNotNone(flag.resolved_at)
         self.assertEqual(
             RoomConflictFlag.objects.filter(resolved_at__isnull=True).count(), 0)
+
+
+# ---------------------------------------------------------------------------
+# ENV-04 scheduler wiring: `runscheduler.build_scheduler()` registers EXACTLY the
+# 3 jobs (materialize / sweep / weekly_report) on one BlockingScheduler and hands
+# it back UNSTARTED, so a single dedicated `manage.py runscheduler` process owns
+# all jobs and nothing double-fires across web workers. Import is method-local so
+# only this class goes RED before runscheduler.py exists (Task 3).
+# ---------------------------------------------------------------------------
+class SchedulerWiringTests(TestCase):
+    """ENV-04: build_scheduler() wires exactly 3 jobs and returns them unstarted."""
+
+    def test_build_scheduler_registers_exactly_three_jobs_unstarted(self):
+        from scheduling.management.commands.runscheduler import build_scheduler
+        sched = build_scheduler()
+        try:
+            self.assertFalse(sched.running)  # never started by build_scheduler()
+            self.assertEqual(
+                {j.id for j in sched.get_jobs()},
+                {"materialize", "sweep", "weekly_report"})
+        finally:
+            if getattr(sched, "running", False):
+                sched.shutdown(wait=False)
