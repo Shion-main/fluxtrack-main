@@ -1,8 +1,8 @@
 ---
 phase: 1
 slug: mssql-environment-data-foundation
-status: draft
-nyquist_compliant: false
+status: approved
+nyquist_compliant: true
 wave_0_complete: false
 created: 2026-07-02
 ---
@@ -63,7 +63,7 @@ created: 2026-07-02
 
 | Behavior | Requirement | Why Manual | Test Instructions |
 |----------|-------------|------------|-------------------|
-| App boots and serves every existing surface on `DB_ENGINE=mssql` | ENV-01 | Full-surface smoke needs a running server + browser; not unit-testable | Cold `migrate` + `seed_demo` on fresh `fluxtrack` DB, `runserver`, hit dev-login + each role landing surface |
+| App boots and serves **every** role surface on `DB_ENGINE=mssql` | ENV-01 | Full per-role smoke needs a running server + browser; not unit-testable. NOTE: Plan 01-01 Task 3 now automates a partial proof (Django test-client `GET /login`→200 + `force_login` `GET /`→200); this manual entry covers only the remaining per-role landing pages, owned by `/gsd:verify-work` | Cold `migrate` + `seed_demo` on fresh `fluxtrack` DB, `runserver`, hit dev-login + each role landing surface |
 | R3 parity on the **real** registrar CSV | ENV-02 | Real numbers (17/10/15/18/18) come from gitignored PII CSV under `/data/raw/`; automated test skips if absent | Run `import_offerings --building R --floor 3` + `materialize_sessions --days 7` against real CSV locally, confirm 17/10/15/18/18 |
 
 ---
@@ -75,6 +75,6 @@ created: 2026-07-02
 - [ ] Wave 0 covers all MISSING references (`campus/tests.py`, new test classes)
 - [ ] No watch-mode flags
 - [ ] Feedback latency < 90s
-- [ ] `nyquist_compliant: true` set in frontmatter
+- [x] `nyquist_compliant: true` set in frontmatter
 
-**Approval:** pending
+**Approval:** approved 2026-07-02 (plan-checker VERIFICATION PASSED, iteration 2 — Dimension 8 PASS)
