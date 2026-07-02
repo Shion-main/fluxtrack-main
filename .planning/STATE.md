@@ -3,8 +3,8 @@ gsd_state_version: 1.0
 milestone: v1.2
 milestone_name: "**Goal**: Faculty can request a lead-time-gated modality shift that a Dean approves, with rooms auto-released or auto-assigned, and the SRS brought back in sync with reality."
 status: executing
-stopped_at: Completed 01-02-PLAN.md
-last_updated: "2026-07-02T19:16:31.116Z"
+stopped_at: Completed 01-03-PLAN.md
+last_updated: "2026-07-02T19:16:52.492Z"
 last_activity: 2026-07-03 — Executed plan 01-02 (MSSQL datetime round-trip + R3 import parity tests, CI-safe fixture)
 progress:
   total_phases: 8
@@ -26,9 +26,9 @@ See: .planning/PROJECT.md (updated 2026-07-02)
 ## Current Position
 
 Phase: 1 of 8 (MSSQL Environment & Data Foundation)
-Plan: 2 of 3 in current phase (01-02 complete)
-Status: Executing — Wave 1 complete (01-01), Wave 2 in progress (01-02 done, 01-03 parallel)
-Last activity: 2026-07-03 — Executed plan 01-02 (MSSQL datetime round-trip + R3 import parity tests, CI-safe fixture)
+Plan: 3 of 3 in current phase (all complete)
+Status: Executing — Phase 1 complete (Wave 1: 01-01; Wave 2: 01-02 + 01-03 in parallel)
+Last activity: 2026-07-03 — Executed plan 01-03 (surgical CS collation on qr_token/manual_code + collation round-trip tests)
 
 Progress: [███████░░░] 67%
 
@@ -90,6 +90,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-07-02T19:15:16.750Z
-Stopped at: Completed 01-02-PLAN.md
+Last session: 2026-07-02T19:16:52.488Z
+Stopped at: Completed 01-03-PLAN.md
 Resume file: None
