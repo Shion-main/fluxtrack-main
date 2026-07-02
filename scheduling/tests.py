@@ -115,3 +115,63 @@ class FacultyResolverTests(SimpleTestCase):
         r = resolve([s1, s2], now=T0 + timedelta(hours=3))
         self.assertEqual(r.outcome, R.CHECKED_IN)
         self.assertEqual(r.session_id, 2)
+
+
+# ---------------------------------------------------------------------------
+# DB-backed MSSQL foundation tests (ENV-01 datetime, ENV-02 import parity).
+# Nyquist Wave 0 scaffolding — validates SQL Server runtime behavior, not the
+# pure resolver above. FacultyResolverTests stays a SimpleTestCase (no DB).
+# ---------------------------------------------------------------------------
+from datetime import date, datetime as dt, time  # noqa: E402
+from zoneinfo import ZoneInfo  # noqa: E402
+
+from django.contrib.auth import get_user_model  # noqa: E402
+from django.test import TestCase, TransactionTestCase  # noqa: E402
+
+from campus.models import Building, Floor, Room  # noqa: E402
+from scheduling.models import AcademicTerm, Schedule, Session  # noqa: E402
+
+
+def make_session(scheduled_start, scheduled_end=None):
+    """Build the minimal FK chain for a single Session (fast — no full seed).
+
+    Returns a persisted Session whose scheduled_start is the given aware
+    datetime. Room requires unique qr_token + manual_code (NOT NULL).
+    """
+    User = get_user_model()
+    fac = User.objects.create(username="fac_dt", email="fac_dt@mcm.edu.ph", role="faculty")
+    bldg = Building.objects.create(name="R", code="R")
+    floor = Floor.objects.create(building=bldg, number=3)
+    room = Room.objects.create(floor=floor, code="R399",
+                               qr_token="tok-dt-399", manual_code="900399")
+    term = AcademicTerm.objects.create(name="TZ Term",
+                                       start_date=date(2026, 1, 1),
+                                       end_date=date(2026, 12, 31), is_active=True)
+    sch = Schedule.objects.create(term=term, course_code="TZ101", section="A",
+                                  faculty=fac, room=room, day_of_week=0,
+                                  start_time=time(8, 0), end_time=time(9, 30))
+    return Session.objects.create(schedule=sch, faculty=fac, room=room,
+                                  date=scheduled_start.date(),
+                                  scheduled_start=scheduled_start,
+                                  scheduled_end=scheduled_end or scheduled_start)
+
+
+class DatetimeRoundTripTests(TestCase):
+    """An aware Asia/Manila instant must round-trip on SQL Server datetime2
+    with NO 8-hour drift (Pitfall 2 in 01-RESEARCH)."""
+
+    def test_manila_midnight_instant_survives_roundtrip(self):
+        manila = ZoneInfo("Asia/Manila")
+        aware = dt(2026, 7, 6, 0, 30, tzinfo=manila)   # 00:30 PHT = 16:30 UTC prev day
+        s = make_session(aware)
+        s.refresh_from_db()
+        self.assertEqual(s.scheduled_start, aware)
+        self.assertEqual(s.scheduled_start.astimezone(ZoneInfo("UTC")).hour, 16)
+
+    def test_manila_0800_reads_back_as_0000_utc(self):
+        manila = ZoneInfo("Asia/Manila")
+        aware = dt(2026, 7, 6, 8, 0, tzinfo=manila)    # 08:00 PHT = 00:00 UTC
+        s = make_session(aware)
+        s.refresh_from_db()
+        self.assertEqual(s.scheduled_start.astimezone(ZoneInfo("UTC")).hour, 0)
+        self.assertEqual(s.scheduled_start, aware)
