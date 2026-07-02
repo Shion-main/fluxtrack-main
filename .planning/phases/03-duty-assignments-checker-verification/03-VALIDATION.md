@@ -46,6 +46,7 @@ requirement below MUST wire to the matching test class.
 | CHK-01 | Off-duty scan refused | unit (pure) | `verification.tests.CheckerResolverTests.test_off_duty_refused` | ❌ W0 | ⬜ pending |
 | CHK-01 | Wrong-floor scan refused with a clear reason | unit (pure) | `verification.tests.CheckerResolverTests.test_wrong_floor_refused` | ❌ W0 | ⬜ pending |
 | CHK-01 / IFO-06 | Active FLOOR assignment grants scan powers on that floor | integration | `verification.tests.CheckerScanDBTests.test_active_assignment_grants_scan` | ❌ W0 | ⬜ pending |
+| CHK-01 | Action POST re-gated server-side: refused when no longer on duty | integration | `verification.tests.CheckerScanDBTests.test_action_refused_when_no_longer_on_duty` | ❌ W0 | ⬜ pending |
 | CHK-02 | On-duty scan returns session state + faculty profile photo | integration | `verification.tests.CheckerScanDBTests.test_scan_returns_session_and_photo` | ❌ W0 | ⬜ pending |
 | CHK-02 | Online session routes to `teams_link` (no room state) | integration | `verification.tests.CheckerScanDBTests.test_online_scan_redirects_to_teams` | ❌ W0 | ⬜ pending |
 | CHK-03 / CHK-04 | Verify records a validation; `verified_by_checker` becomes true | integration | `verification.tests.CheckerScanDBTests.test_verify_marks_verified` | ❌ W0 | ⬜ pending |

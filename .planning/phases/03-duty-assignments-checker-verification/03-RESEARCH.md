@@ -432,26 +432,32 @@ def _assert_no_confirmed_absent(apps, schema_editor):
 | A7 | `CONFIRMED_EMPTY` and `VERIFIED_EMPTY` redundancy resolves to a single canonical empty action | Open Questions | Low-Med — picking the wrong one is a cheap rename, but decide before building the button |
 | A8 | Removing the online sweep exclusion requires rewriting the two existing online-exclusion tests | Pitfall 1 | Low — verified those tests exist; the rewrite is expected, not a regression |
 
-## Open Questions
+## Open Questions (RESOLVED)
+
+> All four questions were decided during discuss/plan; each carries an inline `RESOLVED:` note pointing at the plan/task that owns the decision.
 
 1. **Which empty-confirmation action is canonical — `CONFIRMED_EMPTY` or `VERIFIED_EMPTY`?**
    - What we know: both exist in `ValidationAction` (`verification/models.py:42-43`); CONTEXT calls the action "Confirm/Verified empty" as a single one-tap action; neither is currently emitted by any code.
    - What's unclear: whether the two encode distinct meanings (e.g. "no session scheduled, room empty" vs "session scheduled but legitimately empty") or are accidental duplicates.
    - Recommendation: use `VERIFIED_EMPTY` as the single canonical action (aligns with the `verified_by_checker` naming family) and consider retiring `CONFIRMED_EMPTY` alongside `CONFIRMED_ABSENT`. Confirm at discuss/plan.
+   - **RESOLVED: 03-01** — `VERIFIED_EMPTY` is the single canonical empty action; `CONFIRMED_EMPTY`/`CONFIRMED_ABSENT` are retired in the 03-01 ValidationAction pass (guarded by `CheckerScanDBTests.test_confirmed_absent_not_in_choices` in 03-02).
 
 2. **Does Flag-not-present set session status, and to what?**
    - What we know: for online, an un-verified session already falls to Absent via the sweep once the exclusion is removed. For F2F, the faculty may already be ACTIVE (checked in) yet the Checker reports nobody present.
    - What's unclear: whether Flag-not-present should force `status=ABSENT` immediately (Checker is authoritative) or only record the flag and let downstream reporting reflect it.
    - Recommendation: online Flag-not-present → set `status=ABSENT` directly (authoritative, avoids waiting a sweep tick); F2F Flag-not-present → record the flag + notify, but do **not** silently override a faculty check-in without an IFO decision. Confirm.
+   - **RESOLVED: 03-05** — online Flag-not-present sets `status=ABSENT` authoritatively (in the `_apply_action` online branch); F2F Flag-not-present records the flag + notify(IFO+HR) only, with no silent status override. Gated by `CheckerScanDBTests.test_online_flag_not_present_absent`.
 
 3. **Where exactly does round-robin online assignment run, and what happens when no online-duty Checker exists for a date?**
    - What we know: assignments may not exist at materialize time; Phase 4 also needs to assign a Checker to newly-online sessions.
    - Recommendation: assign when the IFO online-duty roster is set/edited for a date and via a light daily pass; if no online-duty Checker exists, leave `online_checker` NULL and raise an "unassigned online session" flag to IFO rather than guessing. Confirm the trigger points.
+   - **RESOLVED: 03-03** — `assign_online_sessions` runs on two triggers: (1) when the IFO online-duty roster is saved/edited (Task 3 calls it after an online-duty assignment create) and (2) the `assign_online` daily management-command pass (Task 2). No online-duty Checker for a date → `online_checker` stays NULL + `notify(IFO, online_unassigned)`. Assigned Checkers also get a write-only `notify(users=[checker], online_assigned)` at assignment time (CHK-02).
 
 4. **Media serving for `profile_photo` in dev.**
    - What we know: the field exists and uploads to `profile_photos/`.
    - What's unclear: whether `MEDIA_URL`/`MEDIA_ROOT` are wired to serve in DEBUG so CHK-02 photos render; seeded demo users likely have no photo.
    - Recommendation: verify media serving; provide a placeholder-avatar fallback in the scan outcome template for users without a photo.
+   - **RESOLVED: 03-02** — Task 3 confirms `MEDIA_URL`/`MEDIA_ROOT` serve in DEBUG (config/urls.py) so `profile_photo.url` renders, and the `active-unverified` branch of `templates/checker/_outcome.html` provides an `{% else %}` initials/placeholder avatar for users without a photo. Gated by `CheckerScanDBTests.test_scan_returns_session_and_photo`.
 
 ## Environment Availability
 
