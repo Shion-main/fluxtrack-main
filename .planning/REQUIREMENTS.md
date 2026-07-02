@@ -24,7 +24,7 @@ roadmap does NOT create phases for them.
 
 ### Environment & Data (ENV)
 
-- [ ] **ENV-01**: Project runs on SQL Server via `mssql-django` in both local dev (SQL Server Express) and prod, with `DB_ENGINE=mssql`, Django pinned to 6.0.6, and a proven datetime2/timezone + collation round-trip (no Asia/Manila drift, no case-folding surprises)
+- [x] **ENV-01**: Project runs on SQL Server via `mssql-django` in both local dev (SQL Server Express) and prod, with `DB_ENGINE=mssql`, Django pinned to 6.0.6, and a proven datetime2/timezone + collation round-trip (no Asia/Manila drift, no case-folding surprises)
 - [ ] **ENV-02**: Registrar CSV import + session materialization run correctly against MSSQL at the R3-slice scale already validated on SQLite
 
 ### Correctness Foundations (JOB / NOTIF-core)
@@ -146,7 +146,7 @@ phase (see ROADMAP.md). Status values: Pending / In progress / Complete.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| ENV-01 | Phase 1 | Pending |
+| ENV-01 | Phase 1 | Complete |
 | ENV-02 | Phase 1 | Pending |
 | NOTIF-00 | Phase 2 | Pending |
 | JOB-02a | Phase 2 | Pending |
