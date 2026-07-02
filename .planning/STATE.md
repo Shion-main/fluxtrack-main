@@ -6,15 +6,15 @@ current_phase: 1
 current_phase_name: MSSQL Environment & Data Foundation
 status: executing
 stopped_at: Completed 02-04-PLAN.md
-last_updated: "2026-07-02T21:53:28.801Z"
+last_updated: "2026-07-02T22:03:00.557Z"
 last_activity: 2026-07-03
 last_activity_desc: Executed plan 01-03 (surgical CS collation on qr_token/manual_code + collation round-trip tests)
 progress:
   total_phases: 8
-  completed_phases: 1
+  completed_phases: 2
   total_plans: 8
-  completed_plans: 7
-  percent: 13
+  completed_plans: 8
+  percent: 25
 ---
 
 # Project State
@@ -62,6 +62,7 @@ Progress: [███████░░░] 67%
 | Phase 02 P02 | 2 | 3 tasks tasks | 4 files files |
 | Phase 02 P04 | 2 | 2 tasks | 2 files |
 | Phase 02 P03 | 4 | 3 tasks | 5 files |
+| Phase 02 P05 | 6 | 3 tasks | 8 files |
 
 ## Accumulated Context
 
@@ -87,6 +88,7 @@ Recent decisions affecting current work:
 - [Phase 02]: session.room_released AuditLog is the room-release audit contract (target_type=session, target_id=pk, payload.released_at ISO); actor=None denotes a system-initiated release
 - [Phase 02]: JOB-02 sweep marks unscanned F2F/Blended no-shows Absent via the shared is_no_show_past_grace predicate; online EXCLUDED with a Phase-3 hook (not Phase 7); backfilled, idempotent (SCHEDULED->ABSENT only), AuditLog(by=sweep); never stamps room_released_at
 - [Phase 02]: Room-conflict dedup via RoomConflictFlag (filtered UniqueConstraint uniq_open_conflict_per_key, key room:{room_id}); one notify(role=IFO_ADMIN, type=room_conflict) per open conflict, auto-resolves on clear (JOB-02c)
+- [Phase ?]: [Phase 02]: ENV-04 dedicated scheduler — one manage.py runscheduler BlockingScheduler+MemoryJobStore process wires exactly 3 jobs (materialize/6h via call_command, sweep/policy-driven 5min running sweep_no_shows+detect_room_conflicts, weekly_report Mon06:00 stub); scheduler built ONLY in build_scheduler(), never AppConfig.ready (NoImplicitSchedulerTests guards no per-worker double-fire); run_job records a JobRun per run + notifies SYSTEM_ADMIN on failure only, never crashes the scheduler; APScheduler pinned >=3.10,<4
 
 ### Pending Todos
 
@@ -105,6 +107,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-07-02T21:53:17.324Z
+Last session: 2026-07-02T22:02:24.793Z
 Stopped at: Completed 02-04-PLAN.md
 Resume file: .planning/phases/02-correctness-foundations/02-CONTEXT.md

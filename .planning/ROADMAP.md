@@ -26,7 +26,7 @@ build, and AWS deploy — lands last so it never blocks feature work.
 Decimal phases appear between their surrounding integers in numeric order.
 
 - [ ] **Phase 1: MSSQL Environment & Data Foundation** - Prove SQL Server runtime (timezone + collation round-trips) and run existing import/materialize against it
-- [ ] **Phase 2: Correctness Foundations** - Shared notify() write path, JOB-02 status sweep + occupancy release, single scheduler process
+- [x] **Phase 2: Correctness Foundations** - Shared notify() write path, JOB-02 status sweep + occupancy release, single scheduler process (completed 2026-07-02)
 - [ ] **Phase 3: Duty Assignments & Checker Verification** - Floor assignments gate an on-duty Checker's online + offline room verification
 - [ ] **Phase 4: Modality Shift Approval & SRS v1.2** - Lead-time-gated faculty request, Dean approval, auto room-release/assign, SRS revision
 - [ ] **Phase 5: Notifications — Read Surface & Web Push** - In-app polled list + VAPID web push + per-user mute preferences
@@ -69,7 +69,7 @@ Plans:
   4. The materialize, sweep, and weekly-report jobs run automatically from one dedicated scheduler process, never duplicated across web workers, with last-run status recordable.
   5. Re-running the sweep never changes an already-decided session (idempotent — active, completed, and already-Absent sessions are untouched).
 
-**Plans**: 4/5 plans executed
+**Plans**: 5/5 plans complete
 
 Plans:
 
@@ -77,7 +77,7 @@ Plans:
 - [x] 02-02-PLAN.md — Shared notify() write path + scan migration (NOTIF-00) [Wave 1]
 - [x] 02-03-PLAN.md — Status sweep + deduped room-conflict flags (JOB-02b, JOB-02c) [Wave 2]
 - [x] 02-04-PLAN.md — release_room() occupancy helper, built for MOD-03 (JOB-02c) [Wave 2]
-- [ ] 02-05-PLAN.md — Dedicated APScheduler process + JobRun observability (ENV-04) [Wave 3]
+- [x] 02-05-PLAN.md — Dedicated APScheduler process + JobRun observability (ENV-04) [Wave 3]
 
 ### Phase 3: Duty Assignments & Checker Verification
 
@@ -203,7 +203,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. MSSQL Environment & Data Foundation | 0/TBD | Not started | - |
-| 2. Correctness Foundations | 4/5 | In Progress|  |
+| 2. Correctness Foundations | 5/5 | Complete   | 2026-07-02 |
 | 3. Duty Assignments & Checker Verification | 0/TBD | Not started | - |
 | 4. Modality Shift Approval & SRS v1.2 | 0/TBD | Not started | - |
 | 5. Notifications — Read Surface & Web Push | 0/TBD | Not started | - |
