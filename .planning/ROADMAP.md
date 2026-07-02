@@ -61,10 +61,14 @@ Plans:
   3. Every notification in the system is created by one shared `notify()` write path — the ad-hoc `_notify_ifo` is gone and no other inline notifier remains.
   4. The materialize, sweep, and weekly-report jobs run automatically from one dedicated scheduler process, never duplicated across web workers, with last-run status recordable.
   5. Re-running the sweep never changes an already-decided session (idempotent — active, completed, and already-Absent sessions are untouched).
-**Plans**: TBD
+**Plans**: 5 plans
 
 Plans:
-- [ ] 02-01: TBD
+- [ ] 02-01-PLAN.md — Shared no-show grace predicate extraction (JOB-02a) [Wave 1]
+- [ ] 02-02-PLAN.md — Shared notify() write path + scan migration (NOTIF-00) [Wave 1]
+- [ ] 02-03-PLAN.md — Status sweep + deduped room-conflict flags (JOB-02b, JOB-02c) [Wave 2]
+- [ ] 02-04-PLAN.md — release_room() occupancy helper, built for MOD-03 (JOB-02c) [Wave 2]
+- [ ] 02-05-PLAN.md — Dedicated APScheduler process + JobRun observability (ENV-04) [Wave 3]
 
 ### Phase 3: Duty Assignments & Checker Verification
 **Goal**: An on-duty Checker can verify physical presence room-by-room, online and offline, and only while actually assigned to that floor.
@@ -167,7 +171,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. MSSQL Environment & Data Foundation | 0/TBD | Not started | - |
-| 2. Correctness Foundations | 0/TBD | Not started | - |
+| 2. Correctness Foundations | 0/5 | Not started | - |
 | 3. Duty Assignments & Checker Verification | 0/TBD | Not started | - |
 | 4. Modality Shift Approval & SRS v1.2 | 0/TBD | Not started | - |
 | 5. Notifications — Read Surface & Web Push | 0/TBD | Not started | - |
