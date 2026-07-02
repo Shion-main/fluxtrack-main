@@ -104,6 +104,31 @@ class RoomConflictFlag(models.Model):
         return f"conflict {self.conflict_key} ({state})"
 
 
+class JobRun(models.Model):
+    """One row per scheduled-job execution (ENV-04; SYS-04 reads it in Phase 7).
+
+    The dedicated `runscheduler` process wraps every job in `ops.jobrun.run_job`,
+    which records exactly one JobRun per run: `status` moves running -> ok|failed,
+    `rows_affected` captures the job's return count, and started/finished_at bound
+    the run. ENV-04's "last-run status recordable" is satisfied by this table
+    (prefer a row over a log line, Conventions §Logging). SYS-04 (Phase 7) reads
+    the latest row per `job_name` — hence the (job_name, -started_at) index.
+    """
+    job_name = models.CharField(max_length=60)   # "materialize" | "sweep" | "weekly_report"
+    status = models.CharField(max_length=10)     # "running" | "ok" | "failed"
+    started_at = models.DateTimeField()
+    finished_at = models.DateTimeField(null=True, blank=True)
+    rows_affected = models.IntegerField(default=0)
+    detail = models.TextField(blank=True)        # error repr or run summary
+
+    class Meta:
+        ordering = ["-started_at"]
+        indexes = [models.Index(fields=["job_name", "-started_at"])]
+
+    def __str__(self):
+        return f"{self.job_name} {self.status} @ {self.started_at:%Y-%m-%d %H:%M}"
+
+
 class SystemSetting(models.Model):
     """Configurable policy values (SRS §8). Seeded from FLUXTRACK_POLICY."""
     key = models.CharField(max_length=60, unique=True)
