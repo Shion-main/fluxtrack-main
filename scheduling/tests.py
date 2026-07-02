@@ -175,3 +175,52 @@ class DatetimeRoundTripTests(TestCase):
         s.refresh_from_db()
         self.assertEqual(s.scheduled_start.astimezone(ZoneInfo("UTC")).hour, 0)
         self.assertEqual(s.scheduled_start, aware)
+
+
+# ---------------------------------------------------------------------------
+# Registrar import -> session materialization parity (ENV-02).
+# R3ParityTests hits the REAL gitignored PII CSV and is SKIPPED where absent;
+# ImportPathTests runs everywhere against a committed anonymized fixture.
+# ---------------------------------------------------------------------------
+import os  # noqa: E402
+from unittest import skipUnless  # noqa: E402
+
+from django.core.management import call_command  # noqa: E402
+
+from accounts.models import Role  # noqa: E402
+
+REAL_CSV = "data/raw/2T-25-26-Course Offerring(Sheet1).csv"
+FIXTURE_CSV = "data/fixtures/r3_synthetic.csv"
+
+
+class ImportPathTests(TransactionTestCase):
+    """CI-safe: import + materialize the committed synthetic fixture and assert
+    its own known counts (2 sections / 2 rooms / 2 faculty / 3 schedules / 3
+    sessions). TransactionTestCase because the commands wrap work in atomic()."""
+
+    def test_synthetic_fixture_import_and_materialize_counts(self):
+        call_command("import_offerings", file=FIXTURE_CSV, building="R", floor=3)
+        call_command("materialize_sessions", days=7)
+        User = get_user_model()
+        self.assertEqual(Schedule.objects.count(), 3)
+        self.assertEqual(Room.objects.count(), 2)
+        self.assertEqual(User.objects.filter(role=Role.FACULTY).count(), 2)
+        self.assertEqual(Session.objects.count(), 3)
+
+
+@skipUnless(os.path.exists(REAL_CSV), "registrar CSV not present (gitignored)")
+class R3ParityTests(TransactionTestCase):
+    """Full R-floor-3 slice against the real registrar CSV must reproduce the
+    validated numbers on MSSQL: 17 sections / 10 rooms / 15 faculty / 18
+    schedules / 18 sessions."""
+
+    def test_r3_slice_matches_sqlite_validated_numbers(self):
+        call_command("import_offerings", building="R", floor=3)
+        call_command("materialize_sessions", days=7)
+        User = get_user_model()
+        self.assertEqual(Schedule.objects.count(), 18)
+        self.assertEqual(Room.objects.count(), 10)
+        self.assertEqual(User.objects.filter(role=Role.FACULTY).count(), 15)
+        self.assertEqual(Session.objects.count(), 18)
+        self.assertEqual(
+            Schedule.objects.values("course_code", "section").distinct().count(), 17)
