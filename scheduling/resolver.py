@@ -36,6 +36,22 @@ class Resolution:
         self.needs_confirm = self.outcome in CONFIRM_OUTCOMES
 
 
+def is_no_show_past_grace(scheduled_start, now, grace_min):
+    """The SINGLE shared no-show predicate (JOB-02a).
+
+    Returns True when `now` is strictly past `scheduled_start + grace_min`
+    minutes — i.e. the faculty member has failed to check in within grace and
+    the session is a no-show. At exactly +grace it is False (mirrors the
+    resolver's original `now > start + grace` semantics).
+
+    Pure: takes aware datetimes + int minutes, returns a bool. No ORM, no
+    `timezone.now()`, no side effects (SRS §6.6). Both `resolve_faculty_scan`
+    (scan-time) and the Phase-2 status sweep (sweep-time) call this so the two
+    paths can never disagree on whether a session is a no-show past grace.
+    """
+    return now > scheduled_start + timedelta(minutes=grace_min)
+
+
 def resolve_faculty_scan(sessions_today, scanned_room_id, occupying_session_id,
                          now, *, grace_min, early_end_min, open_min=15):
     """
@@ -49,7 +65,6 @@ def resolve_faculty_scan(sessions_today, scanned_room_id, occupying_session_id,
     early_end_min: checkout earlier than this before end needs a reason (FAC-06).
     open_min: minutes before start when the check-in window opens.
     """
-    grace = timedelta(minutes=grace_min)
     early_end = timedelta(minutes=early_end_min)
     open_lead = timedelta(minutes=open_min)
 
@@ -86,7 +101,7 @@ def resolve_faculty_scan(sessions_today, scanned_room_id, occupying_session_id,
     if candidate.room_id != scanned_room_id:
         return Resolution(WRONG_ROOM, candidate.id)
 
-    if now > candidate.scheduled_start + grace:
+    if is_no_show_past_grace(candidate.scheduled_start, now, grace_min):
         return Resolution(ABSENT, candidate.id)
 
     if occupying_session_id is not None:
