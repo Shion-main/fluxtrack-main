@@ -151,4 +151,5 @@ FLUXTRACK_POLICY = {
     "materialization_horizon_days": 14,
     "poll_interval_seconds": 8,
     "reporting_week_start": "monday",
+    "sweep_interval_minutes": 5,   # ENV-04: dedicated-scheduler sweep cadence (JOB-02)
 }

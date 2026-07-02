@@ -10,8 +10,9 @@ whitenoise>=6.6              # static file serving on EC2
 qrcode[pil]>=7.4            # room QR posters (IFO-01)
 Pillow>=10.0
 
-# Scheduled jobs (JOB-01/02/03)
-APScheduler>=3.10
+# Scheduled jobs (JOB-01/02/03) — pinned <4: the 4.0 pre-release rewrites the
+# BlockingScheduler/jobstore API (ENV-04 relies on 3.x); do NOT adopt 4.0.
+APScheduler>=3.10,<4
 
 # Identity (Entra ID token verification) — wired in Phase 2
 PyJWT>=2.8
