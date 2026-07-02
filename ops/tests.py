@@ -6,7 +6,14 @@ NOTIF-00 — the single Notification write path `ops.notify.notify`:
 - SingleWritePathTests: a source guard proving the ad-hoc IFO notifier helper is
   gone from web/scan.py and that no notifier module constructs Notification rows
   inline outside ops/notify.py.
+
+JOB-02c — the room-release single write path `ops.occupancy.release_room`:
+- ReleaseRoomTests: release_room(session) stamps Session.room_released_at and
+  writes exactly one session.room_released AuditLog; explicit actor/now are
+  recorded. The paired "sweep NEVER stamps room_released_at" guard lives in
+  Plan 02-03 SweepTests, not here.
 """
+from datetime import datetime, timezone as dt_timezone
 from pathlib import Path
 
 from django.conf import settings
@@ -106,3 +113,73 @@ class SingleWritePathTests(TestCase):
                 self._CREATE_TOKEN, src,
                 f"{rel} constructs Notification rows inline; route through "
                 "ops.notify.notify (NOTIF-00 single write path)")
+
+
+class ReleaseRoomTests(TestCase):
+    """JOB-02c: `ops.occupancy.release_room` is the single source of truth for
+    releasing a room. Given a Session with room_released_at IS NULL, calling
+    release_room(session) stamps room_released_at with an aware datetime and
+    writes exactly one AuditLog(event_type="session.room_released"). Guards
+    T-02-10 (every release is audited with actor + released_at).
+
+    NOTE: the paired "sweep NEVER stamps room_released_at" guard is enforced in
+    Plan 02-03 SweepTests — release_room has zero Phase-2 callers (T-02-11).
+
+    Imports are method-local (mirrors NotifyTests) so this class is the only one
+    that goes RED before ops/occupancy.py exists — the 02-02 classes stay green.
+    """
+
+    def _session(self):
+        # Reuse the scheduling test factory (aware start) to build the FK chain.
+        from scheduling.tests import make_session
+        aware = datetime(2026, 7, 6, 8, 0, tzinfo=dt_timezone.utc)
+        return make_session(aware)
+
+    def test_release_stamps_room_released_at(self):
+        from ops.occupancy import release_room
+        s = self._session()
+        self.assertIsNone(s.room_released_at)  # precondition: not yet released
+        release_room(s)
+        s.refresh_from_db()
+        self.assertIsNotNone(s.room_released_at)
+        self.assertIsNotNone(s.room_released_at.tzinfo)  # aware datetime
+
+    def test_release_writes_single_audit_row(self):
+        from ops.occupancy import release_room
+        s = self._session()
+        before = AuditLog.objects.count()
+        release_room(s)
+        self.assertEqual(AuditLog.objects.count(), before + 1)
+        log = AuditLog.objects.filter(
+            event_type="session.room_released", target_id=str(s.pk)).get()
+        self.assertEqual(log.target_type, "session")
+        self.assertIn("released_at", log.payload)
+
+    def test_release_records_explicit_actor(self):
+        from ops.occupancy import release_room
+        User = get_user_model()
+        dean = User.objects.create(username="dean1", role=Role.DEAN)
+        s = self._session()
+        release_room(s, actor=dean)
+        log = AuditLog.objects.filter(
+            event_type="session.room_released", target_id=str(s.pk)).get()
+        self.assertEqual(log.actor_id, dean.pk)
+
+    def test_release_default_actor_is_none(self):
+        from ops.occupancy import release_room
+        s = self._session()
+        release_room(s)  # system-initiated: actor omitted
+        log = AuditLog.objects.filter(
+            event_type="session.room_released", target_id=str(s.pk)).get()
+        self.assertIsNone(log.actor_id)
+
+    def test_release_records_explicit_now(self):
+        from ops.occupancy import release_room
+        s = self._session()
+        instant = datetime(2026, 7, 6, 10, 30, tzinfo=dt_timezone.utc)
+        release_room(s, now=instant)
+        s.refresh_from_db()
+        self.assertEqual(s.room_released_at, instant)
+        log = AuditLog.objects.filter(
+            event_type="session.room_released", target_id=str(s.pk)).get()
+        self.assertEqual(log.payload["released_at"], instant.isoformat())
