@@ -52,7 +52,7 @@ Plans:
 - [ ] 01-03-PLAN.md — Case-sensitive collation on qr_token/manual_code & collation round-trip tests [Wave 2]
 
 ### Phase 2: Correctness Foundations
-**Goal**: "Absent" is trustworthy without relying on scans, rooms release on a timer, every event flows through one notification write path, and all jobs run from one scheduler process.
+**Goal**: "Absent" is trustworthy without relying on scans, contradictory room occupancy is flagged to IFO, every event flows through one notification write path, and all jobs run from one scheduler process. (Timer-based auto-release cut 2026-07-03; room release moves to the modality-approval flow in Phase 4.)
 **Depends on**: Phase 1
 **Requirements**: NOTIF-00, JOB-02a, JOB-02b, JOB-02c, ENV-04
 **Success Criteria** (what must be TRUE):
