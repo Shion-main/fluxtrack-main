@@ -1,8 +1,10 @@
 """
 Django settings for FluxTrack.
 
-Env-driven (see .env / .env.example). SQLite by default for local dev;
-set DB_ENGINE=mysql for MySQL 8.0 on AWS RDS (SRS §6.7).
+Env-driven (see .env / .env.example). SQL Server only (dev, test, prod)
+via mssql-django; local Express uses a self-signed cert (Encrypt=yes;
+TrustServerCertificate=yes), prod (RDS) trusts a real cert chain — the
+difference is purely DB_ODBC_EXTRA in each .env.
 """
 from pathlib import Path
 import os
@@ -74,26 +76,34 @@ TEMPLATES = [
 
 WSGI_APPLICATION = "config.wsgi.application"
 
-# --- Database: SQLite dev, MySQL prod ---
-if env("DB_ENGINE", "sqlite") == "mysql":
-    DATABASES = {
-        "default": {
-            "ENGINE": "django.db.backends.mysql",
-            "NAME": env("DB_NAME", "fluxtrack"),
-            "USER": env("DB_USER", "fluxtrack"),
-            "PASSWORD": env("DB_PASSWORD", ""),
-            "HOST": env("DB_HOST", "127.0.0.1"),
-            "PORT": env("DB_PORT", "3306"),
-            "OPTIONS": {"charset": "utf8mb4"},
-        }
+# --- Database: SQL Server only (dev, test, prod) ---
+DATABASES = {
+    "default": {
+        "ENGINE": "mssql",
+        "NAME": env("DB_NAME", "fluxtrack"),
+        "USER": env("DB_USER", ""),          # dedicated login, NOT sa
+        "PASSWORD": env("DB_PASSWORD", ""),
+        "HOST": env("DB_HOST", "127.0.0.1"),
+        "PORT": env("DB_PORT", "1433"),
+        "OPTIONS": {
+            "driver": "ODBC Driver 18 for SQL Server",
+            # env-driven encryption: local Express self-signed (trust it);
+            # RDS real cert chain in prod is just a different DB_ODBC_EXTRA
+            "extra_params": env(
+                "DB_ODBC_EXTRA",
+                "Encrypt=yes;TrustServerCertificate=yes",
+            ),
+        },
+        # isolate parallel Wave-2 test runs — each plan can point its
+        # runner at a distinct test DB via DB_TEST_NAME (default test_fluxtrack)
+        "TEST": {"NAME": env("DB_TEST_NAME", "test_fluxtrack")},
     }
-else:
-    DATABASES = {
-        "default": {
-            "ENGINE": "django.db.backends.sqlite3",
-            "NAME": BASE_DIR / "db.sqlite3",
-        }
-    }
+}
+# Local dev may use a LocalDB / integrated-security instance (Windows auth,
+# no SQL login). Prod (RDS) keeps SQL auth via DB_USER/DB_PASSWORD above.
+# Env-driven so the code is identical across environments — only .env differs.
+if env_bool("DB_TRUSTED_CONNECTION", False):
+    DATABASES["default"]["OPTIONS"]["trusted_connection"] = "yes"
 
 # --- Auth ---
 AUTH_USER_MODEL = "accounts.User"

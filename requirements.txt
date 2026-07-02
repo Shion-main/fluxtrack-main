@@ -1,6 +1,7 @@
 # FluxTrack — Python dependencies
 # Core
-Django>=5.0,<7.0
+Django==6.0.6
+mssql-django==1.7.3          # pulls pyodbc; needs ODBC Driver 18 installed system-wide
 djangorestframework>=3.15
 python-dotenv>=1.0
 whitenoise>=6.6              # static file serving on EC2
@@ -16,6 +17,3 @@ APScheduler>=3.10
 PyJWT>=2.8
 cryptography>=42.0
 requests>=2.31
-
-# Production database (local dev uses SQLite by default)
-# mysqlclient>=2.2          # uncomment for MySQL 8.0 on AWS RDS
