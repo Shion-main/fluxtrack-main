@@ -2,16 +2,19 @@
 gsd_state_version: 1.0
 milestone: v1.2
 milestone_name: "**Goal**: Faculty can request a lead-time-gated modality shift that a Dean approves, with rooms auto-released or auto-assigned, and the SRS brought back in sync with reality."
+current_phase: 1
+current_phase_name: MSSQL Environment & Data Foundation
 status: executing
 stopped_at: Phase 2 context gathered
-last_updated: "2026-07-02T19:45:59.329Z"
-last_activity: 2026-07-03 — Executed plan 01-03 (surgical CS collation on qr_token/manual_code + collation round-trip tests)
+last_updated: "2026-07-02T21:41:05.191Z"
+last_activity: 2026-07-03
+last_activity_desc: Executed plan 01-03 (surgical CS collation on qr_token/manual_code + collation round-trip tests)
 progress:
   total_phases: 8
   completed_phases: 1
-  total_plans: 3
-  completed_plans: 3
-  percent: 67
+  total_plans: 8
+  completed_plans: 4
+  percent: 13
 ---
 
 # Project State
@@ -35,6 +38,7 @@ Progress: [███████░░░] 67%
 ## Performance Metrics
 
 **Velocity:**
+
 - Total plans completed: 0
 - Average duration: — min
 - Total execution time: 0.0 hours
@@ -46,6 +50,7 @@ Progress: [███████░░░] 67%
 | - | - | - | - |
 
 **Recent Trend:**
+
 - Last 5 plans: —
 - Trend: —
 
@@ -53,6 +58,7 @@ Progress: [███████░░░] 67%
 | Phase 01 P01 | 20 | 3 tasks | 3 files |
 | Phase 01 P02 | 3 | 2 tasks | 2 files |
 | Phase 01 P03 | 15 | 2 tasks | 3 files |
+| Phase 02 P01 | 2 | 2 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -72,6 +78,7 @@ Recent decisions affecting current work:
 - [Phase 01]: [Phase 01]: R3-slice import+materialize parity (17/10/15/18/18) reproduced on SQL Server; CI-safe synthetic fixture (data/fixtures/r3_synthetic.csv) keeps the import path testable without the gitignored PII CSV
 - [Phase 01]: [Phase 01]: CS token collation landed via hand-written RunSQL migration — mssql-django 1.7.3 db_collation AlterField emits no-op SQL (sqlmigrate confirmed); RunSQL owns DROP/ALTER/re-ADD
 - [Phase 01]: [Phase 01]: qr_token/manual_code are NOT NULL → backed by UNIQUE CONSTRAINTS (not filtered indexes); recollation drops/re-adds the constraint by dynamically-discovered name
+- [Phase 02]: JOB-02a shared no-show predicate extracted: is_no_show_past_grace(scheduled_start, now, grace_min) is the single atom resolve_faculty_scan and the Phase-2 sweep both use; strictly >-past-grace boundary; coupling-integrity test blocks drift
 
 ### Pending Todos
 
@@ -90,6 +97,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-07-02T19:45:59.325Z
+Last session: 2026-07-02T21:40:26.193Z
 Stopped at: Phase 2 context gathered
 Resume file: .planning/phases/02-correctness-foundations/02-CONTEXT.md
