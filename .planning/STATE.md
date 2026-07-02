@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.2
 milestone_name: "**Goal**: Faculty can request a lead-time-gated modality shift that a Dean approves, with rooms auto-released or auto-assigned, and the SRS brought back in sync with reality."
 status: executing
-stopped_at: Completed 01-01-PLAN.md
-last_updated: "2026-07-02T19:09:01.775Z"
-last_activity: "2026-07-03 — Executed plan 01-01 (MSSQL cutover: migrate + seed on SQL Server LocalDB)"
+stopped_at: Completed 01-02-PLAN.md
+last_updated: "2026-07-02T19:16:31.116Z"
+last_activity: 2026-07-03 — Executed plan 01-02 (MSSQL datetime round-trip + R3 import parity tests, CI-safe fixture)
 progress:
   total_phases: 8
-  completed_phases: 0
+  completed_phases: 1
   total_plans: 3
-  completed_plans: 1
-  percent: 33
+  completed_plans: 3
+  percent: 67
 ---
 
 # Project State
@@ -26,11 +26,11 @@ See: .planning/PROJECT.md (updated 2026-07-02)
 ## Current Position
 
 Phase: 1 of 8 (MSSQL Environment & Data Foundation)
-Plan: 1 of 3 in current phase (complete)
-Status: Executing — Wave 1 complete (01-01), 01-02/01-03 remain
-Last activity: 2026-07-03 — Executed plan 01-01 (MSSQL cutover: migrate + seed on SQL Server LocalDB)
+Plan: 2 of 3 in current phase (01-02 complete)
+Status: Executing — Wave 1 complete (01-01), Wave 2 in progress (01-02 done, 01-03 parallel)
+Last activity: 2026-07-03 — Executed plan 01-02 (MSSQL datetime round-trip + R3 import parity tests, CI-safe fixture)
 
-Progress: [███░░░░░░░] 33%
+Progress: [███████░░░] 67%
 
 ## Performance Metrics
 
@@ -51,6 +51,8 @@ Progress: [███░░░░░░░] 33%
 
 *Updated after each plan completion*
 | Phase 01 P01 | 20 | 3 tasks | 3 files |
+| Phase 01 P02 | 3 | 2 tasks | 2 files |
+| Phase 01 P03 | 15 | 2 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -66,6 +68,10 @@ Recent decisions affecting current work:
 - [Roadmap]: Auth (Entra) + AWS/Tailwind deploy deferred to Phase 8 so cutover risk never blocks feature work; dev-login stub carries every earlier phase.
 - [Phase 01]: Local dev DB is SQL Server 2025 LocalDB + Windows auth (DB_TRUSTED_CONNECTION), not Express + SQL login — settings made env-driven so prod SQL-auth is unchanged
 - [Phase 01]: No fix-forward migration needed: all 0001_initial migrations applied cleanly on MSSQL (nullable-unique azure_oid as filtered unique index); 7 users seeded, surface serves 200
+- [Phase 01]: [Phase 01]: MSSQL datetime2 stores UTC and an aware Asia/Manila instant round-trips with zero 8h drift — proven by DatetimeRoundTripTests (16:30 UTC and 00:00 UTC cases)
+- [Phase 01]: [Phase 01]: R3-slice import+materialize parity (17/10/15/18/18) reproduced on SQL Server; CI-safe synthetic fixture (data/fixtures/r3_synthetic.csv) keeps the import path testable without the gitignored PII CSV
+- [Phase 01]: [Phase 01]: CS token collation landed via hand-written RunSQL migration — mssql-django 1.7.3 db_collation AlterField emits no-op SQL (sqlmigrate confirmed); RunSQL owns DROP/ALTER/re-ADD
+- [Phase 01]: [Phase 01]: qr_token/manual_code are NOT NULL → backed by UNIQUE CONSTRAINTS (not filtered indexes); recollation drops/re-adds the constraint by dynamically-discovered name
 
 ### Pending Todos
 
@@ -84,6 +90,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-07-02T19:09:01.770Z
-Stopped at: Completed 01-01-PLAN.md
+Last session: 2026-07-02T19:15:16.750Z
+Stopped at: Completed 01-02-PLAN.md
 Resume file: None
