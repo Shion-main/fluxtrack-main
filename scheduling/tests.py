@@ -5,6 +5,7 @@ from datetime import datetime, timedelta, timezone
 from django.test import SimpleTestCase
 
 from scheduling import resolver as R
+from scheduling.resolver import is_no_show_past_grace  # JOB-02a: the single shared no-show predicate
 
 
 @dataclass
@@ -115,6 +116,50 @@ class FacultyResolverTests(SimpleTestCase):
         r = resolve([s1, s2], now=T0 + timedelta(hours=3))
         self.assertEqual(r.outcome, R.CHECKED_IN)
         self.assertEqual(r.session_id, 2)
+
+
+class NoShowPredicateTests(SimpleTestCase):
+    """JOB-02a boundary math for the single shared no-show predicate.
+
+    is_no_show_past_grace is True strictly AFTER scheduled_start + grace_min;
+    at exactly +grace it is False (mirrors the resolver's `now > start + grace`).
+    Pure function of aware datetimes + int minutes — no DB, no policy lookup.
+    """
+
+    def test_before_start_is_not_no_show(self):
+        self.assertFalse(is_no_show_past_grace(T0, T0 - timedelta(minutes=1), 15))
+
+    def test_within_grace_is_not_no_show(self):
+        self.assertFalse(is_no_show_past_grace(T0, T0 + timedelta(minutes=14), 15))
+
+    def test_exactly_at_grace_is_not_no_show(self):
+        # Boundary: equal is NOT strictly past grace (mirrors `now > start + grace`).
+        self.assertFalse(is_no_show_past_grace(T0, T0 + timedelta(minutes=15), 15))
+
+    def test_one_minute_past_grace_is_no_show(self):
+        self.assertTrue(is_no_show_past_grace(T0, T0 + timedelta(minutes=16), 15))
+
+    def test_far_past_grace_is_no_show(self):
+        self.assertTrue(is_no_show_past_grace(T0, T0 + timedelta(minutes=120), 15))
+
+
+class CouplingIntegrityTests(SimpleTestCase):
+    """JOB-02a / Phase-2 success criterion #1: scan-time and sweep-time share ONE
+    predicate. The resolver returns ABSENT if-and-only-if is_no_show_past_grace is
+    True for identical inputs — this test blocks any future drift between the two
+    paths (the highest-risk coupling in the phase).
+    """
+
+    def test_resolver_absent_iff_predicate_true(self):
+        for delta in (-1, 0, 14, 15, 16, 30):
+            with self.subTest(delta=delta):
+                now = T0 + timedelta(minutes=delta)
+                r = resolve([sess()], now=now)  # window contains now, room matches, f2f, unoccupied
+                self.assertEqual(
+                    r.outcome == R.ABSENT,
+                    is_no_show_past_grace(T0, now, 15),
+                    "resolver ABSENT decision and predicate must agree for identical inputs",
+                )
 
 
 # ---------------------------------------------------------------------------
