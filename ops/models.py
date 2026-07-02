@@ -1,6 +1,7 @@
 """Operations: bookings, notifications, push, audit, settings, reports (SRS §5)."""
 from django.conf import settings
 from django.db import models
+from django.db.models import Q
 
 
 class Booking(models.Model):
@@ -71,6 +72,36 @@ class AuditLog(models.Model):
 
     def __str__(self):
         return f"{self.event_type} by {self.actor} @ {self.created_at:%Y-%m-%d %H:%M}"
+
+
+class RoomConflictFlag(models.Model):
+    """One OPEN flag per contradictory room occupancy (JOB-02c).
+
+    Raised by the status sweep's `detect_room_conflicts` when 2+ ACTIVE sessions
+    hold one room (room_released_at NULL). The filtered UniqueConstraint below
+    guarantees at most ONE open (resolved_at IS NULL) flag per `conflict_key`
+    (the dedup key `f"room:{room_id}"`), so a persistent conflict notifies IFO
+    exactly once instead of every sweep tick. The sweep stamps `resolved_at` when
+    the conflict clears; IFO-08 (Phase 7) resolves the flag manually otherwise.
+    Filtered unique on MSSQL is proven (Phase-1 azure_oid landed the same way).
+    """
+    room = models.ForeignKey(
+        "campus.Room", on_delete=models.CASCADE, related_name="conflict_flags"
+    )
+    conflict_key = models.CharField(max_length=120)
+    detected_at = models.DateTimeField(auto_now_add=True)
+    resolved_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["conflict_key"], condition=Q(resolved_at__isnull=True),
+                name="uniq_open_conflict_per_key")
+        ]
+
+    def __str__(self):
+        state = "open" if self.resolved_at is None else "resolved"
+        return f"conflict {self.conflict_key} ({state})"
 
 
 class SystemSetting(models.Model):
