@@ -29,7 +29,7 @@ roadmap does NOT create phases for them.
 
 ### Correctness Foundations (JOB / NOTIF-core)
 
-- [ ] **NOTIF-00**: A single shared `notify()` write-path service creates `Notification` rows for any role/event (replacing the ad-hoc `_notify_ifo` in `web/scan.py`), used by every downstream writer
+- [x] **NOTIF-00**: A single shared `notify()` write-path service creates `Notification` rows for any role/event (replacing the ad-hoc `_notify_ifo` in `web/scan.py`), used by every downstream writer
 - [x] **JOB-02a**: A pure decision function determines, for a given session and time, whether it is a no-show past grace — reusing the scan resolver's grace predicate so scan-time and sweep-time never disagree
 - [ ] **JOB-02b**: A status sweep marks no-show sessions Absent independent of any scan, so a session nobody scans into is still correctly Absent
 - [ ] **JOB-02c**: The sweep raises a room-conflict flag (via `notify()`, deduped until resolved) when occupancy is contradictory. A shared `release_room()` occupancy helper is built and tested in this phase but is invoked only by the modality-approval flow (MOD-03, Phase 4), NOT by the sweep on a timer — automatic timer-based room release was cut (2026-07-03) as unsafe when a class runs long; room lifecycle is driven by explicit approved events
@@ -148,7 +148,7 @@ phase (see ROADMAP.md). Status values: Pending / In progress / Complete.
 |-------------|-------|--------|
 | ENV-01 | Phase 1 | Complete |
 | ENV-02 | Phase 1 | Complete |
-| NOTIF-00 | Phase 2 | Pending |
+| NOTIF-00 | Phase 2 | Complete |
 | JOB-02a | Phase 2 | Complete |
 | JOB-02b | Phase 2 | Pending |
 | JOB-02c | Phase 2 | Pending |
