@@ -141,17 +141,77 @@ roadmap does NOT create phases for them.
 
 ## Traceability
 
-Filled during roadmap creation.
+Mapped to phases by the roadmapper. Every v1 requirement maps to exactly one
+phase (see ROADMAP.md). Status values: Pending / In progress / Complete.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| (populated by roadmapper) | | |
+| ENV-01 | Phase 1 | Pending |
+| ENV-02 | Phase 1 | Pending |
+| NOTIF-00 | Phase 2 | Pending |
+| JOB-02a | Phase 2 | Pending |
+| JOB-02b | Phase 2 | Pending |
+| JOB-02c | Phase 2 | Pending |
+| ENV-04 | Phase 2 | Pending |
+| IFO-06 | Phase 3 | Pending |
+| CHK-01 | Phase 3 | Pending |
+| CHK-02 | Phase 3 | Pending |
+| CHK-03 | Phase 3 | Pending |
+| CHK-04 | Phase 3 | Pending |
+| CHK-05 | Phase 3 | Pending |
+| CHK-07 | Phase 3 | Pending |
+| CHK-08 | Phase 3 | Pending |
+| MOD-01 | Phase 4 | Pending |
+| MOD-02 | Phase 4 | Pending |
+| MOD-03 | Phase 4 | Pending |
+| MOD-04 | Phase 4 | Pending |
+| MOD-05 | Phase 4 | Pending |
+| MOD-06 | Phase 4 | Pending |
+| DOC-01 | Phase 4 | Pending |
+| NOTIF-01 | Phase 5 | Pending |
+| NOTIF-02 | Phase 5 | Pending |
+| NOTIF-03 | Phase 5 | Pending |
+| RPT-01 | Phase 6 | Pending |
+| RPT-02 | Phase 6 | Pending |
+| RPT-03 | Phase 6 | Pending |
+| RPT-04 | Phase 6 | Pending |
+| RPT-05 | Phase 6 | Pending |
+| IFO-09 | Phase 6 | Pending |
+| DEAN-01 | Phase 6 | Pending |
+| DEAN-02 | Phase 6 | Pending |
+| DEAN-03 | Phase 6 | Pending |
+| DEAN-04 | Phase 6 | Pending |
+| HR-01 | Phase 6 | Pending |
+| HR-02 | Phase 6 | Pending |
+| HR-03 | Phase 6 | Pending |
+| GRD-01 | Phase 7 | Pending |
+| GRD-02 | Phase 7 | Pending |
+| GRD-03 | Phase 7 | Pending |
+| GRD-04 | Phase 7 | Pending |
+| GRD-05 | Phase 7 | Pending |
+| IFO-01b | Phase 7 | Pending |
+| IFO-02 | Phase 7 | Pending |
+| IFO-03b | Phase 7 | Pending |
+| IFO-05 | Phase 7 | Pending |
+| IFO-08 | Phase 7 | Pending |
+| FAC-08 | Phase 7 | Pending |
+| FAC-11 | Phase 7 | Pending |
+| FAC-12 | Phase 7 | Pending |
+| SYS-04 | Phase 7 | Pending |
+| AUTH-01 | Phase 8 | Pending |
+| AUTH-03 | Phase 8 | Pending |
+| AUTH-05 | Phase 8 | Pending |
+| DEPLOY-01 | Phase 8 | Pending |
+| DEPLOY-02 | Phase 8 | Pending |
 
 **Coverage:**
-- v1 requirements: 48 total
-- Mapped to phases: 0 (pending roadmap)
-- Unmapped: 48 ⚠️
+- v1 requirements: 57 total distinct IDs (the earlier "48" figure predates the
+  correctness-foundations split into NOTIF-00/JOB-02a/JOB-02b/JOB-02c/ENV-04 and
+  the IFO-01b/IFO-03b variants; recounted here)
+- Mapped to phases: 57 ✓
+- Unmapped: 0 ✓
+- Duplicates (in >1 phase): 0 ✓
 
 ---
 *Requirements defined: 2026-07-02*
-*Last updated: 2026-07-02 after initialization*
+*Last updated: 2026-07-02 after roadmap creation (traceability populated, 57/57 mapped)*
