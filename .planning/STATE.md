@@ -5,15 +5,15 @@ milestone_name: "**Goal**: Faculty can request a lead-time-gated modality shift 
 current_phase: 1
 current_phase_name: MSSQL Environment & Data Foundation
 status: executing
-stopped_at: Completed 02-02-PLAN.md
-last_updated: "2026-07-02T21:44:13.212Z"
+stopped_at: Completed 02-04-PLAN.md
+last_updated: "2026-07-02T21:49:44.134Z"
 last_activity: 2026-07-03
 last_activity_desc: Executed plan 01-03 (surgical CS collation on qr_token/manual_code + collation round-trip tests)
 progress:
   total_phases: 8
   completed_phases: 1
   total_plans: 8
-  completed_plans: 5
+  completed_plans: 6
   percent: 13
 ---
 
@@ -60,6 +60,7 @@ Progress: [███████░░░] 67%
 | Phase 01 P03 | 15 | 2 tasks | 3 files |
 | Phase 02 P01 | 2 | 2 tasks | 2 files |
 | Phase 02 P02 | 2 | 3 tasks tasks | 4 files files |
+| Phase 02 P04 | 2 | 2 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -81,6 +82,8 @@ Recent decisions affecting current work:
 - [Phase 01]: [Phase 01]: qr_token/manual_code are NOT NULL → backed by UNIQUE CONSTRAINTS (not filtered indexes); recollation drops/re-adds the constraint by dynamically-discovered name
 - [Phase 02]: JOB-02a shared no-show predicate extracted: is_no_show_past_grace(scheduled_start, now, grace_min) is the single atom resolve_faculty_scan and the Phase-2 sweep both use; strictly >-past-grace boundary; coupling-integrity test blocks drift
 - [Phase 02]: notify() (NOTIF-00) is the single Notification write path; web/scan.py IFO notifications migrated onto it and _notify_ifo deleted; notify() emits no AuditLog (triggering domain action carries the audit)
+- [Phase 02]: release_room() (ops/occupancy.py) built + fully tested in Phase 2 with ZERO callers by design; timer-based auto-release cut 2026-07-03, only MOD-03 (Phase 4) will call it — grep guard proves the cut
+- [Phase 02]: session.room_released AuditLog is the room-release audit contract (target_type=session, target_id=pk, payload.released_at ISO); actor=None denotes a system-initiated release
 
 ### Pending Todos
 
@@ -99,6 +102,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-07-02T21:44:13.193Z
-Stopped at: Completed 02-02-PLAN.md
+Last session: 2026-07-02T21:49:43.745Z
+Stopped at: Completed 02-04-PLAN.md
 Resume file: .planning/phases/02-correctness-foundations/02-CONTEXT.md
