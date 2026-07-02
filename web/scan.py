@@ -18,7 +18,8 @@ from django.views.decorators.http import require_http_methods
 
 from accounts.models import Role
 from campus.models import Room
-from ops.models import AuditLog, Notification
+from ops.models import AuditLog
+from ops.notify import notify
 from ops.policy import get_policy
 from scheduling import resolver as R
 from scheduling.models import CheckinMethod, Session, SessionStatus
@@ -60,13 +61,6 @@ def _room_from_payload(request, payload):
 
 
 # --- outcome side effects --------------------------------------------------
-def _notify_ifo(title, body, link=""):
-    from django.contrib.auth import get_user_model
-    for admin in get_user_model().objects.filter(role=Role.IFO_ADMIN, is_active=True):
-        Notification.objects.create(user=admin, type="room_event",
-                                    title=title, body=body, link=link)
-
-
 def _apply(request, resolution, room, method, reason=""):
     """Apply the resolved outcome's state changes. Returns context for rendering."""
     now = timezone.now()
@@ -110,7 +104,8 @@ def _apply(request, resolution, room, method, reason=""):
         session.room = room
         session.save(update_fields=["room"])
         audit("session.room_changed", old_room=old, new_room=room.code)
-        _notify_ifo("Room change", f"{user.get_full_name() or user.username} moved "
+        notify(role=Role.IFO_ADMIN, type="room_event", title="Room change",
+               body=f"{user.get_full_name() or user.username} moved "
                     f"{session.schedule.course_code} from {old} to {room.code}.")
     elif o == R.ROOM_OCCUPIED:  # confirmed force handover (FAC-09)
         prior = Session.objects.filter(pk=resolution.prior_session_id).first()
@@ -126,7 +121,8 @@ def _apply(request, resolution, room, method, reason=""):
                                     "handover_from_session"])
         audit("session.force_handover", room=room.code,
               prior_session=resolution.prior_session_id)
-        _notify_ifo("Force handover", f"{room.code}: prior session auto-completed; "
+        notify(role=Role.IFO_ADMIN, type="room_event", title="Force handover",
+               body=f"{room.code}: prior session auto-completed; "
                     f"{session.schedule.course_code} started via handover.")
     return {"resolution": resolution, "room": room, "session": session}
 
