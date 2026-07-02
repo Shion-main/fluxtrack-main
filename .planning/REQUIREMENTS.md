@@ -32,7 +32,7 @@ roadmap does NOT create phases for them.
 - [ ] **NOTIF-00**: A single shared `notify()` write-path service creates `Notification` rows for any role/event (replacing the ad-hoc `_notify_ifo` in `web/scan.py`), used by every downstream writer
 - [ ] **JOB-02a**: A pure decision function determines, for a given session and time, whether it is a no-show past grace — reusing the scan resolver's grace predicate so scan-time and sweep-time never disagree
 - [ ] **JOB-02b**: A status sweep marks no-show sessions Absent independent of any scan, so a session nobody scans into is still correctly Absent
-- [ ] **JOB-02c**: The sweep releases a room after the room-hold window and raises a room-conflict flag (via `notify()`) when occupancy is contradictory, through a shared `release_room()` occupancy helper
+- [ ] **JOB-02c**: The sweep raises a room-conflict flag (via `notify()`, deduped until resolved) when occupancy is contradictory. A shared `release_room()` occupancy helper is built and tested in this phase but is invoked only by the modality-approval flow (MOD-03, Phase 4), NOT by the sweep on a timer — automatic timer-based room release was cut (2026-07-03) as unsafe when a class runs long; room lifecycle is driven by explicit approved events
 - [ ] **ENV-04**: All scheduled jobs (materialize/JOB-01, sweep/JOB-02, weekly report/JOB-03) run automatically via APScheduler in one dedicated scheduler process, never duplicated across web workers, with last-run status recordable
 
 ### Duty Assignments (IFO)

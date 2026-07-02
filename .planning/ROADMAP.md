@@ -57,7 +57,7 @@ Plans:
 **Requirements**: NOTIF-00, JOB-02a, JOB-02b, JOB-02c, ENV-04
 **Success Criteria** (what must be TRUE):
   1. A session nobody scans into is marked Absent within one sweep interval, using the same grace predicate the live scanner uses — a scan and the sweep never disagree on the same session.
-  2. A room is automatically released after its hold window through a single `release_room()` helper, and contradictory occupancy raises an IFO room-conflict notification.
+  2. Contradictory room occupancy raises a single (deduped) IFO room-conflict notification. The shared `release_room()` helper exists and is tested but is invoked only by the modality-approval flow (Phase 4), not on a timer — timer-based auto-release was cut 2026-07-03.
   3. Every notification in the system is created by one shared `notify()` write path — the ad-hoc `_notify_ifo` is gone and no other inline notifier remains.
   4. The materialize, sweep, and weekly-report jobs run automatically from one dedicated scheduler process, never duplicated across web workers, with last-run status recordable.
   5. Re-running the sweep never changes an already-decided session (idempotent — active, completed, and already-Absent sessions are untouched).
