@@ -6,14 +6,14 @@ current_phase: 1
 current_phase_name: MSSQL Environment & Data Foundation
 status: executing
 stopped_at: Completed 02-04-PLAN.md
-last_updated: "2026-07-02T21:49:44.134Z"
+last_updated: "2026-07-02T21:53:28.801Z"
 last_activity: 2026-07-03
 last_activity_desc: Executed plan 01-03 (surgical CS collation on qr_token/manual_code + collation round-trip tests)
 progress:
   total_phases: 8
   completed_phases: 1
   total_plans: 8
-  completed_plans: 6
+  completed_plans: 7
   percent: 13
 ---
 
@@ -61,6 +61,7 @@ Progress: [███████░░░] 67%
 | Phase 02 P01 | 2 | 2 tasks | 2 files |
 | Phase 02 P02 | 2 | 3 tasks tasks | 4 files files |
 | Phase 02 P04 | 2 | 2 tasks | 2 files |
+| Phase 02 P03 | 4 | 3 tasks | 5 files |
 
 ## Accumulated Context
 
@@ -84,6 +85,8 @@ Recent decisions affecting current work:
 - [Phase 02]: notify() (NOTIF-00) is the single Notification write path; web/scan.py IFO notifications migrated onto it and _notify_ifo deleted; notify() emits no AuditLog (triggering domain action carries the audit)
 - [Phase 02]: release_room() (ops/occupancy.py) built + fully tested in Phase 2 with ZERO callers by design; timer-based auto-release cut 2026-07-03, only MOD-03 (Phase 4) will call it — grep guard proves the cut
 - [Phase 02]: session.room_released AuditLog is the room-release audit contract (target_type=session, target_id=pk, payload.released_at ISO); actor=None denotes a system-initiated release
+- [Phase 02]: JOB-02 sweep marks unscanned F2F/Blended no-shows Absent via the shared is_no_show_past_grace predicate; online EXCLUDED with a Phase-3 hook (not Phase 7); backfilled, idempotent (SCHEDULED->ABSENT only), AuditLog(by=sweep); never stamps room_released_at
+- [Phase 02]: Room-conflict dedup via RoomConflictFlag (filtered UniqueConstraint uniq_open_conflict_per_key, key room:{room_id}); one notify(role=IFO_ADMIN, type=room_conflict) per open conflict, auto-resolves on clear (JOB-02c)
 
 ### Pending Todos
 
@@ -102,6 +105,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-07-02T21:49:43.745Z
+Last session: 2026-07-02T21:53:17.324Z
 Stopped at: Completed 02-04-PLAN.md
 Resume file: .planning/phases/02-correctness-foundations/02-CONTEXT.md
