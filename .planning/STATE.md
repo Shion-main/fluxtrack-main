@@ -4,8 +4,8 @@ milestone: v1.2
 milestone_name: "**Goal**: Faculty can request a lead-time-gated modality shift that a Dean approves, with rooms auto-released or auto-assigned, and the SRS brought back in sync with reality."
 status: executing
 stopped_at: Completed 01-03-PLAN.md
-last_updated: "2026-07-02T19:16:52.492Z"
-last_activity: 2026-07-03 — Executed plan 01-02 (MSSQL datetime round-trip + R3 import parity tests, CI-safe fixture)
+last_updated: "2026-07-02T19:20:19.931Z"
+last_activity: 2026-07-03 — Executed plan 01-03 (surgical CS collation on qr_token/manual_code + collation round-trip tests)
 progress:
   total_phases: 8
   completed_phases: 1
