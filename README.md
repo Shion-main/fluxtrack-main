@@ -44,18 +44,25 @@ py -3.12 manage.py flush --no-input
 py -3.12 manage.py seed_demo
 ```
 
-## Where things are
+## Project Structure
 ```
 config/        settings, urls
 accounts/      User (7 roles), Department
 campus/        Building, Floor, Room
-scheduling/    AcademicTerm, Schedule, Session (+ import/materialize commands)
+scheduling/    AcademicTerm, Schedule, Session, resolver.py (scan outcome logic) + import/materialize commands
 verification/  Assignment, CheckerValidation
-ops/           Booking, Notification, AuditLog, SystemSetting, WeeklyReport
-web/           frontend: dev-login, home, IFO surfaces, PWA shell
+ops/           Booking, Notification, AuditLog, SystemSetting, WeeklyReport, policy.py
+web/           frontend: dev-login, home, scan resolver views, Faculty + IFO surfaces, PWA shell
+templates/     Django templates (Franken UI + htmx), no separate frontend build
+data/          gitignored registrar source data (raw CSVs, PII)
+docs/          use-cases/build reference, design specs, session logs
 poc/           throwaway proof-of-concept + screenshots
 ```
+Any change that adds, removes, or renames a Django app or top-level
+directory updates this section in the same session
+(see `docs/superpowers/specs/2026-07-02-deployment-and-dev-practice-design.md`).
 
 ## Status
-Phase 1 (foundation) + IFO room/schedule surface done. Next: auth (Entra ID),
-scan resolver, Faculty & Checker mobile surfaces, reporting, scheduled jobs.
+Foundation, IFO room/schedule surface, scan resolver, and Faculty check-in
+are built and verified end-to-end. See `docs/USE_CASES.md` for the full
+per-role feature list and what's built vs. not. Next up: Checker surface.
