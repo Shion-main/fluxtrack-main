@@ -51,12 +51,12 @@ No new user-facing surfaces ship this phase. The point is that "Absent" becomes 
 - **Last-run status is recorded** (ok/failed, rows affected, timestamp) so the future SYS-04 dashboard (Phase 7) can read it. Introduce a small `JobRun`-style record (planner names/models it).
 - **Job failure surfacing:** on a job **failure only**, fire `notify()` to System Admins (record every run's status, but only notify on failure). No success/heartbeat notifications.
 
-### Online sessions & the sweep (resolved 2026-07-03, auto-decided while user away — revisit at Phase 7)
-- The sweep marks Absent **only F2F/Blended** no-show sessions past grace. **Online sessions are excluded** (left `scheduled`, not marked Absent).
-- Rationale: online classes don't scan a room QR; the resolver returns `ONLINE_REJECT` for them. The only online-start path is FAC-08 "Verify & Start" (Phase 7), but reporting is Phase 6 — marking online no-shows Absent now would inject false absences into every Phase 6 weekly report for the ~5 phases until FAC-08 exists.
-- Effective modality = `session.declared_modality or session.schedule.modality`; exclude when it equals `online`.
-- **Leave a documented hook** (comment/TODO + a validation note) so Phase 7 (FAC-08) revisits online no-show handling.
-- User was away when this was decided via AskUserQuestion; flag on next interaction so they can override.
+### Online sessions & the sweep (resolved 2026-07-03 with user)
+- The no-show grace predicate is **modality-agnostic** — online sessions get the **same grace period** as F2F/Blended (the predicate `now > scheduled_start + grace` already ignores modality; keep it that way).
+- BUT the **sweep marks Absent only F2F/Blended** no-show sessions past grace for now. **Online sessions are excluded from Absent-marking** (left `scheduled`).
+- Rationale: an online session becomes "verified present" via a **Checker opening the class's public MS Teams link** (see routed feature below) — that verification path is built in **Phase 3** (Checker surface), not Phase 2. Marking online no-shows Absent before that path exists would inject false absences (Phase 6 reports land before... no — Phase 3 lands before Phase 6, so once Phase 3 ships, online joins the sweep and reports stay correct).
+- Effective modality = `session.declared_modality or session.schedule.modality`; exclude from Absent when it equals `online`.
+- **Leave a documented hook** (comment/TODO + a validation note) so **Phase 3** flips online sessions into the sweep once the online-Checker-Teams verification exists.
 
 ### Claude's Discretion
 - Exact module/function placement for the extracted grace predicate (likely `scheduling/resolver.py` or a small shared helper it imports).
@@ -140,6 +140,7 @@ The user approved amending the written requirements to match the no-auto-release
 - **Timer-based automatic room release** — moved out of Phase 2. Room release now happens only via approved modality shift (MOD-03, Phase 4). `room_hold_minutes` policy retained for possible future use.
 - **SYS-04 job-monitoring dashboard** — the `JobRun` last-run status is recorded in Phase 2, but the dashboard that reads it is Phase 7 (SYS-04).
 - **Weekly-report job body** — the scheduler registers/wires the JOB-03 slot in Phase 2, but the report generation itself is Phase 6 (RPT-01/02).
+- **Online session verification via Checker + MS Teams link (routed to Phase 3)** — captured 2026-07-03 from user. Design: when a class's effective modality is online, a **Checker is notified** (via the Phase 2 `notify()` path) and is **redirected to the class's public MS Teams link** to visually verify the faculty is conducting the session; that Checker verification is what marks the online session present/verified (the online analog of a F2F room scan). Implications for Phase 3: **amends CHK-02** (return session state — for online, provide the Teams link instead of/along with room state) and **CHK-03** (Checker verification actions extend to online sessions); **overlaps FAC-08** (Phase 7 currently has the *faculty* self-start online via Teams — reconcile: online presence may become *Checker*-verified rather than faculty-self-declared). Once built, Phase 3 flips online sessions into the JOB-02 sweep (removes the Phase 2 online exclusion). **Not built in Phase 2** — Phase 2 only ships the `notify()` path and sweep that Phase 3 will consume.
 
 </deferred>
 

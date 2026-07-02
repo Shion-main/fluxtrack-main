@@ -76,6 +76,10 @@ Plans:
   3. A Checker can Verify, Flag identity mismatch, Flag not present, or Confirm empty — a Verify marks the session checker-verified, and a flag is surfaced to IFO and HR (no dispute workflow).
   4. The floor view shows coverage progress and an oldest-unverified-first priority queue of active sessions, excluding Absent sessions.
   5. A scan made offline replays on reconnect and is re-validated server-side against current state before applying — never blindly trusted — or flagged for IFO if it no longer applies.
+  6. For an online session, an on-duty Checker is notified and redirected to the class's public MS Teams link to verify the faculty is conducting the session; that Checker verification marks the online session present (the online analog of a room scan). This is what lets online sessions join the JOB-02 sweep (Phase 2 excludes online until this exists).
+
+> **Captured 2026-07-03 (from user, during Phase 2 discussion):** online attendance is *Checker*-verified via the class's public MS Teams link, not faculty-self-declared. Amends **CHK-02** (for online, return/redirect to the Teams link instead of room state) and **CHK-03** (Checker verification actions apply to online sessions). Reconcile with **FAC-08** (Phase 7) which currently has the faculty self-start online. Online sessions get the same grace period as F2F; the Phase 2 sweep excludes them from Absent-marking until this Phase 3 verification path ships.
+
 **Plans**: TBD
 
 Plans:
