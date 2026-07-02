@@ -269,3 +269,219 @@ class R3ParityTests(TransactionTestCase):
         self.assertEqual(Session.objects.count(), 18)
         self.assertEqual(
             Schedule.objects.values("course_code", "section").distinct().count(), 17)
+
+
+# ---------------------------------------------------------------------------
+# JOB-02b status sweep + JOB-02c room-conflict detection (DB-backed).
+# SweepTests prove: a still-SCHEDULED F2F/Blended no-show is marked ABSENT by
+# the sweep independent of any scan (via the SHARED is_no_show_past_grace
+# predicate), backfilled across all past dates, idempotently, with an AuditLog
+# per absence; online no-shows are EXCLUDED (Phase-3 hook); the sweep NEVER
+# stamps room_released_at (no timer-based auto-release). RoomConflictTests prove
+# a single deduped, auto-resolving IFO room-conflict flag via notify().
+# ---------------------------------------------------------------------------
+from ops.models import AuditLog, Notification, RoomConflictFlag  # noqa: E402
+from scheduling.jobs import (detect_room_conflicts,  # noqa: E402
+                             sweep_no_shows)
+from scheduling.models import Modality, SessionStatus  # noqa: E402
+
+# Fixed sweep "now" — sessions are positioned relative to this aware instant.
+NOW = dt(2026, 7, 6, 10, 0, tzinfo=timezone.utc)
+
+
+class _JobFixtureMixin:
+    """Shared DB fixtures for the sweep + conflict tests.
+
+    Each `_session(...)`/`_room()`/`_faculty()` call mints DISTINCT unique keys
+    (username, email, room code, qr_token, manual_code) so a single test method
+    can persist many sessions without tripping a UNIQUE constraint.
+    """
+
+    def setUp(self):
+        self.User = get_user_model()
+        self.bldg = Building.objects.create(name="Jobs", code="JB")
+        self.floor = Floor.objects.create(building=self.bldg, number=1)
+        self.term = AcademicTerm.objects.create(
+            name="Jobs Term", start_date=date(2026, 1, 1),
+            end_date=date(2026, 12, 31), is_active=True)
+        self._i = 0
+
+    def _next(self):
+        self._i += 1
+        return self._i
+
+    def _room(self):
+        i = self._next()
+        return Room.objects.create(floor=self.floor, code=f"JB{i:03d}",
+                                   qr_token=f"jb-tok-{i}", manual_code=f"8{i:05d}")
+
+    def _faculty(self):
+        i = self._next()
+        return self.User.objects.create(username=f"jb_fac_{i}",
+                                        email=f"jb_fac_{i}@mcm.edu.ph",
+                                        role="faculty")
+
+    def _ifo_admin(self):
+        i = self._next()
+        return self.User.objects.create(username=f"jb_ifo_{i}",
+                                        email=f"jb_ifo_{i}@mcm.edu.ph",
+                                        role="ifo_admin", is_active=True)
+
+    def _session(self, *, now=NOW, start_delta_min=-20, status="scheduled",
+                 declared_modality="", schedule_modality="f2f", days_ago=0,
+                 room=None):
+        room = room or self._room()
+        fac = self._faculty()
+        i = self._next()
+        sch = Schedule.objects.create(
+            term=self.term, course_code=f"JB{i}", section="A", faculty=fac,
+            room=room, day_of_week=0, start_time=time(8, 0), end_time=time(9, 30),
+            modality=schedule_modality)
+        start = now + timedelta(minutes=start_delta_min) - timedelta(days=days_ago)
+        return Session.objects.create(
+            schedule=sch, faculty=fac, room=room, date=start.date(),
+            scheduled_start=start, scheduled_end=start + timedelta(minutes=90),
+            status=status, declared_modality=declared_modality)
+
+
+class SweepTests(_JobFixtureMixin, TestCase):
+    """JOB-02b: the sweep marks unscanned F2F/Blended no-shows ABSENT."""
+
+    def test_scheduled_f2f_no_show_becomes_absent(self):
+        # start = now-20min is past the 15-min grace -> no-show (a).
+        s = self._session(start_delta_min=-20)
+        marked = sweep_no_shows(now=NOW)
+        s.refresh_from_db()
+        self.assertEqual(s.status, SessionStatus.ABSENT)
+        self.assertEqual(marked, 1)
+
+    def test_past_date_no_show_is_backfilled(self):
+        # A SCHEDULED no-show 2 days ago is still swept (backfill/self-heal) (b).
+        s = self._session(start_delta_min=-20, days_ago=2)
+        sweep_no_shows(now=NOW)
+        s.refresh_from_db()
+        self.assertEqual(s.status, SessionStatus.ABSENT)
+
+    def test_online_no_show_stays_scheduled_declared(self):
+        # Online via declared_modality is EXCLUDED from Absent-marking (c).
+        s = self._session(start_delta_min=-20, declared_modality=Modality.ONLINE)
+        sweep_no_shows(now=NOW)
+        s.refresh_from_db()
+        self.assertEqual(s.status, SessionStatus.SCHEDULED)
+
+    def test_online_no_show_stays_scheduled_via_schedule(self):
+        # Online via schedule.modality is EXCLUDED too (effective modality) (c).
+        s = self._session(start_delta_min=-20, schedule_modality=Modality.ONLINE)
+        sweep_no_shows(now=NOW)
+        s.refresh_from_db()
+        self.assertEqual(s.status, SessionStatus.SCHEDULED)
+
+    def test_blended_no_show_becomes_absent(self):
+        # Blended is NOT online -> swept like F2F.
+        s = self._session(start_delta_min=-20, schedule_modality=Modality.BLENDED)
+        sweep_no_shows(now=NOW)
+        s.refresh_from_db()
+        self.assertEqual(s.status, SessionStatus.ABSENT)
+
+    def test_within_grace_is_untouched(self):
+        # start = now-10min is still within the 15-min grace -> not a no-show.
+        s = self._session(start_delta_min=-10)
+        marked = sweep_no_shows(now=NOW)
+        s.refresh_from_db()
+        self.assertEqual(s.status, SessionStatus.SCHEDULED)
+        self.assertEqual(marked, 0)
+
+    def test_idempotent_only_scheduled_to_absent(self):
+        # active/completed/already-absent are never touched across a rerun (d).
+        no_show = self._session(start_delta_min=-20, status="scheduled")
+        active = self._session(start_delta_min=-20, status="active")
+        completed = self._session(start_delta_min=-20, status="completed")
+        already = self._session(start_delta_min=-20, status="absent")
+
+        first = sweep_no_shows(now=NOW)
+        second = sweep_no_shows(now=NOW)
+
+        no_show.refresh_from_db()
+        active.refresh_from_db()
+        completed.refresh_from_db()
+        already.refresh_from_db()
+        self.assertEqual(first, 1)
+        self.assertEqual(second, 0)  # idempotent: nothing left to mark
+        self.assertEqual(no_show.status, SessionStatus.ABSENT)
+        self.assertEqual(active.status, SessionStatus.ACTIVE)
+        self.assertEqual(completed.status, SessionStatus.COMPLETED)
+        self.assertEqual(already.status, SessionStatus.ABSENT)
+
+    def test_marked_absence_writes_auditlog_by_sweep(self):
+        # Every sweep-marked absence writes AuditLog(session.marked_absent, by=sweep) (e).
+        s = self._session(start_delta_min=-20)
+        sweep_no_shows(now=NOW)
+        log = AuditLog.objects.filter(event_type="session.marked_absent",
+                                      target_id=str(s.pk)).first()
+        self.assertIsNotNone(log)
+        self.assertEqual(log.payload.get("by"), "sweep")
+        self.assertEqual(log.target_type, "session")
+
+    def test_sweep_never_stamps_room_released_at(self):
+        # Guard: the sweep is not a timer-based auto-release (f).
+        s = self._session(start_delta_min=-20)
+        sweep_no_shows(now=NOW)
+        s.refresh_from_db()
+        self.assertEqual(s.status, SessionStatus.ABSENT)
+        self.assertIsNone(s.room_released_at)
+
+
+class RoomConflictTests(_JobFixtureMixin, TestCase):
+    """JOB-02c: contradictory occupancy raises ONE deduped IFO flag."""
+
+    def _active_pair(self):
+        """Two ACTIVE sessions holding one room (room_released_at NULL)."""
+        room = self._room()
+        s1 = self._session(start_delta_min=-30, status="active", room=room)
+        s2 = self._session(start_delta_min=-30, status="active", room=room)
+        return room, s1, s2
+
+    def test_conflict_raises_one_flag_and_ifo_notifications(self):
+        # Two active sessions -> exactly ONE open flag + one notification per IFO (a).
+        self._ifo_admin()
+        self._ifo_admin()
+        room, s1, s2 = self._active_pair()
+
+        flagged = detect_room_conflicts(now=NOW)
+
+        self.assertEqual(flagged, 1)
+        self.assertEqual(
+            RoomConflictFlag.objects.filter(room=room,
+                                            resolved_at__isnull=True).count(), 1)
+        self.assertEqual(
+            Notification.objects.filter(type="room_conflict").count(), 2)
+
+    def test_second_detection_is_deduped(self):
+        # A re-run with the same unresolved conflict creates NO new flag/notification (b).
+        self._ifo_admin()
+        room, s1, s2 = self._active_pair()
+
+        detect_room_conflicts(now=NOW)
+        flagged_again = detect_room_conflicts(now=NOW)
+
+        self.assertEqual(flagged_again, 0)
+        self.assertEqual(
+            RoomConflictFlag.objects.filter(resolved_at__isnull=True).count(), 1)
+        self.assertEqual(
+            Notification.objects.filter(type="room_conflict").count(), 1)
+
+    def test_conflict_auto_resolves_when_cleared(self):
+        # Once the conflict clears, a detection run stamps resolved_at (c).
+        self._ifo_admin()
+        room, s1, s2 = self._active_pair()
+        detect_room_conflicts(now=NOW)
+
+        # Clear the conflict: one session completes (only one active left).
+        s2.status = SessionStatus.COMPLETED
+        s2.save(update_fields=["status"])
+        detect_room_conflicts(now=NOW)
+
+        flag = RoomConflictFlag.objects.get(room=room)
+        self.assertIsNotNone(flag.resolved_at)
+        self.assertEqual(
+            RoomConflictFlag.objects.filter(resolved_at__isnull=True).count(), 0)
