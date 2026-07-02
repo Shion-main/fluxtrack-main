@@ -43,10 +43,14 @@ def sweep_no_shows(now=None):
     # DB pre-filter derived from the SAME grace value the predicate re-affirms.
     cutoff = now - timedelta(minutes=grace_min)
     marked = 0
-    qs = (Session.objects.filter(status=SessionStatus.SCHEDULED,
-                                 scheduled_start__lt=cutoff)
-          .select_related("schedule"))
-    for s in qs.iterator():
+    # MSSQL/pyodbc allows only ONE active result set per connection (MARS off by
+    # default). Streaming with .iterator() keeps the SELECT cursor open, so the
+    # save()/AuditLog INSERT below would raise HY010 "Function sequence error".
+    # Fully materialize the candidate set first (cursor closed) before mutating.
+    candidates = list(Session.objects.filter(status=SessionStatus.SCHEDULED,
+                                             scheduled_start__lt=cutoff)
+                      .select_related("schedule"))
+    for s in candidates:
         # Phase-3 hook: online sessions are EXCLUDED from Absent-marking until the
         # online-verify path (Checker + MS Teams verification, Phase 3) can flip a
         # genuinely-attended online session to ACTIVE. Marking an unstarted online
@@ -91,7 +95,9 @@ def detect_room_conflicts(now=None):
     current_keys = {f"room:{rid}": rid for rid in conflicting_room_ids}
 
     # Auto-resolve open flags whose conflict has cleared (key no longer present).
-    for flag in RoomConflictFlag.objects.filter(resolved_at__isnull=True):
+    # Materialize first (list) so the save() below doesn't write while the SELECT
+    # cursor is still open — MSSQL HY010 guard, same as sweep_no_shows above.
+    for flag in list(RoomConflictFlag.objects.filter(resolved_at__isnull=True)):
         if flag.conflict_key not in current_keys:
             flag.resolved_at = now
             flag.save(update_fields=["resolved_at"])

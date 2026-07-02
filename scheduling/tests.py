@@ -362,6 +362,20 @@ class SweepTests(_JobFixtureMixin, TestCase):
         s.refresh_from_db()
         self.assertEqual(s.status, SessionStatus.ABSENT)
 
+    def test_batch_of_no_shows_all_marked_absent(self):
+        # Regression (MSSQL HY010): the sweep mutates rows INSIDE the candidate
+        # loop. With .iterator() streaming an open SELECT cursor, the per-row
+        # save()/AuditLog INSERT raised "Function sequence error (SQLFetch)" on
+        # SQL Server (single active result set, MARS off). A batch of no-shows
+        # exercises the mutate-while-iterate path; all must be marked and the
+        # returned count must match.
+        sessions = [self._session(start_delta_min=-20) for _ in range(5)]
+        marked = sweep_no_shows(now=NOW)
+        self.assertEqual(marked, 5)
+        for s in sessions:
+            s.refresh_from_db()
+            self.assertEqual(s.status, SessionStatus.ABSENT)
+
     def test_online_no_show_stays_scheduled_declared(self):
         # Online via declared_modality is EXCLUDED from Absent-marking (c).
         s = self._session(start_delta_min=-20, declared_modality=Modality.ONLINE)
