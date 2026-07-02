@@ -51,6 +51,13 @@ No new user-facing surfaces ship this phase. The point is that "Absent" becomes 
 - **Last-run status is recorded** (ok/failed, rows affected, timestamp) so the future SYS-04 dashboard (Phase 7) can read it. Introduce a small `JobRun`-style record (planner names/models it).
 - **Job failure surfacing:** on a job **failure only**, fire `notify()` to System Admins (record every run's status, but only notify on failure). No success/heartbeat notifications.
 
+### Online sessions & the sweep (resolved 2026-07-03, auto-decided while user away — revisit at Phase 7)
+- The sweep marks Absent **only F2F/Blended** no-show sessions past grace. **Online sessions are excluded** (left `scheduled`, not marked Absent).
+- Rationale: online classes don't scan a room QR; the resolver returns `ONLINE_REJECT` for them. The only online-start path is FAC-08 "Verify & Start" (Phase 7), but reporting is Phase 6 — marking online no-shows Absent now would inject false absences into every Phase 6 weekly report for the ~5 phases until FAC-08 exists.
+- Effective modality = `session.declared_modality or session.schedule.modality`; exclude when it equals `online`.
+- **Leave a documented hook** (comment/TODO + a validation note) so Phase 7 (FAC-08) revisits online no-show handling.
+- User was away when this was decided via AskUserQuestion; flag on next interaction so they can override.
+
 ### Claude's Discretion
 - Exact module/function placement for the extracted grace predicate (likely `scheduling/resolver.py` or a small shared helper it imports).
 - The `notify()` signature (role vs user targeting, kwargs) and where it lives (likely `ops/`).
