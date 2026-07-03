@@ -95,7 +95,7 @@ Plans:
 
 > **Captured 2026-07-03 (from user, during Phase 2 discussion):** online attendance is *Checker*-verified via the class's public MS Teams link, not faculty-self-declared. Amends **CHK-02** (for online, return/redirect to the Teams link instead of room state) and **CHK-03** (Checker verification actions apply to online sessions). Reconcile with **FAC-08** (Phase 7) which currently has the faculty self-start online. Online sessions get the same grace period as F2F; the Phase 2 sweep excludes them from Absent-marking until this Phase 3 verification path ships.
 
-**Plans**: 4/6 plans executed
+**Plans**: 5/6 plans executed
 
 Plans:
 
@@ -103,7 +103,7 @@ Plans:
 - [x] 03-02-PLAN.md — Checker room scan + F2F/Blended Verify / Verified-empty / note-required Flags → IFO+HR (CHK-01/02/03/04/05) [Wave 2]
 - [x] 03-03-PLAN.md — IFO assignment UI (floor + online duty) + round-robin online-session pre-assignment (IFO-06) [Wave 3]
 - [x] 03-04-PLAN.md — Checker floor board: color cards, coverage %, oldest-first priority queue, Absent excluded, htmx-polled (CHK-07) [Wave 4]
-- [ ] 03-05-PLAN.md — Online verification via Teams link (Verify activates session) + remove sweep online exclusion + rewrite sweep tests (CHK-02/03, ROADMAP #6) [Wave 5]
+- [x] 03-05-PLAN.md — Online verification via Teams link (Verify activates session) + remove sweep online exclusion + rewrite sweep tests (CHK-02/03, ROADMAP #6) [Wave 5]
 - [ ] 03-06-PLAN.md — Offline IndexedDB queue + re-validated replay endpoint (apply-or-flag, idempotent) (CHK-08) [Wave 6]
 
 ### Phase 4: Modality Shift Approval & SRS v1.2
@@ -209,7 +209,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8
 |-------|----------------|--------|-----------|
 | 1. MSSQL Environment & Data Foundation | 0/TBD | Not started | - |
 | 2. Correctness Foundations | 5/5 | Complete    | 2026-07-02 |
-| 3. Duty Assignments & Checker Verification | 4/6 | In Progress|  |
+| 3. Duty Assignments & Checker Verification | 5/6 | In Progress|  |
 | 4. Modality Shift Approval & SRS v1.2 | 0/TBD | Not started | - |
 | 5. Notifications — Read Surface & Web Push | 0/TBD | Not started | - |
 | 6. Reporting Engine & Reporting Surfaces | 0/TBD | Not started | - |
