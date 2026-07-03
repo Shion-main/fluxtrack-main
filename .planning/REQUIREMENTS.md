@@ -54,7 +54,7 @@ roadmap does NOT create phases for them.
 - [x] **MOD-01**: A faculty member can submit a modality-shift request (F2F/Blended ↔ Online) for a single session or a recurring schedule, at least `modality_shift_lead_days` (default 2) before the affected date; too-late requests are refused
 - [ ] **MOD-02**: The request routes to the faculty member's department Dean, who can approve or reject with a reason (no dispute)
 - [ ] **MOD-03**: On approval of a →Online shift, the affected session(s) become Online and the room is released immediately (`room_released_at` stamped), not held on the timer; newly materialized Online sessions are born released
-- [ ] **MOD-04**: On approval of a →F2F/Blended shift, a free room in the same building is auto-assigned at approval time; if none is free, the approval fails with a clear reason (no silent partial-apply)
+- [x] **MOD-04**: On approval of a →F2F/Blended shift, a free room in the same building is auto-assigned at approval time; if none is free, the approval fails with a clear reason (no silent partial-apply)
 - [ ] **MOD-05**: On approval, IFO is notified (informational, not a gate) via `notify()`; the faculty member may withdraw a request while still pending
 - [ ] **MOD-06**: This workflow replaces the FAC-07 self-declare; same-day changes have no formal path and fall back to existing scan-time behavior
 
@@ -164,7 +164,7 @@ phase (see ROADMAP.md). Status values: Pending / In progress / Complete.
 | MOD-01 | Phase 4 | Complete |
 | MOD-02 | Phase 4 | Pending |
 | MOD-03 | Phase 4 | Pending |
-| MOD-04 | Phase 4 | Pending |
+| MOD-04 | Phase 4 | Complete |
 | MOD-05 | Phase 4 | Pending |
 | MOD-06 | Phase 4 | Pending |
 | DOC-01 | Phase 4 | Complete |
