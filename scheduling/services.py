@@ -256,3 +256,68 @@ def submit_modality_shift(faculty, schedules, target_modality, window_start,
             link="/dean/requests",
         )
     return request
+
+
+# ---------------------------------------------------------------------------
+# Task 3 -- withdraw + reject transitions (ownership + PENDING re-gate)
+# ---------------------------------------------------------------------------
+
+def withdraw_modality_shift(request, actor):
+    """Faculty pulls a still-PENDING ticket (MOD-05/D-10). Silent -- no notify.
+
+    Succeeds only when ``actor`` is the requester AND the CURRENT status (re-read
+    from the DB inside the transaction, never an earlier snapshot -- 03-02
+    re-gate) is PENDING. Flips to WITHDRAWN and writes an AuditLog. Any guard
+    failure raises ``ModalityShiftError`` and leaves the state untouched. No
+    Notification is written: decision notices are Dean actions (D-11).
+    """
+    with transaction.atomic():
+        req = ModalityShiftRequest.objects.get(pk=request.pk)
+        if req.requester_id != actor.pk:
+            raise ModalityShiftError("only the requester may withdraw this request")
+        if req.status != ModalityShiftStatus.PENDING:
+            raise ModalityShiftError("only a pending request may be withdrawn")
+        req.status = ModalityShiftStatus.WITHDRAWN
+        req.save(update_fields=["status"])
+        AuditLog.objects.create(
+            actor=actor, event_type="modality_shift.withdrawn",
+            target_type="modality_shift_request", target_id=str(req.pk), payload={},
+        )
+    return req
+
+
+def reject_modality_shift(request, dean, reason):
+    """The routed Dean rejects a PENDING ticket with a reason (MOD-02/D-11).
+
+    Succeeds only when ``dean`` holds Role.DEAN AND is the request's department
+    Dean AND the CURRENT status is PENDING (re-read inside the transaction).
+    Sets REJECTED + ``decision_reason``/``decided_by``/``decided_at``, writes an
+    AuditLog, and notifies the requester exactly once (D-11). Any guard failure
+    raises ``ModalityShiftError`` and leaves the state untouched.
+    """
+    now = timezone.now()
+    with transaction.atomic():
+        req = ModalityShiftRequest.objects.get(pk=request.pk)
+        if dean.role != Role.DEAN or req.department_id != dean.department_id:
+            raise ModalityShiftError(
+                "only the routed department Dean may reject this request")
+        if req.status != ModalityShiftStatus.PENDING:
+            raise ModalityShiftError("only a pending request may be rejected")
+        req.status = ModalityShiftStatus.REJECTED
+        req.decision_reason = reason
+        req.decided_by = dean
+        req.decided_at = now
+        req.save(update_fields=[
+            "status", "decision_reason", "decided_by", "decided_at"])
+        AuditLog.objects.create(
+            actor=dean, event_type="modality_shift.rejected",
+            target_type="modality_shift_request", target_id=str(req.pk),
+            payload={"reason": reason},
+        )
+        notify(
+            users=[req.requester], type="modality_shift_rejected",
+            title="Modality shift rejected",
+            body=f"Your modality shift request was rejected: {reason}",
+            link="/faculty/modality/mine",
+        )
+    return req
