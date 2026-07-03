@@ -296,3 +296,148 @@ class NoImplicitSchedulerTests(SimpleTestCase):
                     f"{app}/apps.py references '{token}' — the scheduler must be "
                     "constructed only in runscheduler.build_scheduler(), never in "
                     "an AppConfig.ready() (per-worker double-fire, ENV-04)")
+
+
+# ---------------------------------------------------------------------------
+# MOD-04 pre-booking availability primitive: ops/availability.py.
+# RoomAvailabilityTests is a property-style suite over the single "is room R free
+# for [start,end)?" primitive that the picker (04-07), approval apply (04-05) and
+# materialize hook (04-06) all call. Overlap is HALF-OPEN (adjacent slots do not
+# collide, D-08); an Online / released / absent / completed session holds no
+# physical room; an active Booking occupies; an approved ->F2F reservation
+# occupies even before its Session materializes (D-18); faculty_has_conflict vetoes
+# a time-move that would double-book the faculty (D-17).
+#
+# ops.availability imports are METHOD-LOCAL (mirrors ReleaseRoomTests) so this is
+# the only class that goes RED before ops/availability.py exists.
+# ---------------------------------------------------------------------------
+from datetime import datetime as _dt, time as _time  # noqa: E402
+
+from scheduling.models import (  # noqa: E402
+    Modality as _Modality,
+    ModalityShiftItem as _ShiftItem,
+    ModalityShiftRequest as _ShiftReq,
+    ModalityShiftStatus as _ShiftStatus,
+    SessionStatus as _SessionStatus,
+)
+from scheduling.test_support import MANILA as _MANILA, make_shift_fixture  # noqa: E402
+
+
+def _mnl(d, hh, mm):
+    """Asia/Manila-aware datetime helper, matching the fixture's tz."""
+    return _dt(d.year, d.month, d.day, hh, mm, tzinfo=_MANILA)
+
+
+class RoomAvailabilityTests(TestCase):
+    """ops/availability.py: half-open, building-scoped, Booking- and request-aware
+    room availability + faculty double-book guard (MOD-04 / D-08 / D-18 / D-17)."""
+
+    def setUp(self):
+        self.fx = make_shift_fixture()
+        self.date = self.fx.session.date  # IN_WINDOW_DATE Monday (day_of_week=0)
+        # The fixture seeds TWO SCHEDULED F2F occupants on room_a for the 08:00-09:30
+        # slot: fx.session (the class being moved) and fx.competitor (another
+        # faculty). Room B is held only by an Online session -> no physical room.
+
+    # --- Task 1: overlap + building scope + Booking ------------------------
+    def test_overlap_makes_room_not_free(self):
+        from ops.availability import room_is_free
+        self.assertFalse(
+            room_is_free(self.fx.room_a, _mnl(self.date, 8, 0), _mnl(self.date, 9, 30)))
+
+    def test_free_when_no_overlap(self):
+        from ops.availability import room_is_free
+        # 12:00-13:00 does not overlap the 08:00-09:30 occupants.
+        self.assertTrue(
+            room_is_free(self.fx.room_a, _mnl(self.date, 12, 0), _mnl(self.date, 13, 0)))
+
+    def test_adjacent_boundary_is_free(self):
+        from ops.availability import room_is_free
+        # Occupant ends 09:30; a slot STARTING at 09:30 is adjacent, not overlapping.
+        self.assertTrue(
+            room_is_free(self.fx.room_a, _mnl(self.date, 9, 30), _mnl(self.date, 11, 0)))
+
+    def test_released_session_excluded(self):
+        from ops.availability import room_is_free
+        for s in (self.fx.session, self.fx.competitor):
+            s.room_released_at = _mnl(self.date, 8, 5)
+            s.save(update_fields=["room_released_at"])
+        self.assertTrue(
+            room_is_free(self.fx.room_a, _mnl(self.date, 8, 0), _mnl(self.date, 9, 30)))
+
+    def test_online_session_excluded(self):
+        from ops.availability import room_is_free
+        # An Online effective modality holds no physical room even on room_a.
+        for s in (self.fx.session, self.fx.competitor):
+            s.declared_modality = _Modality.ONLINE
+            s.save(update_fields=["declared_modality"])
+        self.assertTrue(
+            room_is_free(self.fx.room_a, _mnl(self.date, 8, 0), _mnl(self.date, 9, 30)))
+
+    def test_absent_and_completed_excluded(self):
+        from ops.availability import room_is_free
+        self.fx.session.status = _SessionStatus.ABSENT
+        self.fx.session.save(update_fields=["status"])
+        self.fx.competitor.status = _SessionStatus.COMPLETED
+        self.fx.competitor.save(update_fields=["status"])
+        self.assertTrue(
+            room_is_free(self.fx.room_a, _mnl(self.date, 8, 0), _mnl(self.date, 9, 30)))
+
+    def test_active_booking_occupies(self):
+        from ops.availability import room_is_free
+        from ops.models import Booking
+        # Room B is otherwise free at 08:00-09:30 (its only session is Online).
+        self.assertTrue(
+            room_is_free(self.fx.room_b, _mnl(self.date, 8, 0), _mnl(self.date, 9, 30)))
+        Booking.objects.create(
+            room=self.fx.room_b, occupant_name="Faculty Senate",
+            start_datetime=_mnl(self.date, 8, 0), end_datetime=_mnl(self.date, 9, 30),
+            status="active")
+        self.assertFalse(
+            room_is_free(self.fx.room_b, _mnl(self.date, 8, 0), _mnl(self.date, 9, 30)))
+
+    def test_inactive_booking_does_not_occupy(self):
+        from ops.availability import room_is_free
+        from ops.models import Booking
+        Booking.objects.create(
+            room=self.fx.room_b, occupant_name="Cancelled",
+            start_datetime=_mnl(self.date, 8, 0), end_datetime=_mnl(self.date, 9, 30),
+            status="cancelled")
+        self.assertTrue(
+            room_is_free(self.fx.room_b, _mnl(self.date, 8, 0), _mnl(self.date, 9, 30)))
+
+    def test_exclude_session_id_self_exclusion(self):
+        from ops.availability import room_is_free
+        # Leave ONLY fx.session holding room_a, then exclude it -> free.
+        self.fx.competitor.status = _SessionStatus.COMPLETED
+        self.fx.competitor.save(update_fields=["status"])
+        self.assertFalse(
+            room_is_free(self.fx.room_a, _mnl(self.date, 8, 0), _mnl(self.date, 9, 30)))
+        self.assertTrue(
+            room_is_free(self.fx.room_a, _mnl(self.date, 8, 0), _mnl(self.date, 9, 30),
+                         exclude_session_id=self.fx.session.pk))
+
+    def test_free_rooms_in_building_scoped_and_ordered(self):
+        from ops.availability import free_rooms_in_building
+        from campus.models import Building, Floor, Room
+        # A room in a DIFFERENT building must never be returned.
+        other_b = Building.objects.create(name="Other Hall", code="OTHER-BLD")
+        other_f = Floor.objects.create(building=other_b, number=1)
+        Room.objects.create(
+            floor=other_f, code="OTHER-A", capacity=10,
+            qr_token="other-qr-a", manual_code="OTA001")
+        # At 08:00-09:30 room_a is doubly held; room_b (Online only) is free.
+        free = free_rooms_in_building(
+            self.fx.building, _mnl(self.date, 8, 0), _mnl(self.date, 9, 30))
+        codes = [r.code for r in free]
+        self.assertEqual(codes, [self.fx.room_b.code])
+
+    def test_free_rooms_prefer_room_first(self):
+        from ops.availability import free_rooms_in_building
+        # A wholly-free slot: both rooms free; prefer_room floats to the front.
+        free = free_rooms_in_building(
+            self.fx.building, _mnl(self.date, 14, 0), _mnl(self.date, 15, 0),
+            prefer_room=self.fx.room_b)
+        self.assertEqual(free[0].code, self.fx.room_b.code)
+        self.assertEqual({r.code for r in free},
+                         {self.fx.room_a.code, self.fx.room_b.code})
