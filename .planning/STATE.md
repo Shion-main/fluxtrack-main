@@ -6,14 +6,14 @@ current_phase: 03
 current_phase_name: duty-assignments-checker-verification
 status: executing
 stopped_at: Completed 03-02-PLAN.md
-last_updated: "2026-07-03T00:23:30.612Z"
+last_updated: "2026-07-03T00:34:01.926Z"
 last_activity: 2026-07-03
 last_activity_desc: Phase 03 execution resumed (wave continue)
 progress:
   total_phases: 8
   completed_phases: 2
   total_plans: 14
-  completed_plans: 9
+  completed_plans: 11
   percent: 25
 ---
 
@@ -29,7 +29,7 @@ See: .planning/PROJECT.md (updated 2026-07-02)
 ## Current Position
 
 Phase: 03 (duty-assignments-checker-verification) — EXECUTING
-Plan: 3 of 6
+Plan: 4 of 6
 Status: Ready to execute
 Last activity: 2026-07-03 — Phase 03 execution resumed (wave continue)
 
@@ -65,6 +65,7 @@ Progress: [███████░░░] 67%
 | Phase 02 P05 | 6 | 3 tasks | 8 files |
 | Phase 03 P01 | 25m | 2 tasks | 7 files |
 | Phase 03 P02 | ~6m | 3 tasks | 6 files |
+| Phase 03 P03 | ~14m | 3 tasks | 8 files |
 
 ## Accumulated Context
 
@@ -95,6 +96,7 @@ Recent decisions affecting current work:
 - [Phase ?]: AssignmentScope (FLOOR/ONLINE) additive field; Session.online_checker nullable one-owner FK (03-01)
 - [Phase ?]: 03-02: Checker action endpoint re-identifies the room from POST room_id and unconditionally re-runs resolve_checker_scan against current _active_floor_ids before any write (server-side re-gate; never trusts client gating).
 - [Phase ?]: 03-02: _active_floor_ids treats a standing FLOOR posting (date NULL) as always on-duty; a shift is on-duty when date==today and start<=now<=end (either bound may be NULL).
+- [Phase ?]: 03-03: online round-robin apply (assign_online_sessions) writes Session.online_checker via the pure distributor; empty roster leaves NULL + flags IFO, never guesses
 
 ### Pending Todos
 
@@ -113,6 +115,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-07-03T00:23:30.601Z
+Last session: 2026-07-03T00:33:53.911Z
 Stopped at: Completed 03-02-PLAN.md
 Resume file: None
