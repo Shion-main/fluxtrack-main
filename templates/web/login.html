@@ -6,10 +6,21 @@
     <h1 class="uk-h3 mb-1">FluxTrack</h1>
     <p class="uk-text-muted uk-text-small mb-6">Faculty Attendance &amp; Facility Utilization</p>
 
+    {% if messages %}
+    {% for message in messages %}
+    <div class="uk-alert uk-alert-danger mb-4">
+      <div class="uk-alert-description uk-text-small">{{ message }}</div>
+    </div>
+    {% endfor %}
+    {% endif %}
+
+    <a href="{% url 'social:begin' 'azuread-tenant-oauth2' %}"
+       class="uk-btn uk-btn-primary w-full h-11">Sign in with Microsoft</a>
+
     {% if dev_mode %}
-    <div class="uk-alert uk-alert-secondary mb-4">
+    <div class="uk-alert uk-alert-secondary my-4">
       <div class="uk-alert-description uk-text-small">
-        Dev login (Entra ID SSO wired in Phase 2). Pick a role to sign in.
+        Dev login (DEBUG only). Pick a role to sign in.
       </div>
     </div>
     <div class="space-y-2">
@@ -27,8 +38,6 @@
         <code>py -3.12 manage.py seed_demo</code>.</p>
       {% endfor %}
     </div>
-    {% else %}
-    <a href="#" class="uk-btn uk-btn-primary w-full h-11">Sign in with Microsoft</a>
     {% endif %}
 
     {% if error %}<p class="uk-text-small text-destructive mt-3">{{ error }}</p>{% endif %}
