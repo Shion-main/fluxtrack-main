@@ -539,3 +539,27 @@ class SchedulerWiringTests(TestCase):
         finally:
             if getattr(sched, "running", False):
                 sched.shutdown(wait=False)
+
+
+# ---------------------------------------------------------------------------
+# Phase-4 shared fixture builder smoke test (04-01 Task 3).
+# make_shift_fixture() must wire a Dean + faculty in ONE department so later
+# plans' routing (D-09) and department gates resolve correctly. This proves the
+# builder saves a valid graph (no IntegrityError) and the routing keys line up.
+# ---------------------------------------------------------------------------
+from scheduling.test_support import make_shift_fixture  # noqa: E402
+
+
+class FixtureSmokeTests(TestCase):
+    """04-01: make_shift_fixture() seeds a valid, routing-correct object graph."""
+
+    def test_fixture_wires_dean_and_same_department_faculty(self):
+        fx = make_shift_fixture()
+        self.assertEqual(fx.dean.role, Role.DEAN)
+        self.assertEqual(fx.faculty.role, Role.FACULTY)
+        self.assertEqual(fx.faculty.department_id, fx.dean.department_id)
+        # The in-window F2F session and its online counterpart both persisted.
+        self.assertEqual(fx.session.status, SessionStatus.SCHEDULED)
+        self.assertEqual(fx.online_session.declared_modality, Modality.ONLINE)
+        # The competitor holds room A at the same slot for availability tests.
+        self.assertEqual(fx.competitor.room_id, fx.room_a.id)
