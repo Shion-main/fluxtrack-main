@@ -638,3 +638,148 @@ class DeanRoutingTests(TestCase):
         fx.dean.is_active = False
         fx.dean.save(update_fields=["is_active"])
         self.assertIsNone(services.route_to_dean(fx.faculty))
+
+
+# ---------------------------------------------------------------------------
+# 04-04 Task 2 -- in-window scope resolution (D-01/D-19) + submit (atomic ticket).
+# submit_modality_shift gathers the in-window sessions, gates on the earliest
+# affected date, routes to the Dean, creates ONE ModalityShiftRequest with one
+# ModalityShiftItem per schedule, notifies the Dean once, and audits. A time-move
+# is accepted only bundled with F2F/Blended (D-16) and never double-books the
+# faculty (D-17).
+# ---------------------------------------------------------------------------
+from datetime import time as _time  # noqa: E402
+
+from scheduling.models import (  # noqa: E402
+    ModalityShiftItem,
+    ModalityShiftRequest,
+    ModalityShiftStatus,
+)
+
+# A "now" comfortably before the Sat 2026-07-04 00:00 Manila cutoff so scope
+# tests exercise scope/atomicity rather than the lead gate.
+_EARLY_NOW = _manila(2026, 6, 1, 8, 0)
+
+
+def _add_session(schedule, d):
+    """Materialize one SCHEDULED session of ``schedule`` on date ``d``."""
+    return Session.objects.create(
+        schedule=schedule, faculty=schedule.faculty, room=schedule.room, date=d,
+        scheduled_start=dt.combine(d, schedule.start_time, tzinfo=_MANILA),
+        scheduled_end=dt.combine(d, schedule.end_time, tzinfo=_MANILA),
+        status=SessionStatus.SCHEDULED,
+    )
+
+
+class ShiftScopeTests(TestCase):
+    """D-01/D-19: in-window scope resolution and the atomic submit ticket."""
+
+    def test_single_session_window_creates_one_item(self):
+        fx = make_shift_fixture()
+        req = services.submit_modality_shift(
+            fx.faculty, [fx.f2f_schedule], Modality.ONLINE,
+            date(2026, 7, 6), date(2026, 7, 6), now=_EARLY_NOW,
+        )
+        self.assertEqual(req.status, ModalityShiftStatus.PENDING)
+        self.assertEqual(req.dean, fx.dean)
+        self.assertEqual(req.items.count(), 1)
+        self.assertEqual(
+            [s.pk for s in services.affected_sessions(req)], [fx.session.pk])
+        # Dean notified exactly once (MOD-05).
+        self.assertEqual(
+            Notification.objects.filter(
+                user=fx.dean, type="modality_shift_submitted").count(), 1)
+        # AuditLog written (T-04-09 provenance).
+        self.assertTrue(AuditLog.objects.filter(
+            event_type="modality_shift.submitted",
+            target_id=str(req.pk)).exists())
+
+    def test_recurring_window_resolves_only_in_window_sessions(self):
+        fx = make_shift_fixture()
+        _add_session(fx.f2f_schedule, date(2026, 7, 13))   # in window
+        _add_session(fx.f2f_schedule, date(2026, 7, 20))   # in window (edge)
+        out = _add_session(fx.f2f_schedule, date(2026, 7, 27))  # OUT of window
+        req = services.submit_modality_shift(
+            fx.faculty, [fx.f2f_schedule], Modality.ONLINE,
+            date(2026, 7, 6), date(2026, 7, 20), now=_EARLY_NOW,
+        )
+        got = {s.pk for s in services.affected_sessions(req)}
+        self.assertEqual(
+            got, {fx.session.pk} | set(
+                Session.objects.filter(
+                    schedule=fx.f2f_schedule,
+                    date__in=[date(2026, 7, 13), date(2026, 7, 20)],
+                ).values_list("pk", flat=True)))
+        # The out-of-window session is untouched (never in the affected set).
+        self.assertNotIn(out.pk, got)
+        out.refresh_from_db()
+        self.assertEqual(out.declared_modality, "")
+
+    def test_multi_schedule_ticket_has_item_per_schedule(self):
+        fx = make_shift_fixture()
+        tue_schedule = Schedule.objects.create(
+            term=fx.term, course_code="MSF102", section="A",
+            faculty=fx.faculty, room=fx.room_b, day_of_week=1,
+            start_time=_time(8, 0), end_time=_time(9, 30), modality=Modality.F2F,
+        )
+        _add_session(tue_schedule, date(2026, 7, 7))  # Tuesday, in window
+        req = services.submit_modality_shift(
+            fx.faculty, [fx.f2f_schedule, tue_schedule], Modality.ONLINE,
+            date(2026, 7, 6), date(2026, 7, 13), now=_EARLY_NOW,
+        )
+        self.assertEqual(req.items.count(), 2)
+        self.assertEqual(
+            set(req.items.values_list("schedule_id", flat=True)),
+            {fx.f2f_schedule.pk, tue_schedule.pk})
+        self.assertEqual(len(services.affected_sessions(req)), 2)
+
+    def test_time_move_refused_when_target_online(self):
+        fx = make_shift_fixture()
+        with self.assertRaises(ModalityShiftError):
+            services.submit_modality_shift(
+                fx.faculty, [fx.f2f_schedule], Modality.ONLINE,
+                date(2026, 7, 6), date(2026, 7, 6), now=_EARLY_NOW,
+                time_move=(_time(13, 0), _time(14, 30)),
+            )
+
+    def test_time_move_refused_when_double_books_faculty(self):
+        fx = make_shift_fixture()
+        # Move the 08:00 F2F class onto the 10:00-11:30 slot the faculty already
+        # teaches online (fx.online_session) -> D-17 double-book refusal.
+        with self.assertRaises(ModalityShiftError):
+            services.submit_modality_shift(
+                fx.faculty, [fx.f2f_schedule], Modality.F2F,
+                date(2026, 7, 6), date(2026, 7, 6), now=_EARLY_NOW,
+                time_move=(_time(10, 0), _time(11, 30)),
+            )
+
+    def test_valid_f2f_time_move_creates_time_move_ticket(self):
+        fx = make_shift_fixture()
+        req = services.submit_modality_shift(
+            fx.faculty, [fx.f2f_schedule], Modality.F2F,
+            date(2026, 7, 6), date(2026, 7, 6), now=_EARLY_NOW,
+            time_move=(_time(13, 0), _time(14, 30)),
+        )
+        self.assertTrue(req.is_time_move)
+        item = req.items.get()
+        self.assertEqual(item.new_start_time, _time(13, 0))
+        self.assertEqual(item.new_end_time, _time(14, 30))
+
+    def test_too_late_request_refused(self):
+        fx = make_shift_fixture()
+        with self.assertRaises(ModalityShiftError):
+            services.submit_modality_shift(
+                fx.faculty, [fx.f2f_schedule], Modality.ONLINE,
+                date(2026, 7, 6), date(2026, 7, 6),
+                now=_manila(2026, 7, 4, 0, 0),  # at the cutoff -> refused
+            )
+
+    def test_missing_dean_refused_at_submit(self):
+        fx = make_shift_fixture()
+        fx.faculty.department = None
+        fx.faculty.save(update_fields=["department"])
+        with self.assertRaises(ModalityShiftError):
+            services.submit_modality_shift(
+                fx.faculty, [fx.f2f_schedule], Modality.ONLINE,
+                date(2026, 7, 6), date(2026, 7, 6), now=_EARLY_NOW,
+            )
