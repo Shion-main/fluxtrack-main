@@ -589,3 +589,98 @@ class FloorBoardTests(_CheckerFixtureMixin, TestCase):
         self.assertEqual(r.context["total"], 1)
         self.assertContains(r, mine.room.code)
         self.assertNotContains(r, theirs.room.code)
+
+
+# ---------------------------------------------------------------------------
+# Offline replay (CHK-08). ReplayTests drives POST /checker/replay: each queued
+# item is RE-VALIDATED against CURRENT state through the SAME pure gating core
+# (never the offline snapshot) — a still-actionable item applies with the
+# ORIGINAL scanned_at preserved; a stale item (current state no longer
+# actionable) is NOT applied, is recorded via AuditLog(checker.replay_conflict),
+# and flags IFO via notify(); a repeated client_uuid never double-applies. RED
+# until the /checker/replay route + web.checker.replay view exist (Task 2).
+# ---------------------------------------------------------------------------
+import json  # noqa: E402
+import uuid  # noqa: E402
+
+
+class ReplayTests(_CheckerFixtureMixin, TestCase):
+    def _post_replay(self, items):
+        return self.client.post(
+            "/checker/replay", data=json.dumps({"items": items}),
+            content_type="application/json")
+
+    def test_valid_replay_applies(self):
+        # A queued scan whose CURRENT room/session state is still actionable is
+        # applied — CheckerValidation(offline_queued=True) with scanned_at ==
+        # the original offline timestamp (not now).
+        checker = self._checker()
+        self._active_floor_assignment(checker, self.floor)
+        room = self._room()
+        session = self._session(room)
+        self.client.force_login(checker)
+
+        original_scanned_at = timezone.now() - timedelta(minutes=15)
+        client_uuid = str(uuid.uuid4())
+        r = self._post_replay([{
+            "client_uuid": client_uuid, "token": room.qr_token,
+            "action": "verified", "note": "",
+            "scanned_at": original_scanned_at.isoformat()}])
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(r.json()["results"][0]["status"], "applied")
+
+        cv = CheckerValidation.objects.filter(
+            session=session, action="verified", offline_queued=True).first()
+        self.assertIsNotNone(cv)
+        self.assertEqual(cv.scanned_at, original_scanned_at)
+        session.refresh_from_db()
+        self.assertTrue(session.verified_by_checker)
+
+    def test_stale_replay_flags_ifo(self):
+        # The session is currently ABSENT (ended/handed-over/already resolved
+        # between the offline scan and the replay) -> NOT applied (no verifying
+        # CheckerValidation), an AuditLog(checker.replay_conflict) is written,
+        # and IFO is notified via notify() — never blindly trusted.
+        checker = self._checker()
+        self._active_floor_assignment(checker, self.floor)
+        ifo = self._ifo_admin()
+        room = self._room()
+        session = self._session(room, status=SessionStatus.ABSENT)
+        self.client.force_login(checker)
+
+        client_uuid = str(uuid.uuid4())
+        r = self._post_replay([{
+            "client_uuid": client_uuid, "token": room.qr_token,
+            "action": "verified", "note": "",
+            "scanned_at": (timezone.now() - timedelta(minutes=30)).isoformat()}])
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(r.json()["results"][0]["status"], "flagged")
+
+        self.assertFalse(CheckerValidation.objects.filter(
+            session=session, action="verified").exists())
+        self.assertTrue(AuditLog.objects.filter(
+            event_type="checker.replay_conflict").exists())
+        self.assertTrue(Notification.objects.filter(
+            user=ifo, type="checker_replay_conflict").exists())
+
+    def test_replay_idempotent(self):
+        # Posting the same client_uuid twice applies it at most once.
+        checker = self._checker()
+        self._active_floor_assignment(checker, self.floor)
+        room = self._room()
+        session = self._session(room)
+        self.client.force_login(checker)
+
+        client_uuid = str(uuid.uuid4())
+        item = {
+            "client_uuid": client_uuid, "token": room.qr_token,
+            "action": "verified", "note": "",
+            "scanned_at": (timezone.now() - timedelta(minutes=5)).isoformat()}
+
+        r1 = self._post_replay([item])
+        r2 = self._post_replay([item])
+        self.assertEqual(r1.json()["results"][0]["status"], "applied")
+        self.assertEqual(r2.json()["results"][0]["status"], "duplicate")
+
+        self.assertEqual(CheckerValidation.objects.filter(
+            session=session, action="verified").count(), 1)
