@@ -41,6 +41,17 @@ _FLAG_ACTIONS = {ValidationAction.FLAG_IDENTITY_MISMATCH,
                  ValidationAction.FLAG_NOT_PRESENT}
 _VALID_ACTIONS = set(ValidationAction.values)
 
+# Which action(s) each ACTIONABLE outcome permits (CR-02). resolution.actionable
+# only tells us SOME action applies; this pins WHICH. A forged POST applying
+# `verified_empty` to an occupied ACTIVE_UNVERIFIED session — or `verified` to an
+# empty NO_SESSION room — is incongruent and refused (audited, writes nothing).
+_OUTCOME_ACTIONS = {
+    R.NO_SESSION: {ValidationAction.VERIFIED_EMPTY},
+    R.ACTIVE_UNVERIFIED: {ValidationAction.VERIFIED,
+                          ValidationAction.FLAG_IDENTITY_MISMATCH,
+                          ValidationAction.FLAG_NOT_PRESENT},
+}
+
 
 # --- authorization ---------------------------------------------------------
 def checker_required(view):
@@ -343,6 +354,17 @@ def action(request):
         return render(request, "checker/_outcome.html", {
             "resolution": resolution, "room": room, "session": session})
 
+    # Congruence gate (CR-02): the action must be the one this outcome permits —
+    # an actionable room is not a blank cheque. An incongruent action (e.g.
+    # verified_empty on an occupied session) is refused, audited, writes nothing.
+    if action_val not in _OUTCOME_ACTIONS.get(resolution.outcome, set()):
+        AuditLog.objects.create(
+            actor=request.user, event_type="checker.action_refused",
+            target_type="room", target_id=str(room.pk),
+            payload={"outcome": resolution.outcome, "action": action_val})
+        return render(request, "checker/_outcome.html", {
+            "resolution": resolution, "room": room, "session": session})
+
     # Flags require a note (Pitfall 4). Reject empty server-side with a 200 error
     # partial (never a 500) and write nothing.
     if action_val in _FLAG_ACTIONS and not note.strip():
@@ -421,6 +443,10 @@ def replay(request):
                 reason = resolution.outcome
             elif action_val not in _VALID_ACTIONS:
                 reason = "bad-payload"
+            elif action_val not in _OUTCOME_ACTIONS.get(resolution.outcome, set()):
+                # CR-02: an item whose action does not match the current outcome
+                # is flagged for IFO review, never applied.
+                reason = "action-incongruent"
             elif action_val in _FLAG_ACTIONS and not note.strip():
                 # Reuse the FLAG note-required rule (Pitfall 4): a flag item
                 # with an empty note is rejected/flagged, never silently applied.

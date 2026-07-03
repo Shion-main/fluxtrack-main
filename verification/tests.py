@@ -342,6 +342,32 @@ class CheckerScanDBTests(_CheckerFixtureMixin, TestCase):
         self.assertFalse(
             CheckerValidation.objects.filter(session=session).exists())
 
+    def test_incongruent_action_is_refused(self):
+        # CR-02: resolution.actionable is not a blank cheque — the submitted
+        # action must be the one the resolved outcome permits.
+        checker = self._checker()
+        self._active_floor_assignment(checker, self.floor)
+        self.client.force_login(checker)
+
+        # verified_empty against an occupied ACTIVE_UNVERIFIED room: refused,
+        # audited, writes NOTHING (would else falsely record occupied as empty).
+        room = self._room()
+        session = self._session(room)  # ACTIVE, unverified
+        r = self.client.post("/checker/action", {
+            "action": "verified_empty", "room_id": room.id})
+        self.assertEqual(r.status_code, 200)
+        self.assertFalse(CheckerValidation.objects.filter(session=session).exists())
+        self.assertTrue(AuditLog.objects.filter(
+            event_type="checker.action_refused", target_id=str(room.pk)).exists())
+
+        # verified against a truly-empty NO_SESSION room: refused, writes NOTHING
+        # (would else create a garbage session=None verified validation).
+        empty_room = self._room()
+        r2 = self.client.post("/checker/action", {
+            "action": "verified", "room_id": empty_room.id})
+        self.assertEqual(r2.status_code, 200)
+        self.assertFalse(CheckerValidation.objects.filter(room=empty_room).exists())
+
     def test_confirmed_absent_not_in_choices(self):
         # Guard for the 03-01 ValidationAction retirement (VALIDATION.md).
         values = ValidationAction.values
