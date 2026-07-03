@@ -1,0 +1,110 @@
+{% comment %}
+MOD-01/D-05/D-15 availability-first submit form. htmx swaps this partial into
+#modality-panel after a POST so a validation error (status 400) renders inline; a
+successful submit returns HX-Redirect to /faculty/modality/mine (a full-page nav).
+The room pick is only a PREFERENCE -- the server re-resolves rooms at Dean approval
+(D-06) and never trusts the posted room pk. Leaving a room blank = "let the app
+decide" (D-05). Franken UI (uk-*). Use {% comment %} not {# #} so Django does not
+parse the {% %} tags in this header (03-02 parse-error lesson). ASCII-only.
+{% endcomment %}
+{% if error %}
+<div class="uk-alert uk-alert-destructive mb-4" role="alert" data-error="1">
+  <p class="uk-text-small">{{ error }}</p>
+</div>
+{% endif %}
+
+<form hx-post="/faculty/modality/new" hx-target="#modality-panel" hx-swap="innerHTML"
+      method="post" action="/faculty/modality/new" class="flex flex-col gap-4">
+  {% csrf_token %}
+
+  <div>
+    <label class="uk-form-label" for="m-target">Shift to</label>
+    <select id="m-target" name="target_modality" class="uk-select h-11" required>
+      {% for value, label in modalities %}
+      <option value="{{ value }}">{{ label }}</option>
+      {% endfor %}
+    </select>
+    <p class="uk-text-small uk-text-muted mt-1">
+      Online frees the room. Face-to-face / Blended books a room for you -- pick one
+      below or let the app decide.</p>
+  </div>
+
+  <div class="grid grid-cols-2 gap-3">
+    <div>
+      <label class="uk-form-label" for="m-ws">From date</label>
+      <input id="m-ws" type="date" name="window_start" class="uk-input h-11" required>
+    </div>
+    <div>
+      <label class="uk-form-label" for="m-we">To date</label>
+      <input id="m-we" type="date" name="window_end" class="uk-input h-11" required>
+    </div>
+  </div>
+  <p class="uk-text-small uk-text-muted -mt-2">
+    Same date in both for a single session; a range covers every affected class-day
+    inside it.</p>
+
+  <fieldset class="border border-border rounded-md p-3 flex flex-col gap-3">
+    <legend class="uk-text-small uk-text-muted px-1">Classes to shift</legend>
+    {% for row in schedule_rows %}
+    <div class="border-b border-border last:border-0 pb-3 last:pb-0">
+      <label class="flex items-start gap-2">
+        <input type="checkbox" name="schedules" value="{{ row.schedule.id }}"
+               class="uk-checkbox mt-1">
+        <span class="min-w-0">
+          <span class="font-semibold">
+            {{ row.schedule.course_code }}-{{ row.schedule.section }}</span>
+          <span class="uk-text-small uk-text-muted block">
+            {{ row.schedule.get_day_of_week_display }}
+            {{ row.schedule.start_time|time:"g:i A" }}-{{ row.schedule.end_time|time:"g:i A" }}
+            &middot; {{ row.schedule.room.code }}
+            &middot; {{ row.schedule.get_modality_display }}</span>
+        </span>
+      </label>
+
+      <div class="mt-2 pl-6">
+        <label class="uk-form-label" for="m-room-{{ row.schedule.id }}">
+          Preferred room (Face-to-face / Blended)</label>
+        <select id="m-room-{{ row.schedule.id }}"
+                name="preferred_room_{{ row.schedule.id }}" class="uk-select h-10">
+          <option value="">Let the app decide</option>
+          {% for r in row.rooms %}
+          <option value="{{ r.id }}">{{ r.code }}</option>
+          {% empty %}
+          {% endfor %}
+        </select>
+        {% if row.next_session and not row.rooms %}
+        <p class="uk-text-small uk-text-muted mt-1">
+          No room free at the current time -- the app will look for an alternative.</p>
+        {% endif %}
+        {% if row.times %}
+        <p class="uk-text-small uk-text-muted mt-1">
+          Alternative times available that day:
+          {% for start, end in row.times %}{{ start|time:"g:i A" }}{% if not forloop.last %}, {% endif %}{% endfor %}</p>
+        {% endif %}
+      </div>
+    </div>
+    {% empty %}
+    <p class="uk-text-small uk-text-muted">You have no active classes to shift.</p>
+    {% endfor %}
+  </fieldset>
+
+  <fieldset class="border border-border rounded-md p-3">
+    <legend class="uk-text-small uk-text-muted px-1">
+      Move to a different time (optional, Face-to-face / Blended only)</legend>
+    <div class="grid grid-cols-2 gap-3">
+      <div>
+        <label class="uk-form-label" for="m-nst">New start</label>
+        <input id="m-nst" type="time" name="new_start_time" class="uk-input h-10">
+      </div>
+      <div>
+        <label class="uk-form-label" for="m-net">New end</label>
+        <input id="m-net" type="time" name="new_end_time" class="uk-input h-10">
+      </div>
+    </div>
+    <p class="uk-text-small uk-text-muted mt-2">
+      Leave blank to keep the class at its scheduled time.</p>
+  </fieldset>
+
+  <button type="submit" class="uk-btn uk-btn-primary w-full h-12">
+    <uk-icon icon="send" class="size-4"></uk-icon> Submit request</button>
+</form>

@@ -13,6 +13,11 @@ urlpatterns = [
     # Faculty surfaces
     path("faculty/schedule", faculty.schedule, name="faculty_schedule"),
     path("faculty/scan", faculty.scan_page, name="faculty_scan"),
+    # Faculty modality-shift request surface (MOD-01/MOD-05, D-12)
+    path("faculty/modality/new", faculty.modality_new, name="faculty_modality_new"),
+    path("faculty/modality/mine", faculty.modality_mine, name="faculty_modality_mine"),
+    path("faculty/modality/<int:pk>/withdraw", faculty.modality_withdraw,
+         name="faculty_modality_withdraw"),
     # Checker surfaces (CHK-01..05, CHK-07)
     path("checker/scan", checker.scan_page, name="checker_scan"),
     path("checker/resolve", checker.resolve, name="checker_resolve"),
