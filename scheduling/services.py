@@ -30,9 +30,15 @@ from django.db import transaction
 from django.utils import timezone
 
 from accounts.models import Role
-from ops.availability import available_rooms_for, faculty_has_conflict
+from ops.availability import (
+    available_rooms_for,
+    faculty_has_conflict,
+    free_rooms_in_building,
+    room_is_free,
+)
 from ops.models import AuditLog
 from ops.notify import notify
+from ops.occupancy import release_room
 from ops.policy import get_policy
 from scheduling.models import (
     Modality,
@@ -319,5 +325,76 @@ def reject_modality_shift(request, dean, reason):
             title="Modality shift rejected",
             body=f"Your modality shift request was rejected: {reason}",
             link="/faculty/modality/mine",
+        )
+    return req
+
+
+# ---------------------------------------------------------------------------
+# 04-05 -- Dean approval APPLY (the decision-consequence side, MOD-03..06).
+#
+# apply_approval turns an approved PENDING ticket into reality inside ONE atomic
+# transaction that re-gates the Dean and re-checks availability at write time
+# (TOCTOU-safe, D-06). The consequence depends on target_modality:
+#   - ->Online (D-04/MOD-03): each in-window session flips to declared_modality=
+#     Online and its room is released via release_room() (room_released_at stamped;
+#     the room FK is NEVER nulled -- RESEARCH anti-pattern). The freed room becomes
+#     bookable and every effective-modality reader (resolver/sweep/round-robin)
+#     sees Online with zero changes to them (the MOD-06 coupling).
+#   - ->F2F/Blended (Task 2): a real room is re-resolved inside the transaction.
+#   - no free room / double-booking time-move (Task 3): terminal DENY, all-or-
+#     nothing rollback (D-07 REVISED).
+# ---------------------------------------------------------------------------
+
+def _apply_online(request, sessions, dean, now):
+    """MOD-03/D-04: flip each in-window session to Online and release its room.
+
+    Sets ``declared_modality=Online`` (+ ``modality_changed_at``/``_by``) so the
+    resolver, sweep, and online round-robin all read the shift unchanged, then
+    calls the single-source-of-truth ``release_room()`` which stamps
+    ``room_released_at`` and self-audits. ``session.room`` is deliberately left set
+    (the release signal is ``room_released_at``, not a null FK).
+    """
+    for session in sessions:
+        session.declared_modality = Modality.ONLINE
+        session.modality_changed_at = now
+        session.modality_changed_by = dean
+        session.save(update_fields=[
+            "declared_modality", "modality_changed_at", "modality_changed_by"])
+        release_room(session, actor=dean, now=now)
+
+
+def apply_approval(request, dean, *, now=None):
+    """Apply an approved modality shift atomically (MOD-03..06).
+
+    Re-gates inside ``transaction.atomic()``: ``dean`` must hold Role.DEAN, be the
+    request's department Dean, and the CURRENT status (re-read from the DB, never
+    an earlier snapshot -- 03-02 re-gate) must be PENDING. The in-window affected
+    sessions are ``list()``-materialized before the write loop (HY010 guard). For a
+    ->Online target the ``_apply_online`` consequence runs; the request becomes
+    APPROVED with ``decided_by``/``decided_at`` and an AuditLog is written.
+    (->F2F/Blended, terminal DENY, and notifications land in the following tasks.)
+    """
+    now = now or timezone.now()
+    with transaction.atomic():
+        req = ModalityShiftRequest.objects.get(pk=request.pk)
+        if dean.role != Role.DEAN or req.department_id != dean.department_id:
+            raise ModalityShiftError(
+                "only the routed department Dean may approve this request")
+        if req.status != ModalityShiftStatus.PENDING:
+            raise ModalityShiftError("only a pending request may be approved")
+
+        sessions = list(affected_sessions(req))  # HY010: materialize before writes
+
+        if req.target_modality == Modality.ONLINE:
+            _apply_online(req, sessions, dean, now)
+
+        req.status = ModalityShiftStatus.APPROVED
+        req.decided_by = dean
+        req.decided_at = now
+        req.save(update_fields=["status", "decided_by", "decided_at"])
+        AuditLog.objects.create(
+            actor=dean, event_type="modality_shift.approved",
+            target_type="modality_shift_request", target_id=str(req.pk),
+            payload={"target_modality": req.target_modality},
         )
     return req

@@ -866,3 +866,138 @@ class WithdrawTests(TestCase):
             services.reject_modality_shift(req, fx.dean, "too late")
         req.refresh_from_db()
         self.assertEqual(req.status, ModalityShiftStatus.WITHDRAWN)
+
+
+# ---------------------------------------------------------------------------
+# 04-05 -- Dean approval APPLY (the decision-consequence side).
+# apply_approval turns an approved request into real room releases (->Online),
+# real room assignments (->F2F/Blended), terminal denials (no free room), bundled
+# time-moves, reservations for future sessions, and decision/IFO notifications --
+# all atomic, TOCTOU-safe, audited. Task 1 covers the ->Online consequence + the
+# effective-modality coupling (declared_modality is what the resolver/sweep read).
+# ---------------------------------------------------------------------------
+from ops.availability import room_is_free  # noqa: E402
+
+# apply_approval does NOT gate on lead time, so any aware "now" serves.
+_APPLY_NOW = _manila(2026, 6, 1, 9, 0)
+
+
+def _pending_request(fx, target, schedules, window_start, window_end, *,
+                     preferred=None, time_move=None):
+    """Persist a PENDING ModalityShiftRequest with one item per schedule.
+
+    Builds the request directly (bypassing the lead-time gate) so apply tests
+    exercise the CONSEQUENCE side in isolation. ``time_move`` is a
+    ``(new_start_time, new_end_time)`` pair applied to every item.
+    """
+    req = ModalityShiftRequest.objects.create(
+        requester=fx.faculty, dean=fx.dean, department=fx.dept,
+        target_modality=target, window_start=window_start, window_end=window_end,
+        is_time_move=bool(time_move), status=ModalityShiftStatus.PENDING,
+    )
+    nst, net = time_move or (None, None)
+    for sch in schedules:
+        ModalityShiftItem.objects.create(
+            request=req, schedule=sch, preferred_room=preferred,
+            new_start_time=nst, new_end_time=net,
+        )
+    return req
+
+
+class ApplyOnlineTests(TestCase):
+    """MOD-03/D-04: approving a ->Online shift releases the room via release_room
+    and flips effective modality via declared_modality on each in-window session;
+    out-of-window sessions are untouched. The room FK is NEVER nulled -- the
+    release signal is room_released_at (RESEARCH anti-pattern)."""
+
+    def test_online_approval_releases_room_and_flips_modality(self):
+        fx = make_shift_fixture()
+        req = _pending_request(
+            fx, Modality.ONLINE, [fx.f2f_schedule],
+            date(2026, 7, 6), date(2026, 7, 6))
+        out = services.apply_approval(req, fx.dean, now=_APPLY_NOW)
+
+        self.assertEqual(out.status, ModalityShiftStatus.APPROVED)
+        self.assertEqual(out.decided_by, fx.dean)
+        self.assertIsNotNone(out.decided_at)
+
+        fx.session.refresh_from_db()
+        self.assertEqual(fx.session.declared_modality, Modality.ONLINE)
+        self.assertEqual(fx.session.modality_changed_at, _APPLY_NOW)
+        self.assertEqual(fx.session.modality_changed_by, fx.dean)
+        # release_room stamped room_released_at ...
+        self.assertEqual(fx.session.room_released_at, _APPLY_NOW)
+        # ... but never nulled the room FK (session.room stays room_a).
+        self.assertEqual(fx.session.room_id, fx.room_a.id)
+        # AuditLog: the approval + the room release are both recorded.
+        self.assertTrue(AuditLog.objects.filter(
+            event_type="modality_shift.approved",
+            target_id=str(req.pk)).exists())
+        self.assertTrue(AuditLog.objects.filter(
+            event_type="session.room_released",
+            target_id=str(fx.session.pk)).exists())
+
+    def test_out_of_window_session_untouched(self):
+        fx = make_shift_fixture()
+        out_session = _add_session(fx.f2f_schedule, date(2026, 7, 13))  # out of window
+        req = _pending_request(
+            fx, Modality.ONLINE, [fx.f2f_schedule],
+            date(2026, 7, 6), date(2026, 7, 6))
+        services.apply_approval(req, fx.dean, now=_APPLY_NOW)
+
+        out_session.refresh_from_db()
+        self.assertEqual(out_session.declared_modality, "")
+        self.assertIsNone(out_session.room_released_at)
+
+    def test_approve_refused_for_wrong_dean_or_non_pending(self):
+        fx = make_shift_fixture()
+        other = make_shift_fixture("oth")  # a Dean of a DIFFERENT department
+        req = _pending_request(
+            fx, Modality.ONLINE, [fx.f2f_schedule],
+            date(2026, 7, 6), date(2026, 7, 6))
+        with self.assertRaises(ModalityShiftError):
+            services.apply_approval(req, other.dean, now=_APPLY_NOW)
+        req.refresh_from_db()
+        self.assertEqual(req.status, ModalityShiftStatus.PENDING)
+        # Non-pending re-gate: an already-approved ticket cannot be re-approved.
+        req.status = ModalityShiftStatus.WITHDRAWN
+        req.save(update_fields=["status"])
+        with self.assertRaises(ModalityShiftError):
+            services.apply_approval(req, fx.dean, now=_APPLY_NOW)
+
+
+class EffectiveModalityCouplingTests(TestCase):
+    """MOD-06: after a ->Online apply, the effective modality the resolver/sweep
+    read (declared_modality or schedule.modality) is Online for each affected
+    session -- the coupling that makes the shift visible to every reader with zero
+    changes to them. The availability primitive agrees: a released online session
+    holds no physical room."""
+
+    def test_effective_modality_is_online_after_apply(self):
+        fx = make_shift_fixture()
+        req = _pending_request(
+            fx, Modality.ONLINE, [fx.f2f_schedule],
+            date(2026, 7, 6), date(2026, 7, 6))
+        services.apply_approval(req, fx.dean, now=_APPLY_NOW)
+
+        fx.session.refresh_from_db()
+        # The exact expression every reader uses (scheduling/resolver.py:97,
+        # verification/services.py:47, ops/availability.py:56).
+        effective = fx.session.declared_modality or fx.session.schedule.modality
+        self.assertEqual(effective, Modality.ONLINE)
+
+    def test_released_online_session_no_longer_occupies_its_room(self):
+        # A schedule whose ONLY room-holder is the shifted session: after the
+        # ->Online release, availability sees the room as free at that slot.
+        fx = make_shift_fixture("cpl")
+        req = _pending_request(
+            fx, Modality.ONLINE, [fx.f2f_schedule],
+            date(2026, 7, 6), date(2026, 7, 6))
+        services.apply_approval(req, fx.dean, now=_APPLY_NOW)
+
+        fx.session.refresh_from_db()
+        # Exclude the competing occupant so this asserts the SHIFTED session's
+        # release specifically (the competitor holds room_a independently).
+        self.assertTrue(room_is_free(
+            fx.room_a, fx.session.scheduled_start, fx.session.scheduled_end,
+            exclude_session_id=fx.competitor.pk))
