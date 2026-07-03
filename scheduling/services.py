@@ -93,3 +93,166 @@ def route_to_dean(faculty):
         .objects.filter(role=Role.DEAN, department=dept, is_active=True)
         .first()
     )
+
+
+# ---------------------------------------------------------------------------
+# Task 2 -- in-window scope resolution (D-01/D-19) + submit (atomic ticket)
+# ---------------------------------------------------------------------------
+
+def _in_window_sessions(schedule, window_start, window_end):
+    """SCHEDULED/ACTIVE sessions of ``schedule`` dated inside the window.
+
+    Materialized (list()) up front -- the HY010 guard: the SELECT is closed
+    before any follow-up query or write (pyodbc single active result set).
+    """
+    return list(
+        Session.objects.filter(
+            schedule=schedule,
+            status__in=_OCCUPYING_STATUSES,
+            date__gte=window_start,
+            date__lte=window_end,
+        )
+        .select_related("schedule")
+        .order_by("date", "scheduled_start")
+    )
+
+
+def affected_sessions(request):
+    """The in-window SCHEDULED/ACTIVE sessions of every item's schedule (D-01).
+
+    Out-of-window sessions are never returned -- they keep their original
+    modality/room untouched (there is no revert event). Order is stable by item,
+    then date/start.
+    """
+    result = []
+    for item in request.items.select_related("schedule").all():
+        result.extend(
+            _in_window_sessions(item.schedule, request.window_start, request.window_end)
+        )
+    return result
+
+
+def submit_modality_shift(faculty, schedules, target_modality, window_start,
+                          window_end, *, preferred_rooms=None, time_move=None,
+                          now=None):
+    """Create ONE atomic modality-shift ticket (D-19), gated + routed + audited.
+
+    Validates and, on success, persists a ``ModalityShiftRequest`` (status
+    PENDING) with one ``ModalityShiftItem`` per schedule, notifies the routed
+    Dean once, and writes an AuditLog. Refuses (raises ``ModalityShiftError``,
+    nothing written) when:
+      - no schedule/session is in scope, an invalid target modality, or an
+        inverted window is supplied;
+      - the earliest affected date is at/after the lead-time cutoff (D-02);
+      - the requester has no department or no active department Dean (D-09);
+      - a time-move is requested with a non-F2F/Blended target (D-16) or would
+        double-book the requesting faculty at any affected slot (D-17).
+
+    ``preferred_rooms`` maps a schedule (or its pk) to a preferred Room; the pk is
+    NEVER trusted -- it is kept only when the room is genuinely free for the
+    session's own slot (``available_rooms_for``). The room is finalized at Dean
+    approval (04-05), not here. ``time_move`` is a ``(new_start_time,
+    new_end_time)`` pair applied to every item.
+    """
+    now = now or timezone.now()
+    schedules = list(schedules)
+    if not schedules:
+        raise ModalityShiftError("no schedules selected")
+    if target_modality not in Modality.values:
+        raise ModalityShiftError("invalid target modality")
+    if window_start > window_end:
+        raise ModalityShiftError("window start is after window end")
+
+    is_move = time_move is not None
+    new_start_time = new_end_time = None
+    if is_move:
+        if target_modality not in (Modality.F2F, Modality.BLENDED):
+            # D-16: a time-move is only ever bundled with a F2F/Blended shift.
+            raise ModalityShiftError(
+                "a time-move must be bundled with a F2F or Blended shift")
+        new_start_time, new_end_time = time_move
+
+    # Normalize preferred_rooms to {schedule_pk: Room}.
+    pref = {}
+    if preferred_rooms:
+        for key, room in preferred_rooms.items():
+            pref[getattr(key, "pk", key)] = room
+
+    # Gather in-window sessions per schedule (materialized first, HY010 guard).
+    sched_sessions = {}
+    all_dates = []
+    for sch in schedules:
+        sessions = _in_window_sessions(sch, window_start, window_end)
+        sched_sessions[sch.pk] = sessions
+        all_dates.extend(s.date for s in sessions)
+
+    if not all_dates:
+        raise ModalityShiftError("no in-window sessions to shift")
+
+    # Lead-time gate against the EARLIEST affected date (D-02), server clock only.
+    earliest = min(all_dates)
+    if not is_before_lead_cutoff(earliest, now):
+        raise ModalityShiftError("request is past the lead-time cutoff")
+
+    # Deterministic Dean routing (D-09) -- refuse on missing dept / vacant seat.
+    dean = route_to_dean(faculty)
+    if faculty.department is None or dean is None:
+        raise ModalityShiftError("no Dean assigned - contact IFO")
+
+    # Time-move double-book guard (D-17): the new slot must never collide with
+    # another class the requesting faculty already teaches.
+    if is_move:
+        for sch in schedules:
+            for s in sched_sessions[sch.pk]:
+                ns = timezone.make_aware(datetime.combine(s.date, new_start_time))
+                ne = timezone.make_aware(datetime.combine(s.date, new_end_time))
+                if faculty_has_conflict(faculty, ns, ne, exclude_session_id=s.pk):
+                    raise ModalityShiftError(
+                        "the new time double-books the requesting faculty")
+
+    # Validate preferred rooms server-side (never trust a client room pk). A
+    # preference survives only when the room is free for EVERY affected session's
+    # own slot; otherwise it is dropped (the app resolves at approval, D-06).
+    validated_pref = {}
+    for sch in schedules:
+        room = pref.get(sch.pk)
+        if room is None:
+            continue
+        ok = bool(sched_sessions[sch.pk]) and all(
+            any(r.pk == room.pk for r in available_rooms_for(s))
+            for s in sched_sessions[sch.pk]
+        )
+        validated_pref[sch.pk] = room if ok else None
+
+    with transaction.atomic():
+        request = ModalityShiftRequest.objects.create(
+            requester=faculty, dean=dean, department=faculty.department,
+            target_modality=target_modality,
+            window_start=window_start, window_end=window_end,
+            is_time_move=is_move, status=ModalityShiftStatus.PENDING,
+        )
+        for sch in schedules:
+            ModalityShiftItem.objects.create(
+                request=request, schedule=sch,
+                preferred_room=validated_pref.get(sch.pk),
+                new_start_time=new_start_time, new_end_time=new_end_time,
+            )
+        AuditLog.objects.create(
+            actor=faculty, event_type="modality_shift.submitted",
+            target_type="modality_shift_request", target_id=str(request.pk),
+            payload={
+                "target_modality": target_modality,
+                "window_start": str(window_start),
+                "window_end": str(window_end),
+                "is_time_move": is_move,
+                "schedules": [sch.pk for sch in schedules],
+            },
+        )
+        notify(
+            users=[dean], type="modality_shift_submitted",
+            title="Modality shift request",
+            body=(f"{faculty.get_full_name() or faculty.username} requested a "
+                  f"{target_modality} shift for {window_start} to {window_end}."),
+            link="/dean/requests",
+        )
+    return request
