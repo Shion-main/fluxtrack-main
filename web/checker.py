@@ -370,13 +370,15 @@ def action(request):
     elif action_val == ValidationAction.VERIFIED:
         identity_match = True
 
-    # Idempotency: same checker + room/session + minute does not re-apply.
+    # Idempotency: same checker + room/session + action + minute applies once.
+    # Atomic cache.add (WR-01) closes the TOCTOU double-apply/double-notify race a
+    # non-atomic get-then-set left open (two overlapping requests both reading the
+    # cache before either writes). Only the request that wins the add() applies.
     scope_pk = session.pk if session else room.pk
-    idem = f"checker-idem:{request.user.pk}:{scope_pk}:{now:%Y%m%d%H%M}"
-    if cache.get(idem) != action_val:
+    idem = f"checker-idem:{request.user.pk}:{scope_pk}:{action_val}:{now:%Y%m%d%H%M}"
+    if cache.add(idem, True, timeout=120):
         _apply_action(request, session, room, action_val, note=note,
                       identity_match=identity_match, scanned_at=now)
-        cache.set(idem, action_val, timeout=120)
 
     return render(request, "checker/_outcome.html", {
         "resolution": resolution, "room": room, "session": session,
@@ -452,11 +454,16 @@ def replay(request):
                 identity_match = False
             elif action_val == ValidationAction.VERIFIED:
                 identity_match = True
+            # Atomically claim this uuid BEFORE applying (WR-01): a concurrent
+            # replay of the same item loses the add() race and is reported a
+            # duplicate, closing the TOCTOU double-apply/double-notify window the
+            # separate get/set left open.
+            if not cache.add(idem_key, True, timeout=None):
+                results.append({"uuid": client_uuid, "status": "duplicate"})
+                continue
             _apply_action(request, session, room, action_val, note=note,
                           identity_match=identity_match, scanned_at=scanned_at,
                           offline=True)
-            if client_uuid:
-                cache.set(idem_key, True, timeout=None)
             results.append({"uuid": client_uuid, "status": "applied"})
         else:
             AuditLog.objects.create(
@@ -512,14 +519,14 @@ def _online_action(request, session_id, action_val, note, now):
             "error": "note-required", "session": session})
 
     identity_match = True if action_val == ValidationAction.VERIFIED else None
-    # Idempotency: same checker + session + minute does not re-apply.
-    idem = f"checker-idem:{request.user.pk}:{session.pk}:{now:%Y%m%d%H%M}"
-    if cache.get(idem) != action_val:
+    # Idempotency: same checker + session + action + minute applies once. Atomic
+    # cache.add (WR-01) closes the double-apply/double-notify TOCTOU race.
+    idem = f"checker-idem:{request.user.pk}:{session.pk}:{action_val}:{now:%Y%m%d%H%M}"
+    if cache.add(idem, True, timeout=120):
         # room=session.room: online sessions still carry their scheduled room, so
         # the NOT-NULL CheckerValidation.room is satisfied without a schema change.
         _apply_action(request, session, session.room, action_val, note=note,
                       identity_match=identity_match, scanned_at=now, online=True)
-        cache.set(idem, action_val, timeout=120)
 
     return render(request, "checker/_outcome.html", {
         "session": session, "room": session.room,
