@@ -6,14 +6,14 @@ current_phase: 04
 current_phase_name: modality-shift-approval-srs-v1-2
 status: executing
 stopped_at: Phase 4 planned (8 plans, ready to execute)
-last_updated: "2026-07-03T15:47:11.392Z"
+last_updated: "2026-07-03T16:00:44.504Z"
 last_activity: 2026-07-03
 last_activity_desc: Phase 04 execution started
 progress:
   total_phases: 9
   completed_phases: 3
   total_plans: 27
-  completed_plans: 21
+  completed_plans: 22
   percent: 33
 ---
 
@@ -29,7 +29,7 @@ See: .planning/PROJECT.md (updated 2026-07-02)
 ## Current Position
 
 Phase: 04 (modality-shift-approval-srs-v1-2) — EXECUTING
-Plan: 4 of 8
+Plan: 5 of 8
 Status: Ready to execute
 Last activity: 2026-07-03 — Phase 04 execution started
 
@@ -79,6 +79,7 @@ Progress: [████████░░] 80%
 | Phase 04 P01 | 20 | 3 tasks | 5 files |
 | Phase 04 P02 | ~6m | 4 tasks | 5 files |
 | Phase 04 P03 | 35m | 3 tasks | 2 files |
+| Phase 04 P04 | 30 min | 3 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -134,6 +135,7 @@ Recent decisions affecting current work:
 - [Phase 04]: 04-02: FluxTrack_SRS revised to v1.2 -- MOD area (MOD-01..06) added as new Section 4.4 with 4.5..4.13 renumbered (SCAN-03 and IFO-10 cross-refs updated); DEAN-04 dashboard row; FAC-07 marked superseded by the Dean-approved modality-shift workflow; CHK-03 drops Confirm absent and applies to online; CHK-06 removed (Absent is final); RPT-02 notifies IFO + Deans; modality_shift_lead_days=2 in the Section 8 policy register.
 - [Phase 04]: 04-02: FluxTrack_SRS.docx is a GENERATED artifact -- produced only by 'manage.py regenerate_srs_docx' from the .md via bundled pypandoc_binary==1.17 (pandoc 3.9, no system pandoc / no PATH); never hand-edit the .docx; pandoc output is not byte-deterministic.
 - [Phase 04]: 04-02: MOD-06 documentation half (FAC-07 superseded + CHK-06 removed in SRS) shipped here; the code half (declared_modality as approval override) lands in 04-05/04-07, so MOD-06 stays open in REQUIREMENTS.md while DOC-01 is closed.
+- [Phase 04]: 04-04: creation-side refusals raise ModalityShiftError (friendly-400 seam); submit persists a PENDING ticket + item-per-schedule, notifies the Dean once, mutates no sessions (apply is 04-05)
 
 ### Pending Todos
 
@@ -156,6 +158,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-07-03T15:46:53.974Z
+Last session: 2026-07-03T15:59:56.636Z
 Stopped at: Phase 4 planned (8 plans, ready to execute)
 Resume file: .planning/phases/04-modality-shift-approval-srs-v1-2/04-01-PLAN.md
