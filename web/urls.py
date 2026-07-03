@@ -20,6 +20,8 @@ urlpatterns = [
          name="faculty_modality_withdraw"),
     # Dean modality-shift approval surface (MOD-02, D-12)
     path("dean/requests", dean.queue, name="dean_queue"),
+    path("dean/requests/<int:pk>/approve", dean.approve, name="dean_approve"),
+    path("dean/requests/<int:pk>/reject", dean.reject, name="dean_reject"),
     # Checker surfaces (CHK-01..05, CHK-07)
     path("checker/scan", checker.scan_page, name="checker_scan"),
     path("checker/resolve", checker.resolve, name="checker_resolve"),

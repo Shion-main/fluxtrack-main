@@ -57,6 +57,29 @@ tags in this header (03-02 parse-error lesson). Franken UI (uk-*). ASCII-only.
     <span class="uk-text-muted">(no classes)</span>
     {% endfor %}
   </div>
+
+  <div class="flex flex-wrap items-end gap-2 mt-3">
+    <form hx-post="/dean/requests/{{ r.pk }}/approve"
+          hx-target="#dean-queue-panel" hx-swap="innerHTML"
+          method="post" action="/dean/requests/{{ r.pk }}/approve">
+      {% csrf_token %}
+      <button type="submit" class="uk-btn uk-btn-primary uk-btn-sm">
+        <uk-icon icon="check" class="size-4"></uk-icon> Approve</button>
+    </form>
+    <form hx-post="/dean/requests/{{ r.pk }}/reject"
+          hx-target="#dean-queue-panel" hx-swap="innerHTML"
+          method="post" action="/dean/requests/{{ r.pk }}/reject"
+          class="flex items-end gap-2">
+      {% csrf_token %}
+      <div>
+        <label class="uk-form-label" for="reason-{{ r.pk }}">Reason</label>
+        <input id="reason-{{ r.pk }}" type="text" name="reason"
+               class="uk-input uk-form-sm h-9" placeholder="Reason for rejection">
+      </div>
+      <button type="submit" class="uk-btn uk-btn-secondary uk-btn-sm">
+        <uk-icon icon="x" class="size-4"></uk-icon> Reject</button>
+    </form>
+  </div>
 </div>
 {% empty %}
 <p class="uk-text-small uk-text-muted">

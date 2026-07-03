@@ -19,10 +19,16 @@ from functools import wraps
 
 from django.contrib.auth.decorators import login_required
 from django.core.exceptions import PermissionDenied
-from django.shortcuts import render
+from django.shortcuts import get_object_or_404, render
+from django.views.decorators.http import require_http_methods
 
 from accounts.models import Role
 from scheduling.models import ModalityShiftRequest, ModalityShiftStatus
+from scheduling.services import (
+    ModalityShiftError,
+    apply_approval,
+    reject_modality_shift,
+)
 
 
 def dean_required(view):
@@ -62,3 +68,63 @@ def queue(request):
     separate POST-only approve/reject views. Requests from any other department
     are excluded server-side (never merely hidden)."""
     return render(request, "dean/queue.html", _queue_ctx(request.user))
+
+
+@dean_required
+@require_http_methods(["POST"])
+def approve(request, pk):
+    """Approve a PENDING request, applying the room release/assign consequence.
+
+    POST-only; the guard is DELEGATED to ``apply_approval`` which re-fetches the
+    request inside ``transaction.atomic()`` and re-checks Dean role + same
+    department + PENDING before any write (never an earlier snapshot -- the IDOR /
+    TOCTOU re-gate, T-04-01/T-04-03). A cross-department or non-pending approve
+    raises ``ModalityShiftError`` and re-renders the queue at 400 with nothing
+    changed. A ->F2F approval with no free room returns a terminal DENIED request
+    (D-07 REVISED): the queue re-renders with the denial reason and the session is
+    provably unchanged -- never surfaced as success (T-04-07). The view NEVER
+    mutates state itself: the service owns the transaction, audit, and notifies."""
+    req = get_object_or_404(ModalityShiftRequest, pk=pk)
+    error = None
+    message = None
+    try:
+        result = apply_approval(req, request.user)
+    except ModalityShiftError as exc:
+        error = str(exc)
+    else:
+        if result.status == ModalityShiftStatus.DENIED:
+            message = (result.decision_reason
+                       or "No room available that day - request denied.")
+        else:
+            message = "Request approved."
+    ctx = _queue_ctx(request.user, error=error, message=message)
+    return render(request, "dean/_queue.html", ctx,
+                  status=400 if error else 200)
+
+
+@dean_required
+@require_http_methods(["POST"])
+def reject(request, pk):
+    """Reject a PENDING request with a required reason (MOD-02/D-10/D-11).
+
+    POST-only; a non-empty reason is required (rendered at 400 otherwise -- the
+    T-04-05v input-validation guard, mirroring ifo.assignment_create). The guard is
+    delegated to ``reject_modality_shift`` which re-checks Dean role + same
+    department + PENDING inside its transaction and notifies the requester once;
+    the view never mutates state itself."""
+    req = get_object_or_404(ModalityShiftRequest, pk=pk)
+    reason = (request.POST.get("reason") or "").strip()
+    error = None
+    message = None
+    if not reason:
+        error = "A reason is required to reject a request."
+    else:
+        try:
+            reject_modality_shift(req, request.user, reason)
+        except ModalityShiftError as exc:
+            error = str(exc)
+        else:
+            message = "Request rejected."
+    ctx = _queue_ctx(request.user, error=error, message=message)
+    return render(request, "dean/_queue.html", ctx,
+                  status=400 if error else 200)
