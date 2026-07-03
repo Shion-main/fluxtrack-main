@@ -114,11 +114,21 @@ Plans:
 **Plans:** 5 plans
 
 Plans:
+**Wave 1**
 
 - [ ] 03.1-01-PLAN.md — Install social-auth-app-django, add the PKCE mixin backend, wire the settings block + `auth/` URL include, migrate social_django (Wave 1)
+
+**Wave 2** *(blocked on Wave 1 completion)*
+
 - [ ] 03.1-02-PLAN.md — Custom pipeline (deny-unprovisioned + write azure_oid, with security audit) and the `link_entra` command (Wave 2)
 - [ ] 03.1-03-PLAN.md — Dev-login coexistence fix (name ModelBackend), always-visible Microsoft button, refreshed `.env.example` (Wave 2)
+
+**Wave 3** *(blocked on Wave 2 completion)*
+
 - [ ] 03.1-04-PLAN.md — Wave-0 automated tests: PKCE/wiring/deny/oid/link_entra + dev-login coexistence + logout (Wave 3)
+
+**Wave 4** *(blocked on Wave 3 completion)*
+
 - [ ] 03.1-05-PLAN.md — Manual UAT gate: real Entra round-trip, live unprovisioned refusal, break-glass under DEBUG=False (D-09) (Wave 4)
 
 ### Phase 4: Modality Shift Approval & SRS v1.2
