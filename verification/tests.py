@@ -306,3 +306,111 @@ class CheckerScanDBTests(_CheckerFixtureMixin, TestCase):
         self.assertNotIn("confirmed_absent", values)
         self.assertNotIn("confirmed_empty", values)
         self.assertIn("verified_empty", values)
+
+
+# ---------------------------------------------------------------------------
+# Online round-robin distribution (IFO-06) + IFO assignment-create surface.
+# DistributeDBTests drive verification.services.assign_online_sessions: it reuses
+# the pure R.distribute_online_sessions (03-01) and writes Session.online_checker,
+# flags IFO when no online-duty Checker exists, and notifies each assigned Checker
+# (CHK-02 write-only). AssignmentCreateTests drive the IFO non-admin create route
+# (web/ifo.py). RED until verification.services + the IFO views/routes exist
+# (Tasks 2-3): the distribute tests raise ImportError on verification.services,
+# the create tests hit a 404 on the unwired route.
+# ---------------------------------------------------------------------------
+class DistributeDBTests(_CheckerFixtureMixin, TestCase):
+    def _online_duty(self, checker):
+        # A standing ONLINE-scope CHECKER posting -> eligible for round-robin.
+        return Assignment.objects.create(
+            user=checker, role=DutyRole.CHECKER, type="standing",
+            scope="online", term=self.term, status="active")
+
+    def _online_session(self, status=SessionStatus.SCHEDULED):
+        # An online session (schedule.modality online) with no owner yet.
+        return self._session(self._room(), modality=Modality.ONLINE, status=status)
+
+    def test_no_checker_leaves_unassigned(self):
+        # No online-duty Checker exists for the date -> the online session stays
+        # unowned (online_checker NULL) and IFO is flagged via notify().
+        from verification.services import assign_online_sessions
+        ifo = self._ifo_admin()
+        session = self._online_session()
+
+        result = assign_online_sessions(timezone.localdate())
+
+        session.refresh_from_db()
+        self.assertIsNone(session.online_checker_id)
+        self.assertGreaterEqual(result["unassigned"], 1)
+        self.assertEqual(result["assigned"], 0)
+        self.assertTrue(
+            Notification.objects.filter(user=ifo, type="online_unassigned").exists())
+
+    def test_round_robin_assigns_online_checker(self):
+        # 2 online-duty Checkers + 4 online sessions -> a 2/2 round-robin split,
+        # each session gets exactly one owner, and each Checker is notified once.
+        from verification.services import assign_online_sessions
+        c1 = self._checker()
+        c2 = self._checker()
+        self._online_duty(c1)
+        self._online_duty(c2)
+        sessions = [self._online_session() for _ in range(4)]
+
+        result = assign_online_sessions(timezone.localdate())
+
+        owners = []
+        for s in sessions:
+            s.refresh_from_db()
+            owners.append(s.online_checker_id)
+        self.assertNotIn(None, owners)                 # every session owned
+        self.assertEqual(result["assigned"], 4)
+        self.assertEqual(result["unassigned"], 0)
+        self.assertEqual(owners.count(c1.id), 2)       # deterministic 2/2 split
+        self.assertEqual(owners.count(c2.id), 2)
+        # Each assigned Checker is notified at pre-assignment time (CHK-02).
+        self.assertTrue(
+            Notification.objects.filter(user=c1, type="online_assigned").exists())
+        self.assertTrue(
+            Notification.objects.filter(user=c2, type="online_assigned").exists())
+
+
+class AssignmentCreateTests(_CheckerFixtureMixin, TestCase):
+    def test_ifo_creates_floor_assignment(self):
+        # An IFO POST creates a FLOOR-scope Checker assignment on the chosen floor.
+        ifo = self._ifo_admin()
+        checker = self._checker()
+        self.client.force_login(ifo)
+
+        r = self.client.post("/ifo/assignments/create", {
+            "user": checker.id, "role": "checker", "type": "shift",
+            "scope": "floor", "floors": [self.floor.id]})
+        self.assertIn(r.status_code, (200, 302))
+        a = Assignment.objects.filter(
+            user=checker, role="checker", scope="floor").first()
+        self.assertIsNotNone(a)
+        self.assertIn(self.floor, list(a.floors.all()))
+
+    def test_ifo_creates_online_duty_assignment(self):
+        # scope=online creates an ONLINE assignment with no floor requirement.
+        ifo = self._ifo_admin()
+        checker = self._checker()
+        self.client.force_login(ifo)
+
+        r = self.client.post("/ifo/assignments/create", {
+            "user": checker.id, "role": "checker", "type": "standing",
+            "scope": "online"})
+        self.assertIn(r.status_code, (200, 302))
+        a = Assignment.objects.filter(user=checker, scope="online").first()
+        self.assertIsNotNone(a)
+        self.assertEqual(a.floors.count(), 0)
+
+    def test_non_ifo_forbidden(self):
+        # A Checker cannot mint duty grants — the create route is IFO-only (403).
+        checker = self._checker()
+        victim = self._checker()
+        self.client.force_login(checker)
+
+        r = self.client.post("/ifo/assignments/create", {
+            "user": victim.id, "role": "checker", "type": "standing",
+            "scope": "online"})
+        self.assertEqual(r.status_code, 403)
+        self.assertFalse(Assignment.objects.filter(user=victim).exists())
