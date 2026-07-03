@@ -311,7 +311,7 @@ class NoImplicitSchedulerTests(SimpleTestCase):
 # ops.availability imports are METHOD-LOCAL (mirrors ReleaseRoomTests) so this is
 # the only class that goes RED before ops/availability.py exists.
 # ---------------------------------------------------------------------------
-from datetime import datetime as _dt, time as _time  # noqa: E402
+from datetime import datetime as _dt, time as _time, timedelta as _timedelta  # noqa: E402
 
 from scheduling.models import (  # noqa: E402
     Modality as _Modality,
@@ -441,3 +441,68 @@ class RoomAvailabilityTests(TestCase):
         self.assertEqual(free[0].code, self.fx.room_b.code)
         self.assertEqual({r.code for r in free},
                          {self.fx.room_a.code, self.fx.room_b.code})
+
+    # --- Task 2: request-aware occupancy + faculty double-book guard -------
+    def _approved_reservation(self, target, assigned_room, on_date):
+        """Seed an APPROVED ModalityShiftRequest+Item reserving ``assigned_room``
+        for ``on_date`` via the fixture's Monday f2f_schedule (08:00-09:30)."""
+        req = _ShiftReq.objects.create(
+            requester=self.fx.faculty, dean=self.fx.dean, department=self.fx.dept,
+            target_modality=target, window_start=on_date, window_end=on_date,
+            status=_ShiftStatus.APPROVED)
+        return _ShiftItem.objects.create(
+            request=req, schedule=self.fx.f2f_schedule, assigned_room=assigned_room)
+
+    def test_approved_f2f_reservation_occupies_before_materialize(self):
+        from ops.availability import room_is_free
+        future = self.date + _timedelta(days=7)  # next Monday, no Session exists yet
+        self.assertTrue(
+            room_is_free(self.fx.room_b, _mnl(future, 8, 0), _mnl(future, 9, 30)))
+        self._approved_reservation(_Modality.F2F, self.fx.room_b, future)
+        self.assertFalse(
+            room_is_free(self.fx.room_b, _mnl(future, 8, 0), _mnl(future, 9, 30)))
+
+    def test_approved_online_request_reserves_nothing(self):
+        from ops.availability import room_is_free
+        future = self.date + _timedelta(days=7)
+        self._approved_reservation(_Modality.ONLINE, self.fx.room_b, future)
+        self.assertTrue(
+            room_is_free(self.fx.room_b, _mnl(future, 8, 0), _mnl(future, 9, 30)))
+
+    def test_pending_reservation_does_not_occupy(self):
+        from ops.availability import room_is_free
+        future = self.date + _timedelta(days=7)
+        req = _ShiftReq.objects.create(
+            requester=self.fx.faculty, dean=self.fx.dean, department=self.fx.dept,
+            target_modality=_Modality.F2F, window_start=future, window_end=future,
+            status=_ShiftStatus.PENDING)
+        _ShiftItem.objects.create(
+            request=req, schedule=self.fx.f2f_schedule, assigned_room=self.fx.room_b)
+        self.assertTrue(
+            room_is_free(self.fx.room_b, _mnl(future, 8, 0), _mnl(future, 9, 30)))
+
+    def test_reservation_out_of_window_does_not_occupy(self):
+        from ops.availability import room_is_free
+        reserved = self.date + _timedelta(days=7)
+        other = self.date + _timedelta(days=14)  # a Monday outside the window
+        self._approved_reservation(_Modality.F2F, self.fx.room_b, reserved)
+        self.assertTrue(
+            room_is_free(self.fx.room_b, _mnl(other, 8, 0), _mnl(other, 9, 30)))
+
+    def test_faculty_has_conflict_true(self):
+        from ops.availability import faculty_has_conflict
+        # fx.faculty owns fx.session (08:00-09:30) on self.date.
+        self.assertTrue(faculty_has_conflict(
+            self.fx.faculty, _mnl(self.date, 8, 0), _mnl(self.date, 9, 30)))
+
+    def test_faculty_has_conflict_excludes_moved_session(self):
+        from ops.availability import faculty_has_conflict
+        self.assertFalse(faculty_has_conflict(
+            self.fx.faculty, _mnl(self.date, 8, 0), _mnl(self.date, 9, 30),
+            exclude_session_id=self.fx.session.pk))
+
+    def test_faculty_has_conflict_false_when_free(self):
+        from ops.availability import faculty_has_conflict
+        # 14:00-15:00: the faculty teaches nothing then.
+        self.assertFalse(faculty_has_conflict(
+            self.fx.faculty, _mnl(self.date, 14, 0), _mnl(self.date, 15, 0)))
