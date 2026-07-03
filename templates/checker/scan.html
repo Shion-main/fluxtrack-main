@@ -1,10 +1,19 @@
 {% extends "base.html" %}
+{% load static %}
 {% block title %}Scan a room · FluxTrack{% endblock %}
 {% block head %}
 <script src="https://cdn.jsdelivr.net/npm/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+<script src="{% static 'checker/offline_queue.js' %}" defer></script>
 {% endblock %}
 {% block content %}
 <div class="max-w-md mx-auto px-4 pt-4 pb-24">
+  <div id="offline-banner" class="hidden uk-alert uk-alert-secondary mb-3" role="status" aria-live="polite">
+    <div class="uk-alert-title flex items-center gap-2">
+      <uk-icon icon="wifi-off" class="size-4"></uk-icon>
+      <span id="offline-banner-text">Offline — 0 scan(s) queued.</span>
+    </div>
+  </div>
+
   <div class="flex items-center gap-2 mb-4">
     <a href="/" class="uk-btn uk-btn-ghost uk-btn-icon" aria-label="Back">
       <uk-icon icon="arrow-left" class="size-5"></uk-icon></a>
@@ -35,23 +44,118 @@
   </div>
 
   <div id="outcome" class="mt-4"></div>
+
+  <div id="offline-capture" class="hidden uk-card uk-card-body mt-4">
+    <div class="uk-h3 mb-1">Offline — record this scan</div>
+    <p class="uk-text-small uk-text-muted mb-3">
+      You're offline, so the room's live state can't be checked yet. Record what
+      you saw; it will be re-checked automatically and applied or flagged when
+      you're back online.
+    </p>
+
+    <div id="offline-capture-actions" class="space-y-2">
+      <button type="button" class="uk-btn uk-btn-primary w-full h-12" data-offline-action="verified">
+        <uk-icon icon="check" class="size-5"></uk-icon> Verify present
+      </button>
+      <button type="button" class="uk-btn uk-btn-secondary w-full h-11" data-offline-action="verified_empty">
+        <uk-icon icon="door-closed" class="size-5"></uk-icon> Confirm empty
+      </button>
+      <button type="button" class="uk-btn uk-btn-secondary w-full h-11" data-offline-action="flag_not_present">
+        <uk-icon icon="flag" class="size-5"></uk-icon> Flag: not present
+      </button>
+      <label class="uk-text-small font-semibold block" for="offline-note">
+        Note (optional; required for a flag)
+      </label>
+      <textarea id="offline-note" class="uk-input" maxlength="255"
+                placeholder="Briefly say what you saw (sent to IFO and HR)"></textarea>
+    </div>
+    <p id="offline-unavailable-msg" class="hidden uk-text-small uk-text-destructive">
+      Offline capture unavailable in this browser — reconnect and try again.
+    </p>
+    <p id="offline-capture-status" class="uk-text-small uk-text-muted mt-2" role="alert"></p>
+  </div>
 </div>
 
 <script>
   const CSRF = "{{ csrf_token }}";
   let scanner = null;
+  let pendingPayload = null;
 
   async function postPayload(payload) {
-    const body = new FormData();
-    body.append("payload", payload);
-    const r = await fetch("/checker/resolve", {
-      method: "POST", headers: {"X-CSRFToken": CSRF}, body,
-    });
-    const el = document.getElementById("outcome");
-    el.innerHTML = await r.text();
-    if (window.htmx) window.htmx.process(el);
-    el.scrollIntoView({behavior: "smooth", block: "nearest"});
+    pendingPayload = payload;
+    if (!navigator.onLine) {
+      showOfflineCapture();
+      return;
+    }
+    try {
+      const body = new FormData();
+      body.append("payload", payload);
+      const r = await fetch("/checker/resolve", {
+        method: "POST", headers: {"X-CSRFToken": CSRF}, body,
+      });
+      const el = document.getElementById("outcome");
+      el.innerHTML = await r.text();
+      if (window.htmx) window.htmx.process(el);
+      el.scrollIntoView({behavior: "smooth", block: "nearest"});
+    } catch (e) {
+      // Network failed mid-scan (not just navigator.onLine=false) — queue too.
+      showOfflineCapture();
+    }
   }
+
+  function showOfflineCapture() {
+    const box = document.getElementById("offline-capture");
+    const actions = document.getElementById("offline-capture-actions");
+    const unavailable = document.getElementById("offline-unavailable-msg");
+    const status = document.getElementById("offline-capture-status");
+    if (!box) return;
+    box.classList.remove("hidden");
+    status.textContent = "";
+    const canQueue = window.FluxTrackOfflineQueue && window.FluxTrackOfflineQueue.available;
+    actions.classList.toggle("hidden", !canQueue);
+    unavailable.classList.toggle("hidden", !!canQueue);
+    box.scrollIntoView({behavior: "smooth", block: "nearest"});
+  }
+
+  // The manual-code form posts via htmx directly (not through postPayload());
+  // capture its value on submit so an offline/network failure can still fall
+  // back to the offline-capture prompt.
+  document.addEventListener("submit", (ev) => {
+    const input = document.getElementById("manual-code");
+    if (input && ev.target && ev.target.contains(input)) {
+      pendingPayload = input.value;
+      if (!navigator.onLine) {
+        ev.preventDefault();
+        showOfflineCapture();
+      }
+    }
+  });
+  document.body.addEventListener("htmx:sendError", () => { showOfflineCapture(); });
+
+  document.addEventListener("click", async (ev) => {
+    const btn = ev.target.closest("[data-offline-action]");
+    if (!btn || !pendingPayload || !window.FluxTrackOfflineQueue) return;
+    const action = btn.getAttribute("data-offline-action");
+    const note = document.getElementById("offline-note").value.trim();
+    const status = document.getElementById("offline-capture-status");
+    if (action === "flag_not_present" && !note) {
+      status.textContent = "A note is required to flag.";
+      return;
+    }
+    try {
+      await window.FluxTrackOfflineQueue.enqueue({
+        payload: pendingPayload, action: action, note: note,
+        scanned_at: new Date().toISOString(),
+      });
+    } catch (e) {
+      status.textContent = "Could not queue this scan: " + e.message;
+      return;
+    }
+    status.textContent = "Saved offline — it will sync when you're back online.";
+    document.getElementById("offline-note").value = "";
+    document.getElementById("offline-capture").classList.add("hidden");
+    pendingPayload = null;
+  });
 
   function startCamera() {
     if (scanner) return;
