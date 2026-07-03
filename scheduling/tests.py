@@ -783,3 +783,86 @@ class ShiftScopeTests(TestCase):
                 fx.faculty, [fx.f2f_schedule], Modality.ONLINE,
                 date(2026, 7, 6), date(2026, 7, 6), now=_EARLY_NOW,
             )
+
+
+# ---------------------------------------------------------------------------
+# 04-04 Task 3 -- withdraw + reject transitions (ownership + PENDING guards).
+# Both re-check the CURRENT status server-side (never an earlier snapshot,
+# mirroring the 03-02 re-gate) before any write. Withdraw is silent (D-10/D-11);
+# reject records the reason and notifies the requester once (D-11).
+# ---------------------------------------------------------------------------
+class WithdrawTests(TestCase):
+    """MOD-05/D-10/D-11: withdraw (requester+PENDING) and reject (Dean+PENDING)."""
+
+    def _submit(self, fx):
+        return services.submit_modality_shift(
+            fx.faculty, [fx.f2f_schedule], Modality.ONLINE,
+            date(2026, 7, 6), date(2026, 7, 6), now=_EARLY_NOW,
+        )
+
+    def test_owner_pending_withdraw_succeeds_silently(self):
+        fx = make_shift_fixture()
+        req = self._submit(fx)
+        before = Notification.objects.count()
+        out = services.withdraw_modality_shift(req, fx.faculty)
+        self.assertEqual(out.status, ModalityShiftStatus.WITHDRAWN)
+        req.refresh_from_db()
+        self.assertEqual(req.status, ModalityShiftStatus.WITHDRAWN)
+        # Withdraw is silent -- no new Notification row (D-10/D-11).
+        self.assertEqual(Notification.objects.count(), before)
+        self.assertTrue(AuditLog.objects.filter(
+            event_type="modality_shift.withdrawn",
+            target_id=str(req.pk)).exists())
+
+    def test_foreign_user_withdraw_refused_no_state_change(self):
+        fx = make_shift_fixture()
+        req = self._submit(fx)
+        with self.assertRaises(ModalityShiftError):
+            services.withdraw_modality_shift(req, fx.competitor_faculty)
+        req.refresh_from_db()
+        self.assertEqual(req.status, ModalityShiftStatus.PENDING)
+
+    def test_non_pending_withdraw_refused(self):
+        fx = make_shift_fixture()
+        req = self._submit(fx)
+        req.status = ModalityShiftStatus.APPROVED
+        req.save(update_fields=["status"])
+        with self.assertRaises(ModalityShiftError):
+            services.withdraw_modality_shift(req, fx.faculty)
+        req.refresh_from_db()
+        self.assertEqual(req.status, ModalityShiftStatus.APPROVED)
+
+    def test_reject_records_reason_and_notifies_requester(self):
+        fx = make_shift_fixture()
+        req = self._submit(fx)
+        out = services.reject_modality_shift(req, fx.dean, "no room that day")
+        self.assertEqual(out.status, ModalityShiftStatus.REJECTED)
+        req.refresh_from_db()
+        self.assertEqual(req.status, ModalityShiftStatus.REJECTED)
+        self.assertEqual(req.decision_reason, "no room that day")
+        self.assertEqual(req.decided_by, fx.dean)
+        self.assertIsNotNone(req.decided_at)
+        self.assertEqual(
+            Notification.objects.filter(
+                user=fx.faculty, type="modality_shift_rejected").count(), 1)
+        self.assertTrue(AuditLog.objects.filter(
+            event_type="modality_shift.rejected",
+            target_id=str(req.pk)).exists())
+
+    def test_cross_department_dean_reject_refused(self):
+        fx = make_shift_fixture()
+        req = self._submit(fx)
+        other = make_shift_fixture("other")  # a Dean of a DIFFERENT department
+        with self.assertRaises(ModalityShiftError):
+            services.reject_modality_shift(req, other.dean, "not my call")
+        req.refresh_from_db()
+        self.assertEqual(req.status, ModalityShiftStatus.PENDING)
+
+    def test_non_pending_reject_refused(self):
+        fx = make_shift_fixture()
+        req = self._submit(fx)
+        services.withdraw_modality_shift(req, fx.faculty)  # now WITHDRAWN
+        with self.assertRaises(ModalityShiftError):
+            services.reject_modality_shift(req, fx.dean, "too late")
+        req.refresh_from_db()
+        self.assertEqual(req.status, ModalityShiftStatus.WITHDRAWN)
