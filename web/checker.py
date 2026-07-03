@@ -432,8 +432,15 @@ def replay(request):
 
     for item in items:
         client_uuid = str(item.get("client_uuid") or "")
+        # Reject items with a missing/empty client_uuid outright (WR-03): without
+        # it the per-uuid idempotency guard cannot key the item, so a re-post
+        # would re-apply the same queued scan with the double-apply protection
+        # bypassed. Flagged, never applied (the shipped client always sends one).
+        if not client_uuid:
+            results.append({"uuid": "", "status": "flagged", "reason": "bad-payload"})
+            continue
         idem_key = f"checker-replay:{client_uuid}"
-        if client_uuid and cache.get(idem_key):
+        if cache.get(idem_key):
             results.append({"uuid": client_uuid, "status": "duplicate"})
             continue
 

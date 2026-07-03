@@ -847,3 +847,22 @@ class ReplayTests(_CheckerFixtureMixin, TestCase):
 
         self.assertEqual(CheckerValidation.objects.filter(
             session=session, action="verified").count(), 1)
+
+    def test_replay_missing_client_uuid_rejected(self):
+        # WR-03: an item with no client_uuid is rejected (flagged bad-payload) and
+        # never applied — it cannot skip the per-uuid idempotency guard and
+        # re-apply the same queued scan on a replay.
+        checker = self._checker()
+        self._active_floor_assignment(checker, self.floor)
+        room = self._room()
+        session = self._session(room)
+        self.client.force_login(checker)
+
+        r = self._post_replay([{
+            "token": room.qr_token, "action": "verified", "note": "",
+            "scanned_at": timezone.now().isoformat()}])   # no client_uuid
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(r.json()["results"][0]["status"], "flagged")
+        self.assertEqual(r.json()["results"][0]["reason"], "bad-payload")
+        self.assertFalse(
+            CheckerValidation.objects.filter(session=session).exists())
