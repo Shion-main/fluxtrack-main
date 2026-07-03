@@ -5,16 +5,16 @@ milestone_name: "**Goal**: Faculty can request a lead-time-gated modality shift 
 current_phase: 03.1
 current_phase_name: authentication-entra-id-sso-local-dev-proof
 status: executing
-stopped_at: Completed 03.1-03-PLAN.md (Wave 2)
-last_updated: "2026-07-03T12:00:00.000Z"
+stopped_at: Completed 03.1-04-PLAN.md (Wave 3)
+last_updated: "2026-07-03T12:19:00.000Z"
 last_activity: 2026-07-03
-last_activity_desc: Plan 03.1-03 complete (dev-login/SSO coexistence + login UI + .env.example)
+last_activity_desc: Plan 03.1-04 complete (automated Entra wiring proof — 22 new tests, full suite 125 green)
 progress:
   total_phases: 9
   completed_phases: 3
   total_plans: 19
-  completed_plans: 16
-  percent: 34
+  completed_plans: 17
+  percent: 36
 ---
 
 # Project State
@@ -29,9 +29,9 @@ See: .planning/PROJECT.md (updated 2026-07-02)
 ## Current Position
 
 Phase: 03.1 (authentication-entra-id-sso-local-dev-proof) — EXECUTING
-Plan: 4 of 5
+Plan: 5 of 5
 Status: Ready to execute
-Last activity: 2026-07-03 — Plan 03.1-03 complete (dev-login/SSO coexistence + login UI + .env.example)
+Last activity: 2026-07-03 — Plan 03.1-04 complete (automated Entra wiring proof — 22 tests, full suite 125 green)
 
 Progress: [████████░░] 80%
 
@@ -73,6 +73,7 @@ Progress: [████████░░] 80%
 | Phase 03.1 P01 | ~3m | 2 tasks | 4 files |
 | Phase 03.1 P02 | 2 | 2 tasks | 2 files |
 | Phase 03.1 P03 | ~6m | 2 tasks | 3 files |
+| Phase 03.1 P04 | ~14m | 2 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -121,6 +122,8 @@ Recent decisions affecting current work:
 - [Phase 03.1]: 03.1-03: dev-login login() names django.contrib.auth.backends.ModelBackend so it no longer raises ValueError under two AUTHENTICATION_BACKENDS (Pitfall 2, D-09#3); logout_view untouched (D-11 session-only).
 - [Phase 03.1]: 03.1-03: "Sign in with Microsoft" button moved out of the {% else %} branch — always visible in DEBUG and non-DEBUG, wired to {% url social:begin azuread-tenant-oauth2 %}; login.html renders Django messages so a refused Entra login is visible (D-08/D-06); dev-login forms stay under DEBUG.
 - [Phase 03.1]: 03.1-03: .env.example replaces ENTRA_* with SOCIAL_AUTH_AZUREAD_TENANT_OAUTH2_KEY/SECRET/TENANT_ID (client id->_KEY, secret->_SECRET per D-04), drops the "Phase 2" label (Pitfall 8).
+- [Phase 03.1]: 03.1-04: 22 network-free tests lock the Plan 01/02/03 wiring as regression-guarded invariants — accounts/tests.py (PkceBackendTests/AuthWiringTests/DenyUnprovisionedTests/WriteAzureOidTests/LinkEntraCommandTests) + web/tests.py (DevLoginCoexistTests/LogoutTests); pure-function pipeline tests use fake response/details dicts (no live Entra/network/browser — that round-trip is Plan 05). Full suite 125 green.
+- [Phase 03.1]: 03.1-04: AuthWiringTests asserts settings.SOCIAL_AUTH_RAISE_EXCEPTIONS is False + SocialAuthExceptionMiddleware positioned after AuthenticationMiddleware/before MessageMiddleware (refusal redirects, not 500) AND REST_FRAMEWORK still SessionAuthentication (D-10 negative guard) — the two invariants most likely to silently regress.
 
 ### Pending Todos
 
@@ -143,6 +146,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-07-03T12:00:00.000Z
-Stopped at: Completed 03.1-03-PLAN.md (Wave 2)
+Last session: 2026-07-03T12:19:00.000Z
+Stopped at: Completed 03.1-04-PLAN.md (Wave 3)
 Resume file: None

@@ -111,7 +111,7 @@ Plans:
 **Goal:** Wire real Microsoft Entra ID sign-in (Authorization Code + PKCE) into the running Django app on localhost as the real auth path that replaces the DEBUG dev-login stub, proven end-to-end against the project-owned MMCM tenant: a bound faculty account signs in and lands on its role-home, an unprovisioned tenant account is refused, and the dev-login stub + superuser break-glass still work. Local-dev proof only — production https redirect, secret rotation, and staging cutover stay in the deploy phase.
 **Requirements**: none mapped in ROADMAP; advances AUTH-01, AUTH-03, AUTH-05 locally (acceptance anchored on CONTEXT D-09). See 03.1-CONTEXT.md.
 **Depends on:** Phase 3
-**Plans:** 3/5 plans executed
+**Plans:** 4/5 plans executed
 
 Plans:
 **Wave 1**
@@ -125,7 +125,7 @@ Plans:
 
 **Wave 3** *(blocked on Wave 2 completion)*
 
-- [ ] 03.1-04-PLAN.md — Wave-0 automated tests: PKCE/wiring/deny/oid/link_entra + dev-login coexistence + logout (Wave 3)
+- [x] 03.1-04-PLAN.md — Wave-0 automated tests: PKCE/wiring/deny/oid/link_entra + dev-login coexistence + logout (Wave 3)
 
 **Wave 4** *(blocked on Wave 3 completion)*
 
