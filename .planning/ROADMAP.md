@@ -106,6 +106,17 @@ Plans:
 - [x] 03-05-PLAN.md — Online verification via Teams link (Verify activates session) + remove sweep online exclusion + rewrite sweep tests (CHK-02/03, ROADMAP #6) [Wave 5]
 - [x] 03-06-PLAN.md — Offline IndexedDB queue + re-validated replay endpoint (apply-or-flag, idempotent) (CHK-08) [Wave 6]
 
+### Phase 03.1: Authentication — Entra ID SSO (local-dev proof) (INSERTED)
+
+**Goal:** [Urgent work - to be planned]
+**Requirements**: TBD
+**Depends on:** Phase 3
+**Plans:** 0 plans
+
+Plans:
+
+- [ ] TBD (run /gsd-plan-phase 03.1 to break down)
+
 ### Phase 4: Modality Shift Approval & SRS v1.2
 
 **Goal**: Faculty can request a lead-time-gated modality shift that a Dean approves, with rooms auto-released or auto-assigned, and the SRS brought back in sync with reality.

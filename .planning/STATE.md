@@ -6,15 +6,15 @@ current_phase: 4
 current_phase_name: Modality Shift Approval & SRS v1.2
 status: verifying
 stopped_at: Completed 03-05-PLAN.md
-last_updated: "2026-07-03T03:17:48.124Z"
+last_updated: "2026-07-03T10:06:51.849Z"
 last_activity: 2026-07-03
 last_activity_desc: Phase 03 complete, transitioned to Phase 4
 progress:
-  total_phases: 8
+  total_phases: 9
   completed_phases: 3
   total_plans: 14
   completed_plans: 14
-  percent: 38
+  percent: 33
 ---
 
 # Project State
@@ -123,6 +123,10 @@ None yet.
 - [Phase 8]: Tailwind v4 / Franken UI 2.1 build path (npm-plugin vs standalone-CLI) is MEDIUM confidence — needs a short build spike before committing to build-time-npm/Node-free production.
 - [Phase 8]: Entra cutover can lock out all production login if DEBUG=False is flipped before SSO is proven end-to-end — keep a break-glass superuser; verify on staging.
 - [General]: RDS SQL Server Express 10 GB cap + per-write AuditLog rows needs a retention/pruning job before real usage (address in Phase 8).
+
+### Roadmap Evolution
+
+- Phase 03.1 inserted after Phase 3: Entra ID SSO prioritized ahead of Phase 4 — local-dev proof; prod cutover stays in final deploy phase (URGENT)
 
 ## Session Continuity
 
