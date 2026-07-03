@@ -181,12 +181,14 @@ class MicrosoftButtonPostTests(TestCase):
 from datetime import datetime, timedelta  # noqa: E402
 
 from scheduling.models import (  # noqa: E402
+    Modality,
+    ModalityShiftItem,
     ModalityShiftRequest,
     ModalityShiftStatus,
     Session,
     SessionStatus,
 )
-from scheduling.test_support import make_shift_fixture  # noqa: E402
+from scheduling.test_support import IN_WINDOW_DATE, make_shift_fixture  # noqa: E402
 
 
 class FacultyModalityAuthzTests(TestCase):
@@ -268,3 +270,134 @@ class FacultyModalityAuthzTests(TestCase):
         entry point -- no self-declare view/route survives."""
         with self.assertRaises(NoReverseMatch):
             reverse("faculty_modality_declare")
+
+
+# ---------------------------------------------------------------------------
+# 04-08 -- Dean modality-shift approval surface authz + consequence (MOD-02/04).
+#
+# The Dean half of the T-04 register: @dean_required gates every view (T-04-10
+# non-Dean access); approve/reject DELEGATE their guard to the 04-05 services so a
+# cross-department decision is refused server-side and the ticket stays PENDING
+# (T-04-01 IDOR / T-04-03 TOCTOU). A valid ->Online approve applies the room-release
+# consequence and notifies requester + IFO; a no-room ->F2F approve is a terminal
+# DENIED with the session provably unchanged (D-07 REVISED / T-04-07); a reject
+# requires a non-empty reason (T-04-05v) and records it. Assertions are on the
+# persisted state + Notification rows, never on HTML strings.
+# ---------------------------------------------------------------------------
+class DeanModalityAuthzTests(TestCase):
+    """Authz + consequence guards on the Dean modality-shift approval surface."""
+
+    def setUp(self):
+        cache.clear()  # locmem cache is not rolled back between tests
+        self.fx = make_shift_fixture("web08")
+        self.ifo = get_user_model().objects.create(
+            username="web08_ifo", email="web08_ifo@mcm.edu.ph",
+            role=Role.IFO_ADMIN, is_active=True)
+
+    def _pending(self, target_modality, schedule):
+        """A PENDING ticket routed to the fixture Dean's department, one item."""
+        req = ModalityShiftRequest.objects.create(
+            requester=self.fx.faculty, dean=self.fx.dean,
+            department=self.fx.dept, target_modality=target_modality,
+            window_start=IN_WINDOW_DATE, window_end=IN_WINDOW_DATE,
+            status=ModalityShiftStatus.PENDING)
+        ModalityShiftItem.objects.create(request=req, schedule=schedule)
+        return req
+
+    def test_non_dean_approve_denied(self):
+        """A non-Dean (the requesting faculty) POSTing approve is denied (403,
+        @dean_required) and the ticket stays PENDING (T-04-10)."""
+        req = self._pending(Modality.ONLINE, self.fx.f2f_schedule)
+        self.client.force_login(self.fx.faculty)  # role FACULTY, not a Dean
+        resp = self.client.post(f"/dean/requests/{req.pk}/approve")
+        self.assertEqual(resp.status_code, 403)
+        req.refresh_from_db()
+        self.assertEqual(req.status, ModalityShiftStatus.PENDING)
+
+    def test_cross_department_approve_refused_stays_pending(self):
+        """A Dean of another department approving Department A's request is refused
+        server-side (the service re-gate) and the ticket stays PENDING with the
+        session untouched (T-04-01 cross-department IDOR)."""
+        req = self._pending(Modality.ONLINE, self.fx.f2f_schedule)
+        # Distinct first-two-chars vs "web08": the fixture derives room.manual_code
+        # from prefix[:2], so a "web08b" second dept would collide on manual_code.
+        other = make_shift_fixture("dep2")  # a different department + its Dean
+        self.client.force_login(other.dean)
+        resp = self.client.post(f"/dean/requests/{req.pk}/approve")
+        self.assertEqual(resp.status_code, 400)
+        req.refresh_from_db()
+        self.assertEqual(req.status, ModalityShiftStatus.PENDING)
+        self.fx.session.refresh_from_db()
+        self.assertEqual(self.fx.session.declared_modality, "")
+        self.assertIsNone(self.fx.session.room_released_at)
+
+    def test_online_approve_applies_and_notifies(self):
+        """The routed Dean approving a ->Online request applies it: the request is
+        APPROVED, the in-window session is effective-Online with room_released_at
+        stamped, and the requester + IFO are notified (MOD-03/D-11)."""
+        req = self._pending(Modality.ONLINE, self.fx.f2f_schedule)
+        self.client.force_login(self.fx.dean)
+        resp = self.client.post(f"/dean/requests/{req.pk}/approve")
+        self.assertEqual(resp.status_code, 200)
+        req.refresh_from_db()
+        self.assertEqual(req.status, ModalityShiftStatus.APPROVED)
+        self.fx.session.refresh_from_db()
+        self.assertEqual(self.fx.session.declared_modality, Modality.ONLINE)
+        self.assertIsNotNone(self.fx.session.room_released_at)
+        self.assertTrue(Notification.objects.filter(
+            user=self.fx.faculty, type="modality_shift_approved").exists())
+        self.assertTrue(Notification.objects.filter(
+            user=self.ifo, type="modality_shift_applied").exists())
+
+    def test_no_room_f2f_approve_denies_session_unchanged(self):
+        """A ->F2F approval with no free room that day is a terminal DENIED with a
+        reason, and the session is provably unchanged (D-07 REVISED / T-04-07).
+
+        Both building rooms are held at the F2F session's own 08:00-09:30 slot:
+        room A by the fixture competitor, room B by an added blocker."""
+        blocker_sched = Schedule.objects.create(
+            term=self.fx.term, course_code="BLK", section="A",
+            faculty=self.fx.competitor_faculty, room=self.fx.room_b,
+            day_of_week=0, start_time=time(8, 0), end_time=time(9, 30),
+            modality=Modality.F2F)
+        Session.objects.create(
+            schedule=blocker_sched, faculty=self.fx.competitor_faculty,
+            room=self.fx.room_b, date=IN_WINDOW_DATE,
+            scheduled_start=self.fx.session.scheduled_start,
+            scheduled_end=self.fx.session.scheduled_end,
+            status=SessionStatus.SCHEDULED)
+        req = self._pending(Modality.F2F, self.fx.f2f_schedule)
+        self.client.force_login(self.fx.dean)
+        resp = self.client.post(f"/dean/requests/{req.pk}/approve")
+        self.assertEqual(resp.status_code, 200)
+        req.refresh_from_db()
+        self.assertEqual(req.status, ModalityShiftStatus.DENIED)
+        self.assertTrue(req.decision_reason)
+        self.fx.session.refresh_from_db()
+        self.assertEqual(self.fx.session.room_id, self.fx.room_a.pk)
+        self.assertEqual(self.fx.session.declared_modality, "")
+        self.assertIsNone(self.fx.session.room_released_at)
+
+    def test_reject_records_reason_and_notifies(self):
+        """A reject with a reason sets REJECTED + decision_reason and notifies the
+        requester once (MOD-02/D-10/D-11)."""
+        req = self._pending(Modality.ONLINE, self.fx.f2f_schedule)
+        self.client.force_login(self.fx.dean)
+        resp = self.client.post(f"/dean/requests/{req.pk}/reject",
+                                {"reason": "Conflicts with a department event."})
+        self.assertEqual(resp.status_code, 200)
+        req.refresh_from_db()
+        self.assertEqual(req.status, ModalityShiftStatus.REJECTED)
+        self.assertEqual(req.decision_reason, "Conflicts with a department event.")
+        self.assertTrue(Notification.objects.filter(
+            user=self.fx.faculty, type="modality_shift_rejected").exists())
+
+    def test_reject_empty_reason_is_400_and_stays_pending(self):
+        """A reject with an empty/whitespace reason returns 400 and leaves the
+        ticket PENDING (T-04-05v input validation)."""
+        req = self._pending(Modality.ONLINE, self.fx.f2f_schedule)
+        self.client.force_login(self.fx.dean)
+        resp = self.client.post(f"/dean/requests/{req.pk}/reject", {"reason": "   "})
+        self.assertEqual(resp.status_code, 400)
+        req.refresh_from_db()
+        self.assertEqual(req.status, ModalityShiftStatus.PENDING)
