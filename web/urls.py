@@ -17,6 +17,7 @@ urlpatterns = [
     path("checker/scan", checker.scan_page, name="checker_scan"),
     path("checker/resolve", checker.resolve, name="checker_resolve"),
     path("checker/action", checker.action, name="checker_action"),
+    path("checker/replay", checker.replay, name="checker_replay"),
     path("checker/floor", checker.floor_board, name="checker_floor"),
     path("checker/floor/rows", checker.floor_rows, name="checker_floor_rows"),
     path("checker/online", checker.online_list, name="checker_online"),

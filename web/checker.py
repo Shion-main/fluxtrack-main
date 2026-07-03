@@ -12,6 +12,7 @@ UNCONDITIONALLY re-runs resolve_checker_scan against the checker's current
 active floors before any write. A forged or stale POST for a floor the checker
 is no longer on duty for is refused and writes nothing (T-03-03/05).
 """
+import json
 import re
 from functools import wraps
 from urllib.parse import parse_qs, urlparse
@@ -20,9 +21,10 @@ from django.conf import settings
 from django.contrib.auth.decorators import login_required
 from django.core.cache import cache
 from django.core.exceptions import PermissionDenied
-from django.http import Http404
+from django.http import Http404, JsonResponse
 from django.shortcuts import render
 from django.utils import timezone
+from django.utils.dateparse import parse_datetime
 from django.views.decorators.http import require_http_methods
 
 from accounts.models import Role
@@ -174,6 +176,23 @@ def _room_from_payload(request, payload):
         return room, CheckinMethod.MANUAL_CODE
 
     return None, "bad-payload"
+
+
+def _room_from_replay_token(token):
+    """QR token or six-digit manual code -> Room, or None (CHK-08 replay).
+
+    Reuses `_room_from_payload`'s lookup STYLE (QR token first, manual code
+    fallback) without its rate limiting: a replay POST is already
+    `checker_required` + idempotency-guarded per item, so the manual-code
+    brute-force concern (T-03-07) does not apply here.
+    """
+    token = (token or "").strip()
+    if not token:
+        return None
+    room = Room.objects.filter(qr_token=token).select_related("floor").first()
+    if room is None and re.fullmatch(r"\d{6}", token):
+        room = Room.objects.filter(manual_code=token).select_related("floor").first()
+    return room
 
 
 class _SessionState:
@@ -340,6 +359,92 @@ def action(request):
     return render(request, "checker/_outcome.html", {
         "resolution": resolution, "room": room, "session": session,
         "applied": True, "applied_action": action_val})
+
+
+# --- offline replay (CHK-08) ------------------------------------------------
+@checker_required
+@require_http_methods(["POST"])
+def replay(request):
+    """Re-validate every offline-queued scan against CURRENT state through the
+    SAME pure gating core `action` uses above — the offline snapshot's
+    room/session/on-duty decision is NEVER trusted (T-03-19/20). A batch POST
+    `{"items": [{client_uuid, token, action, note, scanned_at}, ...]}` from the
+    client's IndexedDB queue. Per item: re-derive the checker's CURRENT
+    on-duty floors and the room's CURRENT session state server-side and
+    re-run `R.resolve_checker_scan`; a still-actionable item applies
+    (offline_queued=True, the ORIGINAL scanned_at preserved); anything else
+    (off-duty/wrong-floor/absent/already-verified/bad-payload/empty-note flag)
+    is recorded via AuditLog(checker.replay_conflict) and flags IFO via
+    notify(), never applied. Idempotent per `client_uuid` via the Django cache
+    (mirrors web/scan.py's scan-idem idiom, T-03-21) so a double-replay never
+    double-applies.
+    """
+    try:
+        payload = json.loads(request.body.decode("utf-8") or "{}")
+    except (ValueError, UnicodeDecodeError):
+        return JsonResponse({"results": []}, status=400)
+
+    items = list(payload.get("items") or [])   # materialize up front (Pitfall 3, MSSQL HY010)
+    now = timezone.now()
+    results = []
+
+    for item in items:
+        client_uuid = str(item.get("client_uuid") or "")
+        idem_key = f"checker-replay:{client_uuid}"
+        if client_uuid and cache.get(idem_key):
+            results.append({"uuid": client_uuid, "status": "duplicate"})
+            continue
+
+        room = _room_from_replay_token(item.get("token"))
+        action_val = item.get("action", "")
+        note = item.get("note", "") or ""
+        scanned_at = parse_datetime(item.get("scanned_at") or "") or now
+
+        if room is None:
+            reason = "bad-room"
+            session = None
+        else:
+            # ALWAYS re-derive CURRENT state server-side — never the offline
+            # snapshot (the CHK-08 "never blindly trusted" rule).
+            session, state = _room_session_state(room, now)
+            resolution = R.resolve_checker_scan(
+                _active_floor_ids(request.user, now), room.floor_id, state, now)
+            if not resolution.actionable:
+                reason = resolution.outcome
+            elif action_val not in _VALID_ACTIONS:
+                reason = "bad-payload"
+            elif action_val in _FLAG_ACTIONS and not note.strip():
+                # Reuse the FLAG note-required rule (Pitfall 4): a flag item
+                # with an empty note is rejected/flagged, never silently applied.
+                reason = "note-required"
+            else:
+                reason = None
+
+        if reason is None:
+            identity_match = None
+            if action_val == ValidationAction.FLAG_IDENTITY_MISMATCH:
+                identity_match = False
+            elif action_val == ValidationAction.VERIFIED:
+                identity_match = True
+            _apply_action(request, session, room, action_val, note=note,
+                          identity_match=identity_match, scanned_at=scanned_at,
+                          offline=True)
+            if client_uuid:
+                cache.set(idem_key, True, timeout=None)
+            results.append({"uuid": client_uuid, "status": "applied"})
+        else:
+            AuditLog.objects.create(
+                actor=request.user, event_type="checker.replay_conflict",
+                target_type="session", target_id=str(session.pk if session else ""),
+                payload={"outcome": reason, "uuid": client_uuid, "action": action_val})
+            room_label = room.code if room else "an unknown room"
+            notify(role=Role.IFO_ADMIN, type="checker_replay_conflict",
+                   title="Offline scan needs review",
+                   body=f"A queued checker scan for {room_label} no longer applies "
+                        f"({reason}); please resolve.")
+            results.append({"uuid": client_uuid, "status": "flagged", "reason": reason})
+
+    return JsonResponse({"results": results})
 
 
 # --- online verification (CHK-02/03) ---------------------------------------
