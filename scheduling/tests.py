@@ -1192,3 +1192,96 @@ class ShiftNotifyTests(TestCase):
         services.apply_approval(req, fx.dean, now=_APPLY_NOW)
         self.assertEqual(Notification.objects.filter(
             user=fx.faculty, type="modality_shift_denied").count(), 1)
+
+
+# ---------------------------------------------------------------------------
+# 04-06 -- JOB-01 born-released / born-assigned hook (materialize_sessions).
+# The materializer is the ONLY creator of future sessions. A recurring window
+# that extends past the ~14-day horizon must still honor an approved shift on
+# the sessions it creates weeks later: born released (->Online) or born in the
+# reserved room (->F2F/Blended), including a bundled time-move. A defensive
+# no-room guard keeps the original room + notifies IFO and NEVER crashes the
+# unattended job (D-04/D-18, Pitfall 1/2). The hook fires only on was_created,
+# so re-running materialize is idempotent.
+# ---------------------------------------------------------------------------
+_FUTURE_MONDAY = date(2026, 7, 13)  # one week past the fixture's IN_WINDOW_DATE
+
+
+def _approved_request(fx, target, schedule, window_start, window_end, *,
+                      assigned_room=None, time_move=None, decided_at=None):
+    """Persist an APPROVED ModalityShiftRequest + one item (bypassing apply).
+
+    Mirrors the state 04-05 apply_approval leaves behind: an APPROVED request
+    whose item already carries the reserved ``assigned_room`` (D-18) and,
+    optionally, a bundled time-move. ``decided_by``/``decided_at`` stamp the
+    decision the materialize hook copies onto each born session.
+    """
+    decided = decided_at or _manila(2026, 6, 1, 9, 0)
+    req = ModalityShiftRequest.objects.create(
+        requester=fx.faculty, dean=fx.dean, department=fx.dept,
+        target_modality=target, window_start=window_start, window_end=window_end,
+        is_time_move=bool(time_move), status=ModalityShiftStatus.APPROVED,
+        decided_by=fx.dean, decided_at=decided,
+    )
+    nst, net = time_move or (None, None)
+    ModalityShiftItem.objects.create(
+        request=req, schedule=schedule, assigned_room=assigned_room,
+        new_start_time=nst, new_end_time=net,
+    )
+    return req
+
+
+def _materialize_future(days=1, start=_FUTURE_MONDAY):
+    """Run JOB-01 for a single future date past the fixture's materialized set."""
+    call_command("materialize_sessions", days=days, start=str(start))
+
+
+class BornReleasedTests(TestCase):
+    """MOD-03/D-04/Pitfall 1: a future in-window session materialized AFTER an
+    approved ->Online shift is born released -- declared_modality=Online and
+    room_released_at stamped -- so the out-of-horizon tail of a recurring window
+    still honors the approval. Out-of-window future dates are untouched, and a
+    re-run does not re-process an already-created session (idempotent)."""
+
+    def test_future_in_window_session_born_released(self):
+        fx = make_shift_fixture()
+        _approved_request(
+            fx, Modality.ONLINE, fx.f2f_schedule,
+            date(2026, 7, 6), date(2026, 7, 20))
+        _materialize_future()
+
+        born = Session.objects.get(schedule=fx.f2f_schedule, date=_FUTURE_MONDAY)
+        self.assertEqual(born.declared_modality, Modality.ONLINE)
+        self.assertIsNotNone(born.room_released_at)
+        self.assertEqual(born.modality_changed_by, fx.dean)
+        # The room FK is NEVER nulled -- the release signal is room_released_at.
+        self.assertEqual(born.room_id, fx.room_a.id)
+        self.assertTrue(AuditLog.objects.filter(
+            event_type="session.room_released", target_id=str(born.pk)).exists())
+
+    def test_out_of_window_future_session_not_released(self):
+        fx = make_shift_fixture()
+        # Window covers only the original in-window date; the future Monday is OUT.
+        _approved_request(
+            fx, Modality.ONLINE, fx.f2f_schedule,
+            date(2026, 7, 6), date(2026, 7, 6))
+        _materialize_future()
+
+        born = Session.objects.get(schedule=fx.f2f_schedule, date=_FUTURE_MONDAY)
+        self.assertEqual(born.declared_modality, "")
+        self.assertIsNone(born.room_released_at)
+
+    def test_rerun_is_idempotent(self):
+        fx = make_shift_fixture()
+        _approved_request(
+            fx, Modality.ONLINE, fx.f2f_schedule,
+            date(2026, 7, 6), date(2026, 7, 20))
+        _materialize_future()
+        _materialize_future()  # second run: session already exists -> hook skipped
+
+        born = Session.objects.get(schedule=fx.f2f_schedule, date=_FUTURE_MONDAY)
+        self.assertEqual(born.declared_modality, Modality.ONLINE)
+        # Exactly one release event -- the hook fired once (was_created only).
+        self.assertEqual(AuditLog.objects.filter(
+            event_type="session.room_released",
+            target_id=str(born.pk)).count(), 1)
