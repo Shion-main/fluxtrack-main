@@ -138,3 +138,19 @@
 - Notification read surface / push → Phase 5.
 - Broader faculty self-service → Phase 7.
 - Entra live D-09 proof (03.1-05) → tracked in 03.1-UAT.md (unrelated to Phase 4).
+
+---
+
+## Planning-time refinements (2026-07-03, during /gsd-plan-phase)
+
+Follow-up discussion after research surfaced two open questions. Decisions recorded in CONTEXT.md as D-07 (revised) and D-15…D-19.
+
+| Topic | Options weighed | User's choice |
+|-------|-----------------|---------------|
+| No-room-that-day handling (revisits "keep pending", line 78) | (a) keep pending until a room frees · (b) **deny outright, resubmit later** · (c) roomless + IFO action | **(b) Deny outright** — reverses the earlier "stay pending". |
+| Time-move / reschedule | (a) room-finding only, keep the class's scheduled time · (b) **also allow moving the class to a free time slot** | **(b) Allow** — but only bundled with a →F2F shift (never standalone), and the Dean can deny it. |
+| Self-conflict on a time-move | (a) allow · (b) **block double-booking the same faculty** | **(b) Block** — never offer / server-reject a slot where the faculty already has a class. |
+| Multi-class request shape ("Thu & Fri") | (a) per-schedule = multiple requests · (b) **one atomic ticket spanning both class-days** | **(b) One ticket** approved as a block. |
+| Future-session room race (researcher A1/Pitfall 2) | (a) unattended re-resolve at materialize · (b) **reserve room at approval + request-aware availability** | **(b)** — closes the race; the "no room weeks later" case cannot occur in Phase 4 scope. Non-issue, no product decision needed. |
+
+**Notes:** Time-move is an intentional scope extension (adjacent to Phase-7 booking) confirmed explicitly by the user. Model framed as a "ticket": teacher opens → Dean approves/rejects → IFO informed.

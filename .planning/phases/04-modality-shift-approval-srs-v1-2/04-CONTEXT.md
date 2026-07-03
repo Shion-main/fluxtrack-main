@@ -1,6 +1,7 @@
 # Phase 4: Modality Shift Approval & SRS v1.2 - Context
 
 **Gathered:** 2026-07-03
+**Updated:** 2026-07-03 (planning-time refinements — D-07 revised; D-15…D-19 added)
 **Status:** Ready for planning
 
 <domain>
@@ -14,8 +15,9 @@ shift releases the room; a →F2F/Blended shift assigns a free room in the same 
 fails cleanly if none is free). Phase 4 also revises the SRS to v1.2 (DOC-01).
 
 **In scope:** the request model + lifecycle, the availability-first →F2F room picker,
-Dean approval queue, faculty submit + "my requests" status list, the room release/assign
-consequences, the notifications those events write, and the SRS v1.2 revision.
+an optional **time-move** (rescheduling the class to a different slot) bundled into a
+→F2F/Blended request, Dean approval queue, faculty submit + "my requests" status list, the
+room release/assign consequences, the notifications those events write, and the SRS v1.2 revision.
 **Out of scope:** the notification read-surface/push (Phase 5), general IFO ad-hoc booking
 & manual-release UI (Phase 7), broader faculty self-service (Phase 7).
 </domain>
@@ -52,10 +54,11 @@ consequences, the notifications those events write, and the SRS v1.2 revision.
   meanwhile, or the faculty chose "let the app decide," the app auto-assigns: the session's
   **original room if still free, else the first free room** in the same building. It **fails
   only when no room is free at all**.
-- **D-07:** On a no-room-free failure, the Dean's approve action is **blocked with a clear
-  reason** ("no room free in {building} — can't apply") and the request **stays pending** (not
-  terminal) so it can be approved later when a room frees. Nothing changes on the session — no
-  silent partial apply (MOD-04).
+- **D-07 (REVISED 2026-07-03 — supersedes "stays pending"):** If **no room is free that day**,
+  the request is **denied** (terminal), not held. The faculty is told "no room available that
+  day" and may submit a fresh request later. Nothing changes on the session — no silent partial
+  apply (MOD-04). *Original discuss-phase decision kept the request pending until a room freed;
+  the user reversed this at planning time in favor of an outright deny.*
 - **D-08:** Room "free" is decided by the **same conflict-check used for bookings** (no other
   session/booking holds the room for that timeslot). Room lifecycle stays driven by explicit
   approved events.
@@ -91,6 +94,36 @@ consequences, the notifications those events write, and the SRS v1.2 revision.
   then **regenerate `FluxTrack_SRS.docx` from the `.md` via pandoc** so the two never drift.
   ⚠ **pandoc is NOT currently on PATH** — the planner must install it (or define a fallback
   conversion) before DOC-01 can complete.
+
+### Availability-first picker outcomes (MOD-04, concretizes D-05)
+- **D-15:** The →F2F/Blended picker resolves in this order for the affected session(s): (a)
+  preferred room + preferred time free → offer it (or "let the app decide"); (b) preferred time
+  free but preferred room taken → suggest another free room at the **same** time; (c) preferred
+  time has no free room but **another time that day does** → suggest that alternative time (a
+  **time-move**, D-16); (d) **no room free all day → deny** (D-07).
+
+### Time-move / reschedule (MOD-04, extends the phase)
+- **D-16:** A request may **move the class to a different time slot**, but **only bundled with a
+  →F2F/Blended modality shift** — never as a standalone reschedule (standalone/ad-hoc room booking
+  stays Phase 7). The Dean can approve or **deny** the time-move like any other request. This is an
+  intentional scope extension confirmed by the user at planning time.
+- **D-17:** A time-move must **not double-book the requesting faculty** — a slot where they
+  already have another class is never offered and is rejected server-side if forged.
+
+### Room reservation at approval (MOD-03/MOD-04, reinforces D-06 — closes the future-session race)
+- **D-18:** The room is **reserved at Dean approval for every in-window session, including future
+  ones not yet materialized**. The availability query is **request-aware** — a room reserved by an
+  approved future request counts as occupied — so a reserved room cannot be taken before its
+  session exists. `materialize_sessions` (JOB-01) then simply **applies the already-reserved room**;
+  it does not re-resolve and hope. The unattended "no room at materialize time" path is a
+  **defensive guard only** (keep the class in its original room + log); by this design it cannot
+  fire within Phase 4 scope (no IFO ad-hoc booking until Phase 7).
+
+### Request scope — one ticket per run (MOD-01, resolves the multi-class shape)
+- **D-19:** A request is a **single "ticket"** that may span **multiple sessions across multiple
+  schedules** within a faculty-chosen window (e.g. "Thursday **and** Friday for 3 weeks" = one
+  ticket covering both class-days). The Dean approves / rejects / denies it **as one atomic block**;
+  there is no mid-window partial revert (D-01). Withdraw-while-pending (D-10) applies to the whole ticket.
 
 ### Claude's Discretion
 - Exact request model/schema and state names, notification message wording, and the precise
