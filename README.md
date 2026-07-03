@@ -4,10 +4,10 @@ Faculty Attendance & Facility Utilization Information System for MMCM.
 Django 6 + htmx + Franken UI (Tailwind), PWA, no React / no Node runtime,
 SQL Server database. See `FluxTrack_SRS.md`.
 
-> **Progress at a glance:** Phases 1–2 of 8 complete (SQL Server foundation +
-> correctness foundations). For the full collaborator-facing status board — what's
-> built, what's next, and how the phases map to requirements — see
-> **[`docs/PROGRESS.md`](docs/PROGRESS.md)**.
+> **Progress at a glance:** Phases 1–3 of 8 complete (SQL Server foundation +
+> correctness foundations + duty assignments & Checker verification). For the full
+> collaborator-facing status board — what's built, what's next, and how the phases
+> map to requirements — see **[`docs/PROGRESS.md`](docs/PROGRESS.md)**.
 
 ## Requirements
 - Python 3.12 (`py -3.12` launcher on Windows)
@@ -106,7 +106,7 @@ directory updates this section in the same session
 (see `docs/superpowers/specs/2026-07-02-deployment-and-dev-practice-design.md`).
 
 ## Status
-**Phases 1–2 of 8 complete** (both verified against real SQL Server):
+**Phases 1–3 of 8 complete** (all verified against real SQL Server):
 - **Phase 1 — MSSQL Environment & Data Foundation:** runs on SQL Server via
   `mssql-django`; proven datetime2/timezone round-trip (no Asia/Manila drift) and
   case-sensitive collation on QR/manual-code tokens.
@@ -114,8 +114,17 @@ directory updates this section in the same session
   sweep (no-show → Absent independent of any scan, backfilling + idempotent),
   deduped room-conflict flags, and one dedicated APScheduler process with job
   last-run status.
+- **Phase 3 — Duty Assignments & Checker Verification:** IFO assigns Checkers/Guards
+  to floors (shift/standing) and grants online duty (IFO-06); an on-duty Checker
+  scans a room (pure server-side re-gating via `verification/resolver.py`), sees the
+  room's session state + faculty photo, and records Verify / Flag-identity /
+  Flag-not-present / Confirm-empty (flags → IFO + HR). Adds the htmx floor board
+  (coverage % + oldest-unverified-first queue), online verification via the class's
+  public Teams link (a Verify activates the session — which lets online sessions
+  join the JOB-02 sweep), and an offline IndexedDB scan queue that re-validates
+  idempotently on reconnect. Full suite 103 tests green; code review clean.
 
 Foundation, IFO room/schedule surface, scan resolver, and Faculty check-in were
-built and verified end-to-end earlier. **Next up: Phase 3 — Duty Assignments &
-Checker Verification.** See **[`docs/PROGRESS.md`](docs/PROGRESS.md)** for the full
+built and verified end-to-end earlier. **Next up: Phase 4 — Modality Shift Approval
+& SRS v1.2.** See **[`docs/PROGRESS.md`](docs/PROGRESS.md)** for the full
 phase-by-phase board and `docs/USE_CASES.md` for the per-role feature list.
