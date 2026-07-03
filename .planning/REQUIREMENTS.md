@@ -51,7 +51,7 @@ roadmap does NOT create phases for them.
 
 ### Modality Shift Approval (MOD — new)
 
-- [ ] **MOD-01**: A faculty member can submit a modality-shift request (F2F/Blended ↔ Online) for a single session or a recurring schedule, at least `modality_shift_lead_days` (default 2) before the affected date; too-late requests are refused
+- [x] **MOD-01**: A faculty member can submit a modality-shift request (F2F/Blended ↔ Online) for a single session or a recurring schedule, at least `modality_shift_lead_days` (default 2) before the affected date; too-late requests are refused
 - [ ] **MOD-02**: The request routes to the faculty member's department Dean, who can approve or reject with a reason (no dispute)
 - [ ] **MOD-03**: On approval of a →Online shift, the affected session(s) become Online and the room is released immediately (`room_released_at` stamped), not held on the timer; newly materialized Online sessions are born released
 - [ ] **MOD-04**: On approval of a →F2F/Blended shift, a free room in the same building is auto-assigned at approval time; if none is free, the approval fails with a clear reason (no silent partial-apply)
@@ -161,7 +161,7 @@ phase (see ROADMAP.md). Status values: Pending / In progress / Complete.
 | CHK-05 | Phase 3 | Complete |
 | CHK-07 | Phase 3 | Complete |
 | CHK-08 | Phase 3 | Complete |
-| MOD-01 | Phase 4 | Pending |
+| MOD-01 | Phase 4 | Complete |
 | MOD-02 | Phase 4 | Pending |
 | MOD-03 | Phase 4 | Pending |
 | MOD-04 | Phase 4 | Pending |

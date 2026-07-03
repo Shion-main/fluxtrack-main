@@ -2,18 +2,18 @@
 gsd_state_version: 1.0
 milestone: v1.2
 milestone_name: "**Goal**: Faculty can request a lead-time-gated modality shift that a Dean approves, with rooms auto-released or auto-assigned, and the SRS brought back in sync with reality."
-current_phase: 03.1
-current_phase_name: authentication-entra-id-sso-local-dev-proof
-status: paused
+current_phase: 04
+current_phase_name: modality-shift-approval-srs-v1-2
+status: executing
 stopped_at: Phase 4 planned (8 plans, ready to execute)
-last_updated: "2026-07-03T12:51:19.723Z"
+last_updated: "2026-07-03T15:11:55.178Z"
 last_activity: 2026-07-03
-last_activity_desc: Phase 4 planned — 8 plans / 6 waves (5e3d906), plan-checker passed, ready to execute
+last_activity_desc: Phase 04 execution started
 progress:
   total_phases: 9
   completed_phases: 3
-  total_plans: 19
-  completed_plans: 18
+  total_plans: 27
+  completed_plans: 19
   percent: 33
 ---
 
@@ -24,14 +24,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-07-02)
 
 **Core value:** A faculty member checks in with one action, and the resulting attendance record is trustworthy — presence physically verified, lateness captured, ghost bookings detected.
-**Current focus:** Phase 03.1 — authentication-entra-id-sso-local-dev-proof
+**Current focus:** Phase 04 — modality-shift-approval-srs-v1-2
 
 ## Current Position
 
-Phase: 03.1 (authentication-entra-id-sso-local-dev-proof) — PAUSED (code-complete; live D-09 gate deferred)
-Plan: 4 of 5 executed; 03.1-05 (manual D-09 live proof) DEFERRED — to be continued (see 03.1-UAT.md)
-Status: Live Entra proof blocked on redirect-URI registration (AADSTS50011). Resume with /gsd-verify-work 03.1. Proceeding to Phase 4.
-Last activity: 2026-07-03 — begin-view 405 found+fixed (c73a123); D-09 deferred by decision
+Phase: 04 (modality-shift-approval-srs-v1-2) — EXECUTING
+Plan: 2 of 8
+Status: Ready to execute
+Last activity: 2026-07-03 — Phase 04 execution started
 
 **Phase 4** (modality-shift-approval-srs-v1-2): PLANNED ✓ — 8 plans across 6 waves, verified (plan-checker passed). Ready: `/gsd-execute-phase 04`. Runs parallel to 03.1 per ROADMAP.
 
@@ -76,6 +76,7 @@ Progress: [████████░░] 80%
 | Phase 03.1 P02 | 2 | 2 tasks | 2 files |
 | Phase 03.1 P03 | ~6m | 2 tasks | 3 files |
 | Phase 03.1 P04 | ~14m | 2 tasks | 2 files |
+| Phase 04 P01 | 20 | 3 tasks | 5 files |
 
 ## Accumulated Context
 
@@ -126,6 +127,8 @@ Recent decisions affecting current work:
 - [Phase 03.1]: 03.1-03: .env.example replaces ENTRA_* with SOCIAL_AUTH_AZUREAD_TENANT_OAUTH2_KEY/SECRET/TENANT_ID (client id->_KEY, secret->_SECRET per D-04), drops the "Phase 2" label (Pitfall 8).
 - [Phase 03.1]: 03.1-04: 22 network-free tests lock the Plan 01/02/03 wiring as regression-guarded invariants — accounts/tests.py (PkceBackendTests/AuthWiringTests/DenyUnprovisionedTests/WriteAzureOidTests/LinkEntraCommandTests) + web/tests.py (DevLoginCoexistTests/LogoutTests); pure-function pipeline tests use fake response/details dicts (no live Entra/network/browser — that round-trip is Plan 05). Full suite 125 green.
 - [Phase 03.1]: 03.1-04: AuthWiringTests asserts settings.SOCIAL_AUTH_RAISE_EXCEPTIONS is False + SocialAuthExceptionMiddleware positioned after AuthenticationMiddleware/before MessageMiddleware (refusal redirects, not 500) AND REST_FRAMEWORK still SessionAuthentication (D-10 negative guard) — the two invariants most likely to silently regress.
+- [Phase 04]: Migration file renamed to plan artifact name 0003_modality_shift_request.py via unapply/rename/re-apply
+- [Phase 04]: Competitor occupant in make_shift_fixture is a second F2F Session with a distinct faculty (avoids D-17 self-double-book)
 
 ### Pending Todos
 
@@ -148,6 +151,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-07-03T12:51:19.713Z
+Last session: 2026-07-03T15:11:34.183Z
 Stopped at: Phase 4 planned (8 plans, ready to execute)
 Resume file: .planning/phases/04-modality-shift-approval-srs-v1-2/04-01-PLAN.md
