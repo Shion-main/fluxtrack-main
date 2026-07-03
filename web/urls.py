@@ -1,6 +1,6 @@
 from django.urls import path
 
-from . import faculty, ifo, scan, views
+from . import checker, faculty, ifo, scan, views
 
 urlpatterns = [
     path("", views.home, name="home"),
@@ -13,6 +13,10 @@ urlpatterns = [
     # Faculty surfaces
     path("faculty/schedule", faculty.schedule, name="faculty_schedule"),
     path("faculty/scan", faculty.scan_page, name="faculty_scan"),
+    # Checker surfaces (CHK-01..05)
+    path("checker/scan", checker.scan_page, name="checker_scan"),
+    path("checker/resolve", checker.resolve, name="checker_resolve"),
+    path("checker/action", checker.action, name="checker_action"),
     # IFO Admin surfaces
     path("ifo/rooms", ifo.rooms_list, name="ifo_rooms"),
     path("ifo/rooms/<str:code>", ifo.room_detail, name="ifo_room_detail"),
