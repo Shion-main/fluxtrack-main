@@ -83,15 +83,7 @@ def _active_floor_ids(user, now):
                            scope=AssignmentScope.FLOOR, status="active")
                    .prefetch_related("floors"))
     for a in assignments:
-        if a.date is None:
-            on_duty = True                       # standing posting
-        elif a.date == today:
-            start_ok = a.start_time is None or a.start_time <= now_t
-            end_ok = a.end_time is None or now_t <= a.end_time
-            on_duty = start_ok and end_ok        # shift covering now
-        else:
-            on_duty = False
-        if on_duty:
+        if R.assignment_covers_now(a, today, now_t):  # shared predicate (IN-03)
             floor_ids.update(a.floors.values_list("pk", flat=True))
     return floor_ids
 
@@ -110,13 +102,8 @@ def _is_online_on_duty(user, now):
     for a in (Assignment.objects
               .filter(user=user, role=DutyRole.CHECKER,
                       scope=AssignmentScope.ONLINE, status="active")):
-        if a.date is None:
-            return True                              # standing posting
-        if a.date == today:
-            start_ok = a.start_time is None or a.start_time <= now_t
-            end_ok = a.end_time is None or now_t <= a.end_time
-            if start_ok and end_ok:
-                return True                          # shift covering now
+        if R.assignment_covers_now(a, today, now_t):  # shared predicate (IN-03)
+            return True
     return False
 
 

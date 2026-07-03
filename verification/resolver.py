@@ -60,6 +60,30 @@ def resolve_checker_scan(active_floor_ids, scanned_floor_id, session_state, now)
     return CheckerResolution(ACTIVE_UNVERIFIED, session_state.id)
 
 
+def assignment_covers_now(assignment, today, now_t):
+    """True iff an on-duty ``Assignment`` is active at ``today``/``now_t`` (IN-03).
+
+    The single shared "is this posting on duty right now" predicate, reused by
+    ``web/checker._active_floor_ids`` (FLOOR), ``web/checker._is_online_on_duty``
+    (ONLINE), and ``verification.services`` online round-robin eligibility (CR-05)
+    so the three copies can never drift again. A standing posting (``date`` NULL)
+    is always on; a dated shift is on only when its window contains ``now_t``
+    (either bound may be NULL/open). Pure: reads only the passed assignment's
+    ``date``/``start_time``/``end_time`` — no ORM, no wall-clock, no writes.
+
+    ``today``/``now_t`` are the reference day + time to test against — the caller's
+    real ``now`` for live gating, or a session's ``scheduled_start`` for online
+    pre-assignment eligibility.
+    """
+    if assignment.date is None:
+        return True                                  # standing posting
+    if assignment.date == today:
+        start_ok = assignment.start_time is None or assignment.start_time <= now_t
+        end_ok = assignment.end_time is None or now_t <= assignment.end_time
+        return start_ok and end_ok                   # shift covering now_t
+    return False
+
+
 def distribute_online_sessions(session_ids, checker_ids):
     """Deterministic round-robin of online sessions to online-duty checkers.
 

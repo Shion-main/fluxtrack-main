@@ -47,40 +47,63 @@ def _candidate_online_sessions(target_date):
             if (s.declared_modality or s.schedule.modality) == Modality.ONLINE]
 
 
-def _online_duty_checker_ids(target_date):
-    """Distinct, ordered user ids of active online-duty Checkers for ``target_date``.
+def _online_duty_assignments(target_date):
+    """Active ONLINE-scope CHECKER assignments in play for ``target_date``.
 
-    An ONLINE-scope CHECKER assignment is eligible when it is a standing posting
-    (``date`` NULL) or dated to ``target_date``. Ordered by user id so the pure
-    round-robin is deterministic across runs.
+    A standing posting (``date`` NULL) or one dated to ``target_date``. Ordered by
+    user id so the derived round-robin pool is deterministic across runs. The
+    shift window (``start_time``/``end_time``) is intentionally NOT filtered here:
+    per-session eligibility is applied against each session's ``scheduled_start``
+    in ``assign_online_sessions`` (CR-05), mirroring ``web/checker._is_online_on_duty``.
     """
     return list(
         Assignment.objects
         .filter(role=DutyRole.CHECKER, scope=AssignmentScope.ONLINE, status="active")
         .filter(Q(date__isnull=True) | Q(date=target_date))
-        .order_by("user_id")
-        .values_list("user_id", flat=True)
-        .distinct())
+        .order_by("user_id"))
 
 
-def assign_online_sessions(target_date, now=None):
+def assign_online_sessions(target_date):
     """Round-robin online sessions for ``target_date`` to online-duty Checkers.
 
-    Returns ``{"assigned": int, "unassigned": int}``. Empty online roster with
-    candidate sessions -> leave ``online_checker`` NULL, flag IFO once, and count
+    Returns ``{"assigned": int, "unassigned": int}``. Eligibility is window-aware
+    (CR-05): a session is only assignable to a Checker whose ONLINE posting covers
+    that session's ``scheduled_start`` — a standing posting covers all, a dated
+    shift only its window — mirroring the real-time ``_is_online_on_duty`` gate so
+    a Checker is never handed a session they could never verify. Sessions no
+    Checker's window covers stay unowned (``online_checker`` NULL) so the sweep /
+    IFO path still surfaces them rather than silently owning them.
+
+    Empty roster (no covering Checker at all) -> leave NULL, flag IFO once, count
     them unassigned. Otherwise write each owner (audited) and notify each assigned
     Checker once. Pure round-robin is delegated to ``R.distribute_online_sessions``.
     """
-    now = now or timezone.now()
     sessions = _candidate_online_sessions(target_date)   # materialized first
     if not sessions:
         return {"assigned": 0, "unassigned": 0}
 
-    checker_ids = _online_duty_checker_ids(target_date)
-    mapping = R.distribute_online_sessions([s.id for s in sessions], checker_ids)
+    assignments = _online_duty_assignments(target_date)
+
+    # Per-session eligible-checker pools by shift window, then round-robin WITHIN
+    # each identical pool (grouping keeps the pure distributor's determinism and
+    # even split). A session whose pool is empty is left unowned.
+    mapping = {}
+    groups = {}   # ordered eligible-id tuple -> [session_id, ...] in input order
+    for s in sessions:
+        s_local = timezone.localtime(s.scheduled_start)
+        s_day, s_t = s_local.date(), s_local.time()
+        eligible = tuple(sorted(
+            {a.user_id for a in assignments
+             if R.assignment_covers_now(a, s_day, s_t)}))
+        groups.setdefault(eligible, []).append(s.id)
+    for eligible, session_ids in groups.items():
+        if not eligible:
+            continue                                 # no covering Checker -> NULL
+        mapping.update(R.distribute_online_sessions(session_ids, list(eligible)))
 
     if not mapping:
-        # No online-duty Checker -> do not guess an owner. Leave NULL, flag IFO.
+        # No Checker's window covers any session -> do not guess an owner. Leave
+        # NULL, flag IFO once (preserves the empty-roster behavior).
         notify(role=Role.IFO_ADMIN, type="online_unassigned",
                title="Online sessions unassigned",
                body=f"{len(sessions)} online session(s) for {target_date} have no "

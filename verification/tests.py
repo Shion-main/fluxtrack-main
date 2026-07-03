@@ -531,6 +531,62 @@ class DistributeDBTests(_CheckerFixtureMixin, TestCase):
             Notification.objects.filter(user=c2, type="online_assigned").exists())
 
 
+    def _online_at(self, hour, target_date):
+        # An unowned ONLINE session scheduled at a specific LOCAL hour on
+        # target_date (so its scheduled_start can be tested against a shift window).
+        from datetime import datetime as _dt
+        s = self._session(self._room(), modality=Modality.ONLINE,
+                          status=SessionStatus.SCHEDULED)
+        tz = timezone.get_current_timezone()
+        start = timezone.make_aware(_dt.combine(target_date, time(hour, 0)), tz)
+        s.scheduled_start = start
+        s.scheduled_end = start + timedelta(minutes=90)
+        s.date = target_date
+        s.save(update_fields=["scheduled_start", "scheduled_end", "date"])
+        return s
+
+    def test_shift_window_gates_online_eligibility(self):
+        # CR-05: a shift-scoped ONLINE checker (08:00-10:00) is only eligible for
+        # online sessions whose scheduled_start falls inside their window. A 15:00
+        # session is NOT handed to them (it stays unowned/NULL so the sweep + IFO
+        # path surfaces it) while a 09:00 session IS assigned — mirroring the
+        # real-time _is_online_on_duty gate the checker faces at verify time.
+        from verification.services import assign_online_sessions
+        target_date = timezone.localdate()
+        shift_checker = self._checker()
+        Assignment.objects.create(
+            user=shift_checker, role=DutyRole.CHECKER, type="shift",
+            scope="online", term=self.term, status="active",
+            date=target_date, start_time=time(8, 0), end_time=time(10, 0))
+        s_in = self._online_at(9, target_date)     # inside 08:00-10:00
+        s_out = self._online_at(15, target_date)   # outside the shift window
+
+        assign_online_sessions(target_date)
+
+        s_in.refresh_from_db()
+        s_out.refresh_from_db()
+        self.assertEqual(s_in.online_checker_id, shift_checker.id)
+        self.assertIsNone(s_out.online_checker_id)   # never owned by someone off-window
+
+    def test_standing_online_checker_covers_all_windows(self):
+        # CR-05 counterpart: a STANDING online checker (date NULL) covers every
+        # session regardless of the hour, so both the 09:00 and 15:00 online
+        # sessions are assigned to them.
+        from verification.services import assign_online_sessions
+        target_date = timezone.localdate()
+        standing = self._checker()
+        self._online_duty(standing)   # standing ONLINE posting (date NULL)
+        early = self._online_at(9, target_date)
+        late = self._online_at(15, target_date)
+
+        assign_online_sessions(target_date)
+
+        early.refresh_from_db()
+        late.refresh_from_db()
+        self.assertEqual(early.online_checker_id, standing.id)
+        self.assertEqual(late.online_checker_id, standing.id)
+
+
 class AssignmentCreateTests(_CheckerFixtureMixin, TestCase):
     def test_ifo_creates_floor_assignment(self):
         # An IFO POST creates a FLOOR-scope Checker assignment on the chosen floor.
