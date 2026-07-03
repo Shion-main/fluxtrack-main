@@ -28,7 +28,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [ ] **Phase 1: MSSQL Environment & Data Foundation** - Prove SQL Server runtime (timezone + collation round-trips) and run existing import/materialize against it
 - [x] **Phase 2: Correctness Foundations** - Shared notify() write path, JOB-02 status sweep + occupancy release, single scheduler process (completed 2026-07-02)
 - [x] **Phase 3: Duty Assignments & Checker Verification** - Floor assignments gate an on-duty Checker's online + offline room verification (completed 2026-07-03)
-- [ ] **Phase 4: Modality Shift Approval & SRS v1.2** - Lead-time-gated faculty request, Dean approval, auto room-release/assign, SRS revision
+- [x] **Phase 4: Modality Shift Approval & SRS v1.2** - Lead-time-gated faculty request, Dean approval, auto room-release/assign, SRS revision (completed 2026-07-03)
 - [ ] **Phase 5: Notifications — Read Surface & Web Push** - In-app polled list + VAPID web push + per-user mute preferences
 - [ ] **Phase 6: Reporting Engine & Reporting Surfaces** - One shared aggregate layer powering weekly report, scorecards, IFO/Dean/HR dashboards
 - [ ] **Phase 7: Remaining Operational Surfaces** - Guard monitor/locator, IFO room & booking ops, Faculty self-service, job monitoring
@@ -144,7 +144,7 @@ Plans:
   4. Approving a →F2F/Blended shift auto-assigns a free room in the same building, or fails outright with a clear reason if none is free (no silent partial apply); IFO is notified informationally.
   5. The SRS is revised to v1.2 — new MOD area, removed CHK-06, amended FAC-07/CHK-03, RPT-02-notifies-Deans, and `modality_shift_lead_days` in the policy register — in both `.md` and `.docx`.
 
-**Plans**: 7/8 plans executed
+**Plans**: 8/8 plans complete
 
 Plans:
 
@@ -172,7 +172,7 @@ Plans:
 
 **Wave 6** *(blocked on 04-05, 04-07)*
 
-- [ ] 04-08-PLAN.md — Dean approval queue + approve/reject (dean_required, department-scoped) (MOD-02/04) [Wave 6]
+- [x] 04-08-PLAN.md — Dean approval queue + approve/reject (dean_required, department-scoped) (MOD-02/04) [Wave 6]
 
 ### Phase 5: Notifications — Read Surface & Web Push
 
@@ -259,7 +259,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8
 | 1. MSSQL Environment & Data Foundation | 0/TBD | Not started | - |
 | 2. Correctness Foundations | 5/5 | Complete    | 2026-07-02 |
 | 3. Duty Assignments & Checker Verification | 6/6 | Complete    | 2026-07-03 |
-| 4. Modality Shift Approval & SRS v1.2 | 7/8 | In Progress|  |
+| 4. Modality Shift Approval & SRS v1.2 | 8/8 | Complete   | 2026-07-03 |
 | 5. Notifications — Read Surface & Web Push | 0/TBD | Not started | - |
 | 6. Reporting Engine & Reporting Surfaces | 0/TBD | Not started | - |
 | 7. Remaining Operational Surfaces | 0/TBD | Not started | - |

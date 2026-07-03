@@ -4,17 +4,17 @@ milestone: v1.2
 milestone_name: "**Goal**: Faculty can request a lead-time-gated modality shift that a Dean approves, with rooms auto-released or auto-assigned, and the SRS brought back in sync with reality."
 current_phase: 04
 current_phase_name: modality-shift-approval-srs-v1-2
-status: executing
+status: verifying
 stopped_at: Completed 04-05-PLAN.md
-last_updated: "2026-07-03T16:36:42.976Z"
+last_updated: "2026-07-03T16:49:35.548Z"
 last_activity: 2026-07-03
 last_activity_desc: Phase 04 execution started
 progress:
   total_phases: 9
-  completed_phases: 3
+  completed_phases: 4
   total_plans: 27
-  completed_plans: 25
-  percent: 33
+  completed_plans: 26
+  percent: 44
 ---
 
 # Project State
@@ -30,7 +30,7 @@ See: .planning/PROJECT.md (updated 2026-07-02)
 
 Phase: 04 (modality-shift-approval-srs-v1-2) — EXECUTING
 Plan: 8 of 8
-Status: Ready to execute
+Status: Phase complete — ready for verification
 Last activity: 2026-07-03 — Phase 04 execution started
 
 **Phase 4** (modality-shift-approval-srs-v1-2): PLANNED ✓ — 8 plans across 6 waves, verified (plan-checker passed). Ready: `/gsd-execute-phase 04`. Runs parallel to 03.1 per ROADMAP.
@@ -83,6 +83,7 @@ Progress: [████████░░] 80%
 | Phase 04 P05 | 20min | 3 tasks | 2 files |
 | Phase 04 P06 | 4min | 2 tasks | 2 files |
 | Phase 04 P07 | 35min | 3 tasks | 6 files |
+| Phase 04 P08 | 30min | 3 tasks | 5 files |
 
 ## Accumulated Context
 
@@ -144,6 +145,8 @@ Recent decisions affecting current work:
 - [Phase ?]: 04-06: materialize_sessions APPLIES the reserved room (D-18), never re-resolves; no-room is a defensive guard only
 - [Phase ?]: 04-06: JOB-01 born-released/born-assigned hook fires only on get_or_create was_created, making materialize idempotent
 - [Phase ?]: 04-07: Faculty modality submit is htmx-driven (HX-Redirect on success, 302 fallback); preferred room is a preference only (server re-resolves at approval); withdraw guard delegated to withdraw_modality_shift (IDOR-safe); FAC-07 self-declare retired
+- [Phase 04]: 04-08: Dean approve/reject views delegate all state changes to apply_approval/reject_modality_shift; the view only fetches by pk and renders the outcome (TOCTOU/IDOR-safe)
+- [Phase 04]: 04-08: the D-07 no-room denial is a returned request.status==DENIED surfaced at 200 with a message; only a genuine service refusal (cross-department/non-pending) renders at 400
 
 ### Pending Todos
 
@@ -166,6 +169,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-07-03T16:36:25.951Z
+Last session: 2026-07-03T16:48:40.179Z
 Stopped at: Completed 04-05-PLAN.md
 Resume file: None
