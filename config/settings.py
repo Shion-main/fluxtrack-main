@@ -208,4 +208,5 @@ FLUXTRACK_POLICY = {
     "poll_interval_seconds": 8,
     "reporting_week_start": "monday",
     "sweep_interval_minutes": 5,   # ENV-04: dedicated-scheduler sweep cadence (JOB-02)
+    "modality_shift_lead_days": 2,  # MOD-01/D-02: modality-shift lead-time gate in whole calendar days (Asia/Manila)
 }
