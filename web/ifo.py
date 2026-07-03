@@ -11,6 +11,7 @@ from django.core.exceptions import PermissionDenied
 from django.http import HttpResponse
 from django.shortcuts import get_object_or_404, render
 from django.utils import timezone
+from django.utils.dateparse import parse_date, parse_time
 from django.views.decorators.http import require_http_methods
 
 from accounts.models import Role
@@ -145,6 +146,9 @@ def assignment_create(request):
     type_ = request.POST.get("type")
     scope = request.POST.get("scope")
     floor_ids = request.POST.getlist("floors")
+    date_raw = (request.POST.get("date") or "").strip()
+    start_raw = (request.POST.get("start_time") or "").strip()
+    end_raw = (request.POST.get("end_time") or "").strip()
 
     error = None
     if user is None:
@@ -157,6 +161,17 @@ def assignment_create(request):
         error = "Select floor or online scope."
     elif scope == AssignmentScope.FLOOR and not floor_ids:
         error = "A floor posting needs at least one floor."
+    # Validate date/time FORMAT and floor-id numericness BEFORE the ORM write —
+    # DateField/TimeField.to_python() and a non-numeric pk__in both raise an
+    # unhandled ValidationError (500) at INSERT/.set() time otherwise (CR-04).
+    elif date_raw and parse_date(date_raw) is None:
+        error = "Enter a valid date."
+    elif start_raw and parse_time(start_raw) is None:
+        error = "Enter a valid start time."
+    elif end_raw and parse_time(end_raw) is None:
+        error = "Enter a valid end time."
+    elif floor_ids and not all(f.isdigit() for f in floor_ids):
+        error = "Invalid floor selection."
 
     if error:
         ctx = {"assignments": _active_assignments(), "error": error,
@@ -166,9 +181,9 @@ def assignment_create(request):
     term = AcademicTerm.objects.filter(is_active=True).first()
     a = Assignment.objects.create(
         user=user, role=role, type=type_, scope=scope,
-        date=request.POST.get("date") or None,
-        start_time=request.POST.get("start_time") or None,
-        end_time=request.POST.get("end_time") or None,
+        date=date_raw or None,
+        start_time=start_raw or None,
+        end_time=end_raw or None,
         term=term, status="active")
     if scope == AssignmentScope.FLOOR:
         # Only real floor pks land on the M2M; ONLINE ignores floors entirely.

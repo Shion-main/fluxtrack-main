@@ -561,6 +561,26 @@ class AssignmentCreateTests(_CheckerFixtureMixin, TestCase):
         self.assertIsNotNone(a)
         self.assertEqual(a.floors.count(), 0)
 
+    def test_malformed_input_is_friendly_400_no_500(self):
+        # CR-04: a malformed date (and a non-numeric floor id) render the friendly
+        # 400 partial, never a 500, and create no Assignment — the create view
+        # must validate FORMAT before the ORM write.
+        ifo = self._ifo_admin()
+        checker = self._checker()
+        self.client.force_login(ifo)
+
+        r = self.client.post("/ifo/assignments/create", {
+            "user": checker.id, "role": "checker", "type": "shift",
+            "scope": "floor", "floors": [self.floor.id], "date": "not-a-date"})
+        self.assertEqual(r.status_code, 400)          # never a 500
+        self.assertFalse(Assignment.objects.filter(user=checker).exists())
+
+        r2 = self.client.post("/ifo/assignments/create", {
+            "user": checker.id, "role": "checker", "type": "shift",
+            "scope": "floor", "floors": ["abc"]})
+        self.assertEqual(r2.status_code, 400)
+        self.assertFalse(Assignment.objects.filter(user=checker).exists())
+
     def test_non_ifo_forbidden(self):
         # A Checker cannot mint duty grants — the create route is IFO-only (403).
         checker = self._checker()
