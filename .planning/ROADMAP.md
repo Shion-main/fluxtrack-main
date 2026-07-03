@@ -116,7 +116,7 @@ Plans:
 Plans:
 **Wave 1**
 
-- [ ] 03.1-01-PLAN.md — Install social-auth-app-django, add the PKCE mixin backend, wire the settings block + `auth/` URL include, migrate social_django (Wave 1)
+- [x] 03.1-01-PLAN.md — Install social-auth-app-django, add the PKCE mixin backend, wire the settings block + `auth/` URL include, migrate social_django (Wave 1)
 
 **Wave 2** *(blocked on Wave 1 completion)*
 

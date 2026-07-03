@@ -2,18 +2,18 @@
 gsd_state_version: 1.0
 milestone: v1.2
 milestone_name: "**Goal**: Faculty can request a lead-time-gated modality shift that a Dean approves, with rooms auto-released or auto-assigned, and the SRS brought back in sync with reality."
-current_phase: 4
-current_phase_name: Modality Shift Approval & SRS v1.2
+current_phase: 03.1
+current_phase_name: authentication-entra-id-sso-local-dev-proof
 status: executing
-stopped_at: Phase 03.1 context gathered
-last_updated: "2026-07-03T11:03:56.977Z"
+stopped_at: Completed 03.1-01-PLAN.md (Wave 1)
+last_updated: "2026-07-03T11:17:17Z"
 last_activity: 2026-07-03
-last_activity_desc: Phase 03 complete, transitioned to Phase 4
+last_activity_desc: Plan 03.1-01 complete (social_django wired + migrated on MSSQL)
 progress:
   total_phases: 9
   completed_phases: 3
-  total_plans: 14
-  completed_plans: 14
+  total_plans: 19
+  completed_plans: 15
   percent: 33
 ---
 
@@ -24,14 +24,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-07-02)
 
 **Core value:** A faculty member checks in with one action, and the resulting attendance record is trustworthy — presence physically verified, lateness captured, ghost bookings detected.
-**Current focus:** Phase 03 — duty-assignments-checker-verification
+**Current focus:** Phase 03.1 — authentication-entra-id-sso-local-dev-proof
 
 ## Current Position
 
-Phase: 4 — Modality Shift Approval & SRS v1.2
-Plan: Not started
-Status: Ready to execute
-Last activity: 2026-07-03 — Phase 03 complete, transitioned to Phase 4
+Phase: 03.1 (authentication-entra-id-sso-local-dev-proof) — EXECUTING
+Plan: 2 of 5
+Status: Executing Phase 03.1
+Last activity: 2026-07-03 — Plan 03.1-01 complete (social_django wired + migrated)
 
 Progress: [███████░░░] 67%
 
@@ -70,6 +70,7 @@ Progress: [███████░░░] 67%
 | Phase 03 P04 | ~9m | 2 tasks | 5 files |
 | Phase 03 P05 | ~14m | 3 tasks | 7 files |
 | Phase 03 P06 | ~5m | 3 tasks | 4 files |
+| Phase 03.1 P01 | ~3m | 2 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -108,6 +109,11 @@ Recent decisions affecting current work:
 - [Phase 03]: 03-05: the online /checker/action branch (session_id, no room_id) re-gates server-side — ownership (online_checker_id==user) + active online-duty + actionable — before _apply_action, mirroring the 03-02 floor re-gate; online validations reuse session.room for the NOT-NULL CheckerValidation.room (no migration).
 - [Phase ?]: 03-06: replay re-runs resolve_checker_scan against CURRENT server-derived state per item (active floors + room session state), never the client offline snapshot; stale items write AuditLog(checker.replay_conflict) + notify(IFO), idempotent via cache keyed on client_uuid (no expiry).
 - [Phase ?]: 03-06: IndexedDB offline queue (vanilla JS, no wrapper lib) captures Verify/Confirm-empty/Flag-not-present locally when offline; drain batch-POSTs to /checker/replay, applied/flagged/duplicate are all terminal and removed locally; feature-detects window.indexedDB and degrades without crashing.
+- [Phase 03.1]: 03.1-01: real PKCE requires accounts.backends.AzureADTenantOAuth2PKCE(BaseOAuth2PKCE, AzureADTenantOAuth2) — the stock AzureADTenantOAuth2 does NOT inherit the PKCE mixin so SOCIAL_AUTH_..._USE_PKCE is silently ignored (Pitfall 1); the subclass keeps name='azuread-tenant-oauth2' so the callback URL + env prefix are unchanged.
+- [Phase 03.1]: 03.1-01: SocialAuthExceptionMiddleware sits between AuthenticationMiddleware and MessageMiddleware AND SOCIAL_AUTH_RAISE_EXCEPTIONS=False, so an AuthForbidden refusal redirects to SOCIAL_AUTH_LOGIN_ERROR_URL=/login with a message instead of a raw 500 (D-06/D-09#2).
+- [Phase 03.1]: 03.1-01: SOCIAL_AUTH_PIPELINE has associate_by_email then accounts.pipeline.deny_unprovisioned then accounts.pipeline.write_azure_oid with create_user REMOVED (D-05/D-06); the accounts.pipeline.* refs are lazy dotted-strings resolved only at auth time, so check/migrate/tests pass before Plan 02 creates them.
+- [Phase 03.1]: 03.1-01: all 17 social_django migrations applied cleanly on MSSQL LocalDB (5 social_auth_* tables) — no fix-forward RunSQL needed, resolving research assumption A2.
+- [Phase 03.1]: 03.1-01: REDIRECT_URI pinned to http://localhost:8000/auth/complete/azuread-tenant-oauth2/ (localhost not 127.0.0.1, trailing slash) to avoid AADSTS50011 (Pitfall 3); DRF left on SessionAuthentication+IsAuthenticated (D-10).
 
 ### Pending Todos
 
@@ -130,6 +136,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-07-03T10:25:12.073Z
-Stopped at: Phase 03.1 context gathered
-Resume file: .planning/phases/03.1-authentication-entra-id-sso-local-dev-proof/03.1-CONTEXT.md
+Last session: 2026-07-03T11:17:17Z
+Stopped at: Completed 03.1-01-PLAN.md (Wave 1) — Wave 2 (03.1-02, 03.1-03) unblocked
+Resume file: None
