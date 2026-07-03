@@ -4,17 +4,17 @@ milestone: v1.2
 milestone_name: "**Goal**: Faculty can request a lead-time-gated modality shift that a Dean approves, with rooms auto-released or auto-assigned, and the SRS brought back in sync with reality."
 current_phase: 03
 current_phase_name: duty-assignments-checker-verification
-status: executing
+status: verifying
 stopped_at: Completed 03-05-PLAN.md
-last_updated: "2026-07-03T02:33:22.971Z"
+last_updated: "2026-07-03T02:43:54.046Z"
 last_activity: 2026-07-03
 last_activity_desc: Phase 03 execution resumed (wave continue)
 progress:
   total_phases: 8
-  completed_phases: 2
+  completed_phases: 3
   total_plans: 14
-  completed_plans: 13
-  percent: 25
+  completed_plans: 14
+  percent: 38
 ---
 
 # Project State
@@ -30,7 +30,7 @@ See: .planning/PROJECT.md (updated 2026-07-02)
 
 Phase: 03 (duty-assignments-checker-verification) — EXECUTING
 Plan: 6 of 6
-Status: Ready to execute
+Status: Phase complete — ready for verification
 Last activity: 2026-07-03 — Phase 03 execution resumed (wave continue)
 
 Progress: [███████░░░] 67%
@@ -68,6 +68,7 @@ Progress: [███████░░░] 67%
 | Phase 03 P03 | ~14m | 3 tasks | 8 files |
 | Phase 03 P04 | ~9m | 2 tasks | 5 files |
 | Phase 03 P05 | ~14m | 3 tasks | 7 files |
+| Phase 03 P06 | ~5m | 3 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -104,6 +105,8 @@ Recent decisions affecting current work:
 - [Phase 03]: 03-05: online Verify activates the session (status=ACTIVE + actual_start + checkin_method=ONLINE_MANUAL) — the online analog of a room check-in — and records CheckerValidation(verified); Flag-not-present drives ABSENT authoritatively + notifies IFO/HR.
 - [Phase 03]: 03-05: the JOB-02 sweep online-exclusion guard is REMOVED (online joins the shared is_no_show_past_grace path); shipped in lockstep with the online Verify path so only un-verified online no-shows fall to Absent while ACTIVE (verified) online is skipped — ROADMAP #6.
 - [Phase 03]: 03-05: the online /checker/action branch (session_id, no room_id) re-gates server-side — ownership (online_checker_id==user) + active online-duty + actionable — before _apply_action, mirroring the 03-02 floor re-gate; online validations reuse session.room for the NOT-NULL CheckerValidation.room (no migration).
+- [Phase ?]: 03-06: replay re-runs resolve_checker_scan against CURRENT server-derived state per item (active floors + room session state), never the client offline snapshot; stale items write AuditLog(checker.replay_conflict) + notify(IFO), idempotent via cache keyed on client_uuid (no expiry).
+- [Phase ?]: 03-06: IndexedDB offline queue (vanilla JS, no wrapper lib) captures Verify/Confirm-empty/Flag-not-present locally when offline; drain batch-POSTs to /checker/replay, applied/flagged/duplicate are all terminal and removed locally; feature-detects window.indexedDB and degrades without crashing.
 
 ### Pending Todos
 
@@ -122,6 +125,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-07-03T02:33:22.959Z
+Last session: 2026-07-03T02:43:46.838Z
 Stopped at: Completed 03-05-PLAN.md
 Resume file: None
