@@ -5,16 +5,16 @@ milestone_name: "**Goal**: Faculty can request a lead-time-gated modality shift 
 current_phase: 03.1
 current_phase_name: authentication-entra-id-sso-local-dev-proof
 status: paused
-stopped_at: "03.1 code-complete (01-04 + begin-view fix c73a123); 03.1-05 live D-09 gate DEFERRED — to be continued (see 03.1-UAT.md), blocked on Entra redirect-URI registration"
-last_updated: "2026-07-03T12:00:00.000Z"
+stopped_at: Phase 4 context gathered
+last_updated: "2026-07-03T12:51:19.723Z"
 last_activity: 2026-07-03
-last_activity_desc: "03.1-05 D-09 live proof deferred by decision (found+fixed begin-view 405 → c73a123; AADSTS50011 redirect-URI unregistered). Moving on to Phase 4."
+last_activity_desc: begin-view 405 found+fixed (c73a123); D-09 deferred by decision
 progress:
   total_phases: 9
   completed_phases: 3
   total_plans: 19
-  completed_plans: 17
-  percent: 36
+  completed_plans: 18
+  percent: 33
 ---
 
 # Project State
@@ -146,6 +146,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-07-03T12:19:00.000Z
-Stopped at: Completed 03.1-04-PLAN.md (Wave 3)
-Resume file: None
+Last session: 2026-07-03T12:51:19.713Z
+Stopped at: Phase 4 context gathered
+Resume file: .planning/phases/04-modality-shift-approval-srs-v1-2/04-CONTEXT.md
