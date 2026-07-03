@@ -108,14 +108,18 @@ Plans:
 
 ### Phase 03.1: Authentication — Entra ID SSO (local-dev proof) (INSERTED)
 
-**Goal:** [Urgent work - to be planned]
-**Requirements**: TBD
+**Goal:** Wire real Microsoft Entra ID sign-in (Authorization Code + PKCE) into the running Django app on localhost as the real auth path that replaces the DEBUG dev-login stub, proven end-to-end against the project-owned MMCM tenant: a bound faculty account signs in and lands on its role-home, an unprovisioned tenant account is refused, and the dev-login stub + superuser break-glass still work. Local-dev proof only — production https redirect, secret rotation, and staging cutover stay in the deploy phase.
+**Requirements**: none mapped in ROADMAP; advances AUTH-01, AUTH-03, AUTH-05 locally (acceptance anchored on CONTEXT D-09). See 03.1-CONTEXT.md.
 **Depends on:** Phase 3
-**Plans:** 0 plans
+**Plans:** 5 plans
 
 Plans:
 
-- [ ] TBD (run /gsd-plan-phase 03.1 to break down)
+- [ ] 03.1-01-PLAN.md — Install social-auth-app-django, add the PKCE mixin backend, wire the settings block + `auth/` URL include, migrate social_django (Wave 1)
+- [ ] 03.1-02-PLAN.md — Custom pipeline (deny-unprovisioned + write azure_oid, with security audit) and the `link_entra` command (Wave 2)
+- [ ] 03.1-03-PLAN.md — Dev-login coexistence fix (name ModelBackend), always-visible Microsoft button, refreshed `.env.example` (Wave 2)
+- [ ] 03.1-04-PLAN.md — Wave-0 automated tests: PKCE/wiring/deny/oid/link_entra + dev-login coexistence + logout (Wave 3)
+- [ ] 03.1-05-PLAN.md — Manual UAT gate: real Entra round-trip, live unprovisioned refusal, break-glass under DEBUG=False (D-09) (Wave 4)
 
 ### Phase 4: Modality Shift Approval & SRS v1.2
 
