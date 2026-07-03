@@ -1096,3 +1096,99 @@ class ApproveRaceTests(TestCase):
         # Re-resolved AWAY from the now-taken preferred/original room B to room A.
         self.assertEqual(fx.online_session.room_id, fx.room_a.id)
         self.assertEqual(req.items.get().assigned_room_id, fx.room_a.id)
+
+
+class ApplyF2FNoRoomTests(TestCase):
+    """D-07 REVISED / MOD-04: when NO room is free that day for an affected
+    session, the whole ticket is DENIED (terminal, not left pending) and NOTHING
+    changes on any session -- all-or-nothing, no silent partial apply (D-19)."""
+
+    def test_no_free_room_denies_terminally_nothing_changed(self):
+        fx = make_shift_fixture()
+        # Room A is held by the competitor; occupy room B at the same slot so the
+        # WHOLE building is full -> no room can be resolved.
+        _occupy_room(fx, fx.room_b, _time(8, 0), _time(9, 30), date(2026, 7, 6))
+        req = _pending_request(
+            fx, Modality.BLENDED, [fx.f2f_schedule],
+            date(2026, 7, 6), date(2026, 7, 6))
+        out = services.apply_approval(req, fx.dean, now=_APPLY_NOW)
+
+        self.assertEqual(out.status, ModalityShiftStatus.DENIED)
+        self.assertTrue(out.decision_reason)
+        self.assertEqual(out.decided_by, fx.dean)
+        # No partial apply: the session is byte-for-byte unchanged.
+        fx.session.refresh_from_db()
+        self.assertEqual(fx.session.declared_modality, "")
+        self.assertEqual(fx.session.room_id, fx.room_a.id)
+        self.assertIsNone(fx.session.room_released_at)
+        # Reservation was rolled back too.
+        self.assertIsNone(req.items.get().assigned_room_id)
+        self.assertEqual(Notification.objects.filter(
+            user=fx.faculty, type="modality_shift_denied").count(), 1)
+        self.assertTrue(AuditLog.objects.filter(
+            event_type="modality_shift.denied", target_id=str(req.pk)).exists())
+
+    def test_time_move_double_book_denies_terminally(self):
+        # A bundled time-move onto a slot the faculty already teaches (the online
+        # class at 10:00-11:30) is a double-book -> terminal DENY (D-17), nothing
+        # changed.
+        fx = make_shift_fixture()
+        req = _pending_request(
+            fx, Modality.F2F, [fx.f2f_schedule],
+            date(2026, 7, 6), date(2026, 7, 6),
+            time_move=(_time(10, 0), _time(11, 30)))
+        out = services.apply_approval(req, fx.dean, now=_APPLY_NOW)
+
+        self.assertEqual(out.status, ModalityShiftStatus.DENIED)
+        fx.session.refresh_from_db()
+        self.assertEqual(fx.session.declared_modality, "")
+        self.assertEqual(fx.session.scheduled_start, _manila(2026, 7, 6, 8, 0))
+
+
+class ShiftNotifyTests(TestCase):
+    """MOD-05/D-11: submit -> Dean; approve -> requester + IFO informational;
+    reject -> requester; deny -> requester. All via the single notify() path."""
+
+    def _ifo(self, suffix="1"):
+        return get_user_model().objects.create(
+            username=f"nfy_ifo_{suffix}", email=f"nfy_ifo_{suffix}@mcm.edu.ph",
+            role=Role.IFO_ADMIN, is_active=True)
+
+    def test_submit_notifies_dean(self):
+        fx = make_shift_fixture()
+        services.submit_modality_shift(
+            fx.faculty, [fx.f2f_schedule], Modality.ONLINE,
+            date(2026, 7, 6), date(2026, 7, 6), now=_EARLY_NOW)
+        self.assertEqual(Notification.objects.filter(
+            user=fx.dean, type="modality_shift_submitted").count(), 1)
+
+    def test_approve_notifies_requester_and_ifo(self):
+        fx = make_shift_fixture()
+        ifo = self._ifo()
+        req = _pending_request(
+            fx, Modality.ONLINE, [fx.f2f_schedule],
+            date(2026, 7, 6), date(2026, 7, 6))
+        services.apply_approval(req, fx.dean, now=_APPLY_NOW)
+        self.assertEqual(Notification.objects.filter(
+            user=fx.faculty, type="modality_shift_approved").count(), 1)
+        self.assertEqual(Notification.objects.filter(
+            user=ifo, type="modality_shift_applied").count(), 1)
+
+    def test_reject_notifies_requester(self):
+        fx = make_shift_fixture()
+        req = _pending_request(
+            fx, Modality.ONLINE, [fx.f2f_schedule],
+            date(2026, 7, 6), date(2026, 7, 6))
+        services.reject_modality_shift(req, fx.dean, "no room that day")
+        self.assertEqual(Notification.objects.filter(
+            user=fx.faculty, type="modality_shift_rejected").count(), 1)
+
+    def test_deny_notifies_requester(self):
+        fx = make_shift_fixture()
+        _occupy_room(fx, fx.room_b, _time(8, 0), _time(9, 30), date(2026, 7, 6))
+        req = _pending_request(
+            fx, Modality.BLENDED, [fx.f2f_schedule],
+            date(2026, 7, 6), date(2026, 7, 6))
+        services.apply_approval(req, fx.dean, now=_APPLY_NOW)
+        self.assertEqual(Notification.objects.filter(
+            user=fx.faculty, type="modality_shift_denied").count(), 1)

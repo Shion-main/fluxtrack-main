@@ -472,10 +472,38 @@ def apply_approval(request, dean, *, now=None):
 
         sessions = list(affected_sessions(req))  # HY010: materialize before writes
 
-        if req.target_modality == Modality.ONLINE:
-            _apply_online(req, sessions, dean, now)
-        else:
-            _apply_f2f(req, sessions, dean, now)
+        # Apply the consequence inside a SAVEPOINT so a no-room / double-book
+        # aborts ALL session + item writes (all-or-nothing, D-07 REVISED / D-19).
+        deny_reason = None
+        try:
+            with transaction.atomic():
+                if req.target_modality == Modality.ONLINE:
+                    _apply_online(req, sessions, dean, now)
+                else:
+                    _apply_f2f(req, sessions, dean, now)
+        except _NoRoomAvailable as exc:
+            deny_reason = exc.reason  # savepoint rolled back -> sessions untouched
+
+        if deny_reason is not None:
+            # D-07 REVISED: terminal DENIED (never left pending), nothing changed.
+            req.status = ModalityShiftStatus.DENIED
+            req.decision_reason = deny_reason
+            req.decided_by = dean
+            req.decided_at = now
+            req.save(update_fields=[
+                "status", "decision_reason", "decided_by", "decided_at"])
+            AuditLog.objects.create(
+                actor=dean, event_type="modality_shift.denied",
+                target_type="modality_shift_request", target_id=str(req.pk),
+                payload={"reason": deny_reason},
+            )
+            notify(
+                users=[req.requester], type="modality_shift_denied",
+                title="Modality shift denied",
+                body=f"Your modality shift request was denied: {deny_reason}",
+                link="/faculty/modality/mine",
+            )
+            return req
 
         req.status = ModalityShiftStatus.APPROVED
         req.decided_by = dean
@@ -485,5 +513,30 @@ def apply_approval(request, dean, *, now=None):
             actor=dean, event_type="modality_shift.approved",
             target_type="modality_shift_request", target_id=str(req.pk),
             payload={"target_modality": req.target_modality},
+        )
+
+        # Decision -> requester; applied -> IFO informational (D-11, not a gate).
+        notify(
+            users=[req.requester], type="modality_shift_approved",
+            title="Modality shift approved",
+            body=(f"Your {req.target_modality} shift for {req.window_start} to "
+                  f"{req.window_end} was approved."),
+            link="/faculty/modality/mine",
+        )
+        if req.target_modality == Modality.ONLINE:
+            ifo_body = (f"{len(sessions)} session(s) moved online for "
+                        f"{req.window_start} to {req.window_end}.")
+        else:
+            rooms = sorted({
+                item.assigned_room.code
+                for item in req.items.select_related("assigned_room").all()
+                if item.assigned_room_id is not None
+            })
+            ifo_body = (f"{req.target_modality} shift assigned room(s) "
+                        f"{', '.join(rooms) or '-'} for {req.window_start} to "
+                        f"{req.window_end}.")
+        notify(
+            role=Role.IFO_ADMIN, type="modality_shift_applied",
+            title="Modality shift applied", body=ifo_body, link="/ifo",
         )
     return req
