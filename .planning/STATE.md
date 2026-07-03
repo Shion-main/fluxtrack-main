@@ -6,7 +6,7 @@ current_phase: 04
 current_phase_name: modality-shift-approval-srs-v1-2
 status: executing
 stopped_at: Phase 4 planned (8 plans, ready to execute)
-last_updated: "2026-07-03T15:11:55.178Z"
+last_updated: "2026-07-03T15:33:19.685Z"
 last_activity: 2026-07-03
 last_activity_desc: Phase 04 execution started
 progress:
@@ -29,7 +29,7 @@ See: .planning/PROJECT.md (updated 2026-07-02)
 ## Current Position
 
 Phase: 04 (modality-shift-approval-srs-v1-2) — EXECUTING
-Plan: 2 of 8
+Plan: 3 of 8
 Status: Ready to execute
 Last activity: 2026-07-03 — Phase 04 execution started
 
@@ -77,6 +77,7 @@ Progress: [████████░░] 80%
 | Phase 03.1 P03 | ~6m | 2 tasks | 3 files |
 | Phase 03.1 P04 | ~14m | 2 tasks | 2 files |
 | Phase 04 P01 | 20 | 3 tasks | 5 files |
+| Phase 04 P02 | ~6m | 4 tasks | 5 files |
 
 ## Accumulated Context
 
@@ -129,6 +130,9 @@ Recent decisions affecting current work:
 - [Phase 03.1]: 03.1-04: AuthWiringTests asserts settings.SOCIAL_AUTH_RAISE_EXCEPTIONS is False + SocialAuthExceptionMiddleware positioned after AuthenticationMiddleware/before MessageMiddleware (refusal redirects, not 500) AND REST_FRAMEWORK still SessionAuthentication (D-10 negative guard) — the two invariants most likely to silently regress.
 - [Phase 04]: Migration file renamed to plan artifact name 0003_modality_shift_request.py via unapply/rename/re-apply
 - [Phase 04]: Competitor occupant in make_shift_fixture is a second F2F Session with a distinct faculty (avoids D-17 self-double-book)
+- [Phase 04]: 04-02: FluxTrack_SRS revised to v1.2 -- MOD area (MOD-01..06) added as new Section 4.4 with 4.5..4.13 renumbered (SCAN-03 and IFO-10 cross-refs updated); DEAN-04 dashboard row; FAC-07 marked superseded by the Dean-approved modality-shift workflow; CHK-03 drops Confirm absent and applies to online; CHK-06 removed (Absent is final); RPT-02 notifies IFO + Deans; modality_shift_lead_days=2 in the Section 8 policy register.
+- [Phase 04]: 04-02: FluxTrack_SRS.docx is a GENERATED artifact -- produced only by 'manage.py regenerate_srs_docx' from the .md via bundled pypandoc_binary==1.17 (pandoc 3.9, no system pandoc / no PATH); never hand-edit the .docx; pandoc output is not byte-deterministic.
+- [Phase 04]: 04-02: MOD-06 documentation half (FAC-07 superseded + CHK-06 removed in SRS) shipped here; the code half (declared_modality as approval override) lands in 04-05/04-07, so MOD-06 stays open in REQUIREMENTS.md while DOC-01 is closed.
 
 ### Pending Todos
 
@@ -151,6 +155,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-07-03T15:11:34.183Z
+Last session: 2026-07-03T15:32:58.073Z
 Stopped at: Phase 4 planned (8 plans, ready to execute)
 Resume file: .planning/phases/04-modality-shift-approval-srs-v1-2/04-01-PLAN.md

@@ -125,7 +125,7 @@ roadmap does NOT create phases for them.
 
 ### Documentation (DOC)
 
-- [ ] **DOC-01**: The SRS is revised to v1.2 — new MOD area, DEAN-04, amended FAC-07/CHK-03, removed CHK-06, RPT-02 notifies Deans, `modality_shift_lead_days` in the policy register — in both `.md` and `.docx`
+- [x] **DOC-01**: The SRS is revised to v1.2 — new MOD area, DEAN-04, amended FAC-07/CHK-03, removed CHK-06, RPT-02 notifies Deans, `modality_shift_lead_days` in the policy register — in both `.md` and `.docx`
 
 ## Out of Scope
 
@@ -167,7 +167,7 @@ phase (see ROADMAP.md). Status values: Pending / In progress / Complete.
 | MOD-04 | Phase 4 | Pending |
 | MOD-05 | Phase 4 | Pending |
 | MOD-06 | Phase 4 | Pending |
-| DOC-01 | Phase 4 | Pending |
+| DOC-01 | Phase 4 | Complete |
 | NOTIF-01 | Phase 5 | Pending |
 | NOTIF-02 | Phase 5 | Pending |
 | NOTIF-03 | Phase 5 | Pending |
