@@ -19,7 +19,7 @@ SURFACES = {
         {"title": "Check in", "desc": "Scan a room QR or enter the code.", "icon": "scan-line", "href": "/faculty/scan"},
     ],
     Role.CHECKER: [
-        {"title": "Floor view", "desc": "Coverage and priority queue.", "icon": "layout-grid", "href": "#"},
+        {"title": "Floor view", "desc": "Coverage and priority queue.", "icon": "layout-grid", "href": "/checker/floor"},
         {"title": "Scan a room", "desc": "Verify presence on your floor.", "icon": "scan-line", "href": "/checker/scan"},
     ],
     Role.IFO_ADMIN: [

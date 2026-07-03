@@ -16,6 +16,7 @@ import re
 from functools import wraps
 from urllib.parse import parse_qs, urlparse
 
+from django.conf import settings
 from django.contrib.auth.decorators import login_required
 from django.core.cache import cache
 from django.core.exceptions import PermissionDenied
@@ -255,3 +256,84 @@ def action(request):
     return render(request, "checker/_outcome.html", {
         "resolution": resolution, "room": room, "session": session,
         "applied": True, "applied_action": action_val})
+
+
+# --- floor board (CHK-07) --------------------------------------------------
+# Server-computed status token per room card. Color is NEVER the only signal
+# (WCAG 1.4.1): each state also carries a Lucide icon + a text label. The exact
+# palette is the approved 03-UI-SPEC functional-state table.
+_CARD_STYLES = {
+    "idle": {"border": "border-muted", "text": "text-muted-foreground",
+             "icon": "circle", "label": "No session", "pill": "uk-label"},
+    "active-unverified": {"border": "border-amber-500", "text": "text-amber-600",
+                          "icon": "clock", "label": "Needs check", "pill": "uk-label"},
+    "verified": {"border": "border-green-600", "text": "text-green-600",
+                 "icon": "check-check", "label": "Verified", "pill": "uk-label"},
+    "flagged": {"border": "border-destructive", "text": "text-destructive",
+                "icon": "flag", "label": "Flagged", "pill": "uk-label-destructive"},
+    "verified-empty": {"border": "border-blue-600", "text": "text-blue-600",
+                       "icon": "door-closed", "label": "Empty (checked)", "pill": "uk-label"},
+}
+
+
+def _card_state(actions, status):
+    """Map a session's validation actions + status to a display state token.
+
+    Flagged wins over verified for the card's face (a flagged room needs the
+    eye even if a prior verify exists); coverage counting is independent (any
+    'verified' validation counts, matching Session.verified_by_checker).
+    """
+    if any(a.startswith("flag") for a in actions):
+        return "flagged"
+    if ValidationAction.VERIFIED in actions:
+        return "verified"
+    if ValidationAction.VERIFIED_EMPTY in actions:
+        return "verified-empty"
+    if status == SessionStatus.ACTIVE:
+        return "active-unverified"
+    return "idle"                                    # scheduled / not yet started
+
+
+@checker_required
+def floor_board(request):
+    """CHK-07 board shell — mirrors ifo.live. The poll interval is policy-driven
+    (settings.FLUXTRACK_POLICY[poll_interval_seconds]); NEVER hardcoded."""
+    return render(request, "checker/floor.html",
+                  {"poll_ms": settings.FLUXTRACK_POLICY["poll_interval_seconds"] * 1000})
+
+
+@checker_required
+def floor_rows(request):
+    """CHK-07 polled partial. ONE shared queryset (exclude ABSENT, scoped to the
+    checker's active floors) feeds the cards, the oldest-first priority queue,
+    AND the coverage denominator (Pitfall 5) so the numbers can never disagree.
+    """
+    now = timezone.now()
+    floor_ids = _active_floor_ids(request.user, now)
+    active = list(Session.objects
+                  .filter(room__floor_id__in=floor_ids, date=timezone.localdate())
+                  .exclude(status=SessionStatus.ABSENT)
+                  .select_related("room", "room__floor", "schedule", "faculty")
+                  .prefetch_related("validations")
+                  .order_by("scheduled_start"))
+    # F2F/Blended board only: drop effective-online sessions (declared overrides
+    # schedule), matching _room_session_state's online short-circuit.
+    board = [s for s in active
+             if (s.declared_modality or s.schedule.modality) != Modality.ONLINE]
+
+    cards, queue = [], []
+    verified = 0
+    for s in board:
+        actions = {v.action for v in s.validations.all()}
+        is_verified = ValidationAction.VERIFIED in actions
+        verified += 1 if is_verified else 0
+        state = _card_state(actions, s.status)
+        cards.append({"session": s, "state": state, "style": _CARD_STYLES[state]})
+        if s.status == SessionStatus.ACTIVE and not is_verified:
+            queue.append(s)                          # already oldest-first ordered
+
+    total = len(board)
+    coverage = round(100 * verified / total) if total else 100
+    return render(request, "checker/_floor_rows.html", {
+        "cards": cards, "queue": queue, "coverage": coverage,
+        "verified": verified, "total": total, "now": timezone.localtime(now)})

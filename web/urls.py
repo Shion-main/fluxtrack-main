@@ -13,10 +13,12 @@ urlpatterns = [
     # Faculty surfaces
     path("faculty/schedule", faculty.schedule, name="faculty_schedule"),
     path("faculty/scan", faculty.scan_page, name="faculty_scan"),
-    # Checker surfaces (CHK-01..05)
+    # Checker surfaces (CHK-01..05, CHK-07)
     path("checker/scan", checker.scan_page, name="checker_scan"),
     path("checker/resolve", checker.resolve, name="checker_resolve"),
     path("checker/action", checker.action, name="checker_action"),
+    path("checker/floor", checker.floor_board, name="checker_floor"),
+    path("checker/floor/rows", checker.floor_rows, name="checker_floor_rows"),
     # IFO Admin surfaces
     path("ifo/rooms", ifo.rooms_list, name="ifo_rooms"),
     path("ifo/rooms/<str:code>", ifo.room_detail, name="ifo_room_detail"),
