@@ -334,6 +334,11 @@ def action(request):
 
     # Re-identify the room from POST (ids identify WHICH room only; they are NOT
     # trusted for gating). A missing/forged room_id degrades to an error partial.
+    # Guard non-numeric room_id BEFORE the ORM filter (CR-03) — an AutoField pk
+    # filtered on "abc" raises ValidationError (500); mirror the online path's
+    # `.isdigit()` guard so it degrades to the bad-payload partial (200).
+    if not str(room_id or "").isdigit():
+        return render(request, "checker/_outcome.html", {"error": "bad-payload"})
     room = (Room.objects.filter(pk=room_id)
             .select_related("floor").first())
     if room is None:

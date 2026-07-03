@@ -342,6 +342,20 @@ class CheckerScanDBTests(_CheckerFixtureMixin, TestCase):
         self.assertFalse(
             CheckerValidation.objects.filter(session=session).exists())
 
+    def test_nonnumeric_room_id_is_bad_payload(self):
+        # CR-03: a non-numeric room_id degrades to the bad-payload error partial
+        # (200), never an unhandled ValidationError (500) from filtering an
+        # integer AutoField pk on "abc". Mirrors the online path's isdigit guard.
+        checker = self._checker()
+        self._active_floor_assignment(checker, self.floor)
+        self.client.force_login(checker)
+
+        r = self.client.post("/checker/action", {
+            "action": "verified", "room_id": "abc"})
+        self.assertEqual(r.status_code, 200)          # never a 500
+        self.assertContains(r, 'data-outcome="invalid"')
+        self.assertFalse(CheckerValidation.objects.exists())
+
     def test_incongruent_action_is_refused(self):
         # CR-02: resolution.actionable is not a blank cheque — the submitted
         # action must be the one the resolved outcome permits.
