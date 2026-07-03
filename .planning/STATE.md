@@ -5,15 +5,15 @@ milestone_name: "**Goal**: Faculty can request a lead-time-gated modality shift 
 current_phase: 04
 current_phase_name: modality-shift-approval-srs-v1-2
 status: executing
-stopped_at: Phase 4 planned (8 plans, ready to execute)
-last_updated: "2026-07-03T16:00:44.504Z"
+stopped_at: Completed 04-05-PLAN.md
+last_updated: "2026-07-03T16:16:24.062Z"
 last_activity: 2026-07-03
 last_activity_desc: Phase 04 execution started
 progress:
   total_phases: 9
   completed_phases: 3
   total_plans: 27
-  completed_plans: 22
+  completed_plans: 23
   percent: 33
 ---
 
@@ -29,7 +29,7 @@ See: .planning/PROJECT.md (updated 2026-07-02)
 ## Current Position
 
 Phase: 04 (modality-shift-approval-srs-v1-2) — EXECUTING
-Plan: 5 of 8
+Plan: 6 of 8
 Status: Ready to execute
 Last activity: 2026-07-03 — Phase 04 execution started
 
@@ -80,6 +80,7 @@ Progress: [████████░░] 80%
 | Phase 04 P02 | ~6m | 4 tasks | 5 files |
 | Phase 04 P03 | 35m | 3 tasks | 2 files |
 | Phase 04 P04 | 30 min | 3 tasks | 2 files |
+| Phase 04 P05 | 20min | 3 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -136,6 +137,8 @@ Recent decisions affecting current work:
 - [Phase 04]: 04-02: FluxTrack_SRS.docx is a GENERATED artifact -- produced only by 'manage.py regenerate_srs_docx' from the .md via bundled pypandoc_binary==1.17 (pandoc 3.9, no system pandoc / no PATH); never hand-edit the .docx; pandoc output is not byte-deterministic.
 - [Phase 04]: 04-02: MOD-06 documentation half (FAC-07 superseded + CHK-06 removed in SRS) shipped here; the code half (declared_modality as approval override) lands in 04-05/04-07, so MOD-06 stays open in REQUIREMENTS.md while DOC-01 is closed.
 - [Phase 04]: 04-04: creation-side refusals raise ModalityShiftError (friendly-400 seam); submit persists a PENDING ticket + item-per-schedule, notifies the Dean once, mutates no sessions (apply is 04-05)
+- [Phase ?]: 04-05: no-room/double-book apply raises _NoRoomAvailable caught outside a nested savepoint -> terminal DENIED commits while all session/item writes roll back (D-07 REVISED, no partial apply)
+- [Phase ?]: 04-05: ->F2F room re-resolved server-side INSIDE the approval transaction (TOCTOU-safe); item.assigned_room stores the D-18 reservation
 
 ### Pending Todos
 
@@ -158,6 +161,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-07-03T15:59:56.636Z
-Stopped at: Phase 4 planned (8 plans, ready to execute)
-Resume file: .planning/phases/04-modality-shift-approval-srs-v1-2/04-01-PLAN.md
+Last session: 2026-07-03T16:16:12.755Z
+Stopped at: Completed 04-05-PLAN.md
+Resume file: None
