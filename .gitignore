@@ -25,3 +25,8 @@ poc/*.pdf
 # Raw source datasets (may contain PII / be large) — never committed
 /data/raw/
 .gstack/
+
+# graphify — transient build output + large regenerable diff baseline
+# (the graph deliverables graph.json / graph.html / GRAPH_REPORT.md are committed under .planning/graphs/)
+graphify-out/
+.planning/graphs/.last-build-snapshot.json
