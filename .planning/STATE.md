@@ -6,14 +6,14 @@ current_phase: 04
 current_phase_name: modality-shift-approval-srs-v1-2
 status: executing
 stopped_at: Completed 04-05-PLAN.md
-last_updated: "2026-07-03T16:26:09.333Z"
+last_updated: "2026-07-03T16:36:42.976Z"
 last_activity: 2026-07-03
 last_activity_desc: Phase 04 execution started
 progress:
   total_phases: 9
   completed_phases: 3
   total_plans: 27
-  completed_plans: 24
+  completed_plans: 25
   percent: 33
 ---
 
@@ -29,7 +29,7 @@ See: .planning/PROJECT.md (updated 2026-07-02)
 ## Current Position
 
 Phase: 04 (modality-shift-approval-srs-v1-2) — EXECUTING
-Plan: 7 of 8
+Plan: 8 of 8
 Status: Ready to execute
 Last activity: 2026-07-03 — Phase 04 execution started
 
@@ -82,6 +82,7 @@ Progress: [████████░░] 80%
 | Phase 04 P04 | 30 min | 3 tasks | 2 files |
 | Phase 04 P05 | 20min | 3 tasks | 2 files |
 | Phase 04 P06 | 4min | 2 tasks | 2 files |
+| Phase 04 P07 | 35min | 3 tasks | 6 files |
 
 ## Accumulated Context
 
@@ -142,6 +143,7 @@ Recent decisions affecting current work:
 - [Phase ?]: 04-05: ->F2F room re-resolved server-side INSIDE the approval transaction (TOCTOU-safe); item.assigned_room stores the D-18 reservation
 - [Phase ?]: 04-06: materialize_sessions APPLIES the reserved room (D-18), never re-resolves; no-room is a defensive guard only
 - [Phase ?]: 04-06: JOB-01 born-released/born-assigned hook fires only on get_or_create was_created, making materialize idempotent
+- [Phase ?]: 04-07: Faculty modality submit is htmx-driven (HX-Redirect on success, 302 fallback); preferred room is a preference only (server re-resolves at approval); withdraw guard delegated to withdraw_modality_shift (IDOR-safe); FAC-07 self-declare retired
 
 ### Pending Todos
 
@@ -164,6 +166,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-07-03T16:25:50.911Z
+Last session: 2026-07-03T16:36:25.951Z
 Stopped at: Completed 04-05-PLAN.md
 Resume file: None
