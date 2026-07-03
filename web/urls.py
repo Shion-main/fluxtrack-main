@@ -19,6 +19,8 @@ urlpatterns = [
     path("checker/action", checker.action, name="checker_action"),
     path("checker/floor", checker.floor_board, name="checker_floor"),
     path("checker/floor/rows", checker.floor_rows, name="checker_floor_rows"),
+    path("checker/online", checker.online_list, name="checker_online"),
+    path("checker/online/<int:session_id>", checker.online_open, name="checker_online_open"),
     # IFO Admin surfaces
     path("ifo/rooms", ifo.rooms_list, name="ifo_rooms"),
     path("ifo/rooms/<str:code>", ifo.room_detail, name="ifo_room_detail"),

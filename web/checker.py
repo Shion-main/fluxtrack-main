@@ -20,6 +20,7 @@ from django.conf import settings
 from django.contrib.auth.decorators import login_required
 from django.core.cache import cache
 from django.core.exceptions import PermissionDenied
+from django.http import Http404
 from django.shortcuts import render
 from django.utils import timezone
 from django.views.decorators.http import require_http_methods
@@ -80,6 +81,63 @@ def _active_floor_ids(user, now):
         if on_duty:
             floor_ids.update(a.floors.values_list("pk", flat=True))
     return floor_ids
+
+
+def _is_online_on_duty(user, now):
+    """True iff the checker holds an active ONLINE-scope CHECKER assignment RIGHT
+    NOW (CHK-02/IFO-06) — the online analog of `_active_floor_ids`.
+
+    Online duty is floor-agnostic: a standing posting (`date` NULL) is on duty
+    whenever active; a shift is on duty only when `now` falls inside its window
+    (either bound may be NULL/open). This is the server's sole source of the
+    checker's online-duty state — the client never asserts it (CHK-01 rule).
+    """
+    local = timezone.localtime(now)
+    today, now_t = local.date(), local.time()
+    for a in (Assignment.objects
+              .filter(user=user, role=DutyRole.CHECKER,
+                      scope=AssignmentScope.ONLINE, status="active")):
+        if a.date is None:
+            return True                              # standing posting
+        if a.date == today:
+            start_ok = a.start_time is None or a.start_time <= now_t
+            end_ok = a.end_time is None or now_t <= a.end_time
+            if start_ok and end_ok:
+                return True                          # shift covering now
+    return False
+
+
+def _online_session(session_id, user):
+    """The effective-online session identified by `session_id` AND owned by
+    `user` (`Session.online_checker == user`), or None (CHK-02).
+
+    Ownership and modality are ALWAYS re-derived server-side from the id — the
+    id names WHICH session only, never that the caller may act on it (the same
+    CHK-01 rule the F2F floor path enforces). A non-numeric id, a missing
+    session, a non-online session, or a foreign owner all resolve to None.
+    """
+    if not str(session_id or "").isdigit():
+        return None
+    session = (Session.objects.filter(pk=session_id)
+               .select_related("schedule", "faculty", "room").first())
+    if session is None:
+        return None
+    effective = session.declared_modality or session.schedule.modality
+    if effective != Modality.ONLINE:
+        return None
+    if session.online_checker_id != user.pk:
+        return None
+    return session
+
+
+class _OnlineRefusal:
+    """Minimal resolution shim so the online re-gate can reuse `_outcome.html`'s
+    off-duty / absent-excluded refusal alerts (no F2F room state involved)."""
+
+    actionable = False
+
+    def __init__(self, outcome):
+        self.outcome = outcome
 
 
 # --- room + session state --------------------------------------------------
@@ -152,13 +210,17 @@ def _room_session_state(room, now):
 
 # --- apply layer -----------------------------------------------------------
 def _apply_action(request, session, room, action, *, note="", identity_match=None,
-                  scanned_at=None, offline=False):
+                  scanned_at=None, offline=False, online=False):
     """Write the CheckerValidation + AuditLog and, for flags, notify IFO + HR.
 
     Thin apply (mirror web/scan.py._apply): no gating decision here — the caller
-    has already re-gated through the pure core. Online status semantics
-    (Verify-activation, Flag-not-present -> Absent) are 03-05; this plan is
-    F2F/Blended only.
+    has already re-gated (through the pure core for F2F, or the online re-gate in
+    `_online_action`). For an online action (`online=True`) this ALSO carries the
+    online status semantics (03-05): a Verify ACTIVATES the session (the online
+    analog of a faculty room check-in), and a Flag-not-present drives it ABSENT
+    authoritatively. F2F/Blended NEVER overrides status here (record-only) — an
+    F2F Flag-not-present writes the flag and notifies, but leaves status to the
+    sweep (no silent status override, research Open Q2).
     """
     cv = CheckerValidation.objects.create(
         session=session, room=room, checker=request.user, action=action,
@@ -167,7 +229,21 @@ def _apply_action(request, session, room, action, *, note="", identity_match=Non
     AuditLog.objects.create(
         actor=request.user, event_type=f"checker.{action}",
         target_type="session", target_id=str(session.pk if session else ""),
-        payload={"room": room.code, "offline": offline})
+        payload={"room": room.code, "offline": offline, "online": online})
+
+    # Online branch: the only non-faculty write that moves a session out of
+    # SCHEDULED. A genuine online attendee made ACTIVE is precisely what lets the
+    # sweep safely include online (scheduling/jobs.py exclusion removed in lockstep).
+    if online and session is not None:
+        if action == ValidationAction.VERIFIED:
+            session.status = SessionStatus.ACTIVE
+            session.actual_start = scanned_at or timezone.now()
+            session.checkin_method = CheckinMethod.ONLINE_MANUAL
+            session.save(update_fields=["status", "actual_start", "checkin_method"])
+        elif action == ValidationAction.FLAG_NOT_PRESENT:
+            session.status = SessionStatus.ABSENT      # authoritative (Open Q2)
+            session.save(update_fields=["status"])
+
     if action in _FLAG_ACTIONS:
         # Consequential: reaches IFO + HR permanently, no dispute. The note is
         # mandatory (validated in the view). notify() is the single write path.
@@ -210,9 +286,17 @@ def action(request):
     if action_val not in _VALID_ACTIONS:
         return render(request, "checker/_outcome.html", {"error": "bad-payload"})
 
+    # Online branch: a POST with a session_id and NO room_id targets an online
+    # session (no room-scan). Re-gated server-side against ownership + on-duty +
+    # actionable in `_online_action`, mirroring the floor re-gate below.
+    room_id = request.POST.get("room_id")
+    session_id = request.POST.get("session_id")
+    if not room_id and session_id:
+        return _online_action(request, session_id, action_val, note, now)
+
     # Re-identify the room from POST (ids identify WHICH room only; they are NOT
     # trusted for gating). A missing/forged room_id degrades to an error partial.
-    room = (Room.objects.filter(pk=request.POST.get("room_id"))
+    room = (Room.objects.filter(pk=room_id)
             .select_related("floor").first())
     if room is None:
         return render(request, "checker/_outcome.html", {"error": "bad-payload"})
@@ -256,6 +340,95 @@ def action(request):
     return render(request, "checker/_outcome.html", {
         "resolution": resolution, "room": room, "session": session,
         "applied": True, "applied_action": action_val})
+
+
+# --- online verification (CHK-02/03) ---------------------------------------
+_ONLINE_ACTIONS = {ValidationAction.VERIFIED, ValidationAction.FLAG_NOT_PRESENT}
+
+
+def _online_action(request, session_id, action_val, note, now):
+    """Apply an online Verify / Flag-not-present after a server-side re-gate.
+
+    The online analog of the floor re-gate (T-03-16): ownership, active
+    online-duty, and session-actionability are ALL re-derived server-side from
+    the POST `session_id` — never trusted from the client. A forged, stale, or
+    foreign online action is refused here and writes NOTHING. Only Verify and
+    Flag-not-present are meaningful online actions.
+    """
+    session = _online_session(session_id, request.user)
+    on_duty = _is_online_on_duty(request.user, now)
+    actionable = session is not None and session.status not in (
+        SessionStatus.ABSENT, SessionStatus.COMPLETED)
+
+    if session is None or not on_duty or not actionable:
+        # Refuse: not owned / not on duty / already resolved. Audit + no write.
+        outcome = "absent-excluded" if (session is not None and not actionable) \
+            else "off-duty"
+        AuditLog.objects.create(
+            actor=request.user, event_type="checker.action_refused",
+            target_type="session", target_id=str(session_id or ""),
+            payload={"outcome": outcome, "action": action_val, "online": True})
+        return render(request, "checker/_outcome.html", {
+            "resolution": _OnlineRefusal(outcome), "session": session})
+
+    if action_val not in _ONLINE_ACTIONS:
+        return render(request, "checker/_outcome.html", {"error": "bad-payload"})
+
+    # Flags require a note (server is the gate) — reject empty with a 200 error
+    # partial, never a 500 (mirrors the F2F path).
+    if action_val == ValidationAction.FLAG_NOT_PRESENT and not note.strip():
+        return render(request, "checker/_outcome.html", {
+            "error": "note-required", "session": session})
+
+    identity_match = True if action_val == ValidationAction.VERIFIED else None
+    # Idempotency: same checker + session + minute does not re-apply.
+    idem = f"checker-idem:{request.user.pk}:{session.pk}:{now:%Y%m%d%H%M}"
+    if cache.get(idem) != action_val:
+        # room=session.room: online sessions still carry their scheduled room, so
+        # the NOT-NULL CheckerValidation.room is satisfied without a schema change.
+        _apply_action(request, session, session.room, action_val, note=note,
+                      identity_match=identity_match, scanned_at=now, online=True)
+        cache.set(idem, action_val, timeout=120)
+
+    return render(request, "checker/_outcome.html", {
+        "session": session, "room": session.room,
+        "applied": True, "applied_action": action_val})
+
+
+@checker_required
+def online_list(request):
+    """CHK-02 online-to-verify list: today's owned online sessions not yet
+    verified. A verified online session becomes ACTIVE and drops off the list;
+    Absent/Completed are excluded too (only SCHEDULED effective-online remain)."""
+    sessions = [
+        s for s in (Session.objects
+                    .filter(online_checker=request.user, date=timezone.localdate(),
+                            status=SessionStatus.SCHEDULED)
+                    .select_related("schedule", "faculty", "room")
+                    .order_by("scheduled_start"))
+        if (s.declared_modality or s.schedule.modality) == Modality.ONLINE]
+    return render(request, "checker/online_list.html", {"sessions": sessions})
+
+
+@checker_required
+@require_http_methods(["GET"])
+def online_open(request, session_id):
+    """CHK-02 open one owned online session -> its public Teams link + the
+    Verify / Flag-not-present controls (no room-state card). A non-owner gets a
+    404. An empty teams_link renders the "No Teams link" state and flags IFO so
+    they can add one (rather than a dead redirect)."""
+    session = _online_session(session_id, request.user)
+    if session is None:
+        raise Http404("No online session for this checker.")
+    if not session.teams_link:
+        notify(role=Role.IFO_ADMIN, type="online_no_link",
+               title="Online session missing its Teams link",
+               body=f"{session.schedule.course_code}-{session.schedule.section} "
+                    f"has no Teams meeting link. Please add one so the assigned "
+                    f"checker can verify attendance.")
+        return render(request, "checker/online_open.html",
+                      {"session": session, "no_link": True})
+    return render(request, "checker/online_open.html", {"session": session})
 
 
 # --- floor board (CHK-07) --------------------------------------------------

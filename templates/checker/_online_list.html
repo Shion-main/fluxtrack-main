@@ -1,0 +1,28 @@
+{% comment %}
+Online-to-verify rows (03-05, CHK-02). Swappable partial: each owned online
+session is a card linking to online_open (the Teams + Verify/Flag screen).
+Verified sessions have become ACTIVE and dropped from the owning queryset, so
+only still-to-check sessions render here. Empty -> the 03-UI-SPEC empty copy.
+{% endcomment %}
+{% if sessions %}
+<div class="space-y-3">
+  {% for s in sessions %}
+  <a href="/checker/online/{{ s.id }}"
+     class="uk-card uk-card-body flex items-center gap-3" style="min-height:44px">
+    <div>
+      <div class="font-semibold">{{ s.schedule.course_code }}-{{ s.schedule.section }}</div>
+      <div class="uk-text-small uk-text-muted">
+        {{ s.faculty.get_full_name|default:s.faculty.username }} · {{ s.scheduled_start|time:"g:i A" }}
+      </div>
+    </div>
+    <span class="uk-btn uk-btn-primary h-11 ml-auto">
+      <uk-icon icon="video" class="size-4"></uk-icon> Open Teams to verify
+    </span>
+  </a>
+  {% endfor %}
+</div>
+{% else %}
+<div class="uk-card uk-card-body" data-empty="online">
+  <p class="uk-text-muted">No online sessions assigned to you.</p>
+</div>
+{% endif %}

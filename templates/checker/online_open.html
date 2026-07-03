@@ -1,0 +1,64 @@
+{% extends "base.html" %}
+{% comment %}
+Online verification screen (03-05, CHK-02/03). Sibling of the F2F scan result,
+but there is NO room-state card: the checker opens the session's public MS Teams
+link, then records Verify present / Flag: not present via the same
+/checker/action endpoint (online branch — session_id only, no room_id). The
+outcome partial swaps into #outcome, exactly like the faculty/floor flow. A
+missing teams_link renders the "No Teams link" state (IFO already flagged).
+Franken UI + htmx, conforming to 03-UI-SPEC section 9.
+{% endcomment %}
+{% block title %}Verify online · FluxTrack{% endblock %}
+{% block content %}
+<div class="uk-container max-w-md mx-auto px-4 pt-4 pb-24">
+  <div class="flex items-center gap-2 mb-1">
+    <a href="/checker/online" class="uk-btn uk-btn-ghost uk-btn-icon" aria-label="Back">
+      <uk-icon icon="arrow-left" class="size-5"></uk-icon>
+    </a>
+    <h1 class="uk-h2">Verify online</h1>
+  </div>
+  <p class="uk-text-muted mb-6">
+    {{ session.schedule.course_code }}-{{ session.schedule.section }} ·
+    {{ session.faculty.get_full_name|default:session.faculty.username }} ·
+    {{ session.scheduled_start|time:"g:i A" }}
+  </p>
+
+  {% if no_link %}
+  <div class="uk-alert uk-alert-secondary" role="alert" data-outcome="no-link">
+    <div class="uk-alert-title">No Teams link</div>
+    <div class="uk-alert-description uk-text-small">
+      This online session has no meeting link. We've flagged IFO to add one.
+    </div>
+  </div>
+  {% else %}
+  <a class="uk-btn uk-btn-primary w-full h-12 mb-4"
+     href="{{ session.teams_link }}" target="_blank" rel="noopener">
+    <uk-icon icon="video" class="size-5"></uk-icon> Open Teams to verify
+  </a>
+
+  <div id="outcome">
+    {# One-tap Verify present — the online branch posts session_id only (no room_id). #}
+    <form class="mb-2" hx-post="/checker/action" hx-target="#outcome" hx-swap="innerHTML">
+      {% csrf_token %}
+      <input type="hidden" name="action" value="verified">
+      <input type="hidden" name="session_id" value="{{ session.id }}">
+      <button class="uk-btn uk-btn-primary w-full h-12" type="submit">
+        <uk-icon icon="check" class="size-5"></uk-icon> Verify present
+      </button>
+    </form>
+
+    {# Note-gated Flag: not present -> drives the session Absent (authoritative). #}
+    <form class="space-y-2" hx-post="/checker/action" hx-target="#outcome" hx-swap="innerHTML">
+      {% csrf_token %}
+      <input type="hidden" name="action" value="flag_not_present">
+      <input type="hidden" name="session_id" value="{{ session.id }}">
+      <label class="uk-text-small font-semibold" for="note-online">Flag: not present</label>
+      <textarea id="note-online" name="note" class="uk-input" required maxlength="255"
+                placeholder="Briefly say what you saw (sent to IFO and HR)"></textarea>
+      <p class="uk-text-small uk-text-muted">Flags reach IFO and HR permanently and can't be appealed.</p>
+      <button class="uk-btn uk-btn-destructive w-full h-11" type="submit">Send flag</button>
+    </form>
+  </div>
+  {% endif %}
+</div>
+{% endblock %}
