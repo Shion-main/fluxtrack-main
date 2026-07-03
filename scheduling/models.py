@@ -107,6 +107,13 @@ class Session(models.Model):
         "self", null=True, blank=True, on_delete=models.SET_NULL, related_name="handover_to"
     )
     teams_link = models.URLField(blank=True)
+    # CHK-02/IFO-06: the one online-duty owner for an online session. Round-robin
+    # assigned in 03-03; Phase-4 modality-shift (to Online) also sets it. Nullable
+    # until a roster exists for the session's date.
+    online_checker = models.ForeignKey(
+        settings.AUTH_USER_MODEL, null=True, blank=True,
+        on_delete=models.SET_NULL, related_name="online_verifications",
+    )
     ended_early = models.BooleanField(default=False)
     early_end_reason = models.CharField(max_length=255, blank=True)
     room_released_at = models.DateTimeField(null=True, blank=True)

@@ -9,6 +9,7 @@ from types import SimpleNamespace
 from django.test import SimpleTestCase
 
 from verification import resolver as R
+from verification.models import AssignmentScope, ValidationAction
 
 
 def state(id=1, status="active", verified=False):
@@ -70,3 +71,19 @@ class DistributeTests(SimpleTestCase):
 
     def test_empty_checkers_returns_empty(self):
         self.assertEqual(R.distribute_online_sessions([101, 102], []), {})
+
+
+class ModelExtensionTests(SimpleTestCase):
+    def test_confirmed_absent_not_in_choices(self):
+        values = ValidationAction.values
+        self.assertNotIn("confirmed_absent", values)
+        self.assertNotIn("confirmed_empty", values)
+        self.assertIn("verified_empty", values)  # canonical empty action stays
+
+    def test_assignment_scope_defaults_floor(self):
+        self.assertIn("floor", AssignmentScope.values)
+        self.assertIn("online", AssignmentScope.values)
+        from verification.models import Assignment
+        self.assertEqual(
+            Assignment._meta.get_field("scope").default, AssignmentScope.FLOOR
+        )

@@ -13,6 +13,11 @@ class AssignmentType(models.TextChoices):
     STANDING = "standing", "Standing posting"
 
 
+class AssignmentScope(models.TextChoices):
+    FLOOR = "floor", "Floor"      # gates room scans on the assigned floor(s)
+    ONLINE = "online", "Online"   # gates online (Teams) verification, floor-agnostic
+
+
 class Assignment(models.Model):
     """On-duty grant for a Checker/Guard on assigned floors (CHK-01, IFO-06)."""
     user = models.ForeignKey(
@@ -21,6 +26,11 @@ class Assignment(models.Model):
     role = models.CharField(max_length=10, choices=DutyRole.choices)
     floors = models.ManyToManyField("campus.Floor", related_name="assignments")
     type = models.CharField(max_length=10, choices=AssignmentType.choices)
+    # IFO-06 online-duty extension: FLOOR gates room scans, ONLINE gates online
+    # verification. Orthogonal to `type` (shift vs standing).
+    scope = models.CharField(
+        max_length=10, choices=AssignmentScope.choices, default=AssignmentScope.FLOOR
+    )
     date = models.DateField(null=True, blank=True)  # null for standing postings
     start_time = models.TimeField(null=True, blank=True)
     end_time = models.TimeField(null=True, blank=True)
@@ -35,11 +45,12 @@ class Assignment(models.Model):
 
 
 class ValidationAction(models.TextChoices):
+    # CONFIRMED_ABSENT and CONFIRMED_EMPTY were retired in 03-01: "Confirm absent"
+    # went with CHK-06 (Absent is final via the sweep), and VERIFIED_EMPTY is the
+    # single canonical empty action (research Open Q1). See migration 0003.
     VERIFIED = "verified", "Verified"
     FLAG_IDENTITY_MISMATCH = "flag_identity_mismatch", "Flag: identity mismatch"
     FLAG_NOT_PRESENT = "flag_not_present", "Flag: not present"
-    CONFIRMED_ABSENT = "confirmed_absent", "Confirmed absent"
-    CONFIRMED_EMPTY = "confirmed_empty", "Confirmed empty"
     VERIFIED_EMPTY = "verified_empty", "Verified empty"
 
 
