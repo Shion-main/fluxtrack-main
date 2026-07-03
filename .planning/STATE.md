@@ -5,10 +5,10 @@ milestone_name: "**Goal**: Faculty can request a lead-time-gated modality shift 
 current_phase: 03.1
 current_phase_name: authentication-entra-id-sso-local-dev-proof
 status: executing
-stopped_at: Completed 03.1-01-PLAN.md (Wave 1)
-last_updated: "2026-07-03T11:17:17Z"
+stopped_at: Completed 03.1-02-PLAN.md (Wave 2)
+last_updated: "2026-07-03T11:23:47.631Z"
 last_activity: 2026-07-03
-last_activity_desc: Plan 03.1-01 complete (social_django wired + migrated on MSSQL)
+last_activity_desc: Plan 03.1-01 complete (social_django wired + migrated)
 progress:
   total_phases: 9
   completed_phases: 3
@@ -29,8 +29,8 @@ See: .planning/PROJECT.md (updated 2026-07-02)
 ## Current Position
 
 Phase: 03.1 (authentication-entra-id-sso-local-dev-proof) — EXECUTING
-Plan: 2 of 5
-Status: Executing Phase 03.1
+Plan: 3 of 5
+Status: Ready to execute
 Last activity: 2026-07-03 — Plan 03.1-01 complete (social_django wired + migrated)
 
 Progress: [███████░░░] 67%
@@ -71,6 +71,7 @@ Progress: [███████░░░] 67%
 | Phase 03 P05 | ~14m | 3 tasks | 7 files |
 | Phase 03 P06 | ~5m | 3 tasks | 4 files |
 | Phase 03.1 P01 | ~3m | 2 tasks | 4 files |
+| Phase 03.1 P02 | 2 | 2 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -114,6 +115,8 @@ Recent decisions affecting current work:
 - [Phase 03.1]: 03.1-01: SOCIAL_AUTH_PIPELINE has associate_by_email then accounts.pipeline.deny_unprovisioned then accounts.pipeline.write_azure_oid with create_user REMOVED (D-05/D-06); the accounts.pipeline.* refs are lazy dotted-strings resolved only at auth time, so check/migrate/tests pass before Plan 02 creates them.
 - [Phase 03.1]: 03.1-01: all 17 social_django migrations applied cleanly on MSSQL LocalDB (5 social_auth_* tables) — no fix-forward RunSQL needed, resolving research assumption A2.
 - [Phase 03.1]: 03.1-01: REDIRECT_URI pinned to http://localhost:8000/auth/complete/azuread-tenant-oauth2/ (localhost not 127.0.0.1, trailing slash) to avoid AADSTS50011 (Pitfall 3); DRF left on SessionAuthentication+IsAuthenticated (D-10).
+- [Phase 03.1]: 03.1-02: deny_unprovisioned (after associate_by_email, create_user removed) refuses user=None/inactive with AuthForbidden + auth.entra_refused AuditLog(actor=None); write_azure_oid persists response['oid'] (durable Entra oid, NOT the sub uid), idempotent, + auth.entra_login AuditLog on success (D-05/D-06/AUTH-03/05; Convention #2 audit honored).
+- [Phase 03.1]: 03.1-02: link_entra <username> <upn> repoints seeded User.email to a real MMCM UPN (D-07) so associate_by_email binds the slot; validates UPN, rejects unknown username + cross-user email clash, idempotent no-change exits 0, ASCII-only; seed_demo.py untouched.
 
 ### Pending Todos
 
@@ -136,6 +139,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-07-03T11:17:17Z
-Stopped at: Completed 03.1-01-PLAN.md (Wave 1) — Wave 2 (03.1-02, 03.1-03) unblocked
+Last session: 2026-07-03T11:23:47.620Z
+Stopped at: Completed 03.1-02-PLAN.md (Wave 2)
 Resume file: None
