@@ -25,7 +25,8 @@ class User(AbstractUser):
     """
     Each User holds exactly one role and may belong to a Department (§5).
     Identity maps to a Microsoft Entra object id (azure_oid); password login
-    stays available for the dev-login stub until Entra is wired (Phase 2).
+    stays available for the dev-login stub until Entra SSO is wired (the auth
+    cutover phase — see .planning/ROADMAP.md; not yet implemented).
     """
     azure_oid = models.CharField(max_length=64, unique=True, null=True, blank=True)
     role = models.CharField(max_length=20, choices=Role.choices, default=Role.FACULTY)

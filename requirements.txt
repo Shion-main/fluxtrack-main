@@ -14,7 +14,7 @@ Pillow>=10.0
 # BlockingScheduler/jobstore API (ENV-04 relies on 3.x); do NOT adopt 4.0.
 APScheduler>=3.10,<4
 
-# Identity (Entra ID token verification) — wired in Phase 2
+# Identity (Entra ID SSO) — not yet wired; added in the auth cutover phase (see .planning/ROADMAP.md)
 PyJWT>=2.8
 cryptography>=42.0
 requests>=2.31

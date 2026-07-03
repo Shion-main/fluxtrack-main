@@ -49,7 +49,8 @@ SURFACES = {
 @require_http_methods(["GET", "POST"])
 def login_view(request):
     """Dev-login stub. In DEBUG, sign in as any seeded user by username.
-    Phase 2 replaces this with Entra ID (Authorization Code + PKCE)."""
+    To be replaced by Entra ID sign-in (Authorization Code + PKCE) in the
+    auth cutover phase — see .planning/ROADMAP.md. Not yet implemented."""
     if request.user.is_authenticated:
         return redirect("/")
 
