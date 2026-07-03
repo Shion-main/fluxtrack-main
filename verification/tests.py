@@ -804,6 +804,28 @@ class ReplayTests(_CheckerFixtureMixin, TestCase):
         self.assertTrue(Notification.objects.filter(
             user=ifo, type="checker_replay_conflict").exists())
 
+    def test_replay_manual_code_rate_limited(self):
+        # WR-02: distinct 6-digit manual-code lookups are capped per checker per
+        # minute inside the replay loop, so a batch POST cannot enumerate manual
+        # codes for rooms across floors. QR-token items are not affected.
+        checker = self._checker()
+        self._active_floor_assignment(checker, self.floor)
+        self.client.force_login(checker)
+
+        limit = 5  # config.settings FLUXTRACK_POLICY manual_code_rate_limit_per_min
+        rooms = [self._room(self.other_floor) for _ in range(limit + 3)]
+        items = [{
+            "client_uuid": str(uuid.uuid4()), "token": r.manual_code,
+            "action": "verified_empty", "note": "",
+            "scanned_at": timezone.now().isoformat()} for r in rooms]
+
+        resp = self._post_replay(items)
+        self.assertEqual(resp.status_code, 200)
+        rate_limited = [x for x in resp.json()["results"]
+                        if x.get("reason") == "rate-limited"]
+        # The lookups beyond the per-minute cap are rate-limited, not resolved.
+        self.assertGreaterEqual(len(rate_limited), 3)
+
     def test_replay_idempotent(self):
         # Posting the same client_uuid twice applies it at most once.
         checker = self._checker()

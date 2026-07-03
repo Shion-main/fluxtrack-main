@@ -193,6 +193,24 @@ def _room_from_replay_token(token):
     return room
 
 
+def _replay_manual_code_allowed(user, now):
+    """Per-checker-per-minute cap on manual-code (6-digit) lookups during replay
+    (WR-02). Reuses the `_room_from_payload` rate-limit idiom so a single batch
+    POST — each item a fresh client_uuid + a different six-digit guess, none of
+    which trips the per-uuid idempotency guard — cannot enumerate manual codes
+    for rooms across the whole campus, unthrottled. QR-token lookups are exempt
+    (opaque, not brute-forceable).
+    """
+    minute = now.strftime("%Y%m%d%H%M")
+    key = f"checker-replay-rl:{user.pk}:{minute}"
+    limit = get_policy("manual_code_rate_limit_per_min")
+    count = cache.get_or_set(key, 0, timeout=90)
+    if count >= limit:
+        return False
+    cache.incr(key)
+    return True
+
+
 class _SessionState:
     """Minimal value object the pure core reads: .id / .status / .verified."""
 
@@ -419,7 +437,21 @@ def replay(request):
             results.append({"uuid": client_uuid, "status": "duplicate"})
             continue
 
-        room = _room_from_replay_token(item.get("token"))
+        # Rate-limit manual-code (6-digit) lookups per checker per minute (WR-02)
+        # BEFORE the room lookup — a QR token is exempt (opaque). Over the cap the
+        # item is flagged (not applied), never used to probe another floor's code.
+        token_raw = str(item.get("token") or "").strip()
+        if re.fullmatch(r"\d{6}", token_raw) and \
+                not _replay_manual_code_allowed(request.user, now):
+            AuditLog.objects.create(
+                actor=request.user, event_type="checker.rate_limited",
+                target_type="session", target_id="",
+                payload={"uuid": client_uuid, "context": "replay"})
+            results.append({"uuid": client_uuid, "status": "flagged",
+                            "reason": "rate-limited"})
+            continue
+
+        room = _room_from_replay_token(token_raw)
         action_val = item.get("action", "")
         note = item.get("note", "") or ""
         scanned_at = parse_datetime(item.get("scanned_at") or "") or now
