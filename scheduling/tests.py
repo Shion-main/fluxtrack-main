@@ -1285,3 +1285,61 @@ class BornReleasedTests(TestCase):
         self.assertEqual(AuditLog.objects.filter(
             event_type="session.room_released",
             target_id=str(born.pk)).count(), 1)
+
+
+class BornAssignedTests(TestCase):
+    """MOD-04/D-18/Pitfall 2: a future in-window session materialized AFTER an
+    approved ->F2F/Blended shift is born in the item's already-reserved room --
+    materialize APPLIES the reservation, it never re-resolves -- including any
+    bundled time-move. The defensive no-room guard keeps the original room and
+    notifies IFO without ever raising inside the unattended job."""
+
+    def _ifo(self, suffix="1"):
+        return get_user_model().objects.create(
+            username=f"mat_ifo_{suffix}", email=f"mat_ifo_{suffix}@mcm.edu.ph",
+            role=Role.IFO_ADMIN, is_active=True)
+
+    def test_future_in_window_session_born_in_reserved_room(self):
+        fx = make_shift_fixture()
+        # f2f_schedule.room is room_a; the approval reserved room_b (D-18).
+        _approved_request(
+            fx, Modality.F2F, fx.f2f_schedule,
+            date(2026, 7, 6), date(2026, 7, 20), assigned_room=fx.room_b)
+        _materialize_future()
+
+        born = Session.objects.get(schedule=fx.f2f_schedule, date=_FUTURE_MONDAY)
+        self.assertEqual(born.room_id, fx.room_b.id)  # reservation applied, not re-resolved
+        self.assertEqual(born.declared_modality, Modality.F2F)
+        self.assertEqual(born.modality_changed_by, fx.dean)
+        self.assertIsNone(born.room_released_at)
+
+    def test_time_move_born_at_new_slot(self):
+        fx = make_shift_fixture()
+        _approved_request(
+            fx, Modality.F2F, fx.f2f_schedule,
+            date(2026, 7, 6), date(2026, 7, 20), assigned_room=fx.room_b,
+            time_move=(_time(13, 0), _time(14, 30)))
+        _materialize_future()
+
+        born = Session.objects.get(schedule=fx.f2f_schedule, date=_FUTURE_MONDAY)
+        self.assertEqual(born.room_id, fx.room_b.id)
+        self.assertEqual(born.scheduled_start, _manila(2026, 7, 13, 13, 0))
+        self.assertEqual(born.scheduled_end, _manila(2026, 7, 13, 14, 30))
+        self.assertEqual(born.declared_modality, Modality.F2F)
+
+    def test_no_assigned_room_falls_back_to_schedule_room_and_notifies_ifo(self):
+        # Contrived defensive case (cannot occur in Phase 4 scope, D-18): an
+        # approved ->F2F item with no reserved room. The job must NOT crash --
+        # keep the original schedule.room and notify IFO informationally.
+        fx = make_shift_fixture()
+        ifo = self._ifo()
+        _approved_request(
+            fx, Modality.BLENDED, fx.f2f_schedule,
+            date(2026, 7, 6), date(2026, 7, 20), assigned_room=None)
+        _materialize_future()  # must not raise
+
+        born = Session.objects.get(schedule=fx.f2f_schedule, date=_FUTURE_MONDAY)
+        self.assertEqual(born.room_id, fx.room_a.id)  # kept the schedule default
+        self.assertEqual(
+            Notification.objects.filter(
+                user=ifo, type="modality_materialize_no_room").count(), 1)
