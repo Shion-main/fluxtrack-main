@@ -6,14 +6,14 @@ current_phase: 04
 current_phase_name: modality-shift-approval-srs-v1-2
 status: executing
 stopped_at: Completed 04-05-PLAN.md
-last_updated: "2026-07-03T16:16:24.062Z"
+last_updated: "2026-07-03T16:26:09.333Z"
 last_activity: 2026-07-03
 last_activity_desc: Phase 04 execution started
 progress:
   total_phases: 9
   completed_phases: 3
   total_plans: 27
-  completed_plans: 23
+  completed_plans: 24
   percent: 33
 ---
 
@@ -29,7 +29,7 @@ See: .planning/PROJECT.md (updated 2026-07-02)
 ## Current Position
 
 Phase: 04 (modality-shift-approval-srs-v1-2) — EXECUTING
-Plan: 6 of 8
+Plan: 7 of 8
 Status: Ready to execute
 Last activity: 2026-07-03 — Phase 04 execution started
 
@@ -81,6 +81,7 @@ Progress: [████████░░] 80%
 | Phase 04 P03 | 35m | 3 tasks | 2 files |
 | Phase 04 P04 | 30 min | 3 tasks | 2 files |
 | Phase 04 P05 | 20min | 3 tasks | 2 files |
+| Phase 04 P06 | 4min | 2 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -139,6 +140,8 @@ Recent decisions affecting current work:
 - [Phase 04]: 04-04: creation-side refusals raise ModalityShiftError (friendly-400 seam); submit persists a PENDING ticket + item-per-schedule, notifies the Dean once, mutates no sessions (apply is 04-05)
 - [Phase ?]: 04-05: no-room/double-book apply raises _NoRoomAvailable caught outside a nested savepoint -> terminal DENIED commits while all session/item writes roll back (D-07 REVISED, no partial apply)
 - [Phase ?]: 04-05: ->F2F room re-resolved server-side INSIDE the approval transaction (TOCTOU-safe); item.assigned_room stores the D-18 reservation
+- [Phase ?]: 04-06: materialize_sessions APPLIES the reserved room (D-18), never re-resolves; no-room is a defensive guard only
+- [Phase ?]: 04-06: JOB-01 born-released/born-assigned hook fires only on get_or_create was_created, making materialize idempotent
 
 ### Pending Todos
 
@@ -161,6 +164,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-07-03T16:16:12.755Z
+Last session: 2026-07-03T16:25:50.911Z
 Stopped at: Completed 04-05-PLAN.md
 Resume file: None

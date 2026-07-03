@@ -144,7 +144,7 @@ Plans:
   4. Approving a →F2F/Blended shift auto-assigns a free room in the same building, or fails outright with a clear reason if none is free (no silent partial apply); IFO is notified informationally.
   5. The SRS is revised to v1.2 — new MOD area, removed CHK-06, amended FAC-07/CHK-03, RPT-02-notifies-Deans, and `modality_shift_lead_days` in the policy register — in both `.md` and `.docx`.
 
-**Plans**: 5/8 plans executed
+**Plans**: 6/8 plans executed
 
 Plans:
 
@@ -167,7 +167,7 @@ Plans:
 
 **Wave 5** *(blocked on 04-05)*
 
-- [ ] 04-06-PLAN.md — materialize_sessions born-released/born-assigned hook (D-04/D-18) [Wave 5]
+- [x] 04-06-PLAN.md — materialize_sessions born-released/born-assigned hook (D-04/D-18) [Wave 5]
 - [ ] 04-07-PLAN.md — Faculty availability-first submit picker + my-requests + withdraw + FAC-07 retirement (MOD-01/05/06) [Wave 5]
 
 **Wave 6** *(blocked on 04-05, 04-07)*
@@ -259,7 +259,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8
 | 1. MSSQL Environment & Data Foundation | 0/TBD | Not started | - |
 | 2. Correctness Foundations | 5/5 | Complete    | 2026-07-02 |
 | 3. Duty Assignments & Checker Verification | 6/6 | Complete    | 2026-07-03 |
-| 4. Modality Shift Approval & SRS v1.2 | 5/8 | In Progress|  |
+| 4. Modality Shift Approval & SRS v1.2 | 6/8 | In Progress|  |
 | 5. Notifications — Read Surface & Web Push | 0/TBD | Not started | - |
 | 6. Reporting Engine & Reporting Surfaces | 0/TBD | Not started | - |
 | 7. Remaining Operational Surfaces | 0/TBD | Not started | - |
