@@ -14,6 +14,14 @@ DOC-01 is a self-contained doc task blocked only by pandoc not being on PATH. `p
 
 **Primary recommendation:** Build one `ModalityShiftRequest` model + a new `ops/availability.py` room-free query; drive the shift consequence by setting `declared_modality` (+`release_room()` / room assign) inside a transaction that re-checks availability at write time; teach `materialize_sessions` to honor approved requests; regenerate the DOCX via `pypandoc_binary`.
 
+## Post-Research Corrections (added 2026-07-03 during planning)
+
+Two research-time positions were revised/resolved when planning with the user. **CONTEXT.md is authoritative**; this note keeps the research doc from contradicting it:
+
+- **D-07 was REVISED.** This document's "no room free → block, **stays pending**" (Summary, Locked Decisions, Architecture Diagram, Requirements→Test Map) is superseded. The locked behavior is **terminal DENY** — no room that day → the request is denied (faculty resubmits later), never held. See CONTEXT.md D-07 (revised).
+- **Open Questions are RESOLVED.** Q1 (multi-class recurrence) → CONTEXT.md **D-19** (one atomic ticket over multiple schedules). Q2 (no-free-room at future materialize) → **D-18** (reserve room at approval + request-aware availability → the case cannot occur in Phase 4 scope; defensive guard only). Q3 (one-Dean-per-department) → **D-09** (runtime invariant; `.first()` defensive).
+- **New planning-time decisions** not in this research: **D-15** (picker resolution order), **D-16** (time-move bundled only with a →F2F shift, Dean can deny), **D-17** (faculty self-double-book guard). See CONTEXT.md.
+
 ## User Constraints (from CONTEXT.md)
 
 ### Locked Decisions
