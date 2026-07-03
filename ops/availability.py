@@ -28,7 +28,7 @@ evaluation. pyodbc keeps only one active result set per connection (MARS off), s
 a streaming cursor kept open across a follow-up query raises HY010; mirror
 scheduling/jobs.py and materialize candidates up front.
 """
-from datetime import datetime
+from datetime import datetime, time
 
 from django.utils import timezone
 
@@ -43,6 +43,12 @@ from scheduling.models import (
 )
 
 _OCCUPYING_STATUSES = (SessionStatus.SCHEDULED, SessionStatus.ACTIVE)
+
+# available_times_for operating window: candidate alternative slots are stepped
+# across a standard campus day (07:00-21:00) by the class's OWN duration, so a
+# suggested time-move keeps the class length unchanged (D-15c / D-16).
+_DAY_OPEN = time(7, 0)
+_DAY_CLOSE = time(21, 0)
 
 
 def _effective_modality(session):
@@ -146,6 +152,55 @@ def faculty_has_conflict(faculty, start, end, *, exclude_session_id=None):
     if exclude_session_id is not None:
         qs = qs.exclude(pk=exclude_session_id)
     return bool(list(qs))  # HY010 guard: materialize before returning
+
+
+def available_rooms_for(session):
+    """Rooms in the session's building free at the session's OWN scheduled slot,
+    original schedule.room preferred first (D-15 a/b). Empty when the preferred
+    time has no free room in the building."""
+    building = session.schedule.room.floor.building
+    return free_rooms_in_building(
+        building,
+        session.scheduled_start,
+        session.scheduled_end,
+        exclude_session_id=session.pk,
+        prefer_room=session.schedule.room,
+    )
+
+
+def available_times_for(session):
+    """Alternative (start, end) slots THAT SAME DAY at which at least one building
+    room is free AND the faculty has no other class (D-15c time-move, honoring
+    D-17).
+
+    Slots keep the session's own duration and step across the campus operating
+    window; the session's current slot is not re-offered (this list is strictly
+    ALTERNATIVES). Each returned tuple is a pair of Asia/Manila-aware datetimes.
+    """
+    building = session.schedule.room.floor.building
+    duration = session.scheduled_end - session.scheduled_start
+    day = _local_date(session.scheduled_start)
+
+    cursor = timezone.make_aware(datetime.combine(day, _DAY_OPEN))
+    day_close = timezone.make_aware(datetime.combine(day, _DAY_CLOSE))
+
+    slots = []
+    while cursor + duration <= day_close:
+        c_start = cursor
+        c_end = cursor + duration
+        cursor = c_end
+        if c_start == session.scheduled_start and c_end == session.scheduled_end:
+            continue  # the current slot is not an alternative
+        if not free_rooms_in_building(
+            building, c_start, c_end, exclude_session_id=session.pk
+        ):
+            continue  # no room free at this time
+        if faculty_has_conflict(
+            session.faculty, c_start, c_end, exclude_session_id=session.pk
+        ):
+            continue  # would double-book the faculty (D-17)
+        slots.append((c_start, c_end))
+    return slots
 
 
 def free_rooms_in_building(building, start, end, *, exclude_session_id=None, prefer_room=None):
