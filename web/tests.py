@@ -7,9 +7,10 @@ IFO admins — guarding T-02-05 (a silent notification regression during migrati
 """
 from datetime import date, time, timedelta
 
+from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.core.cache import cache
-from django.test import TestCase
+from django.test import TestCase, override_settings
 from django.utils import timezone
 
 from accounts.models import Role
@@ -83,3 +84,59 @@ class ScanNotifyTests(TestCase):
         n = Notification.objects.filter(user=self.ifo, type="room_event").first()
         self.assertIsNotNone(n)
         self.assertEqual(n.title, "Force handover")
+
+
+@override_settings(DEBUG=True)
+class DevLoginCoexistTests(TestCase):
+    """The DEBUG dev-login survives the second AUTHENTICATION_BACKENDS entry (D-08/D-09#3).
+
+    Plan 01 added the Entra PKCE backend, so two backends are now configured and a
+    bare login() cannot infer which one authenticated — it raises ValueError
+    (RESEARCH Pitfall 2). Plan 03 named ModelBackend explicitly; these tests fail
+    loudly if that regresses. Superuser break-glass via ModelBackend password auth
+    is also proven (D-03/D-09#3). No live Entra call.
+    """
+
+    def setUp(self):
+        User = get_user_model()
+        self.faculty = User.objects.create(username="devfac", email="devfac@mcm.edu.ph",
+                                           role=Role.FACULTY, is_active=True)
+        self.admin = User.objects.create(username="devadmin", email="devadmin@mcm.edu.ph",
+                                         role=Role.SYSTEM_ADMIN, is_active=True,
+                                         is_staff=True, is_superuser=True)
+        self.admin.set_password("break-glass-pw")
+        self.admin.save()
+
+    def test_dev_login_post_authenticates_under_two_backends(self):
+        """POST /login logs the seeded user in and redirects to / — no ValueError (Pitfall 2)."""
+        # Two backends are configured; the dev-login must name ModelBackend or login() raises.
+        self.assertEqual(len(settings.AUTHENTICATION_BACKENDS), 2)
+        resp = self.client.post("/login", {"username": "devfac"})
+        self.assertRedirects(resp, "/")
+        self.assertEqual(self.client.session.get("_auth_user_id"), str(self.faculty.pk))
+
+    def test_superuser_break_glass_via_modelbackend(self):
+        """A superuser still authenticates via ModelBackend password auth (D-03/D-09#3)."""
+        self.assertTrue(self.client.login(username="devadmin", password="break-glass-pw"))
+        self.assertEqual(self.client.session.get("_auth_user_id"), str(self.admin.pk))
+
+
+class LogoutTests(TestCase):
+    """/logout flushes the local session and redirects to /login (D-11).
+
+    D-11: logout is a local Django session flush only (no Entra global sign-out).
+    After logout the session must no longer identify the user.
+    """
+
+    def setUp(self):
+        User = get_user_model()
+        self.user = User.objects.create(username="outuser", email="out@mcm.edu.ph",
+                                        role=Role.FACULTY, is_active=True)
+
+    def test_logout_flushes_session_and_redirects(self):
+        """An authenticated GET /logout redirects to /login and drops the user (D-11)."""
+        self.client.force_login(self.user)
+        self.assertEqual(self.client.session.get("_auth_user_id"), str(self.user.pk))
+        resp = self.client.get("/logout")
+        self.assertRedirects(resp, "/login")
+        self.assertNotIn("_auth_user_id", self.client.session)
