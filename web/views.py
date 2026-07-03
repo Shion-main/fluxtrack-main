@@ -48,9 +48,11 @@ SURFACES = {
 
 @require_http_methods(["GET", "POST"])
 def login_view(request):
-    """Dev-login stub. In DEBUG, sign in as any seeded user by username.
-    To be replaced by Entra ID sign-in (Authorization Code + PKCE) in the
-    auth cutover phase — see .planning/ROADMAP.md. Not yet implemented."""
+    """Login surface. Microsoft Entra ID SSO (Authorization Code + PKCE) is the
+    real sign-in path — the "Sign in with Microsoft" button starts the round-trip
+    via social-auth (see config/settings.py AUTHENTICATION_BACKENDS). In DEBUG,
+    a passwordless dev-login also lets you sign in as any seeded user by username;
+    it stays gated behind settings.DEBUG (D-08) and is never reachable in prod."""
     if request.user.is_authenticated:
         return redirect("/")
 
@@ -60,7 +62,10 @@ def login_view(request):
             user = User.objects.get(username=username, is_active=True)
         except User.DoesNotExist:
             return render(request, "web/login.html", _login_ctx(error="Unknown user."))
-        login(request, user)
+        # Two AUTHENTICATION_BACKENDS are configured (Entra PKCE + ModelBackend),
+        # so login() cannot infer the backend and would raise ValueError — name
+        # ModelBackend explicitly for the dev-login path (RESEARCH Pitfall 2, D-09#3).
+        login(request, user, backend="django.contrib.auth.backends.ModelBackend")
         return redirect("/")
 
     return render(request, "web/login.html", _login_ctx())
