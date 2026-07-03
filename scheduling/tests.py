@@ -376,19 +376,36 @@ class SweepTests(_JobFixtureMixin, TestCase):
             s.refresh_from_db()
             self.assertEqual(s.status, SessionStatus.ABSENT)
 
-    def test_online_no_show_stays_scheduled_declared(self):
-        # Online via declared_modality is EXCLUDED from Absent-marking (c).
+    def test_online_no_show_declared_now_absent(self):
+        # ROADMAP #6 + plan 03-05: the sweep's online exclusion is REMOVED once
+        # the online Checker Verify path exists. An un-verified online no-show
+        # (declared_modality=online) past grace now falls to ABSENT under the SAME
+        # is_no_show_past_grace predicate — a deliberate, coordinated behavior
+        # change (online joins JOB-02), NOT a regression. This test previously
+        # asserted the session stayed SCHEDULED; that exclusion is gone.
         s = self._session(start_delta_min=-20, declared_modality=Modality.ONLINE)
         sweep_no_shows(now=NOW)
         s.refresh_from_db()
-        self.assertEqual(s.status, SessionStatus.SCHEDULED)
+        self.assertEqual(s.status, SessionStatus.ABSENT)
 
-    def test_online_no_show_stays_scheduled_via_schedule(self):
-        # Online via schedule.modality is EXCLUDED too (effective modality) (c).
+    def test_online_no_show_via_schedule_now_absent(self):
+        # Same inclusion semantics via schedule.modality=online (effective
+        # modality). Rewritten in lockstep with the exclusion removal (03-05).
         s = self._session(start_delta_min=-20, schedule_modality=Modality.ONLINE)
         sweep_no_shows(now=NOW)
         s.refresh_from_db()
-        self.assertEqual(s.status, SessionStatus.SCHEDULED)
+        self.assertEqual(s.status, SessionStatus.ABSENT)
+
+    def test_verified_online_not_marked_absent(self):
+        # The linchpin of the coupled change (03-05): a genuine online attendee is
+        # made ACTIVE by an online Verify, so the sweep (which only touches
+        # SCHEDULED) skips it. Only un-verified (still-SCHEDULED) online no-shows
+        # fall to Absent — verified/ACTIVE online sessions are never touched.
+        s = self._session(start_delta_min=-20, declared_modality=Modality.ONLINE,
+                          status="active")
+        sweep_no_shows(now=NOW)
+        s.refresh_from_db()
+        self.assertEqual(s.status, SessionStatus.ACTIVE)
 
     def test_blended_no_show_becomes_absent(self):
         # Blended is NOT online -> swept like F2F.

@@ -106,8 +106,8 @@ from django.utils import timezone  # noqa: E402
 from accounts.models import Role  # noqa: E402
 from campus.models import Building, Floor, Room  # noqa: E402
 from ops.models import AuditLog, Notification  # noqa: E402
-from scheduling.models import (AcademicTerm, Modality, Schedule,  # noqa: E402
-                               Session, SessionStatus)
+from scheduling.models import (AcademicTerm, CheckinMethod,  # noqa: E402
+                               Modality, Schedule, Session, SessionStatus)
 from verification.models import (Assignment, CheckerValidation,  # noqa: E402
                                  DutyRole)
 
@@ -191,6 +191,23 @@ class _CheckerFixtureMixin:
     def _qr(self, room):
         # QR deep-link payload — the resolver's rate-limit-free path.
         return f"?t={room.qr_token}"
+
+    def _online_duty_assignment(self, checker):
+        # A standing ONLINE-scope CHECKER posting -> on online duty (03-05).
+        return Assignment.objects.create(
+            user=checker, role=DutyRole.CHECKER, type="standing",
+            scope="online", term=self.term, status="active")
+
+    def _owned_online_session(self, checker, *,
+                              teams_link="https://teams.microsoft.com/l/meet-x",
+                              status=SessionStatus.SCHEDULED, start_delta_min=-20):
+        # An online session (schedule.modality=online) owned by `checker`.
+        s = self._session(self._room(), modality=Modality.ONLINE, status=status,
+                          start_delta_min=start_delta_min)
+        s.online_checker = checker
+        s.teams_link = teams_link
+        s.save(update_fields=["online_checker", "teams_link"])
+        return s
 
 
 class CheckerScanDBTests(_CheckerFixtureMixin, TestCase):
@@ -306,6 +323,82 @@ class CheckerScanDBTests(_CheckerFixtureMixin, TestCase):
         self.assertNotIn("confirmed_absent", values)
         self.assertNotIn("confirmed_empty", values)
         self.assertIn("verified_empty", values)
+
+    # --- online verification path (03-05, CHK-02/03, ROADMAP #6) -----------
+    def test_online_verify_activates_session(self):
+        # An online Verify is the analog of a faculty check-in: it moves the
+        # session out of SCHEDULED to ACTIVE with actual_start + ONLINE_MANUAL,
+        # AND records a CheckerValidation(verified). Posted with session_id only
+        # (no room_id) -> the online branch of /checker/action.
+        checker = self._checker()
+        self._online_duty_assignment(checker)
+        session = self._owned_online_session(checker)
+        self.client.force_login(checker)
+
+        r = self.client.post("/checker/action", {
+            "action": "verified", "session_id": session.id})
+        self.assertEqual(r.status_code, 200)
+        session.refresh_from_db()
+        self.assertEqual(session.status, SessionStatus.ACTIVE)
+        self.assertIsNotNone(session.actual_start)
+        self.assertEqual(session.checkin_method, CheckinMethod.ONLINE_MANUAL)
+        self.assertTrue(CheckerValidation.objects.filter(
+            session=session, action="verified").exists())
+        self.assertTrue(session.verified_by_checker)
+
+    def test_online_scan_redirects_to_teams(self):
+        # Opening an assigned online session surfaces its public teams_link (no
+        # room-state card). A foreign checker gets a 404. An empty teams_link
+        # surfaces a "no link" state and flags IFO (online_no_link).
+        checker = self._checker()
+        self._online_duty_assignment(checker)
+        ifo = self._ifo_admin()
+        session = self._owned_online_session(
+            checker, teams_link="https://teams.microsoft.com/l/meet-x")
+        self.client.force_login(checker)
+
+        r = self.client.get(f"/checker/online/{session.id}")
+        self.assertEqual(r.status_code, 200)
+        self.assertContains(r, "https://teams.microsoft.com/l/meet-x")
+
+        # A different checker cannot open someone else's online session.
+        other = self._checker()
+        self.client.force_login(other)
+        self.assertEqual(
+            self.client.get(f"/checker/online/{session.id}").status_code, 404)
+
+        # Empty teams_link -> no-link state + IFO flag.
+        self.client.force_login(checker)
+        session.teams_link = ""
+        session.save(update_fields=["teams_link"])
+        r2 = self.client.get(f"/checker/online/{session.id}")
+        self.assertEqual(r2.status_code, 200)
+        self.assertContains(r2, "No Teams link")
+        self.assertTrue(
+            Notification.objects.filter(user=ifo, type="online_no_link").exists())
+
+    def test_online_flag_not_present_absent(self):
+        # An online Flag-not-present drives the session to ABSENT authoritatively
+        # (RESEARCH Open Q2 RESOLVED) and still notifies IFO + HR.
+        checker = self._checker()
+        self._online_duty_assignment(checker)
+        ifo = self._ifo_admin()
+        hr = self._hr_admin()
+        session = self._owned_online_session(checker)
+        self.client.force_login(checker)
+
+        r = self.client.post("/checker/action", {
+            "action": "flag_not_present", "session_id": session.id,
+            "note": "No one present in the meeting."})
+        self.assertEqual(r.status_code, 200)
+        session.refresh_from_db()
+        self.assertEqual(session.status, SessionStatus.ABSENT)
+        self.assertTrue(CheckerValidation.objects.filter(
+            session=session, action="flag_not_present").exists())
+        self.assertTrue(
+            Notification.objects.filter(user=ifo, type="checker_flag").exists())
+        self.assertTrue(
+            Notification.objects.filter(user=hr, type="checker_flag").exists())
 
 
 # ---------------------------------------------------------------------------
