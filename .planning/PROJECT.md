@@ -31,6 +31,10 @@ unused) are detected automatically.
 - ✓ CSV schedule import + session materialization (management commands; IFO-03/JOB-01 logic, CLI-only) — existing
 - ✓ Scan resolver: pure-function core with all Faculty outcomes, 16 passing tests (SCAN-01..07, FAC-02..06/09/10) — existing
 - ✓ Faculty check-in surface: schedule view + scan page, end-to-end verified (FAC-01..06/09/10) — existing
+- ✓ Correctness foundations (JOB-02 no-show sweep → Absent, room release, conflict flags; notify() single write path; shared is_no_show_past_grace predicate) — validated in Phase 2
+- ✓ IFO-06 Checker/Guard floor + online-duty assignments: non-admin IFO UI (shift/standing), round-robin online-session pre-assignment (shift-window-aware) — validated in Phase 3
+- ✓ Checker verification surface (CHK-01..05/07/08): on-duty floor gating via pure resolver, room-state scan + faculty photo for identity match, Verify / Flag-identity / Flag-not-present / Confirm-empty → IFO+HR, htmx floor board (coverage % + oldest-unverified-first queue, Absent excluded), online Teams-link verification (Verify activates session), offline IndexedDB queue + server re-validated idempotent replay — validated in Phase 3
+- ✓ JOB-02 sweep now includes online sessions (exclusion removed in lockstep with the online-Verify-activates path) — validated in Phase 3
 
 ### Active
 
@@ -43,12 +47,7 @@ unused) are detected automatically.
 - [ ] Tailwind standalone-CLI build replacing the Franken UI CDN before deploy
 - [ ] APScheduler as a dedicated scheduler process (JOB-01/02/03 wiring)
 
-**Correctness foundations**
-- [ ] JOB-02 status sweep: mark no-show sessions Absent independent of any scan; release rooms after hold; raise conflict flags
-- [ ] IFO-06 Checker/Guard floor assignments (hard blocker for Checker)
-
 **Core attendance loop**
-- [ ] Checker surface (CHK-01..05/07/08): on-duty gating, room-state scan + photo, verify/flag actions, floor view, offline queue
 - [ ] Modality shift approval workflow (new): ModalityShiftRequest, Dean approves, IFO notified, auto room-release; removes CHK-06, amends CHK-03/FAC-07
 - [ ] Notifications: in-app list (NOTIF-01) + web push (NOTIF-02) + mute prefs (NOTIF-03)
 
@@ -126,4 +125,4 @@ unused) are detected automatically.
 | Build order: env → JOB-02 → IFO-06 → Checker → modality → notif → reporting → Guard/Dean/HR → auth/deploy | Dependency-driven (Checker needs assignments + trustworthy Absent) | — Pending |
 
 ---
-*Last updated: 2026-07-02 after initialization (brownfield, codebase mapped)*
+*Last updated: 2026-07-03 after Phase 3 complete (Duty Assignments & Checker Verification — IFO-06, CHK-01..05/07/08 shipped and verified; code review clean)*
