@@ -1,0 +1,112 @@
+{% comment %}
+IFO-06 assignment create form + active duty roster. htmx swaps this partial into
+#assignment-panel after a create POST so the new roster row (or a validation error)
+renders inline. Franken UI (uk-*). Use {% comment %} not {# #} so Django does not
+parse the {% %} tags inside the header (03-02 parse-error lesson).
+{% endcomment %}
+<div class="grid gap-6 lg:grid-cols-2">
+  <div class="uk-card uk-card-body">
+    <h2 class="uk-h3 mb-3">New assignment</h2>
+
+    {% if error %}
+    <div class="uk-alert uk-alert-destructive mb-3" role="alert" data-error="1">
+      <p class="uk-text-small">{{ error }}</p>
+    </div>
+    {% endif %}
+    {% if created %}
+    <div class="uk-alert uk-alert-secondary mb-3" role="status" data-created="1">
+      <p class="uk-text-small">Posted {{ created.user.get_full_name|default:created.user.username }} — {{ created.get_scope_display }} duty.</p>
+    </div>
+    {% endif %}
+
+    <form hx-post="/ifo/assignments/create" hx-target="#assignment-panel" hx-swap="innerHTML"
+          class="flex flex-col gap-3">
+      {% csrf_token %}
+      <div>
+        <label class="uk-form-label" for="a-user">Checker or Guard</label>
+        <select id="a-user" name="user" class="uk-select h-11" required>
+          <option value="">Select a person…</option>
+          {% for u in duty_users %}
+          <option value="{{ u.id }}">{{ u.get_full_name|default:u.username }} ({{ u.get_role_display }})</option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <div class="grid grid-cols-2 gap-3">
+        <div>
+          <label class="uk-form-label" for="a-role">Role</label>
+          <select id="a-role" name="role" class="uk-select h-11">
+            {% for value, label in roles %}<option value="{{ value }}">{{ label }}</option>{% endfor %}
+          </select>
+        </div>
+        <div>
+          <label class="uk-form-label" for="a-type">Posting</label>
+          <select id="a-type" name="type" class="uk-select h-11">
+            {% for value, label in types %}<option value="{{ value }}">{{ label }}</option>{% endfor %}
+          </select>
+        </div>
+      </div>
+
+      <div>
+        <label class="uk-form-label" for="a-scope">Scope</label>
+        <select id="a-scope" name="scope" class="uk-select h-11">
+          {% for value, label in scopes %}<option value="{{ value }}">{{ label }}</option>{% endfor %}
+        </select>
+      </div>
+
+      <fieldset class="border border-border rounded-md p-3">
+        <legend class="uk-text-small uk-text-muted px-1">Floors (floor scope only)</legend>
+        <div class="grid grid-cols-2 gap-2">
+          {% for f in floors %}
+          <label class="flex items-center gap-2 uk-text-small">
+            <input type="checkbox" name="floors" value="{{ f.id }}" class="uk-checkbox">
+            {{ f.building.code }} F{{ f.number }}
+          </label>
+          {% empty %}
+          <p class="uk-text-small uk-text-muted">No floors yet.</p>
+          {% endfor %}
+        </div>
+      </fieldset>
+
+      <div class="grid grid-cols-3 gap-3">
+        <div>
+          <label class="uk-form-label" for="a-date">Date</label>
+          <input id="a-date" type="date" name="date" class="uk-input h-11">
+        </div>
+        <div>
+          <label class="uk-form-label" for="a-start">Start</label>
+          <input id="a-start" type="time" name="start_time" class="uk-input h-11">
+        </div>
+        <div>
+          <label class="uk-form-label" for="a-end">End</label>
+          <input id="a-end" type="time" name="end_time" class="uk-input h-11">
+        </div>
+      </div>
+      <p class="uk-text-small uk-text-muted">Leave date blank for a standing posting.</p>
+
+      <button type="submit" class="uk-btn uk-btn-primary w-full h-12">
+        <uk-icon icon="user-plus" class="size-4"></uk-icon> Create assignment</button>
+    </form>
+  </div>
+
+  <div class="uk-card uk-card-body">
+    <h2 class="uk-h3 mb-3">Active roster</h2>
+    {% for a in assignments %}
+    <div class="flex items-center gap-3 py-2 border-b border-border last:border-0">
+      <uk-icon icon="{% if a.scope == 'online' %}wifi{% else %}map-pin{% endif %}" class="size-4 text-muted-foreground"></uk-icon>
+      <div class="min-w-0">
+        <p class="font-semibold truncate">{{ a.user.get_full_name|default:a.user.username }}</p>
+        <p class="uk-text-small uk-text-muted">
+          {{ a.get_role_display }} &middot; {{ a.get_type_display }}
+          {% if a.scope == 'floor' %}&middot;
+            {% for f in a.floors.all %}{{ f.building.code }} F{{ f.number }}{% if not forloop.last %}, {% endif %}{% empty %}(no floor){% endfor %}
+          {% endif %}
+        </p>
+      </div>
+      <span class="uk-label {% if a.scope == 'online' %}uk-label-primary{% else %}uk-label-secondary{% endif %} ml-auto">{{ a.get_scope_display }}</span>
+    </div>
+    {% empty %}
+    <p class="uk-text-muted uk-text-small">No active assignments yet.</p>
+    {% endfor %}
+  </div>
+</div>

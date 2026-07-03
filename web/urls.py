@@ -24,6 +24,8 @@ urlpatterns = [
     path("ifo/rooms/<str:code>/qr.png", ifo.room_qr, name="ifo_room_qr"),
     path("ifo/live", ifo.live, name="ifo_live"),
     path("ifo/live/rows", ifo.live_rows, name="ifo_live_rows"),
+    path("ifo/assignments", ifo.assignments_list, name="ifo_assignments"),
+    path("ifo/assignments/create", ifo.assignment_create, name="ifo_assignment_create"),
     # PWA shell
     path("manifest.webmanifest", views.manifest),
     path("sw.js", views.service_worker),

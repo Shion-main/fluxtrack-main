@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+{% block title %}Assignments · FluxTrack{% endblock %}
+{% block content %}
+<div class="uk-container max-w-4xl pt-8 pb-16">
+  <div class="flex items-center gap-2 mb-1">
+    <a href="/" class="uk-btn uk-btn-ghost uk-btn-icon" aria-label="Back">
+      <uk-icon icon="arrow-left" class="size-5"></uk-icon></a>
+    <h1 class="uk-h2">Duty assignments</h1>
+  </div>
+  <p class="uk-text-muted mb-6">Post Checkers and Guards to floors, or grant online duty (IFO-06). Granting online duty pre-assigns that date's online sessions automatically.</p>
+
+  <div id="assignment-panel">
+    {% include "ifo/_assignment_form.html" %}
+  </div>
+</div>
+{% endblock %}
