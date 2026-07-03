@@ -1001,3 +1001,98 @@ class EffectiveModalityCouplingTests(TestCase):
         self.assertTrue(room_is_free(
             fx.room_a, fx.session.scheduled_start, fx.session.scheduled_end,
             exclude_session_id=fx.competitor.pk))
+
+
+def _occupy_room(fx, room, start_t, end_t, d, *, faculty=None):
+    """Persist an F2F occupant holding ``room`` at [start_t, end_t) on ``d``.
+
+    Used to make a room genuinely un-free at approval time so the TOCTOU
+    re-resolution / no-room paths are exercised. The occupant is a DIFFERENT
+    faculty so it is not a self-double-book.
+    """
+    faculty = faculty or fx.competitor_faculty
+    sch = Schedule.objects.create(
+        term=fx.term, course_code="BLK", section="A", faculty=faculty,
+        room=room, day_of_week=d.weekday(), start_time=start_t, end_time=end_t,
+        modality=Modality.F2F)
+    return Session.objects.create(
+        schedule=sch, faculty=faculty, room=room, date=d,
+        scheduled_start=dt.combine(d, start_t, tzinfo=_MANILA),
+        scheduled_end=dt.combine(d, end_t, tzinfo=_MANILA),
+        status=SessionStatus.SCHEDULED)
+
+
+class ApplyF2FTests(TestCase):
+    """MOD-04/D-06/D-16/D-18: approving a ->F2F/Blended shift assigns a room
+    re-resolved INSIDE the transaction (original if free, else the first free room
+    in the building), applies any bundled time-move after a faculty-conflict
+    re-check, and reserves the resolved room on the item for future sessions."""
+
+    def test_original_room_free_keeps_original(self):
+        # Shift the Online class in room B to F2F: room B is free (an online
+        # session holds no physical room) -> the original room is kept.
+        fx = make_shift_fixture()
+        req = _pending_request(
+            fx, Modality.F2F, [fx.online_schedule],
+            date(2026, 7, 6), date(2026, 7, 6))
+        out = services.apply_approval(req, fx.dean, now=_APPLY_NOW)
+
+        self.assertEqual(out.status, ModalityShiftStatus.APPROVED)
+        fx.online_session.refresh_from_db()
+        self.assertEqual(fx.online_session.room_id, fx.room_b.id)
+        self.assertEqual(fx.online_session.declared_modality, Modality.F2F)
+        self.assertIsNone(fx.online_session.room_released_at)
+        item = req.items.get()
+        self.assertEqual(item.assigned_room_id, fx.room_b.id)  # reservation (D-18)
+
+    def test_original_room_taken_assigns_first_free(self):
+        # Shift the F2F class in room A (whose slot the competitor already holds)
+        # to Blended: original room A is taken -> first free room B is assigned.
+        fx = make_shift_fixture()
+        req = _pending_request(
+            fx, Modality.BLENDED, [fx.f2f_schedule],
+            date(2026, 7, 6), date(2026, 7, 6))
+        services.apply_approval(req, fx.dean, now=_APPLY_NOW)
+
+        fx.session.refresh_from_db()
+        self.assertEqual(fx.session.room_id, fx.room_b.id)
+        self.assertEqual(fx.session.declared_modality, Modality.BLENDED)
+        self.assertEqual(req.items.get().assigned_room_id, fx.room_b.id)
+
+    def test_time_move_rewrites_scheduled_start_end(self):
+        # A bundled time-move (D-16) rewrites the session's slot after the
+        # faculty-conflict re-check (D-17); the room is resolved at the NEW slot.
+        fx = make_shift_fixture()
+        req = _pending_request(
+            fx, Modality.F2F, [fx.f2f_schedule],
+            date(2026, 7, 6), date(2026, 7, 6),
+            time_move=(_time(13, 0), _time(14, 30)))
+        services.apply_approval(req, fx.dean, now=_APPLY_NOW)
+
+        fx.session.refresh_from_db()
+        self.assertEqual(fx.session.scheduled_start, _manila(2026, 7, 6, 13, 0))
+        self.assertEqual(fx.session.scheduled_end, _manila(2026, 7, 6, 14, 30))
+        self.assertEqual(fx.session.room_id, fx.room_a.id)  # room A free at 13:00
+        self.assertEqual(fx.session.declared_modality, Modality.F2F)
+
+
+class ApproveRaceTests(TestCase):
+    """MOD-04/D-06 TOCTOU: a room free at submit but occupied by ANOTHER session at
+    approval is re-resolved INSIDE the transaction to a different free room -- the
+    picked/preferred room is never trusted blindly."""
+
+    def test_preferred_room_taken_at_approval_reresolves(self):
+        fx = make_shift_fixture()
+        # The preferred (and original) room B is free when the request is built ...
+        req = _pending_request(
+            fx, Modality.F2F, [fx.online_schedule],
+            date(2026, 7, 6), date(2026, 7, 6), preferred=fx.room_b)
+        # ... but another class grabs room B at that slot before approval.
+        _occupy_room(fx, fx.room_b, _time(10, 0), _time(11, 30), date(2026, 7, 6))
+
+        services.apply_approval(req, fx.dean, now=_APPLY_NOW)
+
+        fx.online_session.refresh_from_db()
+        # Re-resolved AWAY from the now-taken preferred/original room B to room A.
+        self.assertEqual(fx.online_session.room_id, fx.room_a.id)
+        self.assertEqual(req.items.get().assigned_room_id, fx.room_a.id)

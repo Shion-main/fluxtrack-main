@@ -345,6 +345,93 @@ def reject_modality_shift(request, dean, reason):
 #     nothing rollback (D-07 REVISED).
 # ---------------------------------------------------------------------------
 
+class _NoRoomAvailable(Exception):
+    """Internal sentinel raised inside the apply savepoint when a ->F2F/Blended
+    resolution finds no free room, or a bundled time-move would double-book the
+    faculty (D-17). It forces the savepoint to roll back ALL session/item writes so
+    ``apply_approval`` can set a terminal DENIED with nothing changed (D-07
+    REVISED). Carries the human-readable ``reason`` surfaced to the requester.
+    """
+
+    def __init__(self, reason):
+        self.reason = reason
+        super().__init__(reason)
+
+
+def resolve_shift_room(item, at_start, at_end, *, exclude_session_id=None):
+    """The room to assign for ``item`` at [at_start, at_end): the original
+    ``schedule.room`` when it is free, else the first free room in the same
+    building (faculty preference floated first when still free), else None.
+
+    ``None`` is the no-room signal that drives the terminal DENY (D-07 REVISED).
+    Room selection is ALWAYS server-side (never a client-supplied pk): the
+    availability re-check runs against CURRENT state at write time (TOCTOU, D-06).
+    """
+    original = item.schedule.room
+    if room_is_free(original, at_start, at_end, exclude_session_id=exclude_session_id):
+        return original
+    building = original.floor.building
+    free = free_rooms_in_building(
+        building, at_start, at_end,
+        exclude_session_id=exclude_session_id, prefer_room=item.preferred_room)
+    return free[0] if free else None
+
+
+def _apply_f2f(request, sessions, dean, now):
+    """MOD-04/D-06/D-16/D-18: assign a re-resolved room to each in-window session.
+
+    Iterates items (mapping each session back to its item for the reservation and
+    the time-move slot). For each affected session: if the item carries a time-move
+    (D-16) the new [start, end) is re-checked against ``faculty_has_conflict``
+    (D-17) and rewritten; the room is re-resolved INSIDE the transaction via
+    ``resolve_shift_room`` (TOCTOU, D-06). A ``None`` resolution or a failed
+    conflict re-check raises ``_NoRoomAvailable`` (the all-or-nothing DENY, Task 3).
+    The resolved room is stored on ``item.assigned_room`` as the reservation for
+    future in-window sessions (D-18). Items are ``list()``-materialized (HY010).
+    """
+    for item in list(request.items.select_related("schedule").all()):
+        item_sessions = _in_window_sessions(
+            item.schedule, request.window_start, request.window_end)
+        resolved_room = None
+        is_move = item.new_start_time is not None and item.new_end_time is not None
+        for session in item_sessions:
+            if is_move:
+                new_start = timezone.make_aware(
+                    datetime.combine(session.date, item.new_start_time))
+                new_end = timezone.make_aware(
+                    datetime.combine(session.date, item.new_end_time))
+                if faculty_has_conflict(
+                        session.faculty, new_start, new_end,
+                        exclude_session_id=session.pk):
+                    raise _NoRoomAvailable(
+                        "the new time double-books the requesting faculty")
+                at_start, at_end = new_start, new_end
+            else:
+                at_start, at_end = session.scheduled_start, session.scheduled_end
+
+            room = resolve_shift_room(
+                item, at_start, at_end, exclude_session_id=session.pk)
+            if room is None:
+                raise _NoRoomAvailable("No room available that day.")
+
+            session.room = room
+            session.declared_modality = request.target_modality
+            session.modality_changed_at = now
+            session.modality_changed_by = dean
+            fields = ["room", "declared_modality",
+                      "modality_changed_at", "modality_changed_by"]
+            if is_move:
+                session.scheduled_start = at_start
+                session.scheduled_end = at_end
+                fields += ["scheduled_start", "scheduled_end"]
+            session.save(update_fields=fields)
+            resolved_room = room
+
+        if resolved_room is not None:
+            item.assigned_room = resolved_room
+            item.save(update_fields=["assigned_room"])
+
+
 def _apply_online(request, sessions, dean, now):
     """MOD-03/D-04: flip each in-window session to Online and release its room.
 
@@ -387,6 +474,8 @@ def apply_approval(request, dean, *, now=None):
 
         if req.target_modality == Modality.ONLINE:
             _apply_online(req, sessions, dean, now)
+        else:
+            _apply_f2f(req, sessions, dean, now)
 
         req.status = ModalityShiftStatus.APPROVED
         req.decided_by = dean
