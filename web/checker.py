@@ -211,13 +211,21 @@ def _room_session_state(room, now):
     F2F/Blended only: an online session (declared or scheduled) has no room-scan
     target in this plan (online verify is 03-05), so it reads as an empty room.
     Completed sessions are ignored (the room is free again).
+
+    Selection is `now`-aware (CR-01): prefer the room's ACTIVE session, else the
+    session whose scheduled window contains `now`, else the room reads empty. A
+    stale earlier-in-the-day ABSENT session (ABSENT is never COMPLETED) must NOT
+    latch and block verifying a later session in the same room.
     """
-    session = (Session.objects
-               .filter(room=room, date=timezone.localdate())
-               .exclude(status=SessionStatus.COMPLETED)
-               .select_related("schedule", "faculty")
-               .order_by("scheduled_start")
-               .first())
+    sessions = list(Session.objects
+                    .filter(room=room, date=timezone.localdate())
+                    .exclude(status=SessionStatus.COMPLETED)
+                    .select_related("schedule", "faculty")
+                    .order_by("scheduled_start"))
+    session = next((s for s in sessions if s.status == SessionStatus.ACTIVE), None)
+    if session is None:
+        session = next((s for s in sessions
+                        if s.scheduled_start <= now <= s.scheduled_end), None)
     if session is None:
         return None, None
     effective = session.declared_modality or session.schedule.modality

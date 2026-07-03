@@ -231,6 +231,31 @@ class CheckerScanDBTests(_CheckerFixtureMixin, TestCase):
         r = self.client.post("/checker/resolve", {"payload": self._qr(room)})
         self.assertContains(r, 'data-outcome="wrong-floor"')
 
+    def test_room_prefers_active_over_stale_absent(self):
+        # CR-01 regression: a room hosting an earlier ABSENT session (8-9am) and a
+        # later ACTIVE session (9-10am) — scanned mid-second-session — resolves to
+        # the ACTIVE session (verifiable), NOT the stale ABSENT one that sorts
+        # first by scheduled_start. Before the fix, _room_session_state returned
+        # the earliest non-COMPLETED row (the ABSENT one) and latched off-duty.
+        checker = self._checker()
+        self._active_floor_assignment(checker, self.floor)
+        room = self._room()
+        self._session(room, status=SessionStatus.ABSENT, start_delta_min=-75)
+        active = self._session(room, status=SessionStatus.ACTIVE, start_delta_min=-15)
+        self.client.force_login(checker)
+
+        r = self.client.post("/checker/resolve", {"payload": self._qr(room)})
+        self.assertContains(r, 'data-outcome="active-unverified"')
+
+        # A Verify targets the genuinely-in-progress ACTIVE session.
+        r2 = self.client.post("/checker/action", {
+            "action": "verified", "room_id": room.id, "session_id": active.id})
+        self.assertEqual(r2.status_code, 200)
+        self.assertTrue(CheckerValidation.objects.filter(
+            session=active, action="verified").exists())
+        active.refresh_from_db()
+        self.assertTrue(active.verified_by_checker)
+
     def test_scan_returns_session_and_photo(self):
         checker = self._checker()
         self._active_floor_assignment(checker, self.floor)
