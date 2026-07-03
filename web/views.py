@@ -20,7 +20,7 @@ SURFACES = {
     ],
     Role.CHECKER: [
         {"title": "Floor view", "desc": "Coverage and priority queue.", "icon": "layout-grid", "href": "#"},
-        {"title": "Scan a room", "desc": "Verify presence on your floor.", "icon": "scan-line", "href": "#"},
+        {"title": "Scan a room", "desc": "Verify presence on your floor.", "icon": "scan-line", "href": "/checker/scan"},
     ],
     Role.IFO_ADMIN: [
         {"title": "Rooms", "desc": "Per-room schedules and QR posters.", "icon": "building", "href": "/ifo/rooms"},
