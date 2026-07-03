@@ -129,7 +129,7 @@ Plans:
 
 **Wave 4** *(blocked on Wave 3 completion)*
 
-- [ ] 03.1-05-PLAN.md — Manual UAT gate: real Entra round-trip, live unprovisioned refusal, break-glass under DEBUG=False (D-09) (Wave 4)
+- [ ] 03.1-05-PLAN.md — Manual UAT gate: real Entra round-trip, live unprovisioned refusal, break-glass under DEBUG=False (D-09) (Wave 4) — ◷ **DEFERRED / to be continued** (begin-view 405 fixed in `c73a123`; live proof blocked on Entra redirect-URI registration for app `1610c487…`; see `03.1-UAT.md`)
 
 ### Phase 4: Modality Shift Approval & SRS v1.2
 

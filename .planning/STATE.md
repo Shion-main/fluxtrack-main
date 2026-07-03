@@ -4,11 +4,11 @@ milestone: v1.2
 milestone_name: "**Goal**: Faculty can request a lead-time-gated modality shift that a Dean approves, with rooms auto-released or auto-assigned, and the SRS brought back in sync with reality."
 current_phase: 03.1
 current_phase_name: authentication-entra-id-sso-local-dev-proof
-status: executing
-stopped_at: Completed 03.1-04-PLAN.md (Wave 3)
-last_updated: "2026-07-03T12:19:00.000Z"
+status: paused
+stopped_at: "03.1 code-complete (01-04 + begin-view fix c73a123); 03.1-05 live D-09 gate DEFERRED — to be continued (see 03.1-UAT.md), blocked on Entra redirect-URI registration"
+last_updated: "2026-07-03T12:00:00.000Z"
 last_activity: 2026-07-03
-last_activity_desc: Plan 03.1-04 complete (automated Entra wiring proof — 22 new tests, full suite 125 green)
+last_activity_desc: "03.1-05 D-09 live proof deferred by decision (found+fixed begin-view 405 → c73a123; AADSTS50011 redirect-URI unregistered). Moving on to Phase 4."
 progress:
   total_phases: 9
   completed_phases: 3
@@ -28,10 +28,10 @@ See: .planning/PROJECT.md (updated 2026-07-02)
 
 ## Current Position
 
-Phase: 03.1 (authentication-entra-id-sso-local-dev-proof) — EXECUTING
-Plan: 5 of 5
-Status: Ready to execute
-Last activity: 2026-07-03 — Plan 03.1-04 complete (automated Entra wiring proof — 22 tests, full suite 125 green)
+Phase: 03.1 (authentication-entra-id-sso-local-dev-proof) — PAUSED (code-complete; live D-09 gate deferred)
+Plan: 4 of 5 executed; 03.1-05 (manual D-09 live proof) DEFERRED — to be continued (see 03.1-UAT.md)
+Status: Live Entra proof blocked on redirect-URI registration (AADSTS50011). Resume with /gsd-verify-work 03.1. Proceeding to Phase 4.
+Last activity: 2026-07-03 — begin-view 405 found+fixed (c73a123); D-09 deferred by decision
 
 Progress: [████████░░] 80%
 
