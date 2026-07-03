@@ -209,7 +209,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8
 |-------|----------------|--------|-----------|
 | 1. MSSQL Environment & Data Foundation | 0/TBD | Not started | - |
 | 2. Correctness Foundations | 5/5 | Complete    | 2026-07-02 |
-| 3. Duty Assignments & Checker Verification | 6/6 | Complete   | 2026-07-03 |
+| 3. Duty Assignments & Checker Verification | 6/6 | Complete    | 2026-07-03 |
 | 4. Modality Shift Approval & SRS v1.2 | 0/TBD | Not started | - |
 | 5. Notifications — Read Surface & Web Push | 0/TBD | Not started | - |
 | 6. Reporting Engine & Reporting Surfaces | 0/TBD | Not started | - |
