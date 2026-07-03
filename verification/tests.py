@@ -414,3 +414,85 @@ class AssignmentCreateTests(_CheckerFixtureMixin, TestCase):
             "scope": "online"})
         self.assertEqual(r.status_code, 403)
         self.assertFalse(Assignment.objects.filter(user=victim).exists())
+
+
+# ---------------------------------------------------------------------------
+# CHK-07 floor board (coverage %, priority queue, color cards). These drive the
+# htmx-polled floor_rows partial through the test Client: ONE shared queryset
+# (exclude ABSENT, F2F/Blended only, scoped to the checker's active floors)
+# feeds the cards, the oldest-first priority queue, AND the coverage
+# denominator (Pitfall 5) — so the numbers can never disagree. RED until the
+# /checker/floor/rows route + floor_rows view exist (03-04 Task 2).
+# ---------------------------------------------------------------------------
+class FloorBoardTests(_CheckerFixtureMixin, TestCase):
+    def _verify(self, session, checker):
+        return CheckerValidation.objects.create(
+            session=session, room=session.room, checker=checker,
+            action="verified", identity_match=True)
+
+    def test_coverage_excludes_absent(self):
+        # 2 verified + 1 unverified active on the floor, plus 1 ABSENT session.
+        # Coverage = verified / active-excluding-absent; the ABSENT session is
+        # neither carded nor in the denominator; fully verifying reads 100.
+        checker = self._checker()
+        self._active_floor_assignment(checker, self.floor)
+        v1 = self._session(self._room())
+        v2 = self._session(self._room())
+        unverified = self._session(self._room())
+        absent = self._session(self._room(), status=SessionStatus.ABSENT)
+        self._verify(v1, checker)
+        self._verify(v2, checker)
+        self.client.force_login(checker)
+
+        r = self.client.get("/checker/floor/rows")
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(r.context["total"], 3)          # ABSENT out of denominator
+        self.assertEqual(r.context["verified"], 2)
+        self.assertEqual(r.context["coverage"], 67)      # round(100*2/3)
+        self.assertNotContains(r, absent.room.code)      # ABSENT never carded
+
+        # Verifying the last active session brings the floor to 100%.
+        self._verify(unverified, checker)
+        r = self.client.get("/checker/floor/rows")
+        self.assertEqual(r.context["verified"], 3)
+        self.assertEqual(r.context["coverage"], 100)
+
+    def test_priority_queue_oldest_first(self):
+        # Among active-unverified sessions, the queue is oldest-scheduled first
+        # (longest-waiting on top).
+        checker = self._checker()
+        self._active_floor_assignment(checker, self.floor)
+        mid = self._session(self._room(), start_delta_min=-20)
+        oldest = self._session(self._room(), start_delta_min=-40)
+        newest = self._session(self._room(), start_delta_min=-5)
+        self.client.force_login(checker)
+
+        r = self.client.get("/checker/floor/rows")
+        queue_ids = [s.id for s in r.context["queue"]]
+        self.assertEqual(queue_ids, [oldest.id, mid.id, newest.id])
+
+    def test_board_excludes_online(self):
+        # An ONLINE session on the floor's rooms is not on the F2F/Blended board.
+        checker = self._checker()
+        self._active_floor_assignment(checker, self.floor)
+        f2f = self._session(self._room())
+        online = self._session(self._room(), modality=Modality.ONLINE)
+        self.client.force_login(checker)
+
+        r = self.client.get("/checker/floor/rows")
+        self.assertEqual(r.context["total"], 1)          # only the F2F session
+        self.assertContains(r, f2f.room.code)
+        self.assertNotContains(r, online.room.code)
+
+    def test_board_scoped_to_active_floor(self):
+        # A session on a floor the checker is NOT assigned to does not appear.
+        checker = self._checker()
+        self._active_floor_assignment(checker, self.floor)
+        mine = self._session(self._room(self.floor))
+        theirs = self._session(self._room(self.other_floor))
+        self.client.force_login(checker)
+
+        r = self.client.get("/checker/floor/rows")
+        self.assertEqual(r.context["total"], 1)
+        self.assertContains(r, mine.room.code)
+        self.assertNotContains(r, theirs.room.code)
