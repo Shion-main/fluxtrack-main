@@ -506,3 +506,41 @@ class RoomAvailabilityTests(TestCase):
         # 14:00-15:00: the faculty teaches nothing then.
         self.assertFalse(faculty_has_conflict(
             self.fx.faculty, _mnl(self.date, 14, 0), _mnl(self.date, 15, 0)))
+
+    # --- Task 3: picker queries -------------------------------------------
+    def test_available_rooms_prefers_original_when_free(self):
+        from ops.availability import available_rooms_for
+        # Clear the competing occupant so the session's own room_a is free.
+        self.fx.competitor.status = _SessionStatus.COMPLETED
+        self.fx.competitor.save(update_fields=["status"])
+        rooms = available_rooms_for(self.fx.session)
+        codes = [r.code for r in rooms]
+        self.assertEqual(codes[0], self.fx.room_a.code)  # original preferred first
+        self.assertEqual(set(codes), {self.fx.room_a.code, self.fx.room_b.code})
+
+    def test_available_rooms_empty_when_preferred_time_full(self):
+        from ops.availability import available_rooms_for
+        from ops.models import Booking
+        # room_a is held by fx.competitor; also fill room_b at the same slot.
+        Booking.objects.create(
+            room=self.fx.room_b, occupant_name="Seminar",
+            start_datetime=_mnl(self.date, 8, 0), end_datetime=_mnl(self.date, 9, 30),
+            status="active")
+        self.assertEqual(available_rooms_for(self.fx.session), [])
+
+    def test_available_times_offers_alternative_without_double_booking(self):
+        from ops.availability import available_times_for
+        from ops.models import Booking
+        # Preferred time (08:00-09:30) is full in both rooms.
+        Booking.objects.create(
+            room=self.fx.room_b, occupant_name="Seminar",
+            start_datetime=_mnl(self.date, 8, 0), end_datetime=_mnl(self.date, 9, 30),
+            status="active")
+        slots = available_times_for(self.fx.session)
+        self.assertTrue(slots, "expected at least one alternative time slot")
+        # The faculty already teaches the Online class 10:00-11:30 -> never offered.
+        self.assertNotIn(
+            (_mnl(self.date, 10, 0), _mnl(self.date, 11, 30)), slots)
+        # A known free, non-conflicting alternative is present.
+        self.assertIn(
+            (_mnl(self.date, 11, 30), _mnl(self.date, 13, 0)), slots)
