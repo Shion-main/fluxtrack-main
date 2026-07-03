@@ -563,3 +563,78 @@ class FixtureSmokeTests(TestCase):
         self.assertEqual(fx.online_session.declared_modality, Modality.ONLINE)
         # The competitor holds room A at the same slot for availability tests.
         self.assertEqual(fx.competitor.room_id, fx.room_a.id)
+
+
+# ---------------------------------------------------------------------------
+# 04-04: modality-shift CREATION-side service (scheduling/services.py).
+# Task 1 -- the pure, server-clock lead-time gate (D-02) and deterministic Dean
+# routing (D-09). The gate reads modality_shift_lead_days from get_policy (never
+# a literal) and computes the cutoff as Manila-midnight of
+# (earliest_affected_date - lead_days); routing resolves the requester's active
+# department Dean or a safe None on the D-09 edge cases.
+# ---------------------------------------------------------------------------
+from scheduling import services  # noqa: E402
+from scheduling.services import ModalityShiftError  # noqa: E402
+
+_MANILA = ZoneInfo("Asia/Manila")
+
+
+def _manila(y, mo, d, h, mi):
+    """An Asia/Manila-aware instant for the lead-time boundary assertions."""
+    return dt(y, mo, d, h, mi, tzinfo=_MANILA)
+
+
+class LeadTimeGateTests(TestCase):
+    """D-02: whole-calendar-day Manila cutoff = start of (earliest - lead_days).
+
+    The default policy lead is 2, so a Monday 2026-07-06 session has a cutoff of
+    Saturday 2026-07-04 00:00 Manila. The gate refuses AT/after that instant and
+    allows strictly before it; a windowed request keys off the earliest date.
+    """
+
+    SESSION_DATE = date(2026, 7, 6)  # Monday; cutoff = Sat 2026-07-04 00:00 Manila
+
+    def test_refused_at_cutoff_midnight(self):
+        now = _manila(2026, 7, 4, 0, 0)  # exactly the Manila-midnight cutoff
+        self.assertFalse(services.is_before_lead_cutoff(self.SESSION_DATE, now))
+
+    def test_allowed_the_prior_minute(self):
+        now = _manila(2026, 7, 3, 23, 59)  # Fri 23:59 Manila, before the cutoff
+        self.assertTrue(services.is_before_lead_cutoff(self.SESSION_DATE, now))
+
+    def test_windowed_request_keys_off_earliest_date(self):
+        # The same "now" that refuses the earliest date still allows a later one:
+        # the earliest affected date is the binding constraint (D-02 windowed).
+        now = _manila(2026, 7, 4, 0, 0)
+        self.assertFalse(services.is_before_lead_cutoff(self.SESSION_DATE, now))
+        self.assertTrue(services.is_before_lead_cutoff(date(2026, 7, 13), now))
+
+    def test_gate_reads_policy_not_a_literal(self):
+        # Overriding the SystemSetting lead moves the cutoff -- proving the gate
+        # reads get_policy() rather than a hardcoded 2.
+        from ops.models import SystemSetting
+        SystemSetting.objects.create(key="modality_shift_lead_days", value="5")
+        # lead 5 -> cutoff = 2026-07-01 00:00 Manila. 2026-07-04 now is at/after
+        # the default cutoff but a full lead-5 cutoff is earlier, so it is refused.
+        now = _manila(2026, 7, 2, 0, 0)  # after 07-01 cutoff -> refused with lead 5
+        self.assertFalse(services.is_before_lead_cutoff(self.SESSION_DATE, now))
+
+
+class DeanRoutingTests(TestCase):
+    """D-09: deterministic routing to the requester's active department Dean."""
+
+    def test_routes_to_same_department_dean(self):
+        fx = make_shift_fixture()
+        self.assertEqual(services.route_to_dean(fx.faculty), fx.dean)
+
+    def test_none_department_returns_none(self):
+        fx = make_shift_fixture()
+        fx.faculty.department = None
+        fx.faculty.save(update_fields=["department"])
+        self.assertIsNone(services.route_to_dean(fx.faculty))
+
+    def test_vacant_dean_returns_none(self):
+        fx = make_shift_fixture()
+        fx.dean.is_active = False
+        fx.dean.save(update_fields=["is_active"])
+        self.assertIsNone(services.route_to_dean(fx.faculty))
