@@ -1,6 +1,6 @@
 from django.urls import path
 
-from . import checker, faculty, ifo, scan, views
+from . import checker, dean, faculty, ifo, scan, views
 
 urlpatterns = [
     path("", views.home, name="home"),
@@ -18,6 +18,8 @@ urlpatterns = [
     path("faculty/modality/mine", faculty.modality_mine, name="faculty_modality_mine"),
     path("faculty/modality/<int:pk>/withdraw", faculty.modality_withdraw,
          name="faculty_modality_withdraw"),
+    # Dean modality-shift approval surface (MOD-02, D-12)
+    path("dean/requests", dean.queue, name="dean_queue"),
     # Checker surfaces (CHK-01..05, CHK-07)
     path("checker/scan", checker.scan_page, name="checker_scan"),
     path("checker/resolve", checker.resolve, name="checker_resolve"),

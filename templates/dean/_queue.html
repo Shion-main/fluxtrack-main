@@ -1,0 +1,64 @@
+{% comment %}
+MOD-02/D-12 department-scoped pending-approval queue body. The view filters
+status=PENDING + department=request.user.department, so a request routed to
+another department is never rendered here. This partial is htmx-swapped into
+#dean-queue-panel after an approve/reject POST (wired in Task 2): a service
+refusal (status 400) or the D-07 no-room DENIAL both re-render the updated queue
+with a message. Use {% comment %} not {# #} so Django does not parse the {% %}
+tags in this header (03-02 parse-error lesson). Franken UI (uk-*). ASCII-only.
+{% endcomment %}
+{% if error %}
+<div class="uk-alert uk-alert-destructive mb-4" role="alert" data-error="1">
+  <p class="uk-text-small">{{ error }}</p>
+</div>
+{% endif %}
+{% if message %}
+<div class="uk-alert mb-4" role="status" data-message="1">
+  <p class="uk-text-small">{{ message }}</p>
+</div>
+{% endif %}
+
+{% for r in requests %}
+<div class="uk-card uk-card-body mb-3">
+  <div class="flex items-start justify-between gap-3">
+    <div class="min-w-0">
+      <p class="font-semibold">Shift to {{ r.get_target_modality_display }}</p>
+      <p class="uk-text-small uk-text-muted">
+        {{ r.requester.get_full_name|default:r.requester.username }}</p>
+      <p class="uk-text-small uk-text-muted">
+        {{ r.window_start|date:"M j" }}
+        {% if r.window_end != r.window_start %}- {{ r.window_end|date:"M j, Y" }}
+        {% else %}, {{ r.window_start|date:"Y" }}{% endif %}
+        {% if r.is_time_move %}&middot; time-move{% endif %}
+      </p>
+    </div>
+    <span class="uk-label uk-label-primary">Pending</span>
+  </div>
+
+  <div class="uk-text-small mt-2 flex flex-col gap-2">
+    {% for item in r.items.all %}
+    <div>
+      <span class="font-semibold">
+        {{ item.schedule.course_code }}-{{ item.schedule.section }}</span>
+      <span class="uk-text-muted">
+        {{ item.schedule.get_day_of_week_display }}
+        {{ item.schedule.start_time|time:"g:i A" }}-{{ item.schedule.end_time|time:"g:i A" }}
+        &middot; {{ item.schedule.room.code }}</span>
+      {% if item.new_start_time and item.new_end_time %}
+      <span class="uk-text-muted block">
+        New time: {{ item.new_start_time|time:"g:i A" }}-{{ item.new_end_time|time:"g:i A" }}</span>
+      {% endif %}
+      {% if item.preferred_room %}
+      <span class="uk-text-muted block">
+        Preferred room: {{ item.preferred_room.code }}</span>
+      {% endif %}
+    </div>
+    {% empty %}
+    <span class="uk-text-muted">(no classes)</span>
+    {% endfor %}
+  </div>
+</div>
+{% empty %}
+<p class="uk-text-small uk-text-muted">
+  No pending modality-shift requests for your department.</p>
+{% endfor %}

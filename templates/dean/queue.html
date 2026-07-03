@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+{% comment %}
+MOD-02/D-12 Dean approval queue (page shell). The view scopes the list to
+status=PENDING + department=request.user.department, so a request routed to
+another department is never rendered here. The queue body lives in the
+dean/_queue.html partial so an approve/reject POST can htmx-swap #dean-queue-panel
+in place. Franken UI (uk-*). ASCII-only.
+{% endcomment %}
+{% block title %}Approval queue - FluxTrack{% endblock %}
+{% block content %}
+<div class="max-w-2xl mx-auto px-4 pt-4 pb-24">
+  <div class="flex items-center gap-2 mb-4">
+    <a href="/" class="uk-btn uk-btn-ghost uk-btn-icon" aria-label="Back">
+      <uk-icon icon="arrow-left" class="size-5"></uk-icon></a>
+    <h1 class="uk-h3">Approval queue</h1>
+  </div>
+  <div id="dean-queue-panel">
+    {% include "dean/_queue.html" %}
+  </div>
+</div>
+{% endblock %}
