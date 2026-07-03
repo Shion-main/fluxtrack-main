@@ -95,11 +95,11 @@ Plans:
 
 > **Captured 2026-07-03 (from user, during Phase 2 discussion):** online attendance is *Checker*-verified via the class's public MS Teams link, not faculty-self-declared. Amends **CHK-02** (for online, return/redirect to the Teams link instead of room state) and **CHK-03** (Checker verification actions apply to online sessions). Reconcile with **FAC-08** (Phase 7) which currently has the faculty self-start online. Online sessions get the same grace period as F2F; the Phase 2 sweep excludes them from Absent-marking until this Phase 3 verification path ships.
 
-**Plans**: 6 plans (waves 1-6; largely sequential — the plans share web/checker.py, web/urls.py, and verification/tests.py)
+**Plans**: 1/6 plans executed
 
 Plans:
 
-- [ ] 03-01-PLAN.md — Foundation: AssignmentScope + Session.online_checker + retire dead actions + pure decision cores (resolve_checker_scan, distribute_online_sessions) [Wave 1]
+- [x] 03-01-PLAN.md — Foundation: AssignmentScope + Session.online_checker + retire dead actions + pure decision cores (resolve_checker_scan, distribute_online_sessions) [Wave 1]
 - [ ] 03-02-PLAN.md — Checker room scan + F2F/Blended Verify / Verified-empty / note-required Flags → IFO+HR (CHK-01/02/03/04/05) [Wave 2]
 - [ ] 03-03-PLAN.md — IFO assignment UI (floor + online duty) + round-robin online-session pre-assignment (IFO-06) [Wave 3]
 - [ ] 03-04-PLAN.md — Checker floor board: color cards, coverage %, oldest-first priority queue, Absent excluded, htmx-polled (CHK-07) [Wave 4]
@@ -209,7 +209,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8
 |-------|----------------|--------|-----------|
 | 1. MSSQL Environment & Data Foundation | 0/TBD | Not started | - |
 | 2. Correctness Foundations | 5/5 | Complete    | 2026-07-02 |
-| 3. Duty Assignments & Checker Verification | 0/6 | Not started | - |
+| 3. Duty Assignments & Checker Verification | 1/6 | In Progress|  |
 | 4. Modality Shift Approval & SRS v1.2 | 0/TBD | Not started | - |
 | 5. Notifications — Read Surface & Web Push | 0/TBD | Not started | - |
 | 6. Reporting Engine & Reporting Surfaces | 0/TBD | Not started | - |

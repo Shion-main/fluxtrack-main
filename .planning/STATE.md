@@ -2,18 +2,18 @@
 gsd_state_version: 1.0
 milestone: v1.2
 milestone_name: "**Goal**: Faculty can request a lead-time-gated modality shift that a Dean approves, with rooms auto-released or auto-assigned, and the SRS brought back in sync with reality."
-current_phase: 3
-current_phase_name: Duty Assignments & Checker Verification
+current_phase: 03
+current_phase_name: duty-assignments-checker-verification
 status: executing
 stopped_at: Phase 3 UI-SPEC approved
-last_updated: "2026-07-02T23:36:09.953Z"
-last_activity: 2026-07-02
-last_activity_desc: Phase 02 complete, transitioned to Phase 3
+last_updated: "2026-07-03T00:12:01.261Z"
+last_activity: 2026-07-03
+last_activity_desc: Phase 03 execution resumed (wave continue)
 progress:
   total_phases: 8
   completed_phases: 2
   total_plans: 14
-  completed_plans: 8
+  completed_plans: 9
   percent: 25
 ---
 
@@ -24,14 +24,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-07-02)
 
 **Core value:** A faculty member checks in with one action, and the resulting attendance record is trustworthy — presence physically verified, lateness captured, ghost bookings detected.
-**Current focus:** Phase 1 — MSSQL Environment & Data Foundation
+**Current focus:** Phase 03 — duty-assignments-checker-verification
 
 ## Current Position
 
-Phase: 3 of 8 (Duty Assignments & Checker Verification)
-Plan: Not started
-Status: Executing — Phase 1 complete (Wave 1: 01-01; Wave 2: 01-02 + 01-03 in parallel)
-Last activity: 2026-07-02 — Phase 02 complete, transitioned to Phase 3
+Phase: 03 (duty-assignments-checker-verification) — EXECUTING
+Plan: 2 of 6
+Status: Ready to execute
+Last activity: 2026-07-03 — Phase 03 execution resumed (wave continue)
 
 Progress: [███████░░░] 67%
 
@@ -63,6 +63,7 @@ Progress: [███████░░░] 67%
 | Phase 02 P04 | 2 | 2 tasks | 2 files |
 | Phase 02 P03 | 4 | 3 tasks | 5 files |
 | Phase 02 P05 | 6 | 3 tasks | 8 files |
+| Phase 03 P01 | 25m | 2 tasks | 7 files |
 
 ## Accumulated Context
 
@@ -89,6 +90,8 @@ Recent decisions affecting current work:
 - [Phase 02]: JOB-02 sweep marks unscanned F2F/Blended no-shows Absent via the shared is_no_show_past_grace predicate; online EXCLUDED with a Phase-3 hook (not Phase 7); backfilled, idempotent (SCHEDULED->ABSENT only), AuditLog(by=sweep); never stamps room_released_at
 - [Phase 02]: Room-conflict dedup via RoomConflictFlag (filtered UniqueConstraint uniq_open_conflict_per_key, key room:{room_id}); one notify(role=IFO_ADMIN, type=room_conflict) per open conflict, auto-resolves on clear (JOB-02c)
 - [Phase ?]: [Phase 02]: ENV-04 dedicated scheduler — one manage.py runscheduler BlockingScheduler+MemoryJobStore process wires exactly 3 jobs (materialize/6h via call_command, sweep/policy-driven 5min running sweep_no_shows+detect_room_conflicts, weekly_report Mon06:00 stub); scheduler built ONLY in build_scheduler(), never AppConfig.ready (NoImplicitSchedulerTests guards no per-worker double-fire); run_job records a JobRun per run + notifies SYSTEM_ADMIN on failure only, never crashes the scheduler; APScheduler pinned >=3.10,<4
+- [Phase ?]: VERIFIED_EMPTY is the canonical empty checker action; confirmed_absent and confirmed_empty retired (03-01)
+- [Phase ?]: AssignmentScope (FLOOR/ONLINE) additive field; Session.online_checker nullable one-owner FK (03-01)
 
 ### Pending Todos
 
@@ -107,6 +110,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-07-02T23:36:09.943Z
+Last session: 2026-07-03T00:11:41.681Z
 Stopped at: Phase 3 UI-SPEC approved
 Resume file: .planning/phases/03-duty-assignments-checker-verification/03-UI-SPEC.md
