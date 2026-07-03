@@ -11,7 +11,7 @@ from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.core.cache import cache
 from django.test import TestCase, override_settings
-from django.urls import reverse
+from django.urls import NoReverseMatch, reverse
 from django.utils import timezone
 
 from accounts.models import Role
@@ -165,3 +165,106 @@ class MicrosoftButtonPostTests(TestCase):
         """Documents why the button must POST: GET on begin is 405 under 6.0.0."""
         begin_url = reverse("social:begin", args=["azuread-tenant-oauth2"])
         self.assertEqual(self.client.get(begin_url).status_code, 405)
+
+
+# ---------------------------------------------------------------------------
+# 04-07 -- Faculty modality-shift surface authz + validation (MOD-01/05/06).
+#
+# The faculty half of the T-04 register: @faculty_required gates every view
+# (T-04-10 non-faculty access); modality_withdraw delegates its guard to
+# withdraw_modality_shift so a FOREIGN withdraw is refused server-side and the
+# ticket stays PENDING (T-04-01 IDOR); a malformed submit is a friendly 400, never
+# a 500 (T-04-05v); a forged room pk is never trusted (T-04-02, service re-resolves).
+# MOD-06/D-13: there is NO faculty self-declare route -- this request workflow is
+# the sole faculty modality-change entry point (the FAC-07 path is retired).
+# ---------------------------------------------------------------------------
+from datetime import datetime, timedelta  # noqa: E402
+
+from scheduling.models import (  # noqa: E402
+    ModalityShiftRequest,
+    ModalityShiftStatus,
+    Session,
+    SessionStatus,
+)
+from scheduling.test_support import make_shift_fixture  # noqa: E402
+
+
+class FacultyModalityAuthzTests(TestCase):
+    """Authz + input-validation guards on the faculty modality-shift surface."""
+
+    def setUp(self):
+        cache.clear()  # locmem cache is not rolled back between tests
+        self.fx = make_shift_fixture("web07")
+
+    def _future_session(self):
+        """A SCHEDULED session comfortably past the lead-time cutoff for a real
+        ``timezone.now()`` (the view cannot inject a fake clock), so a valid submit
+        exercises routing/creation rather than the lead gate."""
+        sch = self.fx.f2f_schedule
+        d = timezone.localdate() + timedelta(days=30)
+        start = timezone.make_aware(datetime.combine(d, sch.start_time))
+        end = timezone.make_aware(datetime.combine(d, sch.end_time))
+        Session.objects.create(
+            schedule=sch, faculty=sch.faculty, room=sch.room, date=d,
+            scheduled_start=start, scheduled_end=end,
+            status=SessionStatus.SCHEDULED)
+        return d
+
+    def test_non_faculty_denied(self):
+        """A non-faculty user (the Dean) is denied GET and POST on the submit view
+        (T-04-10, @faculty_required)."""
+        self.client.force_login(self.fx.dean)
+        self.assertEqual(self.client.get("/faculty/modality/new").status_code, 403)
+        self.assertEqual(
+            self.client.post("/faculty/modality/new", {}).status_code, 403)
+
+    def test_foreign_withdraw_refused_and_stays_pending(self):
+        """A faculty withdrawing ANOTHER faculty's pending ticket is refused and the
+        ticket stays PENDING (T-04-01 IDOR; guard delegated to the service)."""
+        req = ModalityShiftRequest.objects.create(
+            requester=self.fx.faculty, dean=self.fx.dean,
+            department=self.fx.dept, target_modality="online",
+            window_start=timezone.localdate(), window_end=timezone.localdate(),
+            status=ModalityShiftStatus.PENDING)
+        self.client.force_login(self.fx.competitor_faculty)  # a different faculty
+        resp = self.client.post(f"/faculty/modality/{req.pk}/withdraw")
+        self.assertEqual(resp.status_code, 400)
+        req.refresh_from_db()
+        self.assertEqual(req.status, ModalityShiftStatus.PENDING)
+
+    def test_malformed_submit_is_400_not_500(self):
+        """A bad target modality / bad date renders the form partial at 400, never a
+        500 (T-04-05v, assignment_create pattern)."""
+        self.client.force_login(self.fx.faculty)
+        bad_modality = self.client.post("/faculty/modality/new", {
+            "target_modality": "banana",
+            "schedules": [str(self.fx.f2f_schedule.pk)],
+            "window_start": "2026-07-06", "window_end": "2026-07-06"})
+        self.assertEqual(bad_modality.status_code, 400)
+        bad_date = self.client.post("/faculty/modality/new", {
+            "target_modality": "online",
+            "schedules": [str(self.fx.f2f_schedule.pk)],
+            "window_start": "not-a-date", "window_end": "2026-07-06"})
+        self.assertEqual(bad_date.status_code, 400)
+
+    def test_valid_submit_creates_one_pending_routed_to_dean(self):
+        """A valid submit creates exactly one PENDING ticket routed to the
+        department Dean (MOD-01/D-09), and redirects to the my-requests list."""
+        d = self._future_session()
+        self.client.force_login(self.fx.faculty)
+        resp = self.client.post("/faculty/modality/new", {
+            "target_modality": "online",
+            "schedules": [str(self.fx.f2f_schedule.pk)],
+            "window_start": d.isoformat(), "window_end": d.isoformat()})
+        self.assertRedirects(resp, "/faculty/modality/mine")
+        reqs = ModalityShiftRequest.objects.filter(requester=self.fx.faculty)
+        self.assertEqual(reqs.count(), 1)
+        req = reqs.get()
+        self.assertEqual(req.status, ModalityShiftStatus.PENDING)
+        self.assertEqual(req.dean, self.fx.dean)
+
+    def test_no_faculty_self_declare_route_exists(self):
+        """MOD-06/D-13: the modality-shift request is the sole faculty modality-change
+        entry point -- no self-declare view/route survives."""
+        with self.assertRaises(NoReverseMatch):
+            reverse("faculty_modality_declare")
