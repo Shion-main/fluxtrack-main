@@ -5,8 +5,8 @@ milestone_name: "**Goal**: Faculty can request a lead-time-gated modality shift 
 current_phase: 03
 current_phase_name: duty-assignments-checker-verification
 status: executing
-stopped_at: Phase 3 UI-SPEC approved
-last_updated: "2026-07-03T00:12:01.261Z"
+stopped_at: Completed 03-02-PLAN.md
+last_updated: "2026-07-03T00:23:30.612Z"
 last_activity: 2026-07-03
 last_activity_desc: Phase 03 execution resumed (wave continue)
 progress:
@@ -29,7 +29,7 @@ See: .planning/PROJECT.md (updated 2026-07-02)
 ## Current Position
 
 Phase: 03 (duty-assignments-checker-verification) — EXECUTING
-Plan: 2 of 6
+Plan: 3 of 6
 Status: Ready to execute
 Last activity: 2026-07-03 — Phase 03 execution resumed (wave continue)
 
@@ -64,6 +64,7 @@ Progress: [███████░░░] 67%
 | Phase 02 P03 | 4 | 3 tasks | 5 files |
 | Phase 02 P05 | 6 | 3 tasks | 8 files |
 | Phase 03 P01 | 25m | 2 tasks | 7 files |
+| Phase 03 P02 | ~6m | 3 tasks | 6 files |
 
 ## Accumulated Context
 
@@ -92,6 +93,8 @@ Recent decisions affecting current work:
 - [Phase ?]: [Phase 02]: ENV-04 dedicated scheduler — one manage.py runscheduler BlockingScheduler+MemoryJobStore process wires exactly 3 jobs (materialize/6h via call_command, sweep/policy-driven 5min running sweep_no_shows+detect_room_conflicts, weekly_report Mon06:00 stub); scheduler built ONLY in build_scheduler(), never AppConfig.ready (NoImplicitSchedulerTests guards no per-worker double-fire); run_job records a JobRun per run + notifies SYSTEM_ADMIN on failure only, never crashes the scheduler; APScheduler pinned >=3.10,<4
 - [Phase ?]: VERIFIED_EMPTY is the canonical empty checker action; confirmed_absent and confirmed_empty retired (03-01)
 - [Phase ?]: AssignmentScope (FLOOR/ONLINE) additive field; Session.online_checker nullable one-owner FK (03-01)
+- [Phase ?]: 03-02: Checker action endpoint re-identifies the room from POST room_id and unconditionally re-runs resolve_checker_scan against current _active_floor_ids before any write (server-side re-gate; never trusts client gating).
+- [Phase ?]: 03-02: _active_floor_ids treats a standing FLOOR posting (date NULL) as always on-duty; a shift is on-duty when date==today and start<=now<=end (either bound may be NULL).
 
 ### Pending Todos
 
@@ -110,6 +113,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-07-03T00:11:41.681Z
-Stopped at: Phase 3 UI-SPEC approved
-Resume file: .planning/phases/03-duty-assignments-checker-verification/03-UI-SPEC.md
+Last session: 2026-07-03T00:23:30.601Z
+Stopped at: Completed 03-02-PLAN.md
+Resume file: None

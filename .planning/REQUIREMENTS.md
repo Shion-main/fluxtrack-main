@@ -42,10 +42,10 @@ roadmap does NOT create phases for them.
 ### Checker (CHK)
 
 - [x] **CHK-01**: A Checker gains verification powers only while on duty (active assignment) on the scanned floor; off-duty/wrong-floor scans are refused with a clear reason
-- [ ] **CHK-02**: Scanning a room on the assigned floor returns the room's current session state plus the scheduled faculty member's profile photo for identity matching. For an **online** session, the Checker is instead notified (via `notify()`) and redirected to the class's **public MS Teams link** to verify the faculty is conducting the session (captured 2026-07-03; online is Checker-verified, not faculty-self-declared — reconcile with FAC-08)
+- [x] **CHK-02**: Scanning a room on the assigned floor returns the room's current session state plus the scheduled faculty member's profile photo for identity matching. For an **online** session, the Checker is instead notified (via `notify()`) and redirected to the class's **public MS Teams link** to verify the faculty is conducting the session (captured 2026-07-03; online is Checker-verified, not faculty-self-declared — reconcile with FAC-08)
 - [x] **CHK-03**: A Checker can record one of: Verify, Flag identity mismatch, Flag not present, Confirm empty / Verified empty (no "Confirm absent" — Absent is final per the modality/sweep changes). These verification actions apply to **online** sessions too (verified via the MS Teams link per CHK-02), not only physical room scans (captured 2026-07-03)
-- [ ] **CHK-04**: A Verify finding marks the session checker-verified
-- [ ] **CHK-05**: A Flag identity mismatch is recorded and surfaced to IFO and HR, with no dispute workflow
+- [x] **CHK-04**: A Verify finding marks the session checker-verified
+- [x] **CHK-05**: A Flag identity mismatch is recorded and surfaced to IFO and HR, with no dispute workflow
 - [ ] **CHK-07**: A floor view shows coverage progress, a priority queue of oldest unverified active sessions, and color-coded room cards, excluding Absent sessions
 - [ ] **CHK-08**: Scans made offline queue locally and replay on reconnect, each re-validated server-side before applying (not blindly trusted) or flagged for IFO
 
@@ -155,10 +155,10 @@ phase (see ROADMAP.md). Status values: Pending / In progress / Complete.
 | ENV-04 | Phase 2 | Complete |
 | IFO-06 | Phase 3 | Complete |
 | CHK-01 | Phase 3 | Complete |
-| CHK-02 | Phase 3 | Pending |
+| CHK-02 | Phase 3 | Complete |
 | CHK-03 | Phase 3 | Complete |
-| CHK-04 | Phase 3 | Pending |
-| CHK-05 | Phase 3 | Pending |
+| CHK-04 | Phase 3 | Complete |
+| CHK-05 | Phase 3 | Complete |
 | CHK-07 | Phase 3 | Pending |
 | CHK-08 | Phase 3 | Pending |
 | MOD-01 | Phase 4 | Pending |
