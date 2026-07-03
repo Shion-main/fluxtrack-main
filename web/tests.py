@@ -11,6 +11,7 @@ from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.core.cache import cache
 from django.test import TestCase, override_settings
+from django.urls import reverse
 from django.utils import timezone
 
 from accounts.models import Role
@@ -140,3 +141,27 @@ class LogoutTests(TestCase):
         resp = self.client.get("/logout")
         self.assertRedirects(resp, "/login")
         self.assertNotIn("_auth_user_id", self.client.session)
+
+
+class MicrosoftButtonPostTests(TestCase):
+    """The 'Sign in with Microsoft' button must POST to social:begin, not GET it.
+
+    social-auth-app-django 6.0.0 decorates the begin view with @require_POST
+    (login-CSRF hardening), so a GET link returns 405 and SSO never starts. This
+    guards the exact regression found live at the D-09 gate: the login template
+    must render a POST <form> to the begin URL, carrying a CSRF token — not an
+    <a href> link. No live Entra call.
+    """
+
+    def test_login_page_posts_to_social_begin(self):
+        """/login renders a POST form to the begin URL and no GET link to it."""
+        begin_url = reverse("social:begin", args=["azuread-tenant-oauth2"])
+        html = self.client.get("/login").content.decode()
+        self.assertIn(f'action="{begin_url}"', html)      # form posts to begin
+        self.assertIn("csrfmiddlewaretoken", html)         # CSRF token present
+        self.assertNotIn(f'href="{begin_url}"', html)      # old GET link is gone
+
+    def test_social_begin_rejects_get(self):
+        """Documents why the button must POST: GET on begin is 405 under 6.0.0."""
+        begin_url = reverse("social:begin", args=["azuread-tenant-oauth2"])
+        self.assertEqual(self.client.get(begin_url).status_code, 405)

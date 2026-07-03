@@ -14,8 +14,11 @@
     {% endfor %}
     {% endif %}
 
-    <a href="{% url 'social:begin' 'azuread-tenant-oauth2' %}"
-       class="uk-btn uk-btn-primary w-full h-11">Sign in with Microsoft</a>
+    <form method="post" action="{% url 'social:begin' 'azuread-tenant-oauth2' %}">
+      {% csrf_token %}
+      <button type="submit"
+              class="uk-btn uk-btn-primary w-full h-11">Sign in with Microsoft</button>
+    </form>
 
     {% if dev_mode %}
     <div class="uk-alert uk-alert-secondary my-4">
