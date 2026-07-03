@@ -18,6 +18,7 @@ IEEE 830 · ISO/IEC/IEEE 29148
 | Document title | FluxTrack — Software Requirements Specification |
 | System | Faculty Attendance and Facility Utilization Information System |
 | Status | For review |
+| Version | 1.2 |
 | Standard basis | IEEE 830 / ISO/IEC/IEEE 29148 |
 
 **Revision History**
@@ -26,6 +27,7 @@ IEEE 830 · ISO/IEC/IEEE 29148
 | :---- | :---- | :---- | :---- |
 | 1.0 | 2026-06-25 | Research Team (Mayo, Ong, Sabuero) | Initial specification. |
 | 1.1 | 2026-07-02 | Research Team (Mayo, Ong, Sabuero) | Frontend stack changed from Next.js/React SPA to server-rendered Django templates + htmx + Franken UI (Tailwind CSS). PWA, mobile-first, QR, and offline capabilities unchanged. Affects §2.1, §2.4, §3.3, §6.6, §6.7. |
+| 1.2 | 2026-07-03 | Research Team (Mayo, Ong, Sabuero) | Modality-shift approval workflow (MOD-01..06); DEAN-04 added; FAC-07 superseded by MOD approval; CHK-03 amended (Confirm absent removed, actions apply to online sessions); CHK-06 removed; RPT-02 notifies Deans; modality_shift_lead_days added to the policy register. |
 
 **Approval and Sign-off**
 
@@ -249,7 +251,7 @@ A single role-aware endpoint resolves the scanner, room, current schedule, and c
 | :---- | :---- | :---- | :---- |
 | SCAN-01 | The system shall expose a single role-aware scan endpoint that accepts exactly one of a QR token or a six-digit manual code and resolves it against the authenticated user, room, current schedule, and current time. | The user is authenticated; a valid token or code is supplied. | A discrete, role-appropriate outcome is returned. |
 | SCAN-02 | The system shall return, for Faculty scans, one of: checked-in, absent (after grace), too-early, wrong-room confirmation, room-occupied, checked-out, early-end confirmation, online-reject, or no-schedule. | The scanner is a Faculty user. | The session state reflects the resolved outcome. |
-| SCAN-03 | The system shall return, for Checker scans, the room's current state to support verification (see Section 4.4). | The scanner is an on-duty Checker on the assigned floor. | The current room state is presented for action. |
+| SCAN-03 | The system shall return, for Checker scans, the room's current state to support verification (see Section 4.5). | The scanner is an on-duty Checker on the assigned floor. | The current room state is presented for action. |
 | SCAN-04 | The system shall issue a short-lived signed resolution token for two-step outcomes (wrong-room, room-occupied, early-end) and shall apply the action only upon a confirming call to the scan-confirm endpoint. | A two-step outcome has been resolved. | The action is applied only after explicit confirmation. |
 | SCAN-05 | The system shall rate-limit the manual-code path (configurable; default five attempts per minute per user) and shall audit-log repeated failures. | A manual code is submitted. | Excess attempts are rejected; failures are logged. |
 | SCAN-06 | The system shall make scans idempotent per user, session, and minute. | A scan is received. | Duplicate scans within the window cause no additional state change. |
@@ -265,27 +267,39 @@ A single role-aware endpoint resolves the scanner, room, current schedule, and c
 | FAC-04 | The system shall mark a session Absent and not start it when check-in occurs after the grace window. | Check-in occurs after grace. | The session is or remains Absent; no active session starts. |
 | FAC-05 | The system shall allow faculty to check out by re-scanning the room (F2F/Blended) or tapping check-out (Online), completing the session. | The session is active. | The session is completed; actual end is stamped. |
 | FAC-06 | The system shall require a reason when check-out occurs earlier than the configurable early-end threshold, recording the session as ended early with that reason. | Check-out occurs before the threshold. | The early-end flag and reason are recorded. |
-| FAC-07 | The system shall allow faculty to set the per-session modality (F2F/Blended/Online), defaulting to the scheduled modality and recording changes with timestamp and author, visible to IFO and HR. | The session exists. | The declared modality and change metadata are recorded. |
+| FAC-07 (superseded) | Superseded by the Dean-approved modality-shift workflow (Section 4.4, MOD area). A per-session modality change is no longer made by faculty self-declaration; a faculty member instead submits a modality-shift request that the department Dean approves or rejects (MOD-01..MOD-06). | The session exists. | Modality changes are recorded only through an approved modality-shift request. |
 | FAC-08 | The system shall require a valid MS Teams link to start an Online session via a "Verify and Start" action (no QR), while Blended sessions check in by QR exactly as F2F. | The session modality is Online (or Blended). | The Online session is started with its Teams link, or the Blended session checks in by QR. |
 | FAC-09 | The system shall, on a room-occupied outcome, allow a Force Handover that auto-completes the prior active session and starts the new session, recording the handover and auditing it, with no faculty-to-faculty interaction. | The room holds a prior active session. | The prior session is completed; the new session is active with handover recorded. |
 | FAC-10 | The system shall, on a wrong-room confirmation, update the session's room and notify IFO. | The faculty member confirms the room change. | The session room is updated; IFO is notified. |
 | FAC-11 | The system shall allow faculty to view their own attendance history, including any Checker flags, read-only with no dispute. | The user is authenticated as Faculty. | The faculty member's own history is displayed. |
 | FAC-12 | The system shall allow faculty to manage their profile, including the profile photo used for Checker identity matching, and their notification preferences. | The user is authenticated as Faculty. | The profile and preferences are updated. |
 
-**4.4 Checker (CHK)**
+**4.4 Modality Shift Approval (MOD)**
+
+This area governs the request-and-approval workflow for changing a session's modality (F2F/Blended to/from Online) with the room consequence applied automatically. It replaces the FAC-07 faculty self-declare path.
+
+| ID | Requirement | Preconditions | Postconditions |
+| :---- | :---- | :---- | :---- |
+| MOD-01 | The system shall allow a faculty member to submit a modality-shift request (F2F/Blended to/from Online) covering a single session or a recurring, faculty-chosen date range, submitted at least `modality_shift_lead_days` (default 2 whole calendar days, Asia/Manila) before the earliest affected session date; a too-late request is refused at submission. | The user is authenticated as Faculty; the affected session(s) exist within the requested window. | A pending request is recorded, or the request is refused as too late. |
+| MOD-02 | The system shall route each request to the requesting faculty member's department Dean, who shall approve or reject it with a reason; there is no dispute workflow. | A pending request exists and the faculty member has an assigned department Dean. | The Dean approves or rejects the request, recording a reason. |
+| MOD-03 | The system shall, on approval of a shift to Online, set the affected in-window session(s) to Online and release the room immediately (`room_released_at` stamped), not on a hold timer; Online sessions later materialized within the window are born released. | The Dean approves a to-Online request. | The affected sessions are Online and their rooms are released. |
+| MOD-04 | The system shall, on approval of a shift to F2F/Blended, auto-assign a free room in the same building at approval time; if no room is free, the approval fails with a clear reason and no session is changed (no silent partial apply). | The Dean approves a to-F2F/Blended request. | A room is assigned to the affected session(s), or the approval fails cleanly with a stated reason. |
+| MOD-05 | The system shall, on approval, notify IFO informationally (not a gate) via the single notification write path, and shall allow the requesting faculty member to withdraw a request while it is still pending. | A request is approved, or a pending request is withdrawn by its requester. | IFO is notified on approval; a pending request may be withdrawn by its owner. |
+| MOD-06 | The system shall make this Dean-approved modality-shift workflow the sole path for changing a session's modality, replacing the FAC-07 self-declare; same-day changes have no formal path and fall back to existing scan-time behavior. | A modality change is required for one or more sessions. | The change occurs only through an approved modality-shift request; the FAC-07 self-declare entry point is retired. |
+
+**4.5 Checker (CHK)**
 
 | ID | Requirement | Preconditions | Postconditions |
 | :---- | :---- | :---- | :---- |
 | CHK-01 | The system shall grant verification powers only while a Checker is on duty (active shift or standing posting) on an assigned floor. | The Checker has an active assignment on the floor. | Verification actions are permitted on that floor. |
 | CHK-02 | The system shall return, on a Checker room scan, the room's current state together with the faculty member's profile photo for identity matching. | The Checker scans a room on the assigned floor. | The room state and faculty photo are presented. |
-| CHK-03 | The system shall offer room-state actions: Verify, Flag identity mismatch, Flag not present, Confirm absent, and Confirm empty / Verified empty. | A room state has been retrieved. | The selected finding is recorded. |
+| CHK-03 | The system shall offer room-state actions: Verify, Flag identity mismatch, Flag not present, and Confirm empty / Verified empty; these actions apply to online sessions as well as to F2F/Blended sessions. | A room or online session state has been retrieved. | The selected finding is recorded. |
 | CHK-04 | The system shall mark a session as checker-verified when a Verify finding is recorded. | A Verify finding is submitted. | The session is marked verified by checker. |
 | CHK-05 | The system shall record a Flag identity mismatch as a flag visible to IFO and HR, with no dispute workflow. | A mismatch finding is submitted. | The flag is recorded and surfaced to IFO/HR. |
-| CHK-06 | The system shall allow a Checker to override an auto-Absent session to Present when the faculty member is physically present; if the room was already released, attendance is corrected, the room is not reopened, and a conflict notification is raised to IFO. | The session was auto-marked Absent; faculty is present. | Attendance is corrected; a conflict is raised if the room was released. |
 | CHK-07 | The system shall present a floor view with coverage progress, a priority queue of the oldest unverified active sessions, and color-coded room cards. | The Checker is on duty on the floor. | The floor view reflects current coverage and priorities. |
 | CHK-08 | The system shall queue scans locally when offline and replay them in batch on reconnect, re-validating each on the server before applying or flagging for IFO. | Connectivity is intermittent. | Queued scans are applied or flagged on reconnection. |
 
-**4.5 IFO Admin (IFO)**
+**4.6 IFO Admin (IFO)**
 
 | ID | Requirement | Preconditions | Postconditions |
 | :---- | :---- | :---- | :---- |
@@ -298,10 +312,10 @@ A single role-aware endpoint resolves the scanner, room, current schedule, and c
 | IFO-07 | The system shall present a live map of room status and a live calendar of today's sessions (with check-in-method icons, verified badges, and status), updated by polling. | The user is an IFO Admin. | Current room and session status is displayed. |
 | IFO-08 | The system shall allow IFO to manually release a held room and to resolve room-conflict notifications. | A held room or conflict exists. | The room is released or the conflict is resolved. |
 | IFO-09 | The system shall present a dashboard of summary cards (Faculty, Room Occupancy in session-hours, Sessions, Absences) over a selectable range (default the active term) with a faculty-scorecard drill-down. | The user is an IFO Admin. | Summary metrics and drill-downs are displayed. |
-| IFO-10 | The system shall produce the Weekly Consolidated Faculty Attendance Report, per department (see Section 4.9). | Attendance data exist for the period. | The report is available and exportable. |
+| IFO-10 | The system shall produce the Weekly Consolidated Faculty Attendance Report, per department (see Section 4.10). | Attendance data exist for the period. | The report is available and exportable. |
 | IFO-11 | The system shall allow IFO to view a selected room's fixed per-term schedule — its recurring classes (faculty, course/section, day-of-week, time, modality) for the active term — together with the room's current and upcoming sessions and any ad-hoc bookings, read-only. The same per-room schedule view is available to Guards (GRD-02) and, scoped to their department(s), to Deans. | A room and active term exist. | The room's per-term schedule is displayed. |
 
-**4.6 HR Admin (HR)**
+**4.7 HR Admin (HR)**
 
 | ID | Requirement | Preconditions | Postconditions |
 | :---- | :---- | :---- | :---- |
@@ -310,7 +324,7 @@ A single role-aware endpoint resolves the scanner, room, current schedule, and c
 | HR-03 | The system shall allow HR to export detailed, session-level attendance as CSV for external payroll processing. | A result set is selected. | A CSV export is produced. |
 | HR-04 | The system shall not implement payroll periods, locks, or finalization. | — | No payroll lifecycle exists in the system. |
 
-**4.7 Guard (GRD)**
+**4.8 Guard (GRD)**
 
 | ID | Requirement | Preconditions | Postconditions |
 | :---- | :---- | :---- | :---- |
@@ -320,25 +334,26 @@ A single role-aware endpoint resolves the scanner, room, current schedule, and c
 | GRD-04 | The system shall deliver debounced web-push alerts to Guards for floor activity. | The Guard has a push subscription. | Relevant alerts are delivered. |
 | GRD-05 | The system shall restrict Guards to read-only access, with no verification, editing, or incident logging. | The user is a Guard. | Write actions are denied. |
 
-**4.8 Dean (DEAN)**
+**4.9 Dean (DEAN)**
 
 | ID | Requirement | Preconditions | Postconditions |
 | :---- | :---- | :---- | :---- |
 | DEAN-01 | The system shall restrict Deans to read-only access scoped to their assigned department(s), as set by a System Admin. | The Dean's department scope is configured. | Access is limited to in-scope data. |
 | DEAN-02 | The system shall allow Deans to view department-scoped attendance reporting and per-faculty scorecards. | The user is a Dean. | Department reporting is displayed. |
 | DEAN-03 | The system shall allow Deans to view and export the weekly consolidated attendance report for their department(s). | The report exists for the department(s). | The report is viewed or exported. |
+| DEAN-04 | The system shall present a Dean dashboard of department-scoped summary cards (Faculty, Sessions, Absences, Attendance percentage) plus a latest-weekly-report card, reusing the reporting aggregates (Section 4.10). | The user is a Dean with a configured department scope. | The department-scoped dashboard is displayed. |
 
-**4.9 Reporting (RPT)**
+**4.10 Reporting (RPT)**
 
 | ID | Requirement | Preconditions | Postconditions |
 | :---- | :---- | :---- | :---- |
 | RPT-01 | The system shall produce a Weekly Consolidated Faculty Attendance Report grouped per department: one row per faculty (classes scheduled, held/present, absent, attendance percentage, checker-verified count) plus itemized absence detail (date, course/section, room, time). | Attendance data exist for the week and department. | The consolidated report is generated. |
-| RPT-02 | The system shall make the report available on demand (by week and department/all) and shall auto-generate it weekly, storing it and notifying IFO. | The reporting period has elapsed (for auto-generation). | The report is available and IFO is notified. |
+| RPT-02 | The system shall make the report available on demand (by week and department/all) and shall auto-generate it weekly, storing it and notifying IFO and the relevant Dean(s). | The reporting period has elapsed (for auto-generation). | The report is available and IFO and the relevant Dean(s) are notified. |
 | RPT-03 | The system shall export the report in both CSV and printable PDF, one per department or for all departments. | A report exists. | CSV and PDF exports are produced. |
 | RPT-04 | The system shall produce a faculty scorecard (scheduled vs. held, attendance percentage, absences, early-ends, modality breakdown) over a selectable period. | Attendance data exist for the faculty member. | The scorecard is displayed. |
 | RPT-05 | The system shall compute report aggregates with pure, independently tested functions and shall degrade gracefully so that a single failed aggregate does not blank the page. | A report is requested. | Available sections render; failed sections show error states. |
 
-**4.10 Notifications (NOTIF)**
+**4.11 Notifications (NOTIF)**
 
 | ID | Requirement | Preconditions | Postconditions |
 | :---- | :---- | :---- | :---- |
@@ -346,7 +361,7 @@ A single role-aware endpoint resolves the scanner, room, current schedule, and c
 | NOTIF-02 | The system shall deliver web-push notifications (VAPID) for floor activity (Checker/Guard) and key events (wrong-room change, force handover, room conflict, weekly report ready). | The user has a push subscription. | Relevant push notifications are delivered. |
 | NOTIF-03 | The system shall honor per-user notification mute preferences. | The user has set preferences. | Muted notifications are suppressed. |
 
-**4.11 System Admin (SYS)**
+**4.12 System Admin (SYS)**
 
 | ID | Requirement | Preconditions | Postconditions |
 | :---- | :---- | :---- | :---- |
@@ -355,7 +370,7 @@ A single role-aware endpoint resolves the scanner, room, current schedule, and c
 | SYS-03 | The system shall allow System Admins to view the audit log of all write events. | The user is a System Admin. | The audit log is displayed. |
 | SYS-04 | The system shall allow System Admins to monitor scheduled-job status (last run, success/failure, rows affected). | The user is a System Admin. | Job status is displayed. |
 
-**4.12 Scheduled Jobs (JOB)**
+**4.13 Scheduled Jobs (JOB)**
 
 | ID | Requirement | Preconditions | Postconditions |
 | :---- | :---- | :---- | :---- |
@@ -468,6 +483,7 @@ The official MMCM IRR / attendance policy is not currently available. Every valu
 | Modality definitions (F2F/Blended/Online; Blended \= instructor on site) | per FGD | Confirmed (expert FGD) |
 | Weekly per-department consolidated attendance report | — | Confirmed (IFO subject-matter expert) |
 | Reporting week definition (Mon–Sun) | Mon–Sun | Assumption — confirm the institutional week |
+| Modality-shift lead time (modality_shift_lead_days) | 2 days | Operational - whole calendar days, Asia/Manila |
 
 Before any production use, all assumption and placeholder values shall be validated against the official MMCM IRR / attendance policy and the institutional report format.
 
