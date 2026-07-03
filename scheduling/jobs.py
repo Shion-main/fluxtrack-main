@@ -28,15 +28,21 @@ from campus.models import Room
 from ops.models import AuditLog, RoomConflictFlag
 from ops.notify import notify
 from ops.policy import get_policy
-from scheduling.models import Modality, Session, SessionStatus
+from scheduling.models import Session, SessionStatus
 from scheduling.resolver import is_no_show_past_grace
 
 
 def sweep_no_shows(now=None):
-    """JOB-02b: mark unscanned F2F/Blended no-shows ABSENT. Returns count marked.
+    """JOB-02b: mark unscanned no-shows ABSENT. Returns count marked.
 
     Idempotent (only SCHEDULED -> ABSENT), backfilled across all past dates, and
-    audited. Online sessions are EXCLUDED pending the Phase-3 verify path.
+    audited. Online is now INCLUDED (03-05): the Phase-3 online Verify path sets a
+    genuinely-attended online session to ACTIVE (the online analog of a room
+    check-in), so the sweep — which only touches SCHEDULED — naturally skips it.
+    Only an un-verified online no-show past grace falls to Absent, under the SAME
+    `is_no_show_past_grace` predicate as F2F/Blended (ROADMAP #6). The exclusion
+    guard that previously skipped all online sessions was removed in lockstep with
+    that Verify path; removing it alone would mark every online session Absent.
     """
     now = now or timezone.now()
     grace_min = get_policy("grace_minutes")
@@ -51,14 +57,6 @@ def sweep_no_shows(now=None):
                                              scheduled_start__lt=cutoff)
                       .select_related("schedule"))
     for s in candidates:
-        # Phase-3 hook: online sessions are EXCLUDED from Absent-marking until the
-        # online-verify path (Checker + MS Teams verification, Phase 3) can flip a
-        # genuinely-attended online session to ACTIVE. Marking an unstarted online
-        # session Absent now would be premature. Effective modality mirrors the
-        # resolver (resolver.py L97): declared_modality overrides schedule.modality.
-        effective_modality = s.declared_modality or s.schedule.modality
-        if effective_modality == Modality.ONLINE:
-            continue
         # Re-affirm via the shared predicate so the ORM cutoff and the
         # authoritative no-show rule are provably ONE rule (coupling guarantee).
         if not is_no_show_past_grace(s.scheduled_start, now, grace_min):
