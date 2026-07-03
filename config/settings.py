@@ -37,6 +37,7 @@ INSTALLED_APPS = [
     "django.contrib.staticfiles",
     # third-party
     "rest_framework",
+    "social_django",
     # local apps
     "accounts",
     "campus",
@@ -53,6 +54,11 @@ MIDDLEWARE = [
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
+    # Intercepts AuthForbidden (deny_unprovisioned) and redirects to
+    # SOCIAL_AUTH_LOGIN_ERROR_URL with a message instead of a raw 500.
+    # Must sit AFTER AuthenticationMiddleware and BEFORE MessageMiddleware so
+    # the messages framework is available to carry the refusal (D-06/D-09#2).
+    "social_django.middleware.SocialAuthExceptionMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
 ]
@@ -69,6 +75,8 @@ TEMPLATES = [
                 "django.template.context_processors.request",
                 "django.contrib.auth.context_processors.auth",
                 "django.contrib.messages.context_processors.messages",
+                "social_django.context_processors.backends",
+                "social_django.context_processors.login_redirect",
             ],
         },
     },
@@ -111,8 +119,56 @@ AUTH_PASSWORD_VALIDATORS = [
     {"NAME": "django.contrib.auth.password_validation.MinimumLengthValidator"},
 ]
 LOGIN_URL = "/login"
-LOGIN_REDIRECT_URL = "/"
+LOGIN_REDIRECT_URL = "/"      # home() routes by role (D-09 #1)
 LOGOUT_REDIRECT_URL = "/login"
+
+# The PKCE subclass is the REAL Entra path and MUST be first (registering the
+# stock AzureADTenantOAuth2 silently ignores USE_PKCE — Pitfall 1). ModelBackend
+# stays second for break-glass superuser + the DEBUG dev-login stub (D-01/D-03).
+AUTHENTICATION_BACKENDS = [
+    "accounts.backends.AzureADTenantOAuth2PKCE",
+    "django.contrib.auth.backends.ModelBackend",
+]
+
+# --- python-social-auth (Microsoft Entra ID, single tenant) ---
+# Setting prefix is derived from the backend .name "azuread-tenant-oauth2"
+# (inherited unchanged by the PKCE subclass). Creds live in .env (D-04).
+SOCIAL_AUTH_AZUREAD_TENANT_OAUTH2_KEY = env("SOCIAL_AUTH_AZUREAD_TENANT_OAUTH2_KEY")
+SOCIAL_AUTH_AZUREAD_TENANT_OAUTH2_SECRET = env("SOCIAL_AUTH_AZUREAD_TENANT_OAUTH2_SECRET")
+SOCIAL_AUTH_AZUREAD_TENANT_OAUTH2_TENANT_ID = env("SOCIAL_AUTH_AZUREAD_TENANT_OAUTH2_TENANT_ID")
+SOCIAL_AUTH_AZUREAD_TENANT_OAUTH2_USE_PKCE = True   # D-02 (honored by the subclass)
+
+# Pin to the exact registered redirect URI to avoid host-derivation drift
+# (localhost, not 127.0.0.1; trailing slash) — else AADSTS50011 (Pitfall 3).
+SOCIAL_AUTH_AZUREAD_TENANT_OAUTH2_REDIRECT_URI = (
+    "http://localhost:8000/auth/complete/azuread-tenant-oauth2/"
+)
+
+# A refused login (AuthForbidden from deny_unprovisioned) must be intercepted by
+# SocialAuthExceptionMiddleware and redirected here with a message, not raised as
+# an unhandled traceback (DEBUG=True) / generic 500 (DEBUG=False) — D-06/D-09#2.
+SOCIAL_AUTH_RAISE_EXCEPTIONS = False
+SOCIAL_AUTH_LOGIN_ERROR_URL = "/login"
+
+# Customized pipeline: associate the tenant identity with a PRE-PROVISIONED
+# seeded User by email (D-05), refuse if none exists (D-06/AUTH-03 — create_user
+# is REMOVED, never auto-provision), then persist User.azure_oid from the 'oid'
+# claim. accounts.pipeline.* is created in Plan 02; this is a lazy dotted-string
+# tuple resolved only during an auth request, so check/migrate/tests don't import
+# it yet.
+SOCIAL_AUTH_PIPELINE = (
+    "social_core.pipeline.social_auth.social_details",
+    "social_core.pipeline.social_auth.social_uid",
+    "social_core.pipeline.social_auth.auth_allowed",
+    "social_core.pipeline.social_auth.social_user",
+    "social_core.pipeline.user.get_username",
+    "social_core.pipeline.social_auth.associate_by_email",  # D-05 first-login bridge
+    "accounts.pipeline.deny_unprovisioned",                 # D-06 refuse if no user
+    "social_core.pipeline.social_auth.associate_user",
+    "accounts.pipeline.write_azure_oid",                    # D-05 write azure_oid=oid
+    "social_core.pipeline.social_auth.load_extra_data",
+    "social_core.pipeline.user.user_details",
+)
 
 # --- I18N / TZ (MMCM, Davao City) ---
 LANGUAGE_CODE = "en-us"

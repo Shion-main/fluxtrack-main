@@ -6,6 +6,10 @@ from django.urls import include, path
 
 urlpatterns = [
     path("admin/", admin.site.urls),
+    # python-social-auth: /auth/login/<backend>/ + /auth/complete/<backend>/
+    # (namespace 'social'; TRAILING_SLASH=True matches the registered Entra
+    # callback /auth/complete/azuread-tenant-oauth2/ — Pitfall 3)
+    path("auth/", include("social_django.urls", namespace="social")),
     path("", include("web.urls")),
 ]
 
