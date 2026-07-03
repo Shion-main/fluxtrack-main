@@ -144,11 +144,35 @@ Plans:
   4. Approving a →F2F/Blended shift auto-assigns a free room in the same building, or fails outright with a clear reason if none is free (no silent partial apply); IFO is notified informationally.
   5. The SRS is revised to v1.2 — new MOD area, removed CHK-06, amended FAC-07/CHK-03, RPT-02-notifies-Deans, and `modality_shift_lead_days` in the policy register — in both `.md` and `.docx`.
 
-**Plans**: TBD
+**Plans**: 8 plans
 
 Plans:
 
-- [ ] 04-01: TBD
+**Wave 1**
+
+- [ ] 04-01-PLAN.md — ModalityShiftRequest/Item models + status enum + modality_shift_lead_days policy default + shared test fixtures [Wave 1]
+- [ ] 04-02-PLAN.md — DOC-01: SRS v1.2 edit map + pypandoc_binary install (gated) + regenerate_srs_docx command [Wave 1]
+
+**Wave 2** *(blocked on 04-01)*
+
+- [ ] 04-03-PLAN.md — ops/availability.py room-free query: half-open overlap, building-scoped, request-aware (D-18), faculty-conflict (D-17) [Wave 2]
+
+**Wave 3** *(blocked on 04-01, 04-03)*
+
+- [ ] 04-04-PLAN.md — services: lead-time gate (D-02) + Dean routing (D-09) + in-window scope (D-01/D-19) + submit/withdraw/reject [Wave 3]
+
+**Wave 4** *(blocked on 04-04)*
+
+- [ ] 04-05-PLAN.md — services: approval consequence — →Online release (MOD-03), →F2F assign/deny (MOD-04/D-07), time-move (D-16/D-17), reserve (D-18), notify (MOD-05) [Wave 4]
+
+**Wave 5** *(blocked on 04-05)*
+
+- [ ] 04-06-PLAN.md — materialize_sessions born-released/born-assigned hook (D-04/D-18) [Wave 5]
+- [ ] 04-07-PLAN.md — Faculty availability-first submit picker + my-requests + withdraw + FAC-07 retirement (MOD-01/05/06) [Wave 5]
+
+**Wave 6** *(blocked on 04-05, 04-07)*
+
+- [ ] 04-08-PLAN.md — Dean approval queue + approve/reject (dean_required, department-scoped) (MOD-02/04) [Wave 6]
 
 ### Phase 5: Notifications — Read Surface & Web Push
 
@@ -235,7 +259,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8
 | 1. MSSQL Environment & Data Foundation | 0/TBD | Not started | - |
 | 2. Correctness Foundations | 5/5 | Complete    | 2026-07-02 |
 | 3. Duty Assignments & Checker Verification | 6/6 | Complete    | 2026-07-03 |
-| 4. Modality Shift Approval & SRS v1.2 | 0/TBD | Not started | - |
+| 4. Modality Shift Approval & SRS v1.2 | 0/8 | Not started | - |
 | 5. Notifications — Read Surface & Web Push | 0/TBD | Not started | - |
 | 6. Reporting Engine & Reporting Surfaces | 0/TBD | Not started | - |
 | 7. Remaining Operational Surfaces | 0/TBD | Not started | - |
