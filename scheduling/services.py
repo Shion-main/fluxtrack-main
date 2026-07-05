@@ -27,6 +27,7 @@ from datetime import datetime, time, timedelta
 
 from django.contrib.auth import get_user_model
 from django.db import transaction
+from django.db.models import Q
 from django.utils import timezone
 
 from accounts.models import Role
@@ -50,6 +51,11 @@ from scheduling.models import (
 )
 
 _OCCUPYING_STATUSES = (SessionStatus.SCHEDULED, SessionStatus.ACTIVE)
+
+# No-double-request policy (UAT 2026-07-05): a schedule with a PENDING request, or
+# one decided within this many days, cannot be re-requested. A WITHDRAWN request is
+# exempt -- decided_at stays NULL on withdraw, so the cooldown clause never matches.
+_REREQUEST_COOLDOWN_DAYS = 2
 
 
 class ModalityShiftError(Exception):
@@ -138,6 +144,23 @@ def affected_sessions(request):
     return result
 
 
+def weeks_window(n_weeks, *, now=None):
+    """Date window covering the next ``n_weeks`` eligible weekly occurrences (D-01).
+
+    The window starts the day AFTER the lead-time cutoff
+    (``modality_shift_lead_days`` + 1) so a weeks-based request never bounces off the
+    D-02 gate on a too-soon session, and spans exactly ``n_weeks * 7`` days -- which
+    contains exactly ``n_weeks`` occurrences of any weekly schedule. The faculty form
+    uses this for recurring requests; a single-session request passes the chosen date
+    as both ends instead.
+    """
+    now = now or timezone.now()
+    lead = get_policy("modality_shift_lead_days")
+    start = timezone.localtime(now).date() + timedelta(days=lead + 1)
+    end = start + timedelta(days=n_weeks * 7 - 1)
+    return start, end
+
+
 def submit_modality_shift(faculty, schedules, target_modality, window_start,
                           window_end, *, preferred_rooms=None, time_move=None,
                           now=None):
@@ -168,6 +191,22 @@ def submit_modality_shift(faculty, schedules, target_modality, window_start,
         raise ModalityShiftError("invalid target modality")
     if window_start > window_end:
         raise ModalityShiftError("window start is after window end")
+
+    # No-double-request guard (UAT 2026-07-05): refuse any selected schedule that
+    # already has a PENDING request, or one decided within the cooldown. WITHDRAWN is
+    # exempt (decided_at stays NULL), so a self-cancelled request can be re-raised now.
+    cooldown_cutoff = now - timedelta(days=_REREQUEST_COOLDOWN_DAYS)
+    for sch in schedules:
+        if ModalityShiftRequest.objects.filter(
+            requester=faculty, items__schedule=sch,
+        ).filter(
+            Q(status=ModalityShiftStatus.PENDING)
+            | Q(decided_at__gte=cooldown_cutoff)
+        ).exists():
+            raise ModalityShiftError(
+                f"You already have a recent request for {sch.course_code} "
+                f"{sch.section}. Withdraw the pending one, or wait "
+                f"{_REREQUEST_COOLDOWN_DAYS} days after a decision.")
 
     is_move = time_move is not None
     new_start_time = new_end_time = None

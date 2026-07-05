@@ -35,10 +35,12 @@ from scheduling.models import (
 from scheduling.services import (
     ModalityShiftError,
     submit_modality_shift,
+    weeks_window,
     withdraw_modality_shift,
 )
 
 _OCCUPYING_STATUSES = (SessionStatus.SCHEDULED, SessionStatus.ACTIVE)
+_MAX_WEEKS = 16  # a term is ~14-16 weeks; cap the recurring-request span
 
 
 def faculty_required(view):
@@ -125,26 +127,36 @@ def modality_new(request):
                       _modality_new_ctx(request.user))
 
     target = request.POST.get("target_modality")
-    ws_raw = (request.POST.get("window_start") or "").strip()
-    we_raw = (request.POST.get("window_end") or "").strip()
+    mode = (request.POST.get("window_mode") or "weeks").strip()
+    weeks_raw = (request.POST.get("weeks") or "").strip()
+    on_date_raw = (request.POST.get("on_date") or "").strip()
     schedule_ids = request.POST.getlist("schedules")
     nst_raw = (request.POST.get("new_start_time") or "").strip()
     net_raw = (request.POST.get("new_end_time") or "").strip()
 
-    # Validate FORMAT before any ORM write -- a bad enum/date/pk must be a friendly
-    # 400, never an unhandled ValidationError (500). Mirrors ifo.assignment_create.
+    # Validate FORMAT before any ORM write -- a bad enum/count/date/pk must be a
+    # friendly 400, never an unhandled ValidationError (500). The window is derived
+    # server-side from either a weeks count (recurring) or a single date (one-off);
+    # the client never posts raw start/end dates (D-01/D-15, UAT 2026-07-05).
     error = None
+    window_start = window_end = None
     if target not in Modality.values:
         error = "Select a valid target modality."
     elif not schedule_ids:
         error = "Select at least one class."
     elif not all(s.isdigit() for s in schedule_ids):
         error = "Invalid class selection."
-    elif not ws_raw or parse_date(ws_raw) is None:
-        error = "Enter a valid start date."
-    elif not we_raw or parse_date(we_raw) is None:
-        error = "Enter a valid end date."
-    elif (nst_raw or net_raw) and (
+    elif mode == "single":
+        on_date = parse_date(on_date_raw)
+        if on_date is None:
+            error = "Pick a valid date for the single session."
+        else:
+            window_start = window_end = on_date
+    elif not weeks_raw.isdigit() or not (1 <= int(weeks_raw) <= _MAX_WEEKS):
+        error = f"Choose how many weeks (1 to {_MAX_WEEKS})."
+    else:
+        window_start, window_end = weeks_window(int(weeks_raw))
+    if error is None and (nst_raw or net_raw) and (
             parse_time(nst_raw) is None or parse_time(net_raw) is None):
         error = "Enter a valid alternative start and end time."
 
@@ -182,7 +194,7 @@ def modality_new(request):
         try:
             submit_modality_shift(
                 request.user, schedules, target,
-                parse_date(ws_raw), parse_date(we_raw),
+                window_start, window_end,
                 preferred_rooms=preferred_rooms or None,
                 time_move=time_move,
             )

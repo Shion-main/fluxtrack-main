@@ -29,19 +29,24 @@ parse the {% %} tags in this header (03-02 parse-error lesson). ASCII-only.
       below or let the app decide.</p>
   </div>
 
-  <div class="grid grid-cols-2 gap-3">
-    <div>
-      <label class="uk-form-label" for="m-ws">From date</label>
-      <input id="m-ws" type="date" name="window_start" class="uk-input h-11" required>
-    </div>
-    <div>
-      <label class="uk-form-label" for="m-we">To date</label>
-      <input id="m-we" type="date" name="window_end" class="uk-input h-11" required>
-    </div>
-  </div>
-  <p class="uk-text-small uk-text-muted -mt-2">
-    Same date in both for a single session; a range covers every affected class-day
-    inside it.</p>
+  <fieldset class="border border-border rounded-md p-3 flex flex-col gap-2">
+    <legend class="uk-text-small uk-text-muted px-1">When</legend>
+    <label class="flex items-center gap-2 flex-wrap">
+      <input type="radio" name="window_mode" value="weeks" class="uk-radio" checked>
+      <span>For the next</span>
+      <input type="number" name="weeks" min="1" max="16" value="1"
+             class="uk-input h-10 w-20 text-center">
+      <span>week(s)</span>
+    </label>
+    <p class="uk-text-small uk-text-muted pl-6 -mt-1">
+      This class repeats weekly -- shifts the next N times it meets, starting at the
+      first date that clears the lead time. "1" = just the next class.</p>
+    <label class="flex items-center gap-2 flex-wrap">
+      <input type="radio" name="window_mode" value="single" class="uk-radio">
+      <span>Just one session on</span>
+      <input type="date" name="on_date" class="uk-input h-10">
+    </label>
+  </fieldset>
 
   <fieldset class="border border-border rounded-md p-3 flex flex-col gap-3">
     <legend class="uk-text-small uk-text-muted px-1">Classes to shift</legend>

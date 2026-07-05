@@ -198,12 +198,12 @@ class FacultyModalityAuthzTests(TestCase):
         cache.clear()  # locmem cache is not rolled back between tests
         self.fx = make_shift_fixture("web07")
 
-    def _future_session(self):
+    def _future_session(self, days=30):
         """A SCHEDULED session comfortably past the lead-time cutoff for a real
         ``timezone.now()`` (the view cannot inject a fake clock), so a valid submit
         exercises routing/creation rather than the lead gate."""
         sch = self.fx.f2f_schedule
-        d = timezone.localdate() + timedelta(days=30)
+        d = timezone.localdate() + timedelta(days=days)
         start = timezone.make_aware(datetime.combine(d, sch.start_time))
         end = timezone.make_aware(datetime.combine(d, sch.end_time))
         Session.objects.create(
@@ -235,18 +235,23 @@ class FacultyModalityAuthzTests(TestCase):
         self.assertEqual(req.status, ModalityShiftStatus.PENDING)
 
     def test_malformed_submit_is_400_not_500(self):
-        """A bad target modality / bad date renders the form partial at 400, never a
-        500 (T-04-05v, assignment_create pattern)."""
+        """A bad target modality / out-of-range weeks / bad single date renders the
+        form partial at 400, never a 500 (T-04-05v, assignment_create pattern)."""
         self.client.force_login(self.fx.faculty)
         bad_modality = self.client.post("/faculty/modality/new", {
             "target_modality": "banana",
             "schedules": [str(self.fx.f2f_schedule.pk)],
-            "window_start": "2026-07-06", "window_end": "2026-07-06"})
+            "window_mode": "weeks", "weeks": "1"})
         self.assertEqual(bad_modality.status_code, 400)
+        bad_weeks = self.client.post("/faculty/modality/new", {
+            "target_modality": "online",
+            "schedules": [str(self.fx.f2f_schedule.pk)],
+            "window_mode": "weeks", "weeks": "0"})
+        self.assertEqual(bad_weeks.status_code, 400)
         bad_date = self.client.post("/faculty/modality/new", {
             "target_modality": "online",
             "schedules": [str(self.fx.f2f_schedule.pk)],
-            "window_start": "not-a-date", "window_end": "2026-07-06"})
+            "window_mode": "single", "on_date": "not-a-date"})
         self.assertEqual(bad_date.status_code, 400)
 
     def test_valid_submit_creates_one_pending_routed_to_dean(self):
@@ -257,13 +262,81 @@ class FacultyModalityAuthzTests(TestCase):
         resp = self.client.post("/faculty/modality/new", {
             "target_modality": "online",
             "schedules": [str(self.fx.f2f_schedule.pk)],
-            "window_start": d.isoformat(), "window_end": d.isoformat()})
+            "window_mode": "single", "on_date": d.isoformat()})
         self.assertRedirects(resp, "/faculty/modality/mine")
         reqs = ModalityShiftRequest.objects.filter(requester=self.fx.faculty)
         self.assertEqual(reqs.count(), 1)
         req = reqs.get()
         self.assertEqual(req.status, ModalityShiftStatus.PENDING)
         self.assertEqual(req.dean, self.fx.dean)
+
+    # --- no-double-request guard + weeks picker (UAT 2026-07-05) ---------------
+    def _existing_request_on_f2f(self, *, status=ModalityShiftStatus.PENDING,
+                                 decided_at=None):
+        """A prior request with one item on the f2f schedule, to exercise the guard."""
+        req = ModalityShiftRequest.objects.create(
+            requester=self.fx.faculty, dean=self.fx.dean, department=self.fx.dept,
+            target_modality="online",
+            window_start=timezone.localdate(), window_end=timezone.localdate(),
+            status=status, decided_at=decided_at)
+        ModalityShiftItem.objects.create(request=req, schedule=self.fx.f2f_schedule)
+        return req
+
+    def test_double_request_while_pending_refused(self):
+        """A second request for a schedule that already has a PENDING one is refused at
+        400 and no new ticket is created (UAT no-double guard)."""
+        self._existing_request_on_f2f()
+        d = timezone.localdate() + timedelta(days=30)
+        self.client.force_login(self.fx.faculty)
+        resp = self.client.post("/faculty/modality/new", {
+            "target_modality": "online",
+            "schedules": [str(self.fx.f2f_schedule.pk)],
+            "window_mode": "single", "on_date": d.isoformat()})
+        self.assertEqual(resp.status_code, 400)
+        self.assertEqual(
+            ModalityShiftRequest.objects.filter(requester=self.fx.faculty).count(), 1)
+
+    def test_rerequest_within_cooldown_after_decision_refused(self):
+        """A schedule decided within the 2-day cooldown cannot be re-requested (400)."""
+        self._existing_request_on_f2f(
+            status=ModalityShiftStatus.REJECTED, decided_at=timezone.now())
+        d = timezone.localdate() + timedelta(days=30)
+        self.client.force_login(self.fx.faculty)
+        resp = self.client.post("/faculty/modality/new", {
+            "target_modality": "online",
+            "schedules": [str(self.fx.f2f_schedule.pk)],
+            "window_mode": "single", "on_date": d.isoformat()})
+        self.assertEqual(resp.status_code, 400)
+
+    def test_withdrawn_allows_immediate_rerequest(self):
+        """A WITHDRAWN request (decided_at NULL) is exempt from the cooldown -- the
+        faculty may re-request the schedule now, creating a fresh PENDING ticket."""
+        self._existing_request_on_f2f(status=ModalityShiftStatus.WITHDRAWN)
+        d = self._future_session()
+        self.client.force_login(self.fx.faculty)
+        resp = self.client.post("/faculty/modality/new", {
+            "target_modality": "online",
+            "schedules": [str(self.fx.f2f_schedule.pk)],
+            "window_mode": "single", "on_date": d.isoformat()})
+        self.assertRedirects(resp, "/faculty/modality/mine")
+        self.assertEqual(
+            ModalityShiftRequest.objects.filter(
+                requester=self.fx.faculty,
+                status=ModalityShiftStatus.PENDING).count(), 1)
+
+    def test_weeks_mode_submit_derives_window_from_count(self):
+        """A weeks-mode submit derives the window server-side: it starts after the
+        lead-time and spans weeks*7 days (UAT weeks picker)."""
+        self._future_session(days=7)  # a session inside the 2-week window
+        self.client.force_login(self.fx.faculty)
+        resp = self.client.post("/faculty/modality/new", {
+            "target_modality": "online",
+            "schedules": [str(self.fx.f2f_schedule.pk)],
+            "window_mode": "weeks", "weeks": "2"})
+        self.assertRedirects(resp, "/faculty/modality/mine")
+        req = ModalityShiftRequest.objects.get(requester=self.fx.faculty)
+        self.assertEqual((req.window_end - req.window_start).days + 1, 14)
+        self.assertGreater(req.window_start, timezone.localdate())
 
     def test_no_faculty_self_declare_route_exists(self):
         """MOD-06/D-13: the modality-shift request is the sole faculty modality-change
