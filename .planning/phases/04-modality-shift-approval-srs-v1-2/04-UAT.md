@@ -20,12 +20,12 @@ source: automated (python-docx: 18 Word tables carry MOD-01..06 / DEAN-04 / poli
 ### 2. Faculty availability-first picker UI
 expected: As a faculty user, open the modality-shift submit form (modality_new). The availability-first room/time picker offers only free rooms/times, is consistent with the project's Franken-UI styling, and is usable on mobile. Submitting creates a pending request; "my requests" (modality_mine) lists it with a working withdraw action.
 result: pass
-source: automated in-process (Django test client through the real view/template/service/DB, rolled back): GET renders the picker listing the class, POST submit -> one PENDING request routed to the dept Dean, my-requests lists it with withdraw. Live browser pixels/htmx polish NOT exercised (dev server unreachable from the test env).
+source: automated in-process (Django test client through the real view/template/service/DB, rolled back): GET renders the picker listing the class, POST submit -> one PENDING request routed to the dept Dean, my-requests lists it with withdraw. ALSO verified LIVE in-browser (/browse against a local runserver): home nav card + availability-first form render correctly; submit redirects to my-requests showing the pending "Shift to Online / CS131-A" request with a withdraw control. Screenshots captured.
 
 ### 3. Dean approval queue UI
 expected: As the department Dean, open the approval queue (dean_queue). Pending requests are listed department-scoped; Approve and Reject act via htmx with a clear in-place swap after the decision; Reject requires a reason. Approving a ->Online request releases the room; approving a ->F2F request with no free room shows the terminal denial cleanly.
 result: pass
-source: automated in-process (Django test client, rolled back): dean queue renders + lists the pending request; POST approve -> request APPROVED + affected session room released (room_released_at set). Cross-department isolation NOT exercised (only one Dean seeded). Live browser pixels/htmx swap NOT exercised (dev server unreachable).
+source: automated in-process (Django test client, rolled back): dean queue renders + lists the pending request; POST approve -> request APPROVED + affected session room released (room_released_at set). Cross-department isolation not exercised (one Dean seeded). ALSO verified LIVE in-browser (/browse): dean queue lists the pending request (department-scoped, requester Jane Mayo); htmx Approve swaps the panel to "Request approved." + "No pending requests". Screenshots captured.
 
 ## Summary
 
