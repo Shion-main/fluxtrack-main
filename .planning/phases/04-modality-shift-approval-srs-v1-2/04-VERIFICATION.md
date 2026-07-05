@@ -1,17 +1,20 @@
 ---
 phase: 04-modality-shift-approval-srs-v1-2
 verified: 2026-07-04T00:00:00Z
-status: human_needed
+status: passed
 score: 5/5 must-haves verified
 behavior_unverified: 0
 overrides_applied: 0
 human_verification:
+
   - test: "Open the regenerated FluxTrack_SRS.docx in Word/LibreOffice and confirm the MOD area (4.4), DEAN-04 row, the removed CHK-06 row, and the policy-register row render with tables/headings intact."
     expected: "The DOCX visually matches the .md content — no broken tables, no missing sections, no encoding artifacts from the pandoc conversion."
     why_human: "Automated tests only assert the .docx is non-empty and byte-writable; pandoc's table/heading rendering fidelity is a visual property no grep/unit test can see."
+
   - test: "As a faculty user, open /faculty/modality/new, pick a ->F2F/Blended target, and exercise the availability-first picker (pick a specific room/time, pick 'let the app decide', and trigger a time-move suggestion when the preferred slot is full)."
     expected: "The picker renders real room/time options from available_rooms_for/available_times_for, Franken-UI styling is consistent with other faculty pages, and the form is usable on a mobile-width viewport."
     why_human: "Server-side validation/authz is unit-proven (FacultyModalityAuthzTests), but visual layout, Franken-UI consistency, and mobile-first usability require an in-browser check (flagged by the 04-07 executor itself, coverage item D4)."
+
   - test: "As a Dean user, open /dean/requests, approve a pending ->Online request and a pending ->F2F request (one with a free room, one with none), and reject a request with a reason — observe the htmx in-place queue swap after each action."
     expected: "The queue updates in place without a full page reload, success/denial/error messages are clearly distinguishable, and the layout is Franken-UI consistent."
     why_human: "Approve/reject consequences are unit-proven (DeanModalityAuthzTests) against persisted state and Notification rows, but the htmx swap behavior and visual message clarity require an in-browser check (flagged by the 04-08 executor itself, coverage item D5)."
