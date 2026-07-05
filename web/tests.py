@@ -401,3 +401,21 @@ class DeanModalityAuthzTests(TestCase):
         self.assertEqual(resp.status_code, 400)
         req.refresh_from_db()
         self.assertEqual(req.status, ModalityShiftStatus.PENDING)
+
+
+class HomeSurfaceNavTests(TestCase):
+    """The home page must link to the Phase 4 modality surfaces for the roles that own
+    them. Guards the UAT-04 gap: the faculty/dean views + URLs existed but SURFACES
+    (web/views.py) was never updated, leaving the features reachable only by typing a URL."""
+
+    def test_faculty_home_links_modality_request(self):
+        u = get_user_model().objects.create(username="fac_nav", role=Role.FACULTY)
+        self.client.force_login(u)
+        resp = self.client.get("/")
+        self.assertContains(resp, "/faculty/modality/new")
+
+    def test_dean_home_links_approval_queue(self):
+        u = get_user_model().objects.create(username="dean_nav", role=Role.DEAN)
+        self.client.force_login(u)
+        resp = self.client.get("/")
+        self.assertContains(resp, "/dean/requests")

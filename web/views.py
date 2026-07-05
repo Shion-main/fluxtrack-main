@@ -12,11 +12,14 @@ from accounts.models import Role
 
 User = get_user_model()
 
-# Role → home-screen surface cards (Phase 1 stubs; real surfaces land in Phase 4).
+# Role → home-screen surface cards. Phase 4 wired the faculty modality-shift request
+# and Dean approval surfaces into the nav; remaining "#" hrefs are later-phase stubs
+# (reporting/dashboards = Phase 6).
 SURFACES = {
     Role.FACULTY: [
         {"title": "My schedule", "desc": "Today and this week.", "icon": "calendar", "href": "/faculty/schedule"},
         {"title": "Check in", "desc": "Scan a room QR or enter the code.", "icon": "scan-line", "href": "/faculty/scan"},
+        {"title": "Request modality shift", "desc": "Shift a session online or to a room; your Dean approves.", "icon": "arrow-left-right", "href": "/faculty/modality/new"},
     ],
     Role.CHECKER: [
         {"title": "Floor view", "desc": "Coverage and priority queue.", "icon": "layout-grid", "href": "/checker/floor"},
@@ -37,6 +40,7 @@ SURFACES = {
         {"title": "Faculty locator", "desc": "Find a professor on campus.", "icon": "search", "href": "#"},
     ],
     Role.DEAN: [
+        {"title": "Modality approvals", "desc": "Pending shift requests from your department.", "icon": "check-check", "href": "/dean/requests"},
         {"title": "Department oversight", "desc": "Reporting and scorecards.", "icon": "bar-chart", "href": "#"},
     ],
     Role.SYSTEM_ADMIN: [
