@@ -25,27 +25,37 @@ ASCII-only by convention (Windows cp1252).
 from django.db import transaction
 
 from ops.models import AuditLog
-from scheduling.models import CheckinMethod, Session, SessionStatus
+from scheduling.models import CheckinMethod, Modality, Session, SessionStatus
 
 
 def merged_sibling_ids(anchor, candidates):
     """Return the set of candidate ids that merge with `anchor` under D-01.
 
-    A candidate merges when it is a DIFFERENT row with:
-      - same faculty_id, AND
-      - same scheduled_start (exact aware instant), AND
-      - (same room_id OR same course_code).
+    A candidate merges when it is a DIFFERENT row with the same faculty_id and
+    the same scheduled_start (exact aware instant), AND -- per-modality:
+
+      - ONLINE arm (D-01 refinement #2): when BOTH the anchor and the candidate
+        are effectively online, faculty + exact start alone is enough. An online
+        class has no room, and one instructor cannot be live in two different
+        online classes at the same instant, so all their same-start online
+        sessions are one presence event. (Empirically, the room-OR-course key
+        missed ~32% of real online groups -- see 04.2-VERIFICATION.md.)
+      - F2F / mixed arm (unchanged, the GARAY case): otherwise the candidate
+        merges only when it shares the same room_id OR the same course_code.
 
     Pure: `anchor` and `candidates` are Session-like objects exposing
     ``.id`` / ``.faculty_id`` / ``.scheduled_start`` / ``.room_id`` /
-    ``.course_code``. The caller materializes them (``select_related("schedule")``)
-    and supplies ``course_code``. No ORM query and no ``timezone.now()`` inside --
-    mirrors the "pure, no now()" convention of
-    ``scheduling.resolver.is_no_show_past_grace``.
+    ``.course_code`` / ``.is_online``. The caller materializes them
+    (``select_related("schedule")``) and supplies ``course_code`` + ``is_online``.
+    No ORM query and no ``timezone.now()`` inside -- mirrors the "pure, no now()"
+    convention of ``scheduling.resolver.is_no_show_past_grace``.
 
     scheduled_start is compared as the full aware DateTime (the exact instant),
     NEVER truncated to a date or time-of-day, so a 1-minute offset disqualifies.
+    ``is_online`` defaults to False (F2F) when unset, so a caller that omits it
+    keeps the pre-refinement room-OR-course behavior.
     """
+    anchor_online = getattr(anchor, "is_online", False)
     out = set()
     for c in candidates:
         if c.id == anchor.id:
@@ -54,19 +64,32 @@ def merged_sibling_ids(anchor, candidates):
             continue
         if c.scheduled_start != anchor.scheduled_start:
             continue
-        if c.room_id == anchor.room_id or c.course_code == anchor.course_code:
-            out.add(c.id)
+        if anchor_online and getattr(c, "is_online", False):
+            out.add(c.id)  # online arm: faculty + exact start is sufficient
+        elif c.room_id == anchor.room_id or c.course_code == anchor.course_code:
+            out.add(c.id)  # F2F / mixed arm: same room OR same course
     return out
 
 
+def _effective_is_online(session):
+    """True when the session is effectively online (declared wins, else schedule).
+
+    Mirrors ``audit_merge_coverage._effective_modality`` (SCAN-01 rule): a
+    per-session ``declared_modality`` (set by a Phase-4 modality shift) overrides
+    the ``schedule.modality`` default.
+    """
+    return (session.declared_modality or session.schedule.modality) == Modality.ONLINE
+
+
 def _materialize_candidates(anchor):
-    """Fetch + course_code-annotate the anchor's same-faculty/same-start rows.
+    """Fetch + annotate the anchor's same-faculty/same-start rows.
 
     Materializes the queryset to a list (cursor closed) BEFORE any write, so the
     later filtered ``.update()`` / ``bulk_create`` never fires an INSERT while a
     SELECT cursor is still open -- the MSSQL HY010 guard from
-    ``scheduling.jobs.sweep_no_shows``. Attaches ``course_code`` (from the related
-    schedule) onto the anchor and each candidate so the pure detector can read it.
+    ``scheduling.jobs.sweep_no_shows``. Attaches ``course_code`` and ``is_online``
+    (effective modality) onto the anchor and each candidate so the pure detector
+    can read both merge arms.
     """
     candidates = list(
         Session.objects.filter(
@@ -77,8 +100,10 @@ def _materialize_candidates(anchor):
         .select_related("schedule")
     )
     anchor.course_code = anchor.schedule.course_code
+    anchor.is_online = _effective_is_online(anchor)
     for c in candidates:
         c.course_code = c.schedule.course_code
+        c.is_online = _effective_is_online(c)
     return candidates
 
 

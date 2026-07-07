@@ -3,14 +3,16 @@
 This is the READ-ONLY check an operator runs against the live loaded term to
 prove that the pure D-01 detector (``scheduling.merge.merged_sibling_ids``)
 catches every real online co-scheduled ("merged") group WITHOUT any ``teams_link``
-clause (Post-Research Clarification #1: online classes have no reliable per-class
-Teams link, so D-01 covers them via shared V-room OR shared ``course_code``).
+clause. Per D-01 refinement #2 (owner decision after this audit first exposed the
+gap -- 48/152 online groups were missed by the old room-OR-course key): two
+effective-online sessions with the same faculty and exact start ARE a merge, so
+the detector's ONLINE arm covers them regardless of room or course.
 
 For every 2+ group of effective-online sessions sharing the SAME faculty and the
 SAME exact ``scheduled_start`` in the ACTIVE term, it asks: does the union of one
-anchor plus its D-01 siblings span the WHOLE group? If yes the group is CAUGHT;
-if some member shares ONLY a distinct-both (different room AND different course)
-identity it is MISSED -- the empirical gap criterion #3 must never surface.
+anchor plus its D-01 siblings span the WHOLE group? Under the online arm the
+answer is always yes, so a MISSED line now signals a REGRESSION (the online arm
+was weakened) rather than an accepted gap -- criterion #3 must stay at 0 MISSED.
 
 The command mutates NOTHING: it opens no ``transaction.atomic()``, calls no
 ``.update()``/``.save()``, and creates no ``AuditLog`` (T-04.2-06). Output is a
@@ -52,8 +54,14 @@ class Command(BaseCommand):
         )
         online = [s for s in sessions if _effective_modality(s) == Modality.ONLINE]
         for s in online:
-            # Attach course_code so the pure D-01 detector can read it.
+            # Attach course_code + is_online so the pure D-01 detector can read
+            # both arms. Every session here is effective-online by construction,
+            # so is_online is True; the detector's online arm (D-01 refinement #2)
+            # then merges same-faculty/same-start online rows regardless of room
+            # or course. This command stays a live regression guard: if the online
+            # arm is ever removed, distinct-both groups resurface as MISSED.
             s.course_code = s.schedule.course_code
+            s.is_online = True
 
         # Group effective-online sessions by (faculty, exact scheduled_start).
         groups = defaultdict(list)

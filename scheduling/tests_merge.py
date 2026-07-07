@@ -50,7 +50,7 @@ class MergeDetectorTests(SimpleTestCase):
     def _sess(self, **kw):
         defaults = dict(
             id=1, faculty_id=100, scheduled_start=self.ANCHOR_START,
-            room_id=10, course_code="MMA116",
+            room_id=10, course_code="MMA116", is_online=False,
         )
         defaults.update(kw)
         return SimpleNamespace(**defaults)
@@ -81,6 +81,46 @@ class MergeDetectorTests(SimpleTestCase):
                     self.assertEqual(result, {cand.id})
                 else:
                     self.assertEqual(result, set())
+
+    def test_online_arm(self):
+        # D-01 refinement #2: two effective-ONLINE sessions with the same faculty
+        # + exact start MERGE even when they share NEITHER room NOR course (online
+        # has no room; one instructor = one live presence). A mixed online/F2F
+        # pair is NOT "two online sessions" -> falls back to the room/course arm.
+        online_anchor = self._sess(id=1, room_id=10, course_code="ONL200",
+                                    is_online=True)
+        rows = [
+            ("both online, diff-room diff-course -> MERGE (online arm, the fix)",
+             dict(id=2, room_id=99, course_code="ZZZ999", is_online=True), True),
+            ("both online, same course -> MERGE (still)",
+             dict(id=3, room_id=99, course_code="ONL200", is_online=True), True),
+            ("both online, diff faculty -> NOT merge (faculty scope holds)",
+             dict(id=4, faculty_id=777, room_id=99, course_code="ZZZ999",
+                  is_online=True), False),
+            ("both online, start off by 1 min -> NOT merge (exactness holds)",
+             dict(id=5, room_id=99, course_code="ZZZ999", is_online=True,
+                  scheduled_start=self.ANCHOR_START + timedelta(minutes=1)), False),
+            ("mixed: anchor online, candidate F2F, diff-room diff-course -> NOT merge",
+             dict(id=6, room_id=99, course_code="ZZZ999", is_online=False), False),
+        ]
+        for label, kw, should_merge in rows:
+            with self.subTest(row=label):
+                cand = self._sess(**kw)
+                result = self._detector()(online_anchor, [cand])
+                self.assertEqual(result, {cand.id} if should_merge else set())
+
+    def test_mixed_anchor_f2f_candidate_online_uses_room_course_arm(self):
+        # Anchor F2F + candidate online (not "two online sessions"): the online
+        # arm must NOT fire; a distinct-both pair stays un-merged, a shared-course
+        # pair still merges via the F2F/course arm.
+        f2f_anchor = self._sess(id=1, room_id=10, course_code="MMA116",
+                                is_online=False)
+        distinct = self._sess(id=2, room_id=99, course_code="ZZZ999",
+                              is_online=True)
+        shared_course = self._sess(id=3, room_id=99, course_code="MMA116",
+                                   is_online=True)
+        self.assertEqual(self._detector()(f2f_anchor, [distinct]), set())
+        self.assertEqual(self._detector()(f2f_anchor, [shared_course]), {3})
 
     def test_manila_exact_instant_boundary(self):
         # Two rows expressing the SAME instant in different representations

@@ -107,9 +107,10 @@ class MergeCoverageCommandTests(TestCase):
     def _online_pair(self, start_t, course_a, course_b, same_room):
         """Seed two effective-online sessions sharing faculty + exact start.
 
-        ``same_room`` toggles whether both sessions hold one V-room (D-01 room
-        arm) or two distinct rooms; with distinct rooms AND distinct courses the
-        pair is a distinct-both group D-01 must report MISSED.
+        ``same_room`` toggles whether both sessions hold one V-room or two
+        distinct rooms. Under D-01 refinement #2 a distinct-both online pair is
+        now CAUGHT by the online arm (same faculty + exact start); it is only
+        reported MISSED if the online arm is broken (regression).
         """
         start = _aware(IN_WINDOW_DATE, start_t)
         end = _aware(IN_WINDOW_DATE, time(start_t.hour + 1, start_t.minute))
@@ -160,12 +161,30 @@ class MergeCoverageCommandTests(TestCase):
         self.assertEqual(before, after)
         self.assertEqual(AuditLog.objects.count(), audit_before)
 
-    def test_distinct_both_online_pair_is_missed(self):
-        # A synthesized online pair sharing NEITHER room NOR course at a fresh
-        # start is a real D-01 gap: the command must print a MISSED line and exit
-        # non-zero (CommandError), proving it would surface a criterion #3 breach.
+    def test_distinct_both_online_pair_now_caught(self):
+        # D-01 refinement #2: an online pair sharing NEITHER room NOR course at a
+        # fresh start is now CAUGHT by the online arm (same faculty + exact start).
+        # Together with the fixture's ONL200 pair that is 2 online groups, both
+        # CAUGHT, 0 MISSED, and the command exits 0 (no CommandError raised).
         self._online_pair(time(13, 0), "GAPA100", "GAPB200", same_room=False)
         out = StringIO()
-        with self.assertRaises(CommandError):
-            call_command("audit_merge_coverage", stdout=out)
-        self.assertIn("MISSED faculty=", out.getvalue())
+        call_command("audit_merge_coverage", stdout=out)  # must NOT raise
+        text = out.getvalue()
+        self.assertIn("fully CAUGHT by D-01: 2", text)
+        self.assertIn("distinct-both): 0", text)
+        self.assertIn("criterion #3 holds", text)
+
+    def test_command_flags_regression_when_online_arm_broken(self):
+        # Safety net: the MISSED / CommandError guard still fires if a future edit
+        # weakens the online arm so a group is left uncovered. Patch the detector
+        # to return no siblings -> every group is uncovered -> non-zero exit.
+        from unittest import mock
+        self._online_pair(time(13, 0), "GAPA100", "GAPB200", same_room=False)
+        with mock.patch(
+            "scheduling.management.commands.audit_merge_coverage.merged_sibling_ids",
+            return_value=set(),
+        ):
+            out = StringIO()
+            with self.assertRaises(CommandError):
+                call_command("audit_merge_coverage", stdout=out)
+            self.assertIn("MISSED faculty=", out.getvalue())
