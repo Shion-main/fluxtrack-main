@@ -33,6 +33,18 @@ from scheduling.models import (AcademicTerm, ModalityShiftItem, Schedule,
 
 DEFAULT_TERM = "2nd Term SY 2025-2026"
 
+# SQL Server caps a single statement at 2100 parameters. At full-term scale a
+# term holds ~2,100+ schedules/sessions, so a single `id__in=[...]` delete — and
+# the deletion collector's SET_NULL update on Session.handover_from_session —
+# overflows that cap (pyodbc 07002 "COUNT field incorrect or syntax error").
+# Batch every id list well under the limit. (mssql-django too-many-params wall.)
+PARAM_CHUNK = 900
+
+
+def _chunks(seq, n=PARAM_CHUNK):
+    for i in range(0, len(seq), n):
+        yield seq[i:i + n]
+
 
 class Command(BaseCommand):
     help = ("Reversibly clear a term's Schedule + Session rows behind a --yes "
@@ -77,13 +89,18 @@ class Command(BaseCommand):
             .distinct())
         deletable_ids = [sid for sid in schedule_ids if sid not in blocked_ids]
 
+        deleted_sessions = deleted_schedules = 0
         with transaction.atomic():
             # Delete Sessions first (explicit), then the Schedules. Deleting a
-            # Session touches neither its PROTECTed room nor faculty rows.
-            deleted_sessions, _ = (
-                Session.objects.filter(schedule_id__in=deletable_ids).delete())
-            deleted_schedules, _ = (
-                Schedule.objects.filter(id__in=deletable_ids).delete())
+            # Session touches neither its PROTECTed room nor faculty rows. Batch
+            # the id lists (PARAM_CHUNK) so no single DELETE / cascade SET_NULL
+            # UPDATE exceeds SQL Server's 2100-parameter limit at full scale.
+            for batch in _chunks(deletable_ids):
+                n, _ = Session.objects.filter(schedule_id__in=batch).delete()
+                deleted_sessions += n
+            for batch in _chunks(deletable_ids):
+                n, _ = Schedule.objects.filter(id__in=batch).delete()
+                deleted_schedules += n
 
         w(self.style.SUCCESS(f"\nReset complete for {term_name!r}"))
         w(f"  Sessions deleted : {deleted_sessions}")
