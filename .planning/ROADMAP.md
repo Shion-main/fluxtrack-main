@@ -30,7 +30,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 3: Duty Assignments & Checker Verification** - Floor assignments gate an on-duty Checker's online + offline room verification (completed 2026-07-03)
 - [x] **Phase 4: Modality Shift Approval & SRS v1.2** - Lead-time-gated faculty request, Dean approval, auto room-release/assign, SRS revision (completed 2026-07-03)
 - [x] **Phase 04.1: Real-Data Integration — Full 2T SY2025-26 Term Load** (INSERTED) - Harden the importer to read the real .xlsx sources and load the whole term: 114-room master (names+capacities), online/blended/gym meetings, ~200 deduped instructors, ~2,021 schedules, materialized into a live checkable term (completed 2026-07-07)
-- [ ] **Phase 04.2: Co-Scheduled Session Attendance** (INSERTED) - Attendance handling for one instructor teaching 2+ sections at the same time in different rooms (129 slots, 54/200 profs): a single scan/verification must cover the co-scheduled sibling sessions so the sweep never falsely marks them Absent
+- [x] **Phase 04.2: Co-Scheduled Session Attendance** (INSERTED) - Attendance handling for one instructor teaching 2+ sections at the same time in different rooms (129 slots, 54/200 profs): a single scan/verification must cover the co-scheduled sibling sessions so the sweep never falsely marks them Absent (completed 2026-07-07)
 - [ ] **Phase 5: Notifications — Read Surface & Web Push** - In-app polled list + VAPID web push + per-user mute preferences
 - [ ] **Phase 6: Reporting Engine & Reporting Surfaces** - One shared aggregate layer powering weekly report, scorecards, IFO/Dean/HR dashboards
 - [ ] **Phase 7: Remaining Operational Surfaces** - Guard monitor/locator, IFO room & booking ops, Faculty self-service, job monitoring
@@ -216,7 +216,7 @@ Plans:
 
 **Design options to weigh at plan time** (A recommended): (A) one scan marks the whole co-scheduled group present; (B) sweep exemption when a sibling is present; (C) manual checker/IFO correction only. — **Chosen: A** (propagate present; sweep unchanged by construction).
 
-**Plans**: 2/4 plans executed
+**Plans**: 4/4 plans complete
 **Wave 1**
 
 - [x] 04.2-01-PLAN.md — Merge core: pure D-01 detector + CheckinMethod.MERGED migration + GARAY fixture + atomic propagation helpers (present/absent) [Wave 1]
@@ -224,8 +224,8 @@ Plans:
 **Wave 2** *(blocked on Wave 1 completion)*
 
 - [x] 04.2-02-PLAN.md — Faculty scan seam: propagate present on CHECKED_IN + force-handover in one transaction [Wave 2]
-- [ ] 04.2-03-PLAN.md — Checker online seam: online Verify propagates present, online Flag-not-present propagates ABSENT; F2F record-only [Wave 2]
-- [ ] 04.2-04-PLAN.md — Sweep no-change confirmation (criteria #2/#4/D-08) + audit_merge_coverage command (empirical online #3) [Wave 2]
+- [x] 04.2-03-PLAN.md — Checker online seam: online Verify propagates present, online Flag-not-present propagates ABSENT; F2F record-only [Wave 2]
+- [x] 04.2-04-PLAN.md — Sweep no-change confirmation (criteria #2/#4/D-08) + audit_merge_coverage command (empirical online #3) [Wave 2]
 
 ### Phase 5: Notifications — Read Surface & Web Push
 
