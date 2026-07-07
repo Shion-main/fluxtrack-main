@@ -6,15 +6,15 @@ current_phase: 5
 current_phase_name: Notifications — Read Surface & Web Push
 status: verifying
 stopped_at: Completed 04-05-PLAN.md
-last_updated: "2026-07-05T14:08:23.240Z"
+last_updated: "2026-07-07T00:49:22.079Z"
 last_activity: 2026-07-05
 last_activity_desc: Phase 04 complete, transitioned to Phase 5
 progress:
-  total_phases: 9
+  total_phases: 10
   completed_phases: 4
-  total_plans: 27
-  completed_plans: 26
-  percent: 44
+  total_plans: 31
+  completed_plans: 27
+  percent: 40
 ---
 
 # Project State
@@ -85,6 +85,7 @@ Progress: [████████░░] 80%
 | Phase 04 P06 | 4min | 2 tasks | 2 files |
 | Phase 04 P07 | 35min | 3 tasks | 6 files |
 | Phase 04 P08 | 30min | 3 tasks | 5 files |
+| Phase 04.1 P01 | 14min | 3 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -148,6 +149,7 @@ Recent decisions affecting current work:
 - [Phase ?]: 04-07: Faculty modality submit is htmx-driven (HX-Redirect on success, 302 fallback); preferred room is a preference only (server re-resolves at approval); withdraw guard delegated to withdraw_modality_shift (IDOR-safe); FAC-07 self-declare retired
 - [Phase 04]: 04-08: Dean approve/reject views delegate all state changes to apply_approval/reject_modality_shift; the view only fetches by pk and renders the outcome (TOCTOU/IDOR-safe)
 - [Phase 04]: 04-08: the D-07 no-room denial is a returned request.status==DENIED surfaced at 200 with a message; only a genuine service refusal (cross-department/non-pending) renders at 400
+- [Phase ?]: [Phase 04.1]: 04.1-01: stdlib zipfile+xml.etree .xlsx reader (no openpyxl/pandas, D1) + pure importing helpers; reconcile() four-bucket partition reproduces the real file exactly (1211 = 1042 + 44 + 14 + 111, 2021 meetings, 168 rooms, 200 instructors, 10 email-less). Section-label guard demotes room==Sec only when Unassigned (C110), keeping real rooms that share their Sec (A298).
 
 ### Pending Todos
 
@@ -170,6 +172,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-07-03T16:48:40.179Z
+Last session: 2026-07-07T00:49:04.548Z
 Stopped at: Completed 04-05-PLAN.md
 Resume file: None
