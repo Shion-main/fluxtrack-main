@@ -11,6 +11,7 @@ from urllib.parse import parse_qs, urlparse
 from django.contrib.auth.decorators import login_required
 from django.core import signing
 from django.core.cache import cache
+from django.db import transaction
 from django.http import HttpResponseBadRequest
 from django.shortcuts import render
 from django.utils import timezone
@@ -22,6 +23,7 @@ from ops.models import AuditLog
 from ops.notify import notify
 from ops.policy import get_policy
 from scheduling import resolver as R
+from scheduling.merge import propagate_merged_present
 from scheduling.models import CheckinMethod, Session, SessionStatus
 
 CONFIRM_SALT = "fluxtrack.scan.confirm"
@@ -76,11 +78,17 @@ def _apply(request, resolution, room, method, reason=""):
 
     o = resolution.outcome
     if o == R.CHECKED_IN:
-        session.status = SessionStatus.ACTIVE
-        session.actual_start = now
-        session.checkin_method = method
-        session.save(update_fields=["status", "actual_start", "checkin_method"])
-        audit("session.checked_in", room=room.code, method=method)
+        # Anchor write + merged-group present fill share ONE transaction (D-04):
+        # a rollback of the anchor rolls back every propagated sibling too.
+        with transaction.atomic():
+            session.status = SessionStatus.ACTIVE
+            session.actual_start = now
+            session.checkin_method = method
+            session.save(update_fields=["status", "actual_start", "checkin_method"])
+            audit("session.checked_in", room=room.code, method=method)
+            # Anchor keeps its REAL method (D-09); only SCHEDULED siblings become
+            # MERGED via the helper's status-guarded, faculty-scoped fill.
+            propagate_merged_present(session, now, user)
     elif o == R.ABSENT:
         if session.status == SessionStatus.SCHEDULED:
             session.status = SessionStatus.ABSENT
