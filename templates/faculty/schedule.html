@@ -34,7 +34,7 @@
   {% for s in upcoming %}
   <div class="flex items-center gap-3 py-2 border-b border-border uk-text-small">
     <span class="uk-label uk-label-secondary w-20 justify-center">{{ s.date|date:"D M j" }}</span>
-    <span>{{ s.scheduled_start|time:"g:i A" }}</span>
+    <span class="whitespace-nowrap">{{ s.scheduled_start|time:"g:i A" }}–{{ s.scheduled_end|time:"g:i A" }}</span>
     <span class="font-medium">{{ s.schedule.course_code }}-{{ s.schedule.section }}</span>
     <span class="uk-text-muted ml-auto">{{ s.room.code }}</span>
   </div>
