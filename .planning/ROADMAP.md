@@ -217,8 +217,12 @@ Plans:
 **Design options to weigh at plan time** (A recommended): (A) one scan marks the whole co-scheduled group present; (B) sweep exemption when a sibling is present; (C) manual checker/IFO correction only. — **Chosen: A** (propagate present; sweep unchanged by construction).
 
 **Plans**: 4 plans across 2 waves
+**Wave 1**
 
 - [ ] 04.2-01-PLAN.md — Merge core: pure D-01 detector + CheckinMethod.MERGED migration + GARAY fixture + atomic propagation helpers (present/absent) [Wave 1]
+
+**Wave 2** *(blocked on Wave 1 completion)*
+
 - [ ] 04.2-02-PLAN.md — Faculty scan seam: propagate present on CHECKED_IN + force-handover in one transaction [Wave 2]
 - [ ] 04.2-03-PLAN.md — Checker online seam: online Verify propagates present, online Flag-not-present propagates ABSENT; F2F record-only [Wave 2]
 - [ ] 04.2-04-PLAN.md — Sweep no-change confirmation (criteria #2/#4/D-08) + audit_merge_coverage command (empirical online #3) [Wave 2]
