@@ -16,14 +16,24 @@ one scheduled_start and therefore crosses grace together (D-04/D-08).
 
 ASCII-only by convention (Windows cp1252).
 """
-from datetime import timedelta
+from datetime import time, timedelta
+from io import StringIO
 
+from django.core.management import call_command
+from django.core.management.base import CommandError
 from django.test import TestCase
 
+from campus.models import Floor, Room
+from ops.models import AuditLog
 from scheduling.jobs import sweep_no_shows
 from scheduling.merge import propagate_merged_present
-from scheduling.models import Session, SessionStatus
-from scheduling.test_support import make_merge_fixture
+from scheduling.models import (
+    Modality,
+    Schedule,
+    Session,
+    SessionStatus,
+)
+from scheduling.test_support import IN_WINDOW_DATE, _aware, make_merge_fixture
 
 
 class MergeSweepConfirmTests(TestCase):
@@ -84,3 +94,78 @@ class MergeSweepConfirmTests(TestCase):
 
         self.fx.control.refresh_from_db()
         self.assertEqual(self.fx.control.status, SessionStatus.ABSENT)
+
+
+class MergeCoverageCommandTests(TestCase):
+    """audit_merge_coverage: empirical, READ-ONLY D-01 online coverage (criterion #3)."""
+
+    def setUp(self):
+        self.fx = make_merge_fixture(prefix="cov")
+        self.floor = Floor.objects.filter(building=self.fx.building).first()
+        self._room_n = 0
+
+    def _online_pair(self, start_t, course_a, course_b, same_room):
+        """Seed two effective-online sessions sharing faculty + exact start.
+
+        ``same_room`` toggles whether both sessions hold one V-room (D-01 room
+        arm) or two distinct rooms; with distinct rooms AND distinct courses the
+        pair is a distinct-both group D-01 must report MISSED.
+        """
+        start = _aware(IN_WINDOW_DATE, start_t)
+        end = _aware(IN_WINDOW_DATE, time(start_t.hour + 1, start_t.minute))
+
+        def _room():
+            self._room_n += 1
+            return Room.objects.create(
+                floor=self.floor, code=f"cov-V{self._room_n}", capacity=40,
+                qr_token=f"cov-qr-V{self._room_n}",
+                manual_code=f"CV{self._room_n:03d}"[:6],
+            )
+
+        room_a = _room()
+        room_b = room_a if same_room else _room()
+        out = []
+        for course, room, section in ((course_a, room_a, "V01"),
+                                      (course_b, room_b, "V02")):
+            sched = Schedule.objects.create(
+                term=self.fx.term, course_code=course, section=section,
+                faculty=self.fx.faculty, room=room, day_of_week=0,
+                start_time=start_t, end_time=time(start_t.hour + 1, start_t.minute),
+                modality=Modality.ONLINE,
+            )
+            out.append(Session.objects.create(
+                schedule=sched, faculty=self.fx.faculty, room=room,
+                date=IN_WINDOW_DATE, scheduled_start=start, scheduled_end=end,
+                status=SessionStatus.SCHEDULED, declared_modality=Modality.ONLINE,
+            ))
+        return out
+
+    def test_online_pair_reported_caught(self):
+        # The fixture's ONL200 online pair shares course_code -> D-01 CAUGHT.
+        out = StringIO()
+        call_command("audit_merge_coverage", stdout=out)
+        text = out.getvalue()
+        self.assertIn("fully CAUGHT by D-01: 1", text)
+        self.assertIn("distinct-both): 0", text)
+        self.assertIn("criterion #3 holds", text)
+
+    def test_command_is_read_only(self):
+        # T-04.2-06: the audit mutates no Session row and creates no AuditLog.
+        before = dict(Session.objects.values_list("pk", "status"))
+        audit_before = AuditLog.objects.count()
+
+        call_command("audit_merge_coverage", stdout=StringIO())
+
+        after = dict(Session.objects.values_list("pk", "status"))
+        self.assertEqual(before, after)
+        self.assertEqual(AuditLog.objects.count(), audit_before)
+
+    def test_distinct_both_online_pair_is_missed(self):
+        # A synthesized online pair sharing NEITHER room NOR course at a fresh
+        # start is a real D-01 gap: the command must print a MISSED line and exit
+        # non-zero (CommandError), proving it would surface a criterion #3 breach.
+        self._online_pair(time(13, 0), "GAPA100", "GAPB200", same_room=False)
+        out = StringIO()
+        with self.assertRaises(CommandError):
+            call_command("audit_merge_coverage", stdout=out)
+        self.assertIn("MISSED faculty=", out.getvalue())
