@@ -5,16 +5,16 @@ milestone_name: "**Goal**: Faculty can request a lead-time-gated modality shift 
 current_phase: 5
 current_phase_name: Notifications — Read Surface & Web Push
 status: verifying
-stopped_at: Completed 04.1-03-PLAN.md (import_offerings hardened to full-term xlsx, 11 tests green)
-last_updated: "2026-07-07T01:18:36.659Z"
+stopped_at: Completed 04.1-04-PLAN.md (final wave) — live full-term 2T SY25-26 loaded to LocalDB, e2e spot-check green, GARAY (cdgaray) dev-login demo
+last_updated: "2026-07-07T10:25:00.000Z"
 last_activity: 2026-07-05
 last_activity_desc: Phase 04 complete, transitioned to Phase 5
 progress:
   total_phases: 10
-  completed_phases: 4
+  completed_phases: 5
   total_plans: 31
-  completed_plans: 29
-  percent: 40
+  completed_plans: 30
+  percent: 50
 ---
 
 # Project State
@@ -88,6 +88,7 @@ Progress: [████████░░] 80%
 | Phase 04.1 P01 | 14min | 3 tasks | 3 files |
 | Phase 04.1 P02 | 30min | 2 tasks | 3 files |
 | Phase 04.1 P03 | 40min | 3 tasks | 3 files |
+| Phase 04.1 P04 | 35min | 4 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -154,6 +155,7 @@ Recent decisions affecting current work:
 - [Phase ?]: [Phase 04.1]: 04.1-01: stdlib zipfile+xml.etree .xlsx reader (no openpyxl/pandas, D1) + pure importing helpers; reconcile() four-bucket partition reproduces the real file exactly (1211 = 1042 + 44 + 14 + 111, 2021 meetings, 168 rooms, 200 instructors, 10 email-less). Section-label guard demotes room==Sec only when Unassigned (C110), keeping real rooms that share their Sec (A298).
 - [Phase ?]: 04.1-02: load_room_master tab-skip keys on classify_room fields (known building OR is_typo OR floor>0) so only the 2 summary tabs skip while U101/P101 import; reset_term is --yes-guarded, PROTECT-aware, reversible (D10)
 - [Phase 04.1]: 04.1-03: import_offerings hardened to read the real offerings .xlsx by default (extension dispatch keeps the .csv+--building/--floor regression) and consume Plan 01's shared helpers instead of private parsing; keeps virtual/gym meetings, stamps per-meeting modality by room (blended yields physical+online), dedups instructors email-then-name (57 blank-email -> 10 Users), routes roomless-physical to a shared TBA room (Unassigned) and roomless-online to a VTBA Online placeholder. Real dry-run lands 1042+44+14+111=1211 / 2021 meetings / 200 instructors exactly; reconcile()-driven report flags typo 404/516 + the 10 email-less. R3ParityTests retired (ENV-02 now carried at full-term scale). materialize_sessions untouched (D8).
+- [Phase 04.1]: 04.1-04: full D10 clean-load ran live against MSSQL LocalDB (reset_term --yes cleared 2113+2113 under the batched param cap, load_room_master, import_offerings real run, materialize_sessions --days 14 -> 4226 sessions). Reconciliation balanced exactly (1042+44+14+111=1211, 2021 meetings); live term = 2113 schedules / 200 instructors / 218 rooms / 5 term buildings. Scale checks are TERM-SCOPED (active-term buildings == 5), NOT a global Building count — the dormant seed_demo IT building (0 active-term schedules) is expected and must not trip them. DEBUG dev-login curated to a per-role allowlist (DEMO_USERNAMES) with the real professor GARAY (cdgaray) as faculty replacing fake mayo; passwordless-by-username POST unchanged so any imported instructor stays typeable. Human-verify gate approved. Downstream finding (NOT a load defect): co-scheduled sections (same instructor/time, different rooms — e.g. GARAY MMA116 A301/A302) create sibling sessions the sweep would falsely mark Absent — tracked in follow-up Phase 04.2.
 
 ### Pending Todos
 
@@ -169,6 +171,7 @@ None yet.
 - [Phase 8]: Tailwind v4 / Franken UI 2.1 build path (npm-plugin vs standalone-CLI) is MEDIUM confidence — needs a short build spike before committing to build-time-npm/Node-free production.
 - [Phase 8]: Entra cutover can lock out all production login if DEBUG=False is flipped before SSO is proven end-to-end — keep a break-glass superuser; verify on staging.
 - [General]: RDS SQL Server Express 10 GB cap + per-write AuditLog rows needs a retention/pruning job before real usage (address in Phase 8).
+- 04.1-04 Task 1 BLOCKED: reset_term --yes fails at full-term scale (2113 schedules/sessions) with pyodbc 07002 'COUNT field incorrect' — exceeds SQL Server 2100-param limit in reset_term.py Session delete cascade. Fix belongs in Plan 02 reset_term. No tasks complete; DB unchanged (atomic rollback).
 
 ### Roadmap Evolution
 
@@ -176,6 +179,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-07-07T01:18:36.646Z
+Last session: 2026-07-07T02:12:08.555Z
 Stopped at: Completed 04.1-03-PLAN.md (import_offerings hardened to full-term xlsx, 11 tests green)
 Resume file: None

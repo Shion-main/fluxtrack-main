@@ -29,7 +29,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 2: Correctness Foundations** - Shared notify() write path, JOB-02 status sweep + occupancy release, single scheduler process (completed 2026-07-02)
 - [x] **Phase 3: Duty Assignments & Checker Verification** - Floor assignments gate an on-duty Checker's online + offline room verification (completed 2026-07-03)
 - [x] **Phase 4: Modality Shift Approval & SRS v1.2** - Lead-time-gated faculty request, Dean approval, auto room-release/assign, SRS revision (completed 2026-07-03)
-- [ ] **Phase 04.1: Real-Data Integration — Full 2T SY2025-26 Term Load** (INSERTED) - Harden the importer to read the real .xlsx sources and load the whole term: 114-room master (names+capacities), online/blended/gym meetings, ~200 deduped instructors, ~2,021 schedules, materialized into a live checkable term
+- [x] **Phase 04.1: Real-Data Integration — Full 2T SY2025-26 Term Load** (INSERTED) - Harden the importer to read the real .xlsx sources and load the whole term: 114-room master (names+capacities), online/blended/gym meetings, ~200 deduped instructors, ~2,021 schedules, materialized into a live checkable term (completed 2026-07-07)
 - [ ] **Phase 5: Notifications — Read Surface & Web Push** - In-app polled list + VAPID web push + per-user mute preferences
 - [ ] **Phase 6: Reporting Engine & Reporting Surfaces** - One shared aggregate layer powering weekly report, scorecards, IFO/Dean/HR dashboards
 - [ ] **Phase 7: Remaining Operational Surfaces** - Guard monitor/locator, IFO room & booking ops, Faculty self-service, job monitoring
@@ -189,14 +189,14 @@ Plans:
   5. Instructors are deduped (email, then normalized name) to one account each and are connected to every one of their materialized sessions; the ~10 email-less instructors are flagged as unable to authenticate until an email is supplied.
   6. A reconciliation report balances: 1,211 offering rows = schedules created + roomless-TBA-flagged + online-no-room + no-schedule-string; and an F2F, a blended, and an online class each appear on the correct instructor's faculty schedule and are checkable.
 
-**Plans**: 3/4 plans executed
+**Plans**: 4/4 plans complete
 
 Plans:
 
 - [x] 04.1-01-PLAN.md — Stdlib .xlsx reader + pure parse/classify/normalize/modality + reconcile() four-bucket partition (+ parser unit tests) [Wave 1]
 - [x] 04.1-02-PLAN.md — load_room_master (114 named rooms + capacities via prefix map) + reversible reset_term guard [Wave 2]
 - [x] 04.1-03-PLAN.md — Harden import_offerings: xlsx input, kept online/gym, per-meeting modality, instructor dedup, roomless-TBA, reconciliation report [Wave 2]
-- [ ] 04.1-04-PLAN.md — Run reset→room-master→import→materialize --days 14 on LocalDB; assert scale + F2F/blended/online spot check + human verify [Wave 3]
+- [x] 04.1-04-PLAN.md — Run reset→room-master→import→materialize --days 14 on LocalDB; assert scale + F2F/blended/online spot check + human verify [Wave 3]
 
 ### Phase 5: Notifications — Read Surface & Web Push
 
