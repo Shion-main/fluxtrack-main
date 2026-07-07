@@ -29,6 +29,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 2: Correctness Foundations** - Shared notify() write path, JOB-02 status sweep + occupancy release, single scheduler process (completed 2026-07-02)
 - [x] **Phase 3: Duty Assignments & Checker Verification** - Floor assignments gate an on-duty Checker's online + offline room verification (completed 2026-07-03)
 - [x] **Phase 4: Modality Shift Approval & SRS v1.2** - Lead-time-gated faculty request, Dean approval, auto room-release/assign, SRS revision (completed 2026-07-03)
+- [ ] **Phase 04.1: Real-Data Integration — Full 2T SY2025-26 Term Load** (INSERTED) - Harden the importer to read the real .xlsx sources and load the whole term: 114-room master (names+capacities), online/blended/gym meetings, ~200 deduped instructors, ~2,021 schedules, materialized into a live checkable term
 - [ ] **Phase 5: Notifications — Read Surface & Web Push** - In-app polled list + VAPID web push + per-user mute preferences
 - [ ] **Phase 6: Reporting Engine & Reporting Surfaces** - One shared aggregate layer powering weekly report, scorecards, IFO/Dean/HR dashboards
 - [ ] **Phase 7: Remaining Operational Surfaces** - Guard monitor/locator, IFO room & booking ops, Faculty self-service, job monitoring
@@ -173,6 +174,29 @@ Plans:
 **Wave 6** *(blocked on 04-05, 04-07)*
 
 - [x] 04-08-PLAN.md — Dean approval queue + approve/reject (dean_required, department-scoped) (MOD-02/04) [Wave 6]
+
+### Phase 04.1: Real-Data Integration — Full 2T SY2025-26 Term Load (INSERTED)
+
+**Goal**: FluxTrack's live term is the real 2nd Term SY 2025-2026 offering — the whole thing, not a slice. The hardened importer reads the registrar's real `.xlsx` exports directly, loads the full 114-room master (real names + capacities) plus every scheduled room, creates one deduped account per instructor (~200), and materializes ~2,021 real class schedules (F2F, blended, and online) into dated, checkable sessions — with a reconciliation report proving every one of the 1,211 offering rows is accounted for and nothing is silently dropped.
+**Requirements**: none newly mapped; carries ENV-02 from R3-slice to full-term scale and unblocks the reporting phases (Phase 6) that need real data. See 04.1-CONTEXT.md for the 10 locked decisions.
+**Depends on**: Phase 1 (MSSQL import/materialize base), Phase 4 (approved-shift materialize hook must survive the full load).
+**Success Criteria** (what must be TRUE):
+
+  1. The importer reads the real `.xlsx` sources directly (stdlib zip/XML, no new dependency) — no manual CSV re-export step.
+  2. Online and blended and gym meetings are loaded, not skipped: ~1,100 sections / ~2,021 schedule rows / ~200 instructors / ~213 rooms, versus the 483/806 the old CSV-only importer produced.
+  3. Rooms carry real names and capacities from the 114-room master; every room maps to the right building via the explicit R/A/GYM/V prefix table, with P/U/typo codes parked in a flagged "Unassigned" building — nothing silently dropped.
+  4. Each meeting's modality is stamped by its room (physical → f2f/blended/scannable, virtual → online/checker-verified); a blended course yields both.
+  5. Instructors are deduped (email, then normalized name) to one account each and are connected to every one of their materialized sessions; the ~10 email-less instructors are flagged as unable to authenticate until an email is supplied.
+  6. A reconciliation report balances: 1,211 offering rows = schedules created + roomless-TBA-flagged + online-no-room + no-schedule-string; and an F2F, a blended, and an online class each appear on the correct instructor's faculty schedule and are checkable.
+
+**Plans**: 4 plans across 3 waves
+
+Plans:
+
+- [ ] 04.1-01-PLAN.md — Stdlib .xlsx reader + pure parse/classify/normalize/modality + reconcile() four-bucket partition (+ parser unit tests) [Wave 1]
+- [ ] 04.1-02-PLAN.md — load_room_master (114 named rooms + capacities via prefix map) + reversible reset_term guard [Wave 2]
+- [ ] 04.1-03-PLAN.md — Harden import_offerings: xlsx input, kept online/gym, per-meeting modality, instructor dedup, roomless-TBA, reconciliation report [Wave 2]
+- [ ] 04.1-04-PLAN.md — Run reset→room-master→import→materialize --days 14 on LocalDB; assert scale + F2F/blended/online spot check + human verify [Wave 3]
 
 ### Phase 5: Notifications — Read Surface & Web Push
 
