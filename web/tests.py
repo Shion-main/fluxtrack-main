@@ -16,6 +16,7 @@ from django.utils import timezone
 
 from accounts.models import Role
 from campus.models import Building, Floor, Room
+from web import views
 from ops.models import Notification
 from scheduling.models import AcademicTerm, Schedule, Session, SessionStatus
 
@@ -120,6 +121,42 @@ class DevLoginCoexistTests(TestCase):
         """A superuser still authenticates via ModelBackend password auth (D-03/D-09#3)."""
         self.assertTrue(self.client.login(username="devadmin", password="break-glass-pw"))
         self.assertEqual(self.client.session.get("_auth_user_id"), str(self.admin.pk))
+
+
+@override_settings(DEBUG=True)
+class DevLoginCuratedDemoTests(TestCase):
+    """The DEBUG dev-login shows a CURATED per-role demo set with the real professor
+    GARAY (cdgaray) as the faculty account, not a dump of every imported instructor
+    (Phase 04.1 Task 3). The passwordless-by-username POST is unchanged: a curated
+    account (cdgaray) authenticates and role-routes home."""
+
+    def setUp(self):
+        User = get_user_model()
+        # The curated FACULTY demo: the real imported professor GARAY.
+        self.garay = User.objects.create(
+            username="cdgaray", email="cdgaray@mcm.edu.ph",
+            first_name="Christian Dominique", last_name="Garay",
+            role=Role.FACULTY, is_active=True)
+        # A non-allowlisted imported instructor — must NOT appear in the curated list.
+        self.other_faculty = User.objects.create(
+            username="cjldellosa", email="cjldellosa@mcm.edu.ph",
+            role=Role.FACULTY, is_active=True)
+
+    def test_curated_dev_users_include_garay_exclude_arbitrary_instructor(self):
+        """The login-page dev_users context is the curated allowlist: it includes
+        cdgaray and excludes a random imported faculty (not a 200-name dump)."""
+        resp = self.client.get("/login")
+        usernames = {u.username for u in resp.context["dev_users"]}
+        self.assertIn("cdgaray", usernames)
+        self.assertNotIn("cjldellosa", usernames)
+        self.assertLessEqual(len(usernames), len(views.DEMO_USERNAMES))
+
+    def test_garay_dev_login_authenticates_and_redirects_home(self):
+        """A DEBUG POST of cdgaray logs in via the unchanged passwordless path and
+        redirects home (role-routed to the faculty schedule)."""
+        resp = self.client.post("/login", {"username": "cdgaray"})
+        self.assertRedirects(resp, "/")
+        self.assertEqual(self.client.session.get("_auth_user_id"), str(self.garay.pk))
 
 
 class LogoutTests(TestCase):

@@ -12,6 +12,17 @@ from accounts.models import Role
 
 User = get_user_model()
 
+# DEBUG dev-login curated demo set: one clickable account per role (D-08).
+# After the real 2nd Term import (Phase 04.1), the login page must NOT dump all
+# ~200 imported instructors — it shows a short per-role demo list. The FACULTY
+# demo is the REAL professor GARAY, CHRISTIAN DOMINIQUE (username ``cdgaray``,
+# email local-part), replacing the old fake ``mayo`` seed. Any account absent
+# from the live DB is simply omitted (e.g. cdgaray before the import is run, or
+# the seed_demo role accounts before seed_demo is run). The passwordless-by-
+# username POST is unchanged, so any of the ~200 imported instructors is still
+# reachable by typing the username directly (only the visible list is curated).
+DEMO_USERNAMES = ["cdgaray", "cruz", "reyes", "santos", "dela", "ong", "admin"]
+
 # Role → home-screen surface cards. Phase 4 wired the faculty modality-shift request
 # and Dean approval surfaces into the nav; remaining "#" hrefs are later-phase stubs
 # (reporting/dashboards = Phase 6).
@@ -76,7 +87,8 @@ def login_view(request):
 
 
 def _login_ctx(error=None):
-    dev_users = list(User.objects.filter(is_active=True).order_by("role")) if settings.DEBUG else []
+    dev_users = (list(User.objects.filter(username__in=DEMO_USERNAMES, is_active=True)
+                      .order_by("role")) if settings.DEBUG else [])
     return {"dev_mode": settings.DEBUG, "dev_users": dev_users, "error": error}
 
 
