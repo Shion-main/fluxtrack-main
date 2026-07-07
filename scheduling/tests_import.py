@@ -213,3 +213,126 @@ class ImportingHelperTests(SimpleTestCase):
             normalize_name_key("SANTOS, MARIA"),
             normalize_name_key("SANTOS, JOSE"),
         )
+
+
+# ---------------------------------------------------------------------------
+# Task 3 — reconcile() four-bucket partition
+# ---------------------------------------------------------------------------
+# Header/col layout for the small synthetic row sets (mirrors the real columns
+# of interest by name; positions are arbitrary but consistent).
+_SYNTH_COL = {"Code": 0, "Sec": 1, "Mode": 2, "Enrolled": 3,
+              "Instructor": 4, "Email": 5, "Schedule": 6}
+
+
+def _synth_rows():
+    return [
+        # intact — real Academic room on its one meeting
+        ["CS101", "A", "f2f", "30", "DELA CRUZ, JUAN", "juan@x.edu",
+         "M [7:00AM-8:15AM] R415"],
+        # roomless_tba — physical mode, day/time only, no room token
+        ["CS102", "A421", "f2f", "10", "REYES, MARIA", "maria@x.edu",
+         "F [8:15AM-5:00PM] "],
+        # online_no_room — online mode, no room token
+        ["CS103", "B", "online", "20", "SANTOS, PET", "pet@x.edu",
+         "M [9:30AM-10:45A]"],
+        # no_schedule — empty Schedule cell
+        ["CS104", "C", "f2f", "0", "GO, LI", "li@x.edu", ""],
+        # section-label guard — C110 room token == Sec, C110 is Unassigned ->
+        # treated as roomless, NOT an intact room (D9 A151/C110 guard)
+        ["CS105", "C110", "f2f", "5", "LIM, ANA", "ana@x.edu",
+         "M [1:15PM-3:45PM] C110"],
+        # A298 room token == Sec but A298 resolves to a real Admin building ->
+        # kept as a real room (intact), not demoted by the section-label guard
+        ["CS106", "A298", "f2f", "5", "CRUZ, BEN", "ben@x.edu",
+         "W [1:15PM-3:45PM] A298"],
+        # email-less instructor (no email column) -> dedup by normalized name
+        ["CS107", "D", "f2f", "5", "TAN, JOSE R", "",
+         "T [1:15PM-3:45PM] R504"],
+    ]
+
+
+class ReconciliationSyntheticTests(SimpleTestCase):
+    """DB-free, data/raw-free guard of the partition invariant so it holds even
+    when the real files are absent (CI)."""
+
+    def test_partition_is_exhaustive_and_disjoint(self):
+        from scheduling.importing import reconcile
+        rec = reconcile(_synth_rows(), _SYNTH_COL)
+        self.assertEqual(rec.total_rows, 7)
+        self.assertEqual(rec.no_schedule, 1)
+        # intact: CS101 (R415), CS106 (A298 real), CS107 (R504) = 3
+        self.assertEqual(rec.intact_rows, 3)
+        # roomless: CS102 (no room) + CS105 (C110 section-label) = 2
+        self.assertEqual(rec.roomless_tba_rows, 2)
+        self.assertEqual(rec.online_no_room_rows, 1)
+        # every row lands in exactly one bucket
+        self.assertEqual(
+            rec.no_schedule + rec.intact_rows
+            + rec.roomless_tba_rows + rec.online_no_room_rows,
+            rec.total_rows,
+        )
+
+    def test_section_label_guard_distinguishes_real_room_from_label(self):
+        from scheduling.importing import reconcile
+        # A real Admin room whose code equals the Sec stays a room (intact)...
+        real = reconcile(
+            [["X", "A298", "f2f", "1", "N", "e@x.edu", "M [7:00AM-8:15AM] A298"]],
+            _SYNTH_COL)
+        self.assertEqual(real.intact_rows, 1)
+        self.assertEqual(real.total_meetings, 1)
+        # ...but an Unassigned section-label token equal to the Sec is roomless.
+        label = reconcile(
+            [["X", "C110", "f2f", "1", "N", "e@x.edu", "M [7:00AM-8:15AM] C110"]],
+            _SYNTH_COL)
+        self.assertEqual(label.intact_rows, 0)
+        self.assertEqual(label.roomless_tba_rows, 1)
+        self.assertEqual(label.total_meetings, 0)
+
+    def test_emailless_instructor_deduped_by_name(self):
+        from scheduling.importing import reconcile
+        rec = reconcile(_synth_rows(), _SYNTH_COL)
+        self.assertEqual(len(rec.emailless_instructor_keys), 1)
+
+
+@skipUnless(os.path.exists(OFFERINGS_XLSX),
+            "registrar offerings .xlsx not present (gitignored data/raw)")
+class ReconciliationTests(SimpleTestCase):
+    """Full-file dry reconciliation against the real offerings export. Asserts
+    the CONTEXT identity 1211 = 1042 + 44 + 14 + 111 and 2021 meetings."""
+
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
+        from scheduling import xlsx
+        from scheduling.importing import reconcile
+        grid = xlsx.read_grid(OFFERINGS_XLSX, "Sheet1")
+        header, data = grid[0], grid[1:]
+        col = {c: i for i, c in enumerate(header)}
+        cls.rec = reconcile(data, col)
+
+    def test_identity_and_bucket_counts(self):
+        r = self.rec
+        self.assertEqual(r.total_rows, 1211)
+        self.assertEqual(r.no_schedule, 111)
+        self.assertEqual(r.intact_rows, 1042)
+        self.assertEqual(r.roomless_tba_rows, 44)
+        self.assertEqual(r.online_no_room_rows, 14)
+        # exhaustive + disjoint partition
+        self.assertEqual(
+            r.intact_rows + r.roomless_tba_rows
+            + r.online_no_room_rows + r.no_schedule,
+            r.total_rows,
+        )
+
+    def test_total_meetings_is_2021(self):
+        self.assertEqual(self.rec.total_meetings, 2021)
+
+    def test_flagged_and_instructor_stats(self):
+        r = self.rec
+        self.assertIn("404", r.flagged_typo)
+        self.assertIn("516", r.flagged_typo)
+        # U-prefixed codes flagged as unassigned (never silently dropped).
+        self.assertTrue(any(c.startswith("U") for c in r.flagged_unassigned))
+        # ~10 email-less instructors (D7).
+        self.assertGreaterEqual(len(r.emailless_instructor_keys), 8)
+        self.assertLessEqual(len(r.emailless_instructor_keys), 12)
