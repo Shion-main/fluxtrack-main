@@ -5,15 +5,15 @@ milestone_name: "**Goal**: Faculty can request a lead-time-gated modality shift 
 current_phase: 5
 current_phase_name: Notifications — Read Surface & Web Push
 status: verifying
-stopped_at: Completed 04-05-PLAN.md
-last_updated: "2026-07-07T00:49:22.079Z"
+stopped_at: Completed 04.1-02-PLAN.md (load_room_master + reset_term, 12 tests green)
+last_updated: "2026-07-07T01:02:18.740Z"
 last_activity: 2026-07-05
 last_activity_desc: Phase 04 complete, transitioned to Phase 5
 progress:
   total_phases: 10
   completed_phases: 4
   total_plans: 31
-  completed_plans: 27
+  completed_plans: 28
   percent: 40
 ---
 
@@ -86,6 +86,7 @@ Progress: [████████░░] 80%
 | Phase 04 P07 | 35min | 3 tasks | 6 files |
 | Phase 04 P08 | 30min | 3 tasks | 5 files |
 | Phase 04.1 P01 | 14min | 3 tasks | 3 files |
+| Phase 04.1 P02 | 30min | 2 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -150,6 +151,7 @@ Recent decisions affecting current work:
 - [Phase 04]: 04-08: Dean approve/reject views delegate all state changes to apply_approval/reject_modality_shift; the view only fetches by pk and renders the outcome (TOCTOU/IDOR-safe)
 - [Phase 04]: 04-08: the D-07 no-room denial is a returned request.status==DENIED surfaced at 200 with a message; only a genuine service refusal (cross-department/non-pending) renders at 400
 - [Phase ?]: [Phase 04.1]: 04.1-01: stdlib zipfile+xml.etree .xlsx reader (no openpyxl/pandas, D1) + pure importing helpers; reconcile() four-bucket partition reproduces the real file exactly (1211 = 1042 + 44 + 14 + 111, 2021 meetings, 168 rooms, 200 instructors, 10 email-less). Section-label guard demotes room==Sec only when Unassigned (C110), keeping real rooms that share their Sec (A298).
+- [Phase ?]: 04.1-02: load_room_master tab-skip keys on classify_room fields (known building OR is_typo OR floor>0) so only the 2 summary tabs skip while U101/P101 import; reset_term is --yes-guarded, PROTECT-aware, reversible (D10)
 
 ### Pending Todos
 
@@ -172,6 +174,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-07-07T00:49:04.548Z
-Stopped at: Completed 04-05-PLAN.md
+Last session: 2026-07-07T01:02:18.727Z
+Stopped at: Completed 04.1-02-PLAN.md (load_room_master + reset_term, 12 tests green)
 Resume file: None
