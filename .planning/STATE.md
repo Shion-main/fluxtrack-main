@@ -5,15 +5,15 @@ milestone_name: "**Goal**: Faculty can request a lead-time-gated modality shift 
 current_phase: 5
 current_phase_name: Notifications — Read Surface & Web Push
 status: verifying
-stopped_at: Completed 04.1-02-PLAN.md (load_room_master + reset_term, 12 tests green)
-last_updated: "2026-07-07T01:02:18.740Z"
+stopped_at: Completed 04.1-03-PLAN.md (import_offerings hardened to full-term xlsx, 11 tests green)
+last_updated: "2026-07-07T01:18:36.659Z"
 last_activity: 2026-07-05
 last_activity_desc: Phase 04 complete, transitioned to Phase 5
 progress:
   total_phases: 10
   completed_phases: 4
   total_plans: 31
-  completed_plans: 28
+  completed_plans: 29
   percent: 40
 ---
 
@@ -87,6 +87,7 @@ Progress: [████████░░] 80%
 | Phase 04 P08 | 30min | 3 tasks | 5 files |
 | Phase 04.1 P01 | 14min | 3 tasks | 3 files |
 | Phase 04.1 P02 | 30min | 2 tasks | 3 files |
+| Phase 04.1 P03 | 40min | 3 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -152,6 +153,7 @@ Recent decisions affecting current work:
 - [Phase 04]: 04-08: the D-07 no-room denial is a returned request.status==DENIED surfaced at 200 with a message; only a genuine service refusal (cross-department/non-pending) renders at 400
 - [Phase ?]: [Phase 04.1]: 04.1-01: stdlib zipfile+xml.etree .xlsx reader (no openpyxl/pandas, D1) + pure importing helpers; reconcile() four-bucket partition reproduces the real file exactly (1211 = 1042 + 44 + 14 + 111, 2021 meetings, 168 rooms, 200 instructors, 10 email-less). Section-label guard demotes room==Sec only when Unassigned (C110), keeping real rooms that share their Sec (A298).
 - [Phase ?]: 04.1-02: load_room_master tab-skip keys on classify_room fields (known building OR is_typo OR floor>0) so only the 2 summary tabs skip while U101/P101 import; reset_term is --yes-guarded, PROTECT-aware, reversible (D10)
+- [Phase 04.1]: 04.1-03: import_offerings hardened to read the real offerings .xlsx by default (extension dispatch keeps the .csv+--building/--floor regression) and consume Plan 01's shared helpers instead of private parsing; keeps virtual/gym meetings, stamps per-meeting modality by room (blended yields physical+online), dedups instructors email-then-name (57 blank-email -> 10 Users), routes roomless-physical to a shared TBA room (Unassigned) and roomless-online to a VTBA Online placeholder. Real dry-run lands 1042+44+14+111=1211 / 2021 meetings / 200 instructors exactly; reconcile()-driven report flags typo 404/516 + the 10 email-less. R3ParityTests retired (ENV-02 now carried at full-term scale). materialize_sessions untouched (D8).
 
 ### Pending Todos
 
@@ -174,6 +176,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-07-07T01:02:18.727Z
-Stopped at: Completed 04.1-02-PLAN.md (load_room_master + reset_term, 12 tests green)
+Last session: 2026-07-07T01:18:36.646Z
+Stopped at: Completed 04.1-03-PLAN.md (import_offerings hardened to full-term xlsx, 11 tests green)
 Resume file: None

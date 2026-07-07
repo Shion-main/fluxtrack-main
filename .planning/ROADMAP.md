@@ -189,13 +189,13 @@ Plans:
   5. Instructors are deduped (email, then normalized name) to one account each and are connected to every one of their materialized sessions; the ~10 email-less instructors are flagged as unable to authenticate until an email is supplied.
   6. A reconciliation report balances: 1,211 offering rows = schedules created + roomless-TBA-flagged + online-no-room + no-schedule-string; and an F2F, a blended, and an online class each appear on the correct instructor's faculty schedule and are checkable.
 
-**Plans**: 2/4 plans executed
+**Plans**: 3/4 plans executed
 
 Plans:
 
 - [x] 04.1-01-PLAN.md — Stdlib .xlsx reader + pure parse/classify/normalize/modality + reconcile() four-bucket partition (+ parser unit tests) [Wave 1]
 - [x] 04.1-02-PLAN.md — load_room_master (114 named rooms + capacities via prefix map) + reversible reset_term guard [Wave 2]
-- [ ] 04.1-03-PLAN.md — Harden import_offerings: xlsx input, kept online/gym, per-meeting modality, instructor dedup, roomless-TBA, reconciliation report [Wave 2]
+- [x] 04.1-03-PLAN.md — Harden import_offerings: xlsx input, kept online/gym, per-meeting modality, instructor dedup, roomless-TBA, reconciliation report [Wave 2]
 - [ ] 04.1-04-PLAN.md — Run reset→room-master→import→materialize --days 14 on LocalDB; assert scale + F2F/blended/online spot check + human verify [Wave 3]
 
 ### Phase 5: Notifications — Read Surface & Web Push
