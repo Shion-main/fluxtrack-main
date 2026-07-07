@@ -126,3 +126,90 @@ class MergeCheckerOnlineVerifyTests(TestCase):
                 faculty=self.fx.faculty, checkin_method=CheckinMethod.MERGED
             ).values_list("pk", flat=True))
         self.assertEqual(filled, expected)
+
+
+class MergeCheckerOnlineFlagTests(TestCase):
+    """Task 2: one online Flag-not-present fails the whole online group ABSENT."""
+
+    def setUp(self):
+        cache.clear()
+        self.fx = make_merge_fixture()
+        self.checker = _make_online_checker(self.fx)
+        self.client.force_login(self.checker)
+
+    def _flag_online_anchor(self, note="No attendees present in the meeting."):
+        return self.client.post("/checker/action", {
+            "action": "flag_not_present", "session_id": self.fx.online_anchor.id,
+            "note": note})
+
+    def test_online_flag_absents_whole_group(self):
+        r = self._flag_online_anchor()
+        self.assertEqual(r.status_code, 200)
+        anchor = Session.objects.get(pk=self.fx.online_anchor.pk)
+        sibling = Session.objects.get(pk=self.fx.online_sibling.pk)
+
+        # Anchor absented authoritatively (as today) AND the sibling with it.
+        self.assertEqual(anchor.status, SessionStatus.ABSENT)
+        self.assertEqual(sibling.status, SessionStatus.ABSENT)
+
+        logs = AuditLog.objects.filter(
+            event_type="session.merged_absent", target_id=str(sibling.pk))
+        self.assertEqual(logs.count(), 1)
+        self.assertEqual(logs.first().payload["merged_from"], anchor.pk)
+
+    def test_online_flag_absent_respects_status_guard(self):
+        # An already-ACTIVE sibling is NOT forced ABSENT (SCHEDULED-only guard).
+        self.fx.online_sibling.status = SessionStatus.ACTIVE
+        self.fx.online_sibling.save(update_fields=["status"])
+
+        self._flag_online_anchor()
+        sibling = Session.objects.get(pk=self.fx.online_sibling.pk)
+        self.assertEqual(sibling.status, SessionStatus.ACTIVE)
+        self.assertFalse(AuditLog.objects.filter(
+            event_type="session.merged_absent",
+            target_id=str(sibling.pk)).exists())
+
+
+class MergeCheckerF2FRecordOnlyTests(TestCase):
+    """Task 2: the F2F Checker flag stays RECORD-ONLY -- it writes the flag but
+    does NOT force the merged F2F group ABSENT (D-07 F2F; the sweep handles it).
+
+    Driven directly against ``_apply_action`` with ``online=False``: the live F2F
+    ``/checker/action`` path is time-gated to an in-window session, but the merge
+    fixture is a fixed past date; driving ``_apply_action`` isolates exactly the
+    record-only branch this plan must leave unchanged.
+    """
+
+    def setUp(self):
+        cache.clear()
+        self.fx = make_merge_fixture()
+        self.checker = User.objects.create(
+            username="mmf_f2f_checker", email="mmf_f2f_checker@mcm.edu.ph",
+            role=Role.CHECKER, department=self.fx.dept, is_active=True)
+
+    def _req(self):
+        request = RequestFactory().post("/checker/action", {})
+        request.user = self.checker
+        return request
+
+    def test_f2f_flag_leaves_merged_group_scheduled(self):
+        _apply_action(
+            self._req(), self.fx.anchor, self.fx.anchor.room,
+            ValidationAction.FLAG_NOT_PRESENT, note="Room empty at scan.",
+            scanned_at=timezone.now())
+
+        anchor = Session.objects.get(pk=self.fx.anchor.pk)
+        sibling = Session.objects.get(pk=self.fx.sibling.pk)
+
+        # Record-only: NO status override on the F2F path -- anchor and sibling
+        # both stay SCHEDULED, left to the JOB-02 sweep (D-08).
+        self.assertEqual(anchor.status, SessionStatus.SCHEDULED)
+        self.assertEqual(sibling.status, SessionStatus.SCHEDULED)
+
+        # No group ABSENT fill happened (no merged_absent audit on the F2F path).
+        self.assertFalse(
+            AuditLog.objects.filter(event_type="session.merged_absent").exists())
+
+        # ...but the flag WAS recorded (record-only still writes the validation).
+        self.assertTrue(CheckerValidation.objects.filter(
+            session=self.fx.anchor, action="flag_not_present").exists())

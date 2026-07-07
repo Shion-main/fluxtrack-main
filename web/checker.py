@@ -33,7 +33,8 @@ from campus.models import Room
 from ops.models import AuditLog
 from ops.notify import notify
 from ops.policy import get_policy
-from scheduling.merge import propagate_merged_present
+from scheduling.merge import (propagate_merged_absent,
+                              propagate_merged_present)
 from scheduling.models import CheckinMethod, Modality, Session, SessionStatus
 from verification import resolver as R
 from verification.models import (Assignment, AssignmentScope, CheckerValidation,
@@ -297,8 +298,13 @@ def _apply_action(request, session, room, action, *, note="", identity_match=Non
                 propagate_merged_present(session, session.actual_start,
                                          actor=request.user)
         elif action == ValidationAction.FLAG_NOT_PRESENT:
-            session.status = SessionStatus.ABSENT      # authoritative (Open Q2)
-            session.save(update_fields=["status"])
+            # Online not-present fails the whole online merged group ABSENT
+            # immediately (D-07 online), in ONE transaction. The helper's
+            # SCHEDULED status-guard leaves an already-ACTIVE sibling untouched.
+            with transaction.atomic():
+                session.status = SessionStatus.ABSENT  # authoritative (Open Q2)
+                session.save(update_fields=["status"])
+                propagate_merged_absent(session, actor=request.user)
 
     if action in _FLAG_ACTIONS:
         # Consequential: reaches IFO + HR permanently, no dispute. The note is
