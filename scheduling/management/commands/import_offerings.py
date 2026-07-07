@@ -1,20 +1,43 @@
 """
-Import schedules from the MMCM "Course Offering" CSV (IFO-03).
+Import schedules from the MMCM "Course Offering" export (IFO-03, Phase 04.1).
 
-The reliable source is the `Schedule` text column, e.g.:
-    F [7:00AM-8:15AM] V415,M [7:00AM-8:15AM] R415,W [7:00AM-8:15AM] R415
-Each comma-separated part is "DAY [START-END] ROOM". V-prefix rooms are virtual
-(online) and skipped; R/A/G/U are physical. One physical meeting -> one Schedule row.
+Reads the real offerings ``.xlsx`` by default (D1) and consumes the shared,
+DB-free helpers in ``scheduling.importing`` (D4/D5/D7/D9) so the loader, the
+reconciliation report, and the tests all use ONE parsing/classification
+implementation — never a second private copy.
+
+What it does now (vs. the old CSV-only importer that dropped 1,215 meetings):
+  * D1  — dispatches by extension: ``.csv`` is read via ``csv.reader`` (keeps the
+          r3_synthetic fixture + ``--building/--floor`` regression, ImportPathTests);
+          anything else is read via the stdlib ``scheduling.xlsx.read_grid``.
+  * D2  — keeps virtual (V) and gym meetings; the old skip-virtual branch and the
+          GYM-dropping second-char-digit rule are gone.
+  * D4  — rooms are created via the prefix->building map (``classify_room``);
+          unknown/typo/P/U/digit-only codes land in the flagged "Unassigned"
+          building, never silently dropped.
+  * D5  — each meeting's modality is stamped by its room (``modality_for_room``):
+          a virtual room forces Online; a physical room keeps the course mode. A
+          blended course therefore yields BOTH a scannable physical schedule and
+          an Online schedule.
+  * D7  — instructors dedup by email, then by ``normalize_name_key`` — the 57
+          blank-email rows collapse to ~10 Users, never one per row.
+  * D9  — roomless PHYSICAL sections load against a single shared "TBA" placeholder
+          Room in the Unassigned building (section labels are never treated as
+          rooms); roomless ONLINE sections get an Online placeholder room.
+  * D8  — still sets ``Schedule.faculty``; materialize_sessions copies it onto
+          Session.faculty unchanged (that path is NOT touched here).
+  * D6  — the AcademicTerm window stays centered on TODAY, exactly one active term.
 
 Usage:
-    py -3.12 manage.py import_offerings --building R --floor 3           # a slice
-    py -3.12 manage.py import_offerings --dry-run                        # parse only
-    py -3.12 manage.py import_offerings                                  # whole file
+    py -3.12 manage.py import_offerings --dry-run                       # parse + report
+    py -3.12 manage.py import_offerings                                 # whole term (xlsx)
+    py -3.12 manage.py import_offerings --file data/fixtures/r3_synthetic.csv \
+        --building R --floor 3                                          # a CSV slice
 """
 import csv
-import re
+import os
 import secrets
-from datetime import time, timedelta
+from datetime import timedelta
 
 from django.contrib.auth import get_user_model
 from django.core.management.base import BaseCommand
@@ -24,65 +47,69 @@ from django.utils.text import slugify
 
 from accounts.models import Role
 from campus.models import Building, Floor, Room
-from scheduling.models import (AcademicTerm, DayOfWeek, Modality, Schedule,
+from scheduling import xlsx
+from scheduling.importing import (classify_room, modality_for_room,
+                                  normalize_name_key, parse_meetings, reconcile)
+from scheduling.importing import _is_real_room as is_real_room  # shared D9 rule
+from scheduling.models import (AcademicTerm, Modality, Schedule,
                                ScheduleStatus)
 
 User = get_user_model()
 
-DEFAULT_FILE = "data/raw/2T-25-26-Course Offerring(Sheet1).csv"
-MEET_RE = re.compile(r"([A-Z]{1,2})\s*\[([0-9: APM]+)-([0-9: APM]+)\]\s*([A-Za-z0-9\-]+)")
-DAY_MAP = {"M": DayOfWeek.MON, "T": DayOfWeek.TUE, "W": DayOfWeek.WED,
-           "TH": DayOfWeek.THU, "F": DayOfWeek.FRI, "S": DayOfWeek.SAT, "SU": DayOfWeek.SUN}
-MODE_MAP = {"online": Modality.ONLINE, "blended": Modality.BLENDED,
-            "f2f": Modality.F2F, "rotation": Modality.BLENDED}
+DEFAULT_FILE = "data/raw/2T-25-26-Course Offerring (1).xlsx"
+DEFAULT_SHEET = "Sheet1"
 
-
-def parse_time(raw):
-    """'7:00AM' / '12:00P' / '10:45A' / '1:15PM' -> datetime.time, or None."""
-    t = raw.strip().replace(" ", "")
-    m = re.match(r"(\d{1,2}):(\d{2})([AP])M?$", t, re.IGNORECASE)
-    if not m:
-        return None
-    hh, mm, ap = int(m.group(1)), int(m.group(2)), m.group(3).upper()
-    if ap == "P" and hh != 12:
-        hh += 12
-    if ap == "A" and hh == 12:
-        hh = 0
-    if hh > 23 or mm > 59:
-        return None
-    return time(hh, mm)
-
-
-def parse_room(code):
-    """'R415' -> ('R', 4, 'R415'); '' or 'V...' or malformed -> None (skip)."""
-    code = code.strip()
-    if not code or not code[0].isalpha() or code[0].upper() == "V":
-        return None
-    if len(code) < 2 or not code[1].isdigit():
-        return None
-    return code[0].upper(), int(code[1]), code
+# Shared roomless placeholders (D9). "TBA" -> Unassigned building (physical
+# sections with a day/time but no room); "VTBA" -> Online building (roomless
+# online sections). Both are get_or_created once and reused by every roomless row.
+TBA_ROOM_CODE = "TBA"
+ONLINE_TBA_ROOM_CODE = "VTBA"
 
 
 class Command(BaseCommand):
-    help = "Import rooms, faculty, and schedules from the Course Offering CSV."
+    help = "Import rooms, faculty, and schedules from the Course Offering export."
 
     def add_arguments(self, p):
         p.add_argument("--file", default=DEFAULT_FILE)
-        p.add_argument("--building", help="Filter to a building letter, e.g. R")
+        p.add_argument("--sheet", default=DEFAULT_SHEET,
+                       help="Worksheet name for .xlsx input (default Sheet1).")
+        p.add_argument("--building", help="Filter to a building prefix, e.g. R")
         p.add_argument("--floor", type=int, help="Filter to a floor number")
         p.add_argument("--limit", type=int, help="Max sections to import")
         p.add_argument("--term-name", default="2nd Term SY 2025-2026")
         p.add_argument("--dry-run", action="store_true")
 
+    # ------------------------------------------------------------------
+    # Input: extension dispatch (D1). Returns a list of row lists so the
+    # write loop iterates a plain Python list (never a live cursor -> no
+    # pyodbc HY010 single-active-result-set error).
+    # ------------------------------------------------------------------
+    def _read_rows(self, path, sheet):
+        ext = os.path.splitext(path)[1].lower()
+        if ext == ".csv":
+            with open(path, encoding="utf-8-sig", newline="") as fh:
+                return list(csv.reader(fh))
+        return xlsx.read_grid(path, sheet)
+
+    @staticmethod
+    def _cell(row, col, name):
+        """Read a named column tolerating short/sparse rows (missing -> '')."""
+        i = col.get(name)
+        if i is None or i >= len(row):
+            return ""
+        return (row[i] or "").strip()
+
     def handle(self, *args, **o):
-        with open(o["file"], encoding="utf-8-sig", newline="") as fh:
-            rows = list(csv.reader(fh))
+        rows = self._read_rows(o["file"], o["sheet"])
+        if not rows:
+            self.stdout.write(self.style.ERROR(f"No rows read from {o['file']}"))
+            return
         header, data = rows[0], rows[1:]
-        col = {c: i for i, c in enumerate(header)}
+        col = {(c or "").strip(): i for i, c in enumerate(header)}
 
         stats = {"sections": 0, "rooms": set(), "faculty": set(), "schedules": 0,
-                 "skip_no_schedule": 0, "skip_virtual": 0, "skip_bad_time": 0,
-                 "skip_filtered": 0}
+                 "skip_no_schedule": 0, "skip_bad_time": 0, "skip_filtered": 0,
+                 "tba_rows": 0, "online_no_room_rows": 0}
 
         term = None
         if not o["dry_run"]:
@@ -91,82 +118,123 @@ class Command(BaseCommand):
                 defaults={"start_date": timezone.now().date() - timedelta(days=14),
                           "end_date": timezone.now().date() + timedelta(days=100),
                           "is_active": True})
-            # Enforce "exactly one active term" (§5): make this the sole active one.
+            # D6: enforce "exactly one active term" — make this the sole active one.
             AcademicTerm.objects.exclude(pk=term.pk).update(is_active=False)
             if not term.is_active:
                 term.is_active = True
                 term.save(update_fields=["is_active"])
+
+        filtered = bool(o["building"]) or o["floor"] is not None
+        name_cache = {}  # normalized-name key -> User (blank-email dedup, D7)
 
         @transaction.atomic
         def run():
             for r in data:
                 if o["limit"] and stats["sections"] >= o["limit"]:
                     break
-                sched_str = r[col["Schedule"]].strip()
+                sched_str = self._cell(r, col, "Schedule")
                 if not sched_str:
                     stats["skip_no_schedule"] += 1
                     continue
 
-                meetings = []
-                for part in sched_str.split(","):
-                    m = MEET_RE.search(part)
-                    if not m:
-                        continue
-                    day_tok, st_raw, en_raw, room_raw = m.groups()
-                    parsed = parse_room(room_raw)
-                    if parsed is None:
-                        stats["skip_virtual"] += 1
-                        continue
-                    if o["building"] and parsed[0] != o["building"].upper():
-                        stats["skip_filtered"] += 1
-                        continue
-                    if o["floor"] is not None and parsed[1] != o["floor"]:
-                        stats["skip_filtered"] += 1
-                        continue
-                    st, en = parse_time(st_raw), parse_time(en_raw)
-                    if st is None or en is None or day_tok not in DAY_MAP:
+                sec = self._cell(r, col, "Sec")
+                course_mode = self._cell(r, col, "Mode")
+
+                real_meetings = []      # (day, start, end, room_info)
+                roomless_meetings = []  # (day, start, end) valid slot, no real room
+                for m in parse_meetings(sched_str):
+                    if m.day is None or not m.start or not m.end or m.start == m.end:
                         stats["skip_bad_time"] += 1
                         continue
-                    meetings.append((DAY_MAP[day_tok], st, en, parsed))
+                    if is_real_room(m.room_raw, sec):
+                        info = classify_room(m.room_raw)
+                        if o["building"] and info.prefix != o["building"].upper():
+                            stats["skip_filtered"] += 1
+                            continue
+                        if o["floor"] is not None and info.floor != o["floor"]:
+                            stats["skip_filtered"] += 1
+                            continue
+                        real_meetings.append((m.day, m.start, m.end, info))
+                    else:
+                        roomless_meetings.append((m.day, m.start, m.end))
 
-                if not meetings:
+                # Resolve the row's meetings to (room_info | placeholder-kind).
+                # An explicit building/floor filter scopes OUT roomless rows (the
+                # TBA/Online placeholders live in other buildings).
+                if real_meetings:
+                    plan = [(info, modality_for_room(info, course_mode), d, s, e)
+                            for (d, s, e, info) in real_meetings]
+                elif filtered:
+                    continue
+                elif course_mode.strip().lower() == "online":
+                    stats["online_no_room_rows"] += 1
+                    plan = [(None, Modality.ONLINE, d, s, e)
+                            for (d, s, e) in roomless_meetings]
+                    _placeholder = ONLINE_TBA_ROOM_CODE
+                else:
+                    stats["tba_rows"] += 1
+                    plan = [(None, modality_for_room(None, course_mode), d, s, e)
+                            for (d, s, e) in roomless_meetings]
+                    _placeholder = TBA_ROOM_CODE
+
+                if not plan:
                     continue
                 stats["sections"] += 1
+
                 if o["dry_run"]:
-                    for _d, _s, _e, (_b, _f, rc) in meetings:
-                        stats["rooms"].add(rc)
+                    for info, _mode, _d, _s, _e in plan:
+                        code = info.raw_code if info else _placeholder
+                        stats["rooms"].add(code.upper())
                         stats["schedules"] += 1
-                    stats["faculty"].add(r[col["Email"]].strip() or r[col["Instructor"]])
+                    stats["faculty"].add(self._faculty_key(r, col))
                     continue
 
-                faculty = self._faculty(r[col["Instructor"]], r[col["Email"]])
+                faculty = self._faculty(self._cell(r, col, "Instructor"),
+                                        self._cell(r, col, "Email"), name_cache)
                 stats["faculty"].add(faculty.username)
-                mode = MODE_MAP.get(r[col["Mode"]].strip().lower(), Modality.F2F)
-                enrolled = int(r[col["Enrolled"]]) if r[col["Enrolled"]].isdigit() else 0
-                for day, st, en, (b, f, rc) in meetings:
-                    room = self._room(b, f, rc)
-                    stats["rooms"].add(rc)
+                enrolled_raw = self._cell(r, col, "Enrolled")
+                enrolled = int(enrolled_raw) if enrolled_raw.isdigit() else 0
+                course_code = self._cell(r, col, "Code")
+                for info, mode, day, st, en in plan:
+                    room = (self._room_for(info) if info is not None
+                            else self._placeholder_room(_placeholder))
+                    stats["rooms"].add(room.code.upper())
                     _, created = Schedule.objects.get_or_create(
-                        term=term, course_code=r[col["Code"]], section=r[col["Sec"]],
+                        term=term, course_code=course_code, section=sec,
                         day_of_week=day, room=room, start_time=st,
-                        defaults={"faculty": faculty, "end_time": en, "modality": mode,
-                                  "enrolled_count": enrolled, "status": ScheduleStatus.ACTIVE})
+                        defaults={"faculty": faculty, "end_time": en,
+                                  "modality": mode, "enrolled_count": enrolled,
+                                  "status": ScheduleStatus.ACTIVE})
                     if created:
                         stats["schedules"] += 1
 
         run()
-        self._report(stats, o)
+        self._report(stats, o, data, col)
 
-    def _faculty(self, name, email):
+    # ------------------------------------------------------------------
+    # Instructor dedup (D7): email, then normalized name.
+    # ------------------------------------------------------------------
+    def _faculty_key(self, r, col):
+        """The dry-run dedup key mirroring _faculty (email, else name key)."""
+        email = self._cell(r, col, "Email")
+        if email:
+            return "e:" + email.lower()
+        return "n:" + normalize_name_key(self._cell(r, col, "Instructor"))
+
+    def _faculty(self, name, email, name_cache):
         email = email.strip()
         if email:
             uname = email.split("@")[0]
             u, created = User.objects.get_or_create(
                 email=email, defaults={"username": uname, "role": Role.FACULTY})
         else:
-            uname = f"fac-{slugify(name)[:24]}" or f"fac-{secrets.token_hex(3)}"
+            key = normalize_name_key(name)
+            if key in name_cache:
+                return name_cache[key]
+            uname = f"fac-{slugify(key)[:24]}" or f"fac-{secrets.token_hex(3)}"
             u, created = User.objects.get_or_create(
                 username=uname, defaults={"role": Role.FACULTY})
+            name_cache[key] = u
         if created:
             parts = [p.strip() for p in name.split(",")]
             u.last_name = parts[0].title() if parts else ""
@@ -175,15 +243,26 @@ class Command(BaseCommand):
             u.save()
         return u
 
-    def _room(self, b, f, code):
-        bldg, _ = Building.objects.get_or_create(code=b, defaults={"name": f"Building {b}"})
-        floor, _ = Floor.objects.get_or_create(building=bldg, number=f)
-        room, created = Room.objects.get_or_create(code=code, defaults={
+    # ------------------------------------------------------------------
+    # Room creation (D4): prefix->building via classify_room / RoomInfo.
+    # ------------------------------------------------------------------
+    def _room_for(self, info):
+        bldg, _ = Building.objects.get_or_create(
+            code=info.building_code, defaults={"name": info.building_name})
+        floor, _ = Floor.objects.get_or_create(building=bldg, number=info.floor)
+        room, _ = Room.objects.get_or_create(code=info.raw_code, defaults={
             "floor": floor, "qr_token": secrets.token_urlsafe(24),
             "manual_code": f"{secrets.randbelow(1000000):06d}"})
         return room
 
-    def _report(self, s, o):
+    def _placeholder_room(self, code):
+        """Shared roomless placeholder (D9): TBA (Unassigned) / VTBA (Online)."""
+        return self._room_for(classify_room(code))
+
+    # ------------------------------------------------------------------
+    # Reporting — replaced by the reconciliation report in Task 2.
+    # ------------------------------------------------------------------
+    def _report(self, s, o, data, col):
         w = self.stdout.write
         head = "DRY RUN — nothing written" if o["dry_run"] else "Import complete"
         w(self.style.SUCCESS(f"\n{head}"))
@@ -194,7 +273,8 @@ class Command(BaseCommand):
         w(f"  Rooms             : {len(s['rooms'])}")
         w(f"  Faculty           : {len(s['faculty'])}")
         w(f"  Schedule rows     : {s['schedules']}")
+        w(f"  Roomless -> TBA rows        : {s['tba_rows']}")
+        w(f"  Online (no room) rows       : {s['online_no_room_rows']}")
         w(f"  Skipped — no schedule string : {s['skip_no_schedule']}")
-        w(f"  Skipped — virtual/other room : {s['skip_virtual']}")
         w(f"  Skipped — off-filter meeting : {s['skip_filtered']}")
         w(f"  Skipped — bad time/day       : {s['skip_bad_time']}")
