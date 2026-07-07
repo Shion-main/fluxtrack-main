@@ -124,3 +124,29 @@ class ImportReportTests(TransactionTestCase):
         self.assertLessEqual(sections, 1120)
         # ~2,021 real meetings + the roomless placeholder rows.
         self.assertGreaterEqual(schedules, 2000)
+
+    def test_reconciliation_identity_and_meeting_total(self):
+        text = self._dry_run_output()
+        # The four bucket labels are all present.
+        for label in ("intact (real room)", "roomless -> TBA",
+                      "online (no room)", "no schedule string"):
+            self.assertIn(label, text)
+        # The balanced 1,211-row identity is printed and marked OK.
+        m = re.search(r"IDENTITY:.*==\s*total_rows\s*\((\d+)\)\s*\[(\w+)\]", text)
+        self.assertIsNotNone(m, "no reconciliation identity line found")
+        self.assertEqual(m.group(1), "1211")
+        self.assertEqual(m.group(2), "OK")
+        # The 2,021 real-meeting total is reported.
+        meetings = int(re.search(r"Total meetings \(real\)\s*:\s*(\d+)", text).group(1))
+        self.assertEqual(meetings, 2021)
+
+    def test_flags_typo_rooms_and_emailless_instructors(self):
+        text = self._dry_run_output()
+        # D4: the two typo rooms (no building prefix) are flagged.
+        typo_line = re.search(r"Typo rooms.*:\s*(.+)", text).group(1)
+        self.assertIn("404", typo_line)
+        self.assertIn("516", typo_line)
+        # D7: the ~10 email-less instructors are flagged with a count.
+        n = int(re.search(r"Email-less instructors:\s*(\d+)", text).group(1))
+        self.assertGreaterEqual(n, 8)
+        self.assertLessEqual(n, 12)

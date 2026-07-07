@@ -209,7 +209,7 @@ class Command(BaseCommand):
                         stats["schedules"] += 1
 
         run()
-        self._report(stats, o, data, col)
+        self._report(stats, o, data, col, term)
 
     # ------------------------------------------------------------------
     # Instructor dedup (D7): email, then normalized name.
@@ -260,21 +260,75 @@ class Command(BaseCommand):
         return self._room_for(classify_room(code))
 
     # ------------------------------------------------------------------
-    # Reporting — replaced by the reconciliation report in Task 2.
+    # Reconciliation report (D4/D7/D9): prove the four-bucket partition and
+    # flag every Unassigned/typo room + email-less instructor so a silent drop
+    # can never hide. Driven by the SAME scheduling.importing.reconcile the
+    # Plan 04 run/verify consumes — one source of truth.
     # ------------------------------------------------------------------
-    def _report(self, s, o, data, col):
+    def _report(self, s, o, data, col, term):
         w = self.stdout.write
         head = "DRY RUN — nothing written" if o["dry_run"] else "Import complete"
         w(self.style.SUCCESS(f"\n{head}"))
         flt = " ".join(f for f in [f"building={o['building']}" if o["building"] else "",
                                    f"floor={o['floor']}" if o["floor"] is not None else ""] if f)
         w(f"  Filter: {flt or 'none (whole file)'}")
-        w(f"  Sections imported : {s['sections']}")
-        w(f"  Rooms             : {len(s['rooms'])}")
-        w(f"  Faculty           : {len(s['faculty'])}")
-        w(f"  Schedule rows     : {s['schedules']}")
-        w(f"  Roomless -> TBA rows        : {s['tba_rows']}")
-        w(f"  Online (no room) rows       : {s['online_no_room_rows']}")
-        w(f"  Skipped — no schedule string : {s['skip_no_schedule']}")
-        w(f"  Skipped — off-filter meeting : {s['skip_filtered']}")
-        w(f"  Skipped — bad time/day       : {s['skip_bad_time']}")
+
+        # Importer's own tally of what it loaded (per-meeting).
+        w("  Loaded:")
+        w(f"    Sections imported : {s['sections']}")
+        w(f"    Rooms             : {len(s['rooms'])}")
+        w(f"    Faculty           : {len(s['faculty'])}")
+        w(f"    Schedule rows     : {s['schedules']}")
+        w(f"    Roomless -> TBA rows  : {s['tba_rows']}")
+        w(f"    Online (no room) rows : {s['online_no_room_rows']}")
+        w(f"    Skipped — off-filter  : {s['skip_filtered']}")
+        w(f"    Skipped — bad time/day: {s['skip_bad_time']}")
+
+        # The authoritative reconciliation partition over EVERY offering row.
+        rec = reconcile(data, col)
+        bucket_sum = (rec.intact_rows + rec.roomless_tba_rows
+                      + rec.online_no_room_rows + rec.no_schedule)
+        balanced = bucket_sum == rec.total_rows
+        w("  Reconciliation (every offering row lands in exactly one bucket):")
+        w(f"    intact (real room)    : {rec.intact_rows}")
+        w(f"    roomless -> TBA       : {rec.roomless_tba_rows}")
+        w(f"    online (no room)      : {rec.online_no_room_rows}")
+        w(f"    no schedule string    : {rec.no_schedule}")
+        identity = (f"{rec.intact_rows} + {rec.roomless_tba_rows} + "
+                    f"{rec.online_no_room_rows} + {rec.no_schedule} = {bucket_sum}")
+        w(f"    IDENTITY: {identity} == total_rows ({rec.total_rows})  "
+          f"[{'OK' if balanced else 'MISMATCH'}]")
+        w(f"    Total meetings (real) : {rec.total_meetings}  (target 2021)")
+        w(f"    Distinct rooms        : {rec.distinct_rooms}")
+        w(f"    Distinct instructors  : {rec.distinct_instructors}")
+
+        # Flagged lists — visible warning markers; nothing is silently dropped.
+        w("  Flagged (D4/D7 — never silently dropped):")
+        typo = ", ".join(rec.flagged_typo) or "none"
+        unassigned = ", ".join(rec.flagged_unassigned) or "none"
+        w(self.style.WARNING(f"    ! Typo rooms (no building prefix): {typo}"))
+        w(self.style.WARNING(f"    ! Unassigned rooms (P/U/unknown): {unassigned}"))
+        emailless = rec.emailless_instructor_keys
+        w(self.style.WARNING(
+            f"    ! Email-less instructors: {len(emailless)} "
+            f"(cannot authenticate via Entra until an email is supplied)"))
+        for k in emailless:
+            w(self.style.WARNING(f"        - {k}"))
+
+        # A single loud line whenever the identity fails to balance.
+        if not balanced:
+            w(self.style.ERROR(
+                f"  WARNING: reconciliation identity does NOT balance "
+                f"({bucket_sum} != {rec.total_rows}) — a row was lost or "
+                f"double-counted."))
+
+        # Real run: show live DB counts next to the reconciliation targets so a
+        # human can eyeball parity (same report shape as --dry-run otherwise).
+        if not o["dry_run"] and term is not None:
+            live_sched = Schedule.objects.filter(term=term).count()
+            live_rooms = Room.objects.count()
+            live_faculty = User.objects.filter(role=Role.FACULTY).count()
+            w("  Live DB counts (eyeball parity vs. targets above):")
+            w(f"    Schedules (this term) : {live_sched}")
+            w(f"    Rooms                 : {live_rooms}")
+            w(f"    Faculty               : {live_faculty}")
