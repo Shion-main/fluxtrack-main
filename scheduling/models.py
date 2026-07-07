@@ -79,6 +79,7 @@ class CheckinMethod(models.TextChoices):
     MANUAL_CODE = "manual_code", "Manual code"
     ONLINE_MANUAL = "online_manual", "Online (manual)"
     FORCE_HANDOVER = "force_handover", "Force handover"
+    MERGED = "merged", "Merged (sibling fill)"
 
 
 class Session(models.Model):
