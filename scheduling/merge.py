@@ -12,11 +12,20 @@ Absent. This module is the shared merge core the whole phase builds on:
     against the live call-sites the same way the sweep re-affirms the shared
     no-show predicate.
 
+  - `propagate_merged_present` / `propagate_merged_absent` are the impure ORM
+    seams that call the pure detector, then flip ONLY status=SCHEDULED siblings
+    in one atomic, MSSQL-safe filtered `.update()` + `bulk_create` audit write
+    (mirrors scheduling/jobs.py:sweep_no_shows materialize-before-mutate).
+
 D-03: detection is dynamic from existing Session fields at check-in/verify/sweep
 time -- no merge-group model, no grouping migration, no roster/data merge.
 
 ASCII-only by convention (Windows cp1252).
 """
+from django.db import transaction
+
+from ops.models import AuditLog
+from scheduling.models import CheckinMethod, Session, SessionStatus
 
 
 def merged_sibling_ids(anchor, candidates):
@@ -48,3 +57,102 @@ def merged_sibling_ids(anchor, candidates):
         if c.room_id == anchor.room_id or c.course_code == anchor.course_code:
             out.add(c.id)
     return out
+
+
+def _materialize_candidates(anchor):
+    """Fetch + course_code-annotate the anchor's same-faculty/same-start rows.
+
+    Materializes the queryset to a list (cursor closed) BEFORE any write, so the
+    later filtered ``.update()`` / ``bulk_create`` never fires an INSERT while a
+    SELECT cursor is still open -- the MSSQL HY010 guard from
+    ``scheduling.jobs.sweep_no_shows``. Attaches ``course_code`` (from the related
+    schedule) onto the anchor and each candidate so the pure detector can read it.
+    """
+    candidates = list(
+        Session.objects.filter(
+            faculty_id=anchor.faculty_id,
+            scheduled_start=anchor.scheduled_start,
+        )
+        .exclude(pk=anchor.pk)
+        .select_related("schedule")
+    )
+    anchor.course_code = anchor.schedule.course_code
+    for c in candidates:
+        c.course_code = c.schedule.course_code
+    return candidates
+
+
+def propagate_merged_present(anchor, now, actor):
+    """Atomic SCHEDULED->ACTIVE fill for the anchor's merged siblings (D-04/D-05).
+
+    After the anchor has itself been activated (check-in), flip every SCHEDULED
+    merged sibling to ACTIVE, sharing the anchor's ``actual_start`` (== ``now``)
+    and stamping ``checkin_method=MERGED``; write one ``session.merged_present``
+    AuditLog per filled row with payload ``{"merged_from": anchor.pk}``. The
+    anchor itself is never re-stamped (helper only touches siblings). Returns the
+    list of filled pks (``[]`` when nothing qualifies -> idempotent).
+
+    Faculty-scoped (T-04.2-01) and status-guarded (T-04.2-02): the ``.update()``
+    is filtered to ``status=SCHEDULED`` so an already-ACTIVE/ABSENT/COMPLETED
+    sibling is left untouched. One filtered ``.update()`` + ``bulk_create`` inside
+    a single ``transaction.atomic()`` avoids a half-flipped group and the HY010
+    mutate-while-iterate trap (T-04.2-03).
+    """
+    with transaction.atomic():
+        candidates = _materialize_candidates(anchor)
+        sib_ids = merged_sibling_ids(anchor, candidates)
+        fill_ids = list(
+            Session.objects.filter(pk__in=sib_ids, status=SessionStatus.SCHEDULED)
+            .values_list("pk", flat=True)
+        )
+        if not fill_ids:
+            return []
+        Session.objects.filter(pk__in=fill_ids).update(
+            status=SessionStatus.ACTIVE,
+            actual_start=now,
+            checkin_method=CheckinMethod.MERGED,
+        )
+        AuditLog.objects.bulk_create([
+            AuditLog(
+                actor=actor,
+                event_type="session.merged_present",
+                target_type="session",
+                target_id=str(pk),
+                payload={"merged_from": anchor.pk},
+            )
+            for pk in fill_ids
+        ])
+        return fill_ids
+
+
+def propagate_merged_absent(anchor, actor):
+    """Atomic SCHEDULED->ABSENT fill for the anchor's merged siblings (online D-07).
+
+    The online counterpart of ``propagate_merged_present``: when the anchor is
+    resolved Absent (online Flag-not-present / un-verified no-show), flip every
+    SCHEDULED merged sibling to ABSENT and write one ``session.merged_absent``
+    AuditLog per row with payload ``{"merged_from": anchor.pk}``. Same
+    faculty-scoping, status-guard, atomicity, and HY010 safety as the present
+    path. Returns the list of absented pks (``[]`` when nothing qualifies).
+    """
+    with transaction.atomic():
+        candidates = _materialize_candidates(anchor)
+        sib_ids = merged_sibling_ids(anchor, candidates)
+        fill_ids = list(
+            Session.objects.filter(pk__in=sib_ids, status=SessionStatus.SCHEDULED)
+            .values_list("pk", flat=True)
+        )
+        if not fill_ids:
+            return []
+        Session.objects.filter(pk__in=fill_ids).update(status=SessionStatus.ABSENT)
+        AuditLog.objects.bulk_create([
+            AuditLog(
+                actor=actor,
+                event_type="session.merged_absent",
+                target_type="session",
+                target_id=str(pk),
+                payload={"merged_from": anchor.pk},
+            )
+            for pk in fill_ids
+        ])
+        return fill_ids

@@ -144,3 +144,116 @@ def make_shift_fixture(prefix="msf"):
         online_session=online_session,
         competitor=competitor,
     )
+
+
+def make_merge_fixture(prefix="mmf"):
+    """Seed and return the canonical GARAY co-scheduled ("merged sections") graph.
+
+    Mirrors make_shift_fixture's ``_aware`` + prefix-namespacing idiom (Phase
+    04.2, D-01/D-02). ASCII-only. Every unique column is namespaced by ``prefix``
+    so two calls in one test never collide on a UNIQUE constraint.
+
+    Object graph (one cdgaray-shaped faculty owns them all):
+      - F2F merged pair at 15:45 (Monday): ``anchor`` = MMA116 section A301 in
+        room A408-A, ``sibling`` = MMA116 section A302 in room A408-B. Same
+        faculty + exact start + SAME course -> they merge (D-01 course arm).
+      - ``control``: same faculty + same 15:45 start but a DIFFERENT room AND a
+        DIFFERENT course, so it is NOT a merge sibling (negative case).
+      - Online merged pair at 10:00 sharing course_code ONL200 in two distinct
+        V-rooms (modality online): ``online_anchor`` + ``online_sibling``, for
+        the propagate_merged_absent (online D-07) path. A separate start keeps
+        the online group independent of the F2F anchor's candidate set.
+
+    Also returns ``make_extra_siblings(count)`` -> list: seeds ``count`` more
+    SCHEDULED MMA116 siblings sharing the anchor's faculty + exact start (each in
+    its own room/section) for the HY010 batch test.
+
+    Returns a SimpleNamespace: dept, faculty, building, term, anchor, sibling,
+    control, online_anchor, online_sibling, make_extra_siblings.
+    """
+    User = get_user_model()
+
+    dept = Department.objects.create(name=f"{prefix} Department", code=f"{prefix}-DEP")
+    faculty = User.objects.create(
+        username=f"{prefix}_cdgaray", email=f"{prefix}_cdgaray@mcm.edu.ph",
+        role=Role.FACULTY, department=dept, is_active=True,
+    )
+    building = Building.objects.create(name=f"{prefix} Hall", code=f"{prefix}-BLD")
+    floor = Floor.objects.create(building=building, number=4)
+    term = AcademicTerm.objects.create(
+        name=f"{prefix} Term", start_date=date(2026, 1, 1),
+        end_date=date(2026, 12, 31), is_active=True,
+    )
+
+    f2f_start_t, f2f_end_t = time(15, 45), time(17, 15)
+    onl_start_t, onl_end_t = time(10, 0), time(11, 30)
+    f2f_start = _aware(IN_WINDOW_DATE, f2f_start_t)
+    f2f_end = _aware(IN_WINDOW_DATE, f2f_end_t)
+    onl_start = _aware(IN_WINDOW_DATE, onl_start_t)
+    onl_end = _aware(IN_WINDOW_DATE, onl_end_t)
+
+    counter = {"n": 0}
+
+    def _room(tag):
+        counter["n"] += 1
+        return Room.objects.create(
+            floor=floor, code=f"{prefix}-{tag}", capacity=40,
+            qr_token=f"{prefix}-qr-{tag}",
+            manual_code=f"{prefix[:2].upper()}{counter['n']:03d}"[:6],
+        )
+
+    def _schedule(course, section, room, start_t, end_t, modality):
+        return Schedule.objects.create(
+            term=term, course_code=course, section=section, faculty=faculty,
+            room=room, day_of_week=0, start_time=start_t, end_time=end_t,
+            modality=modality,
+        )
+
+    def _session(schedule, room, start, end, declared=""):
+        return Session.objects.create(
+            schedule=schedule, faculty=faculty, room=room, date=IN_WINDOW_DATE,
+            scheduled_start=start, scheduled_end=end,
+            status=SessionStatus.SCHEDULED, declared_modality=declared,
+        )
+
+    # F2F merged pair (course arm): MMA116 in two different rooms, same start.
+    room_a = _room("A408-A")
+    room_b = _room("A408-B")
+    anchor_sched = _schedule("MMA116", "A301", room_a, f2f_start_t, f2f_end_t, Modality.F2F)
+    sibling_sched = _schedule("MMA116", "A302", room_b, f2f_start_t, f2f_end_t, Modality.F2F)
+    anchor = _session(anchor_sched, room_a, f2f_start, f2f_end)
+    sibling = _session(sibling_sched, room_b, f2f_start, f2f_end)
+
+    # Control: same faculty + same start, DIFFERENT room AND DIFFERENT course.
+    room_c = _room("A408-C")
+    control_sched = _schedule("GEC010", "C101", room_c, f2f_start_t, f2f_end_t, Modality.F2F)
+    control = _session(control_sched, room_c, f2f_start, f2f_end)
+
+    # Online merged pair (course arm) at a distinct start, two V-rooms.
+    vroom_1 = _room("V-1")
+    vroom_2 = _room("V-2")
+    onl_anchor_sched = _schedule("ONL200", "V01", vroom_1, onl_start_t, onl_end_t, Modality.ONLINE)
+    onl_sibling_sched = _schedule("ONL200", "V02", vroom_2, onl_start_t, onl_end_t, Modality.ONLINE)
+    online_anchor = _session(onl_anchor_sched, vroom_1, onl_start, onl_end, declared=Modality.ONLINE)
+    online_sibling = _session(onl_sibling_sched, vroom_2, onl_start, onl_end, declared=Modality.ONLINE)
+
+    def make_extra_siblings(count):
+        created = []
+        for i in range(count):
+            r = _room(f"X{i}")
+            sch = _schedule("MMA116", f"A31{i}", r, f2f_start_t, f2f_end_t, Modality.F2F)
+            created.append(_session(sch, r, f2f_start, f2f_end))
+        return created
+
+    return SimpleNamespace(
+        dept=dept,
+        faculty=faculty,
+        building=building,
+        term=term,
+        anchor=anchor,
+        sibling=sibling,
+        control=control,
+        online_anchor=online_anchor,
+        online_sibling=online_sibling,
+        make_extra_siblings=make_extra_siblings,
+    )
