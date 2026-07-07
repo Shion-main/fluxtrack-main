@@ -116,19 +116,26 @@ def _apply(request, resolution, room, method, reason=""):
                body=f"{user.get_full_name() or user.username} moved "
                     f"{session.schedule.course_code} from {old} to {room.code}.")
     elif o == R.ROOM_OCCUPIED:  # confirmed force handover (FAC-09)
-        prior = Session.objects.filter(pk=resolution.prior_session_id).first()
-        if prior and prior.status == SessionStatus.ACTIVE:
-            prior.status = SessionStatus.COMPLETED
-            prior.actual_end = now
-            prior.save(update_fields=["status", "actual_end"])
-        session.status = SessionStatus.ACTIVE
-        session.actual_start = now
-        session.checkin_method = CheckinMethod.FORCE_HANDOVER
-        session.handover_from_session = prior
-        session.save(update_fields=["status", "actual_start", "checkin_method",
-                                    "handover_from_session"])
-        audit("session.force_handover", room=room.code,
-              prior_session=resolution.prior_session_id)
+        # Prior auto-complete + anchor handover + merged-group present fill all
+        # share ONE transaction (D-04), mirroring the CHECKED_IN path. The prior
+        # occupant is a DIFFERENT faculty and is never merge-filled (faculty-
+        # scoped helper, T-04.2-01).
+        with transaction.atomic():
+            prior = Session.objects.filter(pk=resolution.prior_session_id).first()
+            if prior and prior.status == SessionStatus.ACTIVE:
+                prior.status = SessionStatus.COMPLETED
+                prior.actual_end = now
+                prior.save(update_fields=["status", "actual_end"])
+            session.status = SessionStatus.ACTIVE
+            session.actual_start = now
+            session.checkin_method = CheckinMethod.FORCE_HANDOVER
+            session.handover_from_session = prior
+            session.save(update_fields=["status", "actual_start", "checkin_method",
+                                        "handover_from_session"])
+            audit("session.force_handover", room=room.code,
+                  prior_session=resolution.prior_session_id)
+            # Anchor keeps FORCE_HANDOVER (D-09); siblings become MERGED.
+            propagate_merged_present(session, now, user)
         notify(role=Role.IFO_ADMIN, type="room_event", title="Force handover",
                body=f"{room.code}: prior session auto-completed; "
                     f"{session.schedule.course_code} started via handover.")

@@ -14,6 +14,7 @@ graph seeded by Plan 01). ASCII-only by convention (Windows cp1252).
 from django.contrib.auth import get_user_model
 from django.test import RequestFactory, TestCase
 
+from accounts.models import Role
 from ops.models import AuditLog
 from scheduling import resolver as R
 from scheduling.merge import _materialize_candidates, merged_sibling_ids
@@ -89,3 +90,103 @@ class MergeScanCheckedInTests(TestCase):
         )
         self.assertEqual(filled, expected)
         self.assertEqual(filled, {self.fx.sibling.pk})
+
+
+class MergeScanForceHandoverTests(TestCase):
+    """Task 2: a confirmed force-handover (ROOM_OCCUPIED) also propagates
+    present across the merged group, while the anchor stays FORCE_HANDOVER and
+    the displaced prior occupant is not merge-filled."""
+
+    def setUp(self):
+        self.fx = make_merge_fixture()
+        # A DIFFERENT faculty holds the anchor's room ACTIVE (the occupant the
+        # force-handover displaces). It shares neither the acting faculty nor the
+        # merged group, so it must never be merge-filled (T-04.2-01 scoping).
+        self.occupant = User.objects.create(
+            username="mmf_occ", email="mmf_occ@mcm.edu.ph",
+            role=Role.FACULTY, department=self.fx.dept, is_active=True,
+        )
+        anchor_sched = self.fx.anchor.schedule
+        occ_sched = Schedule.objects.create(
+            term=self.fx.term, course_code="OCC999", section="Z",
+            faculty=self.occupant, room=self.fx.anchor.room, day_of_week=0,
+            start_time=anchor_sched.start_time, end_time=anchor_sched.end_time,
+            modality=Modality.F2F,
+        )
+        self.prior = Session.objects.create(
+            schedule=occ_sched, faculty=self.occupant, room=self.fx.anchor.room,
+            date=self.fx.anchor.date,
+            scheduled_start=self.fx.anchor.scheduled_start,
+            scheduled_end=self.fx.anchor.scheduled_end,
+            status=SessionStatus.ACTIVE,
+            actual_start=self.fx.anchor.scheduled_start,
+        )
+
+    def _handover(self):
+        resolution = R.Resolution(
+            R.ROOM_OCCUPIED, self.fx.anchor.pk, prior_session_id=self.prior.pk
+        )
+        return _apply(
+            _req(self.fx.faculty), resolution, self.fx.anchor.room,
+            CheckinMethod.QR_SCAN,
+        )
+
+    def test_force_handover_propagates_present(self):
+        self._handover()
+        anchor = Session.objects.get(pk=self.fx.anchor.pk)
+        sibling = Session.objects.get(pk=self.fx.sibling.pk)
+        prior = Session.objects.get(pk=self.prior.pk)
+
+        # Anchor activated via handover, keeps its REAL method (never MERGED).
+        self.assertEqual(anchor.status, SessionStatus.ACTIVE)
+        self.assertEqual(anchor.checkin_method, CheckinMethod.FORCE_HANDOVER)
+
+        # Sibling filled present across the group.
+        self.assertEqual(sibling.status, SessionStatus.ACTIVE)
+        self.assertEqual(sibling.checkin_method, CheckinMethod.MERGED)
+        self.assertEqual(sibling.actual_start, anchor.actual_start)
+        self.assertEqual(
+            AuditLog.objects.filter(
+                event_type="session.merged_present", target_id=str(sibling.pk)
+            ).count(),
+            1,
+        )
+
+        # Displaced prior occupant: auto-completed, NOT merge-filled.
+        self.assertEqual(prior.status, SessionStatus.COMPLETED)
+        self.assertNotEqual(prior.checkin_method, CheckinMethod.MERGED)
+        self.assertEqual(
+            AuditLog.objects.filter(
+                event_type="session.merged_present", target_id=str(prior.pk)
+            ).count(),
+            0,
+        )
+
+
+class MergeScanIdempotencyTests(TestCase):
+    """Task 2: re-applying the same merge check-in fills the sibling exactly
+    once (the helper's SCHEDULED status-guard makes propagation idempotent)."""
+
+    def setUp(self):
+        self.fx = make_merge_fixture()
+
+    def test_repeated_checkin_fills_sibling_once(self):
+        resolution = R.Resolution(R.CHECKED_IN, self.fx.anchor.pk)
+        _apply(_req(self.fx.faculty), resolution, self.fx.anchor.room,
+               CheckinMethod.QR_SCAN)
+        first_start = Session.objects.get(pk=self.fx.sibling.pk).actual_start
+
+        # Second application of the identical merge check-in.
+        _apply(_req(self.fx.faculty), resolution, self.fx.anchor.room,
+               CheckinMethod.QR_SCAN)
+        sibling = Session.objects.get(pk=self.fx.sibling.pk)
+
+        self.assertEqual(sibling.actual_start, first_start)
+        self.assertEqual(sibling.checkin_method, CheckinMethod.MERGED)
+        self.assertEqual(
+            AuditLog.objects.filter(
+                event_type="session.merged_present",
+                target_id=str(self.fx.sibling.pk),
+            ).count(),
+            1,
+        )
