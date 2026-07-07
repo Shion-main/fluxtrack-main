@@ -8,7 +8,7 @@ dropped". Nothing here touches the database or imports Django models beyond the
 is unit-testable as a plain ``SimpleTestCase``.
 """
 import re
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import time
 
 from scheduling.models import DayOfWeek, Modality
@@ -67,6 +67,24 @@ class MeetingParse:
     start: object        # datetime.time, or None
     end: object          # datetime.time, or None
     room_raw: str        # "" when the meeting had no trailing room token
+
+
+@dataclass(frozen=True)
+class Reconciliation:
+    """The four-bucket partition of every offering row + derived stats. This is
+    the single source of truth the importer report (Plan 03) and the run/verify
+    assertions (Plan 04) both consume."""
+    total_rows: int
+    no_schedule: int
+    intact_rows: int
+    roomless_tba_rows: int
+    online_no_room_rows: int
+    total_meetings: int
+    flagged_unassigned: list        # unassigned room codes (U-prefix, etc.)
+    flagged_typo: list              # digit-only / no-prefix typo codes (404, 516)
+    distinct_rooms: int             # distinct real room codes seen
+    distinct_instructors: int       # distinct (email OR normalized-name) keys
+    emailless_instructor_keys: list  # normalized-name keys carrying no email
 
 
 # --------------------------------------------------------------------------
@@ -204,3 +222,115 @@ def normalize_name_key(name):
     cleaned = (name or "").upper().replace(",", " ").replace(".", " ")
     tokens = [t for t in cleaned.split() if len(t) > 1]
     return " ".join(tokens)
+
+
+# --------------------------------------------------------------------------
+# Reconciliation (the four-bucket partition — "nothing silently dropped", D9)
+# --------------------------------------------------------------------------
+def _row_cell(row, col, name):
+    """Read a named column from a raw row list, tolerating short/sparse rows."""
+    i = col.get(name)
+    if i is None or i >= len(row):
+        return ""
+    return (row[i] or "").strip()
+
+
+def _is_real_room(room_raw, sec):
+    """A non-empty room token is a REAL room unless it is a section label.
+
+    A token equal to the row's Sec that does NOT resolve to a real building
+    (e.g. an Unassigned ``C110``) is a section number, not a room (D9's
+    A151/C110 guard). Typo / unassigned tokens that are NOT the section label
+    (e.g. ``404``, ``U102``) still count as rooms — they are flagged loudly,
+    never silently dropped — and a real building room whose code happens to
+    equal the Sec (e.g. ``A298``) is kept.
+    """
+    if not room_raw:
+        return False
+    if (room_raw.strip().upper() == (sec or "").strip().upper()
+            and classify_room(room_raw).is_unassigned):
+        return False
+    return True
+
+
+def reconcile(rows, col):
+    """Partition every offering row into exactly one of four buckets.
+
+    ``rows`` are the data rows (header excluded); ``col`` is the
+    ``header -> index`` map. Each row lands in exactly one of: ``no_schedule``
+    (blank Schedule cell), ``intact_rows`` (>=1 meeting with a real room + valid
+    weekday + non-zero time), ``online_no_room_rows`` (has meetings but no real
+    room and the course Mode is online), or ``roomless_tba_rows`` (has meetings
+    but no real room, non-online mode -> routed to the TBA placeholder by Plan
+    03). ``total_meetings`` counts every real-room meeting across the intact
+    rows. The partition is exhaustive and disjoint by construction, so the
+    identity ``total_rows == intact + roomless_tba + online_no_room +
+    no_schedule`` always holds — nothing is ever silently dropped.
+    """
+    no_schedule = intact = roomless = online = 0
+    total_meetings = 0
+    flagged_unassigned = set()
+    flagged_typo = set()
+    distinct_rooms = set()
+    email_keys = set()
+    name_email = {}  # normalized-name key -> True if it ever carried an email
+
+    for row in rows:
+        # Instructor stats run for every row (D7 dedup: email, then name).
+        inst = _row_cell(row, col, "Instructor")
+        email = _row_cell(row, col, "Email")
+        nk = normalize_name_key(inst)
+        if email:
+            email_keys.add(email.lower())
+            if nk:
+                name_email[nk] = True
+        elif nk:
+            name_email.setdefault(nk, False)
+
+        sched = _row_cell(row, col, "Schedule")
+        if not sched:
+            no_schedule += 1
+            continue
+
+        sec = _row_cell(row, col, "Sec")
+        mode = _row_cell(row, col, "Mode").lower()
+        real = []
+        for m in parse_meetings(sched):
+            # A meeting requires a valid weekday + a non-zero time slot.
+            if m.day is None or not m.start or not m.end or m.start == m.end:
+                continue
+            if not _is_real_room(m.room_raw, sec):
+                continue
+            real.append(m)
+            info = classify_room(m.room_raw)
+            code = m.room_raw.strip().upper()
+            distinct_rooms.add(code)
+            if info.is_typo:
+                flagged_typo.add(code)
+            elif info.is_unassigned:
+                flagged_unassigned.add(code)
+
+        total_meetings += len(real)
+        if real:
+            intact += 1
+        elif mode == "online":
+            online += 1
+        else:
+            roomless += 1
+
+    emailless = sorted(k for k, has in name_email.items() if not has)
+    distinct_instructors = len(email_keys) + len(emailless)
+
+    return Reconciliation(
+        total_rows=len(rows),
+        no_schedule=no_schedule,
+        intact_rows=intact,
+        roomless_tba_rows=roomless,
+        online_no_room_rows=online,
+        total_meetings=total_meetings,
+        flagged_unassigned=sorted(flagged_unassigned),
+        flagged_typo=sorted(flagged_typo),
+        distinct_rooms=len(distinct_rooms),
+        distinct_instructors=distinct_instructors,
+        emailless_instructor_keys=emailless,
+    )
