@@ -21,6 +21,7 @@ from django.conf import settings
 from django.contrib.auth.decorators import login_required
 from django.core.cache import cache
 from django.core.exceptions import PermissionDenied
+from django.db import transaction
 from django.http import Http404, JsonResponse
 from django.shortcuts import render
 from django.utils import timezone
@@ -32,6 +33,7 @@ from campus.models import Room
 from ops.models import AuditLog
 from ops.notify import notify
 from ops.policy import get_policy
+from scheduling.merge import propagate_merged_present
 from scheduling.models import CheckinMethod, Modality, Session, SessionStatus
 from verification import resolver as R
 from verification.models import (Assignment, AssignmentScope, CheckerValidation,
@@ -279,10 +281,21 @@ def _apply_action(request, session, room, action, *, note="", identity_match=Non
     # sweep safely include online (scheduling/jobs.py exclusion removed in lockstep).
     if online and session is not None:
         if action == ValidationAction.VERIFIED:
-            session.status = SessionStatus.ACTIVE
-            session.actual_start = scanned_at or timezone.now()
-            session.checkin_method = CheckinMethod.ONLINE_MANUAL
-            session.save(update_fields=["status", "actual_start", "checkin_method"])
+            # One online Verify covers the whole online merged group present
+            # (D-04/D-06 online). Anchor write + sibling fill share ONE
+            # transaction so the group can never half-flip. Siblings are
+            # server-derived via the D-01 course_code / V-room key -- teams_link
+            # is NEVER consulted (Post-Research Clarification #1). Merge-filled
+            # siblings get checkin_method=MERGED + a session.merged_present
+            # AuditLog but NO CheckerValidation (D-09), so verified_by_checker
+            # coverage stays honest (CHK-04 not inflated).
+            with transaction.atomic():
+                session.status = SessionStatus.ACTIVE
+                session.actual_start = scanned_at or timezone.now()
+                session.checkin_method = CheckinMethod.ONLINE_MANUAL
+                session.save(update_fields=["status", "actual_start", "checkin_method"])
+                propagate_merged_present(session, session.actual_start,
+                                         actor=request.user)
         elif action == ValidationAction.FLAG_NOT_PRESENT:
             session.status = SessionStatus.ABSENT      # authoritative (Open Q2)
             session.save(update_fields=["status"])
