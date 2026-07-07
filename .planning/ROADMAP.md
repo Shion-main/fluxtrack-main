@@ -30,6 +30,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 3: Duty Assignments & Checker Verification** - Floor assignments gate an on-duty Checker's online + offline room verification (completed 2026-07-03)
 - [x] **Phase 4: Modality Shift Approval & SRS v1.2** - Lead-time-gated faculty request, Dean approval, auto room-release/assign, SRS revision (completed 2026-07-03)
 - [x] **Phase 04.1: Real-Data Integration — Full 2T SY2025-26 Term Load** (INSERTED) - Harden the importer to read the real .xlsx sources and load the whole term: 114-room master (names+capacities), online/blended/gym meetings, ~200 deduped instructors, ~2,021 schedules, materialized into a live checkable term (completed 2026-07-07)
+- [ ] **Phase 04.2: Co-Scheduled Session Attendance** (INSERTED) - Attendance handling for one instructor teaching 2+ sections at the same time in different rooms (129 slots, 54/200 profs): a single scan/verification must cover the co-scheduled sibling sessions so the sweep never falsely marks them Absent
 - [ ] **Phase 5: Notifications — Read Surface & Web Push** - In-app polled list + VAPID web push + per-user mute preferences
 - [ ] **Phase 6: Reporting Engine & Reporting Surfaces** - One shared aggregate layer powering weekly report, scorecards, IFO/Dean/HR dashboards
 - [ ] **Phase 7: Remaining Operational Surfaces** - Guard monitor/locator, IFO room & booking ops, Faculty self-service, job monitoring
@@ -197,6 +198,25 @@ Plans:
 - [x] 04.1-02-PLAN.md — load_room_master (114 named rooms + capacities via prefix map) + reversible reset_term guard [Wave 2]
 - [x] 04.1-03-PLAN.md — Harden import_offerings: xlsx input, kept online/gym, per-meeting modality, instructor dedup, roomless-TBA, reconciliation report [Wave 2]
 - [x] 04.1-04-PLAN.md — Run reset→room-master→import→materialize --days 14 on LocalDB; assert scale + F2F/blended/online spot check + human verify [Wave 3]
+
+### Phase 04.2: Co-Scheduled Session Attendance (INSERTED)
+
+**Goal**: One instructor who teaches two or more sections at the same time in different rooms can prove presence for all of them with a single check-in — the sweep never falsely marks a co-scheduled sibling session Absent.
+**Depends on**: Phase 2 (JOB-02 sweep + grace predicate), Phase 3 (checker verification + online path), Phase 04.1 (the real term that exposed the pattern at scale).
+**Discovered**: 2026-07-07, during Phase 04.1 live-load verification — logging in as the real professor GARAY surfaced that his sections MMA116-1-A301 (46 enrolled, A408-A) and A302 (24 enrolled, A408-B) meet at the same M/W 3:45 slot in the two halves of a divisible room. He can only scan one room, so the other session would be marked Absent by the sweep.
+**Scale of the pattern**: 129 instructor+day+time slots hold 2+ concurrent sections, across 54 of 200 instructors (~27%) — physical (divisible-room halves like A408-A/B) and online (shared Teams link across sibling V-rooms).
+**Not a data defect**: Phase 04.1 loaded the sections faithfully; merging them in-data would destroy their distinct rosters/section identity. The fix belongs in the attendance layer.
+**Success Criteria** (what must be TRUE):
+
+  1. A faculty scan/check-in that resolves one session also satisfies its co-scheduled sibling sessions (same faculty, same date, overlapping time) — all are marked present from the single event.
+  2. The JOB-02 sweep never marks a session Absent when a co-scheduled sibling for the same faculty at that time is Present (or was checked in).
+  3. The online analog holds: one Checker verification of a merged online class (shared Teams link) covers the co-scheduled online siblings.
+  4. Non-co-scheduled sessions are unaffected — a genuinely missed class is still marked Absent as today.
+  5. Reporting/rosters still see the sections as distinct (the fix is attendance-only; no data merge).
+
+**Design options to weigh at plan time** (A recommended): (A) one scan marks the whole co-scheduled group present; (B) sweep exemption when a sibling is present; (C) manual checker/IFO correction only.
+
+**Plans**: TBD (planner)
 
 ### Phase 5: Notifications — Read Surface & Web Push
 
