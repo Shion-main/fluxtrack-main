@@ -125,4 +125,4 @@ unused) are detected automatically.
 | Build order: env → JOB-02 → IFO-06 → Checker → modality → notif → reporting → Guard/Dean/HR → auth/deploy | Dependency-driven (Checker needs assignments + trustworthy Absent) | — Pending |
 
 ---
-*Last updated: 2026-07-03 after Phase 3 complete (Duty Assignments & Checker Verification — IFO-06, CHK-01..05/07/08 shipped and verified; code review clean)*
+*Last updated: 2026-07-07 after Phase 04.2 complete (Co-Scheduled Session Attendance — merged-section detection + present/absent propagation across faculty-scan and Checker-online seams; online merge key refined to faculty + exact start after live-term validation, 152/152 online groups covered). Phases 4 (Modality Shift + SRS v1.2) and 04.1 (real 2T SY2025-26 term load) also complete since the last update. Next: Phase 5 — Notifications.*
