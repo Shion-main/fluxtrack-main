@@ -165,9 +165,33 @@ def service_worker(request):
 
 
 def icon(request, size):
-    from PIL import Image, ImageDraw
+    """PWA / favicon icon: the MMCM crest, resized to the requested size.
+
+    Serves static/brand/mmcm-crest.png — resolved via the staticfiles finders
+    in dev and via STATIC_ROOT after collectstatic in prod. Falls back to a
+    procedural mark if the asset or Pillow is unavailable, so the icon
+    endpoints (used by the manifest, apple-touch-icon, and the service worker
+    precache) never 500.
+    """
+    from PIL import Image
     s = int(size)
-    img = Image.new("RGB", (s, s), "#0a0a0a")
+    try:
+        from django.contrib.staticfiles import finders
+        path = finders.find("brand/mmcm-crest.png")
+        if not path and settings.STATIC_ROOT:
+            from pathlib import Path
+            candidate = Path(settings.STATIC_ROOT) / "brand" / "mmcm-crest.png"
+            path = str(candidate) if candidate.exists() else None
+        if path:
+            img = Image.open(path).convert("RGBA").resize((s, s), Image.LANCZOS)
+            buf = io.BytesIO()
+            img.save(buf, format="PNG")
+            return HttpResponse(buf.getvalue(), content_type="image/png")
+    except Exception:
+        pass
+    # Fallback: procedural placeholder keeps the endpoint alive (navy on-brand).
+    from PIL import ImageDraw
+    img = Image.new("RGB", (s, s), "#0f2554")
     d = ImageDraw.Draw(img)
     pad = s // 4
     d.rounded_rectangle([pad, pad, s - pad, s - pad], radius=s // 12,
