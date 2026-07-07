@@ -74,7 +74,12 @@ class XlsxReaderTests(SimpleTestCase):
         self.assertEqual(default, first)
 
     def test_reader_uses_only_stdlib(self):
+        import re as _re
         import scheduling.xlsx as x
         src = open(x.__file__, encoding="utf-8").read()
-        self.assertNotIn("openpyxl", src)
-        self.assertNotIn("pandas", src)
+        # Scan for real import statements, not prose mentions in docstrings.
+        for banned in ("openpyxl", "pandas", "xlrd", "xlsxwriter"):
+            self.assertIsNone(
+                _re.search(r"^\s*(import|from)\s+%s\b" % banned, src, _re.M),
+                "%s must not be imported by the stdlib reader" % banned,
+            )
