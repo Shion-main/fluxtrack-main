@@ -83,3 +83,133 @@ class XlsxReaderTests(SimpleTestCase):
                 _re.search(r"^\s*(import|from)\s+%s\b" % banned, src, _re.M),
                 "%s must not be imported by the stdlib reader" % banned,
             )
+
+
+# ---------------------------------------------------------------------------
+# Task 2 — pure parse/classify/normalize/modality helpers (scheduling/importing.py)
+# ---------------------------------------------------------------------------
+from datetime import time  # noqa: E402
+
+
+class ImportingHelperTests(SimpleTestCase):
+    """Pure SimpleTestCase — no DB, no data/raw dependency. Every case in the
+    plan's behavior block for the classify/parse/normalize/modality helpers."""
+
+    # --- prefix -> building map (D4) ------------------------------------
+    def test_prefix_building_map(self):
+        from scheduling.importing import PREFIX_BUILDING
+        self.assertEqual(PREFIX_BUILDING["R"], ("ACAD", "Academic Building"))
+        self.assertEqual(PREFIX_BUILDING["A"], ("ADMIN", "Admin Building"))
+        self.assertEqual(PREFIX_BUILDING["GYM"], ("GYM", "Gym"))
+        self.assertEqual(PREFIX_BUILDING["V"], ("ONLINE", "Online (virtual)"))
+
+    # --- classify_room (D4) --------------------------------------------
+    def test_classify_academic_room(self):
+        from scheduling.importing import classify_room
+        info = classify_room("R415")
+        self.assertEqual(info.building_code, "ACAD")
+        self.assertEqual(info.floor, 4)
+        self.assertTrue(info.scannable)
+        self.assertFalse(info.is_virtual)
+
+    def test_classify_virtual_room(self):
+        from scheduling.importing import classify_room
+        info = classify_room("V301")
+        self.assertEqual(info.building_code, "ONLINE")
+        self.assertTrue(info.is_virtual)
+        self.assertFalse(info.scannable)
+
+    def test_classify_gym_does_not_raise(self):
+        from scheduling.importing import classify_room
+        info = classify_room("GYM2")  # old parse_room dropped this
+        self.assertEqual(info.building_code, "GYM")
+        self.assertTrue(info.scannable)
+
+    def test_classify_hyphen_suffix_room(self):
+        from scheduling.importing import classify_room
+        info = classify_room("A410-A")
+        self.assertEqual(info.building_code, "ADMIN")
+        self.assertEqual(info.floor, 4)
+
+    def test_classify_digit_only_typos(self):
+        from scheduling.importing import classify_room
+        for code in ("404", "516"):
+            info = classify_room(code)
+            self.assertEqual(info.building_code, "UNASSIGNED")
+            self.assertTrue(info.is_typo)
+            self.assertTrue(info.is_unassigned)
+
+    def test_classify_u_prefix_unassigned_not_typo(self):
+        from scheduling.importing import classify_room
+        info = classify_room("U102")
+        self.assertEqual(info.building_code, "UNASSIGNED")
+        self.assertTrue(info.is_unassigned)
+        self.assertFalse(info.is_typo)
+
+    def test_classify_tba_placeholder(self):
+        from scheduling.importing import classify_room
+        info = classify_room("TBA")
+        self.assertEqual(info.building_code, "UNASSIGNED")
+        self.assertEqual(info.floor, 0)
+        self.assertFalse(info.is_virtual)
+
+    def test_classify_never_raises_on_real_sample(self):
+        from scheduling.importing import classify_room
+        # Representative sample of the 168 real distinct room codes.
+        for code in ("R415", "A101", "GYM1", "GYM2", "V301", "U102",
+                     "404", "516", "A410-A", "A105", "A298", "TBA"):
+            classify_room(code)  # must not raise
+
+    # --- parse_time -----------------------------------------------------
+    def test_parse_time_cases(self):
+        from scheduling.importing import parse_time
+        self.assertEqual(parse_time("7:00AM"), time(7, 0))
+        self.assertEqual(parse_time("12:00P"), time(12, 0))
+        self.assertEqual(parse_time("12:00A"), time(0, 0))
+        self.assertEqual(parse_time("1:15PM"), time(13, 15))
+        self.assertIsNone(parse_time("bad"))
+
+    # --- parse_meetings (optional room, D2/D9) --------------------------
+    def test_parse_meetings_two_with_rooms(self):
+        from scheduling.importing import parse_meetings
+        from scheduling.models import DayOfWeek
+        meetings = parse_meetings(
+            "F [7:00AM-8:15AM] V415,M [7:00AM-8:15AM] R415")
+        self.assertEqual(len(meetings), 2)
+        self.assertEqual(meetings[0].day, DayOfWeek.FRI)
+        self.assertEqual(meetings[0].room_raw, "V415")
+        self.assertEqual(meetings[0].start, time(7, 0))
+        self.assertEqual(meetings[0].end, time(8, 15))
+        self.assertEqual(meetings[1].day, DayOfWeek.MON)
+        self.assertEqual(meetings[1].room_raw, "R415")
+
+    def test_parse_meetings_optional_room(self):
+        from scheduling.importing import parse_meetings
+        from scheduling.models import DayOfWeek
+        meetings = parse_meetings("M [7:00AM-8:15AM]")
+        self.assertEqual(len(meetings), 1)
+        self.assertEqual(meetings[0].day, DayOfWeek.MON)
+        self.assertEqual(meetings[0].room_raw, "")
+        self.assertEqual(meetings[0].start, time(7, 0))
+
+    # --- modality_for_room (D5) -----------------------------------------
+    def test_modality_for_room(self):
+        from scheduling.importing import classify_room, modality_for_room
+        from scheduling.models import Modality
+        virtual = classify_room("V415")
+        physical = classify_room("R415")
+        self.assertEqual(modality_for_room(virtual, "f2f"), Modality.ONLINE)
+        self.assertEqual(modality_for_room(physical, "blended"), Modality.BLENDED)
+
+    # --- normalize_name_key (D7) ----------------------------------------
+    def test_normalize_name_key_merges_variants(self):
+        from scheduling.importing import normalize_name_key
+        self.assertEqual(
+            normalize_name_key("VILLANUEVA, JUAN P"),
+            normalize_name_key("Villanueva,  Juan  P."),
+        )
+        # Distinct people must not collapse.
+        self.assertNotEqual(
+            normalize_name_key("SANTOS, MARIA"),
+            normalize_name_key("SANTOS, JOSE"),
+        )
