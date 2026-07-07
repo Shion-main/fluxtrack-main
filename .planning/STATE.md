@@ -2,18 +2,18 @@
 gsd_state_version: 1.0
 milestone: v1.2
 milestone_name: "**Goal**: Faculty can request a lead-time-gated modality shift that a Dean approves, with rooms auto-released or auto-assigned, and the SRS brought back in sync with reality."
-current_phase: 5
-current_phase_name: Notifications — Read Surface & Web Push
+current_phase: 04.2
+current_phase_name: co-scheduled-session-attendance-inserted
 status: executing
 stopped_at: Phase 04.2 context gathered
-last_updated: "2026-07-07T08:28:08.342Z"
-last_activity: 2026-07-05
-last_activity_desc: Phase 04 complete, transitioned to Phase 5
+last_updated: "2026-07-07T09:03:08.239Z"
+last_activity: 2026-07-07
+last_activity_desc: Phase 04.2 execution started
 progress:
   total_phases: 11
   completed_phases: 5
-  total_plans: 31
-  completed_plans: 30
+  total_plans: 35
+  completed_plans: 31
   percent: 45
 ---
 
@@ -24,14 +24,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-07-02)
 
 **Core value:** A faculty member checks in with one action, and the resulting attendance record is trustworthy — presence physically verified, lateness captured, ghost bookings detected.
-**Current focus:** Phase 04 — modality-shift-approval-srs-v1-2
+**Current focus:** Phase 04.2 — co-scheduled-session-attendance-inserted
 
 ## Current Position
 
-Phase: 5 — Notifications — Read Surface & Web Push
-Plan: Not started
+Phase: 04.2 (co-scheduled-session-attendance-inserted) — EXECUTING
+Plan: 2 of 4
 Status: Ready to execute
-Last activity: 2026-07-05 — Phase 04 complete, transitioned to Phase 5
+Last activity: 2026-07-07 — Phase 04.2 execution started
 
 **Phase 4** (modality-shift-approval-srs-v1-2): PLANNED ✓ — 8 plans across 6 waves, verified (plan-checker passed). Ready: `/gsd-execute-phase 04`. Runs parallel to 03.1 per ROADMAP.
 
@@ -89,6 +89,7 @@ Progress: [████████░░] 80%
 | Phase 04.1 P02 | 30min | 2 tasks | 3 files |
 | Phase 04.1 P03 | 40min | 3 tasks | 3 files |
 | Phase 04.1 P04 | 35min | 4 tasks | 3 files |
+| Phase 04.2 P01 | 20min | 3 tasks tasks | 5 files files |
 
 ## Accumulated Context
 
@@ -156,6 +157,7 @@ Recent decisions affecting current work:
 - [Phase ?]: 04.1-02: load_room_master tab-skip keys on classify_room fields (known building OR is_typo OR floor>0) so only the 2 summary tabs skip while U101/P101 import; reset_term is --yes-guarded, PROTECT-aware, reversible (D10)
 - [Phase 04.1]: 04.1-03: import_offerings hardened to read the real offerings .xlsx by default (extension dispatch keeps the .csv+--building/--floor regression) and consume Plan 01's shared helpers instead of private parsing; keeps virtual/gym meetings, stamps per-meeting modality by room (blended yields physical+online), dedups instructors email-then-name (57 blank-email -> 10 Users), routes roomless-physical to a shared TBA room (Unassigned) and roomless-online to a VTBA Online placeholder. Real dry-run lands 1042+44+14+111=1211 / 2021 meetings / 200 instructors exactly; reconcile()-driven report flags typo 404/516 + the 10 email-less. R3ParityTests retired (ENV-02 now carried at full-term scale). materialize_sessions untouched (D8).
 - [Phase 04.1]: 04.1-04: full D10 clean-load ran live against MSSQL LocalDB (reset_term --yes cleared 2113+2113 under the batched param cap, load_room_master, import_offerings real run, materialize_sessions --days 14 -> 4226 sessions). Reconciliation balanced exactly (1042+44+14+111=1211, 2021 meetings); live term = 2113 schedules / 200 instructors / 218 rooms / 5 term buildings. Scale checks are TERM-SCOPED (active-term buildings == 5), NOT a global Building count — the dormant seed_demo IT building (0 active-term schedules) is expected and must not trip them. DEBUG dev-login curated to a per-role allowlist (DEMO_USERNAMES) with the real professor GARAY (cdgaray) as faculty replacing fake mayo; passwordless-by-username POST unchanged so any imported instructor stays typeable. Human-verify gate approved. Downstream finding (NOT a load defect): co-scheduled sections (same instructor/time, different rooms — e.g. GARAY MMA116 A301/A302) create sibling sessions the sweep would falsely mark Absent — tracked in follow-up Phase 04.2.
+- [Phase 04.2]: 04.2-01: shared merge core built - pure merged_sibling_ids (faculty_id + exact scheduled_start + same-room-OR-same-course, D-01) mirrors is_no_show_past_grace; propagate_merged_present/absent flip ONLY SCHEDULED siblings via one status-guarded filtered .update() + AuditLog.bulk_create (idempotent, faculty-scoped, HY010-safe on MSSQL); CheckinMethod.MERGED via metadata-only 0004 migration (sqlmigrate no-op); anchor never re-stamped MERGED.
 
 ### Pending Todos
 
@@ -179,6 +181,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-07-07T07:45:20.871Z
+Last session: 2026-07-07T09:02:26.699Z
 Stopped at: Phase 04.2 context gathered
 Resume file: .planning/phases/04.2-co-scheduled-session-attendance-inserted/04.2-CONTEXT.md
