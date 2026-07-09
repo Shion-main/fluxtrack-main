@@ -11,6 +11,7 @@ urlpatterns = [
     path("scan/resolve", scan.resolve, name="scan_resolve"),
     path("scan/confirm", scan.confirm, name="scan_confirm"),
     # Faculty surfaces
+    path("faculty/home", faculty.home, name="faculty_home"),
     path("faculty/schedule", faculty.schedule, name="faculty_schedule"),
     path("faculty/scan", faculty.scan_page, name="faculty_scan"),
     # Faculty modality-shift request surface (MOD-01/MOD-05, D-12)

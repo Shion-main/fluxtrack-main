@@ -1,11 +1,11 @@
 {% extends "base.html" %}
 {% load static %}
-{% block title %}Home · FluxTrack{% endblock %}
+{% block title %}Schedule · FluxTrack{% endblock %}
 {% block content %}
 <div class="ft-app">
 
   <header class="ft-top">
-    <a href="/faculty/schedule" class="ft-top__brand">
+    <a href="/faculty/home" class="ft-top__brand">
       <img class="ft-top__crest" src="{% static 'brand/mmcm-crest.png' %}" alt="">
       <span class="ft-top__mark">FluxTrack</span>
     </a>
@@ -23,83 +23,12 @@
 
   <div class="ft-page">
     <div class="ft-greet">
-      <div class="ft-greet__hi">{{ greeting }}, {{ user.first_name|default:user.get_full_name|default:user.username }}</div>
+      <div class="ft-greet__hi">Schedule</div>
       <div class="ft-greet__date">{{ today|date:"l, F j" }}</div>
     </div>
 
-    {% if hero %}
-    <section class="ft-hero">
-      <div class="ft-hero__top">
-        <span class="ft-eyebrow">Check-in</span>
-        {% if hero_live %}
-        <span class="ft-hero__status is-live"><span class="ft-dot"></span> In session</span>
-        {% else %}
-        <span class="ft-hero__status"><span class="ft-dot"></span> Upcoming</span>
-        {% endif %}
-      </div>
-
-      <h1 class="ft-hero__title">{{ hero.rep.schedule.course_code }}
-        {% if hero.merged %}
-        <span class="sub">{{ hero.count }} merged sections · {% for s in hero.sessions %}{{ s.schedule.section }}{% if not forloop.last %} + {% endif %}{% endfor %}</span>
-        {% else %}
-        <span class="sub">Section {{ hero.rep.schedule.section }}</span>
-        {% endif %}
-      </h1>
-
-      <div class="ft-meta">
-        <div class="ft-meta__item"><uk-icon icon="map-pin"></uk-icon> {{ hero.rooms_label }}</div>
-        {% if hero.merged %}
-        <div class="ft-meta__item"><uk-icon icon="layers"></uk-icon> {{ hero.count }} sections</div>
-        {% elif hero.rep.room.floor.building.code %}
-        <div class="ft-meta__item"><uk-icon icon="building-2"></uk-icon> {{ hero.rep.room.floor.building.code }}{% if hero.rep.room.floor.number %} · Flr {{ hero.rep.room.floor.number }}{% endif %}</div>
-        {% endif %}
-        <div class="ft-meta__item"><uk-icon icon="users"></uk-icon> {{ hero.students }} Students</div>
-        <div class="ft-meta__item"><uk-icon icon="clock"></uk-icon> {{ hero.rep.scheduled_start|time:"g:i" }} - {{ hero.rep.scheduled_end|time:"g:i A" }}</div>
-      </div>
-
-      <div class="ft-seg-label">Class modality</div>
-      <div class="ft-seg" role="group" aria-label="Class modality">
-        {% for value, label in modalities.choices %}
-          {% if value == hero_modality %}
-          <span class="ft-seg__opt is-active" aria-current="true">
-            <uk-icon icon="{% if value == 'f2f' %}presentation{% elif value == 'blended' %}video{% else %}monitor{% endif %}"></uk-icon> {{ label }}</span>
-          {% else %}
-          <a class="ft-seg__opt" href="/faculty/modality/new" title="Request to switch to {{ label }}">
-            <uk-icon icon="{% if value == 'f2f' %}presentation{% elif value == 'blended' %}video{% else %}monitor{% endif %}"></uk-icon> {{ label }}</a>
-          {% endif %}
-        {% endfor %}
-      </div>
-
-      {% if hero_modality == "online" %}
-      <div class="ft-hero__actions">
-        <div class="ft-field">
-          <span class="ft-field__label">Teams meeting link</span>
-          <div class="ft-input-nv">
-            <uk-icon icon="link"></uk-icon>
-            <input type="text" value="{{ hero.rep.teams_link }}" placeholder="No link set yet" readonly>
-          </div>
-        </div>
-        <p class="ft-hero__hint">Online sessions are verified by a roving checker through Teams. Keep the link current so students can join.</p>
-        <a class="ft-hero__link" href="/faculty/modality/new">Request a modality change</a>
-      </div>
-      {% else %}
-      <div class="ft-hero__actions">
-        <a class="ft-cta" href="/faculty/scan"><uk-icon icon="qr-code"></uk-icon> Scan Room QR</a>
-        <div class="ft-or">or</div>
-        <a class="ft-cta ft-cta--ghost" href="/faculty/scan?manual=1">Input Room Code</a>
-      </div>
-      {% if hero.merged %}<p class="ft-hero__hint" style="text-align:center">One check-in covers all {{ hero.count }} merged sections.</p>{% endif %}
-      {% endif %}
-    </section>
-    {% else %}
-    <section class="ft-hero">
-      <div class="ft-hero__top"><span class="ft-eyebrow">Check-in</span></div>
-      <h1 class="ft-hero__title">No classes ahead<span class="sub">You have nothing scheduled in the next 7 days.</span></h1>
-    </section>
-    {% endif %}
-
     <div class="ft-sec">
-      <div class="ft-sec__title">Today's Schedule</div>
+      <div class="ft-sec__title">Today</div>
     </div>
     <div class="ft-list">
       {% for c in today_cards %}

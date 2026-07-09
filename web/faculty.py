@@ -102,25 +102,30 @@ def _group_merged(sessions):
     return cards
 
 
-@faculty_required
-def schedule(request):
-    now = timezone.localtime()
+def _faculty_cards(user, now):
+    """This faculty's sessions for today + the next 7 days, merged-grouped.
+    Returns (today_cards, week_cards, today)."""
     today = now.date()
     week_end = today + timedelta(days=7)
-    sessions = (Session.objects.filter(faculty=request.user,
+    sessions = (Session.objects.filter(faculty=user,
                                        date__gte=today, date__lt=week_end)
                 .select_related("schedule", "room__floor__building")
                 .order_by("date", "scheduled_start"))
     todays, upcoming = [], []
     for s in sessions:
         (todays if s.date == today else upcoming).append(s)
+    return _group_merged(todays), _group_merged(upcoming), today
 
-    today_cards = _group_merged(todays)
-    week_cards = _group_merged(upcoming)
 
-    # Hero "check-in" card: the merged group the faculty most likely acts on now --
-    # an in-progress group first, else the next one still ahead today, else the
-    # next upcoming this week. ``hero_live`` drives the In-session vs Upcoming pill.
+@faculty_required
+def home(request):
+    """Check-in landing (the faculty app's Home tab): the one merged group the
+    faculty most likely acts on now -- in-progress first, else next still ahead
+    today, else the next upcoming session this week -- with its modality and the
+    check-in actions. The full day/week list lives on Schedule."""
+    now = timezone.localtime()
+    today_cards, week_cards, today = _faculty_cards(request.user, now)
+
     def _is_active(card):
         return any(s.status == SessionStatus.ACTIVE for s in card["sessions"])
 
@@ -132,19 +137,37 @@ def schedule(request):
     hero_live = hero is not None
     if hero is None:
         hero = next((c for c in today_cards if _is_next(c)), None)
-    if hero is None:
-        hero = today_cards[0] if today_cards else (week_cards[0] if week_cards else None)
+    if hero is None:  # nothing left today -> surface the next upcoming session
+        hero = week_cards[0] if week_cards else None
 
-    return render(request, "faculty/schedule.html", {
-        "today_cards": today_cards, "week_cards": week_cards, "today": today,
-        "greeting": _greeting(now), "hero": hero, "hero_live": hero_live,
+    hero_is_today = bool(hero) and hero["rep"].date == today
+    return render(request, "faculty/home.html", {
+        "greeting": _greeting(now), "today": today,
+        "hero": hero, "hero_live": hero_live, "hero_is_today": hero_is_today,
         "hero_modality": hero["modality"] if hero else "", "modalities": Modality,
+        "today_count": len(today_cards),
+    })
+
+
+@faculty_required
+def schedule(request):
+    """Pure schedule: today + this week as scannable rows. No hero/CTAs/modality
+    control -- the check-in action and modality live on Home."""
+    now = timezone.localtime()
+    today_cards, week_cards, today = _faculty_cards(request.user, now)
+    return render(request, "faculty/schedule.html", {
+        "today_cards": today_cards, "week_cards": week_cards,
+        "today": today, "greeting": _greeting(now),
     })
 
 
 @faculty_required
 def scan_page(request):
-    return render(request, "faculty/scan.html", {"auto_payload": ""})
+    # Home's "Input Room Code" deep-links with ?manual=1 to open the OTP keypad.
+    return render(request, "faculty/scan.html", {
+        "auto_payload": "",
+        "manual": request.GET.get("manual") == "1",
+    })
 
 
 # --- Modality-shift request surface (MOD-01/MOD-05, D-12) -------------------

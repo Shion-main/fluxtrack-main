@@ -104,7 +104,7 @@ def home(request):
     # surfaces don't yet share a persistent nav. Superusers (no FACULTY role) still
     # get the launcher.
     if request.user.role == Role.FACULTY:
-        return redirect("faculty_schedule")
+        return redirect("faculty_home")
     return render(request, "web/home.html", {"surfaces": SURFACES.get(request.user.role, [])})
 
 
@@ -122,7 +122,7 @@ def manifest(request):
 
 
 SW_JS = r"""
-const CACHE = 'fluxtrack-shell-v2';
+const CACHE = 'fluxtrack-shell-v4';
 // Precache only stable, non-redirecting assets. '/' redirects when anonymous,
 // so caching it (and replaying the redirect) breaks navigation — never precache it.
 const SHELL = ['/login', '/icon-192.png'];

@@ -26,10 +26,10 @@
 </head>
 <body class="bg-background text-foreground" hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'>
   {% with un=request.resolver_match.url_name %}
-  {% if un == "faculty_schedule" or un == "faculty_scan" or un == "faculty_modality_new" or un == "faculty_modality_mine" %}
+  {% if un == "faculty_home" or un == "faculty_schedule" or un == "faculty_scan" or un == "faculty_modality_new" or un == "faculty_modality_mine" %}
   {% elif user.is_authenticated %}
-    {# Standard shell for all other roles (launcher, checker, IFO, dean, admin).
-       Faculty pages render their own top chrome, so no global header there. #}
+    {% comment %}Standard shell for all other roles (launcher, checker, IFO, dean,
+    admin). Faculty pages render their own top chrome, so no global header there.{% endcomment %}
     <header class="border-b border-border sticky top-0 z-30 bg-background/95 backdrop-blur">
       <div class="uk-container max-w-5xl h-14 flex items-center gap-3">
         <a href="/" class="font-semibold">FluxTrack</a>
@@ -45,16 +45,18 @@
 
   <main>{% block content %}{% endblock %}</main>
 
-  {% if un == "faculty_schedule" or un == "faculty_modality_mine" %}
-  {# Bottom tab bar shows on the primary tabs, not on the full-screen scan /
-     sub-flow screens. Three real destinations in the prototype's icon style. #}
+  {% if un == "faculty_home" or un == "faculty_schedule" or un == "faculty_modality_mine" %}
+  {% comment %}Bottom tab bar shows on the three primary tabs, not on the
+  full-screen scan / sub-flow screens. Scan is reached from Home's check-in
+  actions, so it is not a tab.{% endcomment %}
   <nav class="ft-tabbar" aria-label="Faculty">
     <div class="ft-tabbar__row">
-      <a href="/faculty/schedule" class="ft-tab {% if un == 'faculty_schedule' %}is-active{% endif %}"
-         aria-label="Home"{% if un == 'faculty_schedule' %} aria-current="page"{% endif %}>
+      <a href="/faculty/home" class="ft-tab {% if un == 'faculty_home' %}is-active{% endif %}"
+         aria-label="Home"{% if un == 'faculty_home' %} aria-current="page"{% endif %}>
         <uk-icon icon="house"></uk-icon></a>
-      <a href="/faculty/scan" class="ft-tab" aria-label="Check in">
-        <uk-icon icon="scan-line"></uk-icon></a>
+      <a href="/faculty/schedule" class="ft-tab {% if un == 'faculty_schedule' %}is-active{% endif %}"
+         aria-label="Schedule"{% if un == 'faculty_schedule' %} aria-current="page"{% endif %}>
+        <uk-icon icon="calendar-days"></uk-icon></a>
       <a href="/faculty/modality/mine" class="ft-tab {% if un == 'faculty_modality_mine' %}is-active{% endif %}"
          aria-label="Requests"{% if un == 'faculty_modality_mine' %} aria-current="page"{% endif %}>
         <uk-icon icon="arrow-left-right"></uk-icon></a>

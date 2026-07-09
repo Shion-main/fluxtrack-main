@@ -132,6 +132,8 @@
   color: #fff; text-wrap: balance; margin-bottom: 18px;
 }
 .ft-hero__title .sub { display: block; font-size: .95rem; font-weight: 500; color: var(--on-nv-dim); letter-spacing: 0; margin-top: 5px; }
+.ft-hero__when { display: inline-flex; align-items: center; gap: 7px; margin: -8px 0 16px; font-size: .88rem; font-weight: 600; color: var(--on-nv-dim); }
+.ft-hero__when uk-icon, .ft-hero__when svg { width: 15px; height: 15px; }
 
 .ft-meta { display: grid; grid-template-columns: 1fr 1fr; gap: 12px 16px; }
 .ft-meta__item { display: flex; align-items: center; gap: 9px; font-size: .9rem; color: #dfe6f2; }
@@ -298,6 +300,143 @@ a.ft-row:active { transform: translateY(1px); }
 .ft-acct__item uk-icon, .ft-acct__item svg { width: 17px; height: 17px; color: var(--ft-muted); }
 .ft-acct__item:hover { background: var(--panel-2); }
 
+/* ==========================================================================
+   Scan sub-flow — camera viewfinder (white sheet over navy)
+   ========================================================================== */
+.ft-scan { min-height: 100dvh; background: var(--nv-hero); display: flex; flex-direction: column; }
+.ft-scan__sheet {
+  position: relative; flex: 1;
+  background: var(--surface);
+  border-radius: 0 0 30px 30px;
+  padding: 18px 24px calc(30px + env(safe-area-inset-bottom, 0px));
+  display: flex; flex-direction: column;
+  box-shadow: 0 26px 54px -30px rgba(0,0,0,.5);
+}
+.ft-scan__close {
+  position: absolute; top: 18px; left: 18px; z-index: 3;
+  width: 40px; height: 40px; border-radius: 50%;
+  display: grid; place-items: center;
+  background: #fff; color: var(--ink);
+  border: 1px solid var(--line); box-shadow: 0 2px 8px -3px rgba(11,27,58,.25);
+  text-decoration: none; cursor: pointer;
+}
+.ft-scan__close uk-icon, .ft-scan__close svg { width: 20px; height: 20px; }
+.ft-scan__close:hover { background: var(--panel-2); }
+.ft-scan__close:focus-visible { outline: none; box-shadow: 0 0 0 3px rgba(0,28,67,.35); }
+
+.ft-scan__body { flex: 1; display: flex; flex-direction: column; justify-content: center; }
+.ft-scan__title { font-size: 1.28rem; font-weight: 750; letter-spacing: -.01em; color: var(--ink); text-align: center; }
+.ft-scan__sub { margin: 8px auto 0; max-width: 17rem; font-size: .9rem; line-height: 1.45; color: var(--ft-muted); text-align: center; text-wrap: balance; }
+
+/* Camera viewfinder with navy corner brackets */
+.ft-viewfinder { position: relative; width: 232px; max-width: 62vw; aspect-ratio: 1; margin: 0 auto 26px; }
+.ft-viewfinder__cam {
+  position: relative;
+  width: 100%; height: 100%; border-radius: 22px; overflow: hidden;
+  background: #b8bcc6; display: grid; place-items: center;
+}
+.ft-viewfinder__cam uk-icon, .ft-viewfinder__cam svg { width: 46px; height: 46px; color: #4a5568; }
+/* html5-qrcode injects a <video> and sets inline sizing on #qr-reader; pin it
+   inside the rounded box and cover-fit the video so it never blows out. */
+.ft-viewfinder__cam #qr-reader {
+  position: absolute !important; inset: 0 !important;
+  width: 100% !important; height: 100% !important; border: 0 !important;
+}
+.ft-viewfinder__cam #qr-reader video,
+.ft-viewfinder__cam #qr-reader canvas {
+  width: 100% !important; height: 100% !important; object-fit: cover; display: block;
+}
+.ft-bracket { position: absolute; width: 34px; height: 34px; border: 3px solid var(--nv-hero); }
+.ft-bracket--tl { top: -3px; left: -3px; border-right: 0; border-bottom: 0; border-top-left-radius: 10px; }
+.ft-bracket--tr { top: -3px; right: -3px; border-left: 0; border-bottom: 0; border-top-right-radius: 10px; }
+.ft-bracket--bl { bottom: -3px; left: -3px; border-right: 0; border-top: 0; border-bottom-left-radius: 10px; }
+.ft-bracket--br { bottom: -3px; right: -3px; border-left: 0; border-top: 0; border-bottom-right-radius: 10px; }
+
+/* "or" divider on a light surface */
+.ft-or-ink { display: flex; align-items: center; gap: 12px; margin: 22px 0 14px; color: var(--ft-muted); font-size: .84rem; }
+.ft-or-ink::before, .ft-or-ink::after { content: ""; height: 1px; flex: 1; background: var(--line); }
+
+/* Full-width navy action button (Input Room Code / Verify / Continue) */
+.ft-btn-navy {
+  display: inline-flex; align-items: center; justify-content: center; gap: 10px;
+  width: 100%; min-height: 54px; padding: 0 18px;
+  border-radius: var(--r-btn); border: 0; cursor: pointer;
+  background: var(--nv-hero); color: #fff;
+  font-size: 1rem; font-weight: 650; text-decoration: none;
+  transition: background-color .16s ease, transform .06s ease;
+}
+.ft-btn-navy uk-icon, .ft-btn-navy svg { width: 19px; height: 19px; }
+.ft-btn-navy:hover { background: #002a63; }
+.ft-btn-navy:active { transform: translateY(1px); }
+.ft-btn-navy:focus-visible { outline: none; box-shadow: 0 0 0 3px rgba(0,28,67,.3); }
+.ft-btn-navy:disabled { background: var(--panel-2); color: #9aa4bb; cursor: not-allowed; transform: none; }
+
+/* ==========================================================================
+   Manual entry — OTP keypad (full white screen)
+   ========================================================================== */
+.ft-manual { min-height: 100dvh; background: var(--surface); display: flex; flex-direction: column; }
+.ft-appbar {
+  position: relative; display: flex; align-items: center; min-height: 56px;
+  padding: 8px 12px; border-bottom: 1px solid var(--line);
+}
+.ft-appbar__back {
+  width: 40px; height: 40px; border-radius: 12px;
+  display: grid; place-items: center; color: var(--ink);
+  background: transparent; border: 0; cursor: pointer; text-decoration: none;
+}
+.ft-appbar__back uk-icon, .ft-appbar__back svg { width: 22px; height: 22px; }
+.ft-appbar__back:hover { background: var(--panel-2); }
+.ft-appbar__title {
+  position: absolute; left: 50%; transform: translateX(-50%);
+  font-size: 1rem; font-weight: 700; color: var(--ink); letter-spacing: -.01em;
+}
+
+.ft-manual__body {
+  flex: 1; display: flex; flex-direction: column;
+  padding: 22px 24px calc(24px + env(safe-area-inset-bottom, 0px));
+  max-width: 26rem; width: 100%; margin: 0 auto;
+}
+.ft-manual__badge {
+  width: 64px; height: 64px; margin: 8px auto 18px; border-radius: 18px;
+  display: grid; place-items: center; background: var(--nv-hero);
+  box-shadow: 0 10px 22px -10px rgba(0,28,67,.6);
+}
+.ft-manual__badge uk-icon, .ft-manual__badge svg { width: 30px; height: 30px; color: #fff; }
+
+/* OTP boxes */
+.ft-otp { display: flex; justify-content: center; gap: 10px; margin: 22px 0 4px; }
+.ft-otp__box {
+  width: 46px; height: 56px; border-radius: 12px;
+  display: grid; place-items: center;
+  background: var(--panel-2); border: 1.5px solid var(--line);
+  font-size: 1.4rem; font-weight: 700; color: var(--ink);
+  transition: border-color .14s ease, background-color .14s ease;
+}
+.ft-otp__box.is-active { background: #fff; border-color: var(--nv-hero); box-shadow: 0 0 0 3px rgba(0,28,67,.08); }
+.ft-otp__box.is-active::after { content: ""; width: 2px; height: 24px; background: var(--nv-hero); animation: ft-caret 1.1s step-end infinite; }
+.ft-otp__box.is-filled::after { display: none; }
+@keyframes ft-caret { 50% { opacity: 0; } }
+.ft-otp__err { text-align: center; color: var(--red); font-size: .82rem; font-weight: 600; min-height: 1.1rem; margin-top: 8px; }
+
+/* Numeric keypad */
+.ft-keypad {
+  display: grid; grid-template-columns: repeat(3, 1fr);
+  gap: 6px 8px; margin: auto 0 18px; max-width: 20rem; width: 100%; align-self: center;
+}
+.ft-key {
+  min-height: 62px; border: 0; background: transparent; cursor: pointer;
+  font-size: 1.5rem; font-weight: 600; color: var(--ink);
+  border-radius: 16px; transition: background-color .12s ease;
+  display: grid; place-items: center;
+}
+.ft-key:hover { background: var(--panel-2); }
+.ft-key:active { background: #e9edf7; }
+.ft-key:focus-visible { outline: none; box-shadow: inset 0 0 0 2px rgba(0,28,67,.3); }
+.ft-key--ghost { visibility: hidden; pointer-events: none; }
+.ft-key--action uk-icon, .ft-key--action svg { width: 24px; height: 24px; color: var(--ft-muted); }
+
 @media (prefers-reduced-motion: reduce) {
-  .ft-cta, .ft-seg__opt, .ft-row, .ft-tab, .ft-chip { transition: none; }
+  .ft-cta, .ft-seg__opt, .ft-row, .ft-tab, .ft-chip,
+  .ft-btn-navy, .ft-key, .ft-otp__box { transition: none; }
+  .ft-otp__box.is-active::after { animation: none; }
 }
