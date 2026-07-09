@@ -122,7 +122,7 @@ def manifest(request):
 
 
 SW_JS = r"""
-const CACHE = 'fluxtrack-shell-v4';
+const CACHE = 'fluxtrack-shell-v5';
 // Precache only stable, non-redirecting assets. '/' redirects when anonymous,
 // so caching it (and replaying the redirect) breaks navigation — never precache it.
 const SHELL = ['/login', '/icon-192.png'];
@@ -161,6 +161,44 @@ self.addEventListener('fetch', (e) => {
         return resp;
       })
     )
+  );
+});
+
+// Web push (NOTIF-02). EVERY push MUST show a notification: iOS revokes the
+// subscription for a silent push (RESEARCH Pitfall 2), so there is no early
+// return -- a parse failure falls back to a generic FluxTrack alert and still
+// calls showNotification. The payload (title/body/link) is written by the 05-03
+// outbox sender.
+self.addEventListener('push', (e) => {
+  let data = {};
+  try { data = e.data ? e.data.json() : {}; } catch (err) { data = {}; }
+  const title = data.title || 'FluxTrack';
+  const link = data.link || '/notifications';
+  const options = {
+    body: data.body || 'You have a new notification.',
+    icon: '/icon-192.png',
+    badge: '/icon-192.png',
+    data: { link: link },
+    tag: data.tag || 'fluxtrack',
+  };
+  e.waitUntil(self.registration.showNotification(title, options));
+});
+
+// Deep-link a notification tap to its target (data.link). Focus an already-open
+// client on that URL if one exists, otherwise open a new window; fall back to
+// /notifications when no link was supplied.
+self.addEventListener('notificationclick', (e) => {
+  e.notification.close();
+  const link = (e.notification.data && e.notification.data.link) || '/notifications';
+  const target = new URL(link, self.location.origin).href;
+  e.waitUntil(
+    self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clientList) => {
+      for (const client of clientList) {
+        if (client.url === target && 'focus' in client) return client.focus();
+      }
+      if (self.clients.openWindow) return self.clients.openWindow(link);
+      return undefined;
+    })
   );
 });
 """
