@@ -6,14 +6,14 @@ current_phase: 05
 current_phase_name: notifications-read-surface-web-push
 status: executing
 stopped_at: Phase 5 planned — 5 plans across 3 waves, plan-checker PASSED
-last_updated: "2026-07-09T14:07:43.273Z"
+last_updated: "2026-07-09T14:19:19.810Z"
 last_activity: 2026-07-09
 last_activity_desc: Phase 05 execution started
 progress:
   total_phases: 11
   completed_phases: 6
   total_plans: 40
-  completed_plans: 35
+  completed_plans: 36
   percent: 55
 ---
 
@@ -29,7 +29,7 @@ See: .planning/PROJECT.md (updated 2026-07-02)
 ## Current Position
 
 Phase: 05 (notifications-read-surface-web-push) — EXECUTING
-Plan: 2 of 5
+Plan: 3 of 5
 Status: Ready to execute
 Last activity: 2026-07-09 — Phase 05 execution started
 
@@ -95,6 +95,7 @@ Progress: [████████░░] 80%
 | Phase 04.2 P03 | 15min | 2 tasks | 2 files |
 | Phase 04.2 P04 | 15min | 2 tasks | 2 files |
 | Phase 05 P01 | 10min | 3 tasks | 4 files |
+| Phase 05 P02 | 3min | 2 tasks tasks | 5 files files |
 
 ## Accumulated Context
 
@@ -166,6 +167,7 @@ Recent decisions affecting current work:
 - [Phase 04.2]: Faculty scan seam propagates merged-present on CHECKED_IN and force-handover (ROOM_OCCUPIED); anchor keeps real checkin_method, only siblings become MERGED; propagate runs inside the anchor transaction.atomic() (D-04).
 - [Phase ?]: 04.2-03: online Checker Verify propagates present across the online merged group via the D-01 course_code/V-room key (no teams_link clause); online Flag-not-present propagates ABSENT immediately; F2F flag stays record-only (D-07 per-modality)
 - [Phase ?]: 04.2-03: merge-filled siblings get NO CheckerValidation (D-09) so verified_by_checker/CHK-04 coverage stays honest
+- [Phase 05]: 05-02: pywebpush pinned + installed (py-vapid 1.9.4 + http-ece 1.2.1); VAPID_PUBLIC_KEY/PRIVATE_KEY_PATH/SUB read via env() with empty-safe defaults so the app boots unconfigured; private key referenced by path only, PEM gitignored via *.pem+keys/ and git check-ignore verified (T-05-03); push_outbox_interval_seconds=15 added to FLUXTRACK_POLICY (D-09, policy-driven cadence); package-legitimacy gate T-05-SC approved by operator after pypi.org verification.
 
 ### Pending Todos
 
@@ -189,6 +191,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-07-09T14:07:32.356Z
+Last session: 2026-07-09T14:18:48.535Z
 Stopped at: Phase 5 planned — 5 plans across 3 waves, plan-checker PASSED
 Resume file: .planning/phases/05-notifications-read-surface-web-push/05-01-PLAN.md
