@@ -32,13 +32,42 @@ class Notification(models.Model):
     body = models.TextField(blank=True)
     link = models.CharField(max_length=255, blank=True)
     read_at = models.DateTimeField(null=True, blank=True)
+    # Outbox stamp (NOTIF-02): the 05-03 scheduler push pass sets this after
+    # delivering a push for this row. NULL means not yet processed.
+    pushed_at = models.DateTimeField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
         ordering = ["-created_at"]
+        # Supports the unread-badge query (unread_count): rows for one user
+        # ordered/filtered by read_at (NOTIF-01).
+        indexes = [models.Index(fields=["user", "read_at"])]
 
     def __str__(self):
         return f"{self.title} → {self.user}"
+
+
+class NotificationMute(models.Model):
+    """Per-user mute of a notification category group (NOTIF-01/03, D-04/D-05).
+
+    Presence-as-mute: the PRESENCE of a row means that `category` is muted for
+    `user`; ABSENCE means unmuted. Default is therefore everything-unmuted (D-05)
+    with no seed rows and no `is_muted` boolean — a user with zero rows sees all
+    notifications. `category` holds a `NotificationCategory` value (defined in
+    ops/notifications.py, the single source of truth D-06).
+    """
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE,
+        related_name="notification_mutes",
+    )
+    category = models.CharField(max_length=20)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = [("user", "category")]
+
+    def __str__(self):
+        return f"mute {self.category} · {self.user}"
 
 
 class PushSubscription(models.Model):
