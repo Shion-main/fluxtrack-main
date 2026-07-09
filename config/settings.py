@@ -86,6 +86,9 @@ TEMPLATES = [
                 "django.contrib.messages.context_processors.messages",
                 "social_django.context_processors.backends",
                 "social_django.context_processors.login_redirect",
+                # Global notification bell context (NOTIF-01): poll_ms + unread
+                # count + VAPID public key on every page, both shells (D-02).
+                "web.context.notifications",
             ],
         },
     },
