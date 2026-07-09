@@ -5,10 +5,10 @@ milestone_name: "**Goal**: Faculty can request a lead-time-gated modality shift 
 current_phase: 05
 current_phase_name: notifications-read-surface-web-push
 status: executing
-stopped_at: Completed 05-03-PLAN.md
-last_updated: "2026-07-09T14:52:16.097Z"
+stopped_at: 05-05-PLAN.md Tasks 1-3 committed; at Task 4 blocking human-verify UAT
+last_updated: "2026-07-09T14:58:39.000Z"
 last_activity: 2026-07-09
-last_activity_desc: Phase 05 execution started
+last_activity_desc: 05-05 web-push client Tasks 1-3 done; awaiting manual push UAT (Task 4)
 progress:
   total_phases: 11
   completed_phases: 6
@@ -196,6 +196,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-07-09T14:52:08.036Z
-Stopped at: Completed 05-03-PLAN.md
-Resume file: None
+Last session: 2026-07-09T14:58:39.000Z
+Stopped at: 05-05-PLAN.md Task 4 (blocking human-verify UAT) — Tasks 1-3 committed (86b3ca1, 3078b3e, 23f2fec)
+Resume file: .planning/phases/05-notifications-read-surface-web-push/05-05-PLAN.md
