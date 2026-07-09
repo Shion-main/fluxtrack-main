@@ -36,6 +36,9 @@
         <span class="uk-label uk-label-secondary">{{ user.get_role_display }}</span>
         <nav class="ml-auto flex items-center gap-1">
           {% if user.is_staff %}<a href="/admin/" class="uk-btn uk-btn-ghost uk-btn-sm">Admin</a>{% endif %}
+          {% comment %}Notification bell mounted in the Franken shell (D-01); the
+          faculty ft-top mounts the same partial separately.{% endcomment %}
+          {% include "notifications/_bell.html" %}
           <span class="uk-text-small uk-text-muted hidden sm:inline">{{ user.get_full_name|default:user.username }}</span>
           <a href="/logout" class="uk-btn uk-btn-secondary uk-btn-sm">Sign out</a>
         </nav>
@@ -64,5 +67,28 @@
   </nav>
   {% endif %}
   {% endwith %}
+
+  {% if user.is_authenticated %}
+  {% comment %}Soft pre-prompt banner (D-07), rendered once globally across BOTH
+  shells (faculty pages extend this template). Hidden by default; push.js shows it
+  only when the origin permission is still 'default' and the user has not dismissed
+  it, so the REAL browser prompt fires only from the Enable tap -- a stray Block
+  can never be triggered by an ignored banner. The VAPID public key comes from the
+  global context processor (05-04); the CSRF token is read by the raw fetch.{% endcomment %}
+  <div id="push-banner" hidden
+       data-vapid-key="{{ vapid_public_key }}" data-csrftoken="{{ csrf_token }}"
+       class="fixed left-1/2 -translate-x-1/2 z-40 w-[min(92%,26rem)]" style="bottom:5rem">
+    <div class="uk-card uk-card-body border border-border bg-background shadow-lg flex items-center gap-3">
+      <uk-icon icon="bell"></uk-icon>
+      <div class="flex-1">
+        <div class="font-medium">Turn on notifications?</div>
+        <div class="uk-text-small uk-text-muted">Get alerts for room changes and approvals.</div>
+      </div>
+      <button id="push-dismiss" type="button" class="uk-btn uk-btn-default uk-btn-sm">Not now</button>
+      <button id="push-enable" type="button" class="uk-btn uk-btn-primary uk-btn-sm">Enable</button>
+    </div>
+  </div>
+  <script src="{% static 'js/push.js' %}" defer></script>
+  {% endif %}
 </body>
 </html>

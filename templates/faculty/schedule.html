@@ -9,7 +9,10 @@
       <img class="ft-top__crest" src="{% static 'brand/mmcm-crest.png' %}" alt="">
       <span class="ft-top__mark">FluxTrack</span>
     </a>
-    <details class="ft-acct">
+    {% comment %}Notification bell mounted in the faculty navy ft-top (D-01),
+    beside the account avatar; same partial the Franken shell mounts.{% endcomment %}
+    <div class="relative inline-flex" style="margin-left:auto">{% include "notifications/_bell.html" %}</div>
+    <details class="ft-acct" style="margin-left:0">
       <summary class="ft-top__avatar" aria-label="Account and sign out">{{ user.first_name|default:user.username|slice:":1"|upper }}{{ user.last_name|slice:":1"|upper }}</summary>
       <div class="ft-acct__menu">
         <div class="ft-acct__who">

@@ -37,8 +37,11 @@ muted, D-05). POST to /notifications/mute is CSRF-protected via {% csrf_token %}
   <div class="uk-card uk-card-body mt-4">
     <div class="font-medium mb-1">Push notifications</div>
     <p class="uk-text-muted uk-text-small mb-3">Enable browser push for key alerts.</p>
-    {% comment %}05-05 push client populates this (Enable / Blocked state); inert here.{% endcomment %}
-    <div id="push-controls"></div>
+    {% comment %}push.js (05-05) populates this with the state-driven control:
+    Enable / Turn off / a passive "blocked" note. The VAPID key + CSRF token are
+    read from these data attributes so the settings control works on its own.{% endcomment %}
+    <div id="push-controls"
+         data-vapid-key="{{ vapid_public_key }}" data-csrftoken="{{ csrf_token }}"></div>
   </div>
 </div>
 {% endblock %}
