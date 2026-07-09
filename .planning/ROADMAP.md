@@ -239,11 +239,15 @@ Plans:
   3. A user's mute preferences suppress muted notifications from both the in-app list and push.
   4. A failed push to a dead endpoint never breaks the scan, approval, or job that triggered it.
 
-**Plans**: TBD
+**Plans**: 5 plans
 
 Plans:
 
-- [ ] 05-01: TBD
+- [ ] 05-01-PLAN.md — Notification foundation: mute model + pushed_at + single category->type map + helpers (D-04/D-05/D-06)
+- [ ] 05-02-PLAN.md — Web push dependency (pywebpush) + VAPID config/keypair + legitimacy gate (NOTIF-02)
+- [ ] 05-03-PLAN.md — Fault-isolated push delivery: scheduler push_outbox job + 410/404 pruning (NOTIF-02, criterion #4)
+- [ ] 05-04-PLAN.md — In-app read surface: context processor, polled bell + dropdown + full page, auto-read, mute UI (NOTIF-01/NOTIF-03)
+- [ ] 05-05-PLAN.md — Web push client: SW push handlers, subscribe flow + soft pre-prompt, bell mounted in both shells (NOTIF-01/NOTIF-02)
 
 ### Phase 6: Reporting Engine & Reporting Surfaces
 
