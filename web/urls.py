@@ -1,6 +1,6 @@
 from django.urls import path
 
-from . import checker, dean, faculty, ifo, scan, views
+from . import checker, dean, faculty, ifo, notifications, scan, views
 
 urlpatterns = [
     path("", views.home, name="home"),
@@ -41,6 +41,12 @@ urlpatterns = [
     path("ifo/live/rows", ifo.live_rows, name="ifo_live_rows"),
     path("ifo/assignments", ifo.assignments_list, name="ifo_assignments"),
     path("ifo/assignments/create", ifo.assignment_create, name="ifo_assignment_create"),
+    # Notifications read surface (NOTIF-01) + mute settings (NOTIF-03)
+    path("notifications/bell", notifications.bell, name="notif_bell"),
+    path("notifications/dropdown", notifications.dropdown, name="notif_dropdown"),
+    path("notifications/settings", notifications.settings_page, name="notif_settings"),
+    path("notifications/mute", notifications.mute_toggle, name="notif_mute"),
+    path("notifications", notifications.list_page, name="notifications"),
     # PWA shell
     path("manifest.webmanifest", views.manifest),
     path("sw.js", views.service_worker),
