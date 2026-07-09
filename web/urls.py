@@ -1,6 +1,6 @@
 from django.urls import path
 
-from . import checker, dean, faculty, ifo, notifications, scan, views
+from . import checker, dean, faculty, ifo, notifications, push, scan, views
 
 urlpatterns = [
     path("", views.home, name="home"),
@@ -47,6 +47,10 @@ urlpatterns = [
     path("notifications/settings", notifications.settings_page, name="notif_settings"),
     path("notifications/mute", notifications.mute_toggle, name="notif_mute"),
     path("notifications", notifications.list_page, name="notifications"),
+    # Web-push subscription endpoints (NOTIF-02)
+    path("notifications/push/subscribe", push.subscribe, name="push_subscribe"),
+    path("notifications/push/unsubscribe", push.unsubscribe, name="push_unsubscribe"),
+    path("notifications/push/key", push.vapid_public_key, name="push_key"),
     # PWA shell
     path("manifest.webmanifest", views.manifest),
     path("sw.js", views.service_worker),
