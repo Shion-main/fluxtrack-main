@@ -1,14 +1,15 @@
 {% extends "base.html" %}
 {% block title %}Request a modality shift - FluxTrack{% endblock %}
 {% block content %}
-<div class="max-w-2xl mx-auto px-4 pt-4 pb-24">
-  <div class="flex items-center gap-2 mb-4">
-    <a href="/faculty/schedule" class="uk-btn uk-btn-ghost uk-btn-icon" aria-label="Back">
-      <uk-icon icon="arrow-left" class="size-5"></uk-icon></a>
-    <h1 class="uk-h3">Request a modality shift</h1>
-    <a href="/faculty/modality/mine" class="uk-btn uk-btn-secondary uk-btn-sm ml-auto">
+<div class="max-w-2xl mx-auto px-4 pt-5 pb-28 sm:pb-16">
+  <header class="flex items-center gap-3 mb-5">
+    <div class="min-w-0">
+      <h1 class="uk-h3 mb-0.5">Request a modality shift</h1>
+      <p class="uk-text-small uk-text-muted">Ask to move a class online, face-to-face, or blended.</p>
+    </div>
+    <a href="/faculty/modality/mine" class="uk-btn uk-btn-secondary uk-btn-sm ml-auto shrink-0">
       My requests</a>
-  </div>
+  </header>
   <div id="modality-panel">
     {% include "faculty/_modality_form.html" %}
   </div>

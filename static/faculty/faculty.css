@@ -1,0 +1,303 @@
+/* ============================================================================
+   FluxTrack — Faculty app theme (navy)
+   Derived from the owner's Figma prototype (DEFAULT SCREENS). A committed navy
+   system: a drenched deep-navy check-in hero, white pill actions, semantic
+   status pills, and an icon bottom tab bar. Scoped to .ft-app + .ft-* classes
+   so it never leaks into other roles' surfaces. Palette sampled from the PNGs.
+   ASCII-only.
+   ========================================================================== */
+:root {
+  /* Navy scale (sampled: hero #001c43, panel #0a1f44, track #0d284d).
+     Tokens live on :root so the fixed tab bar resolves them even when it is
+     rendered outside a .ft-app wrapper. Names are ft- and nv- prefixed to
+     avoid any clash with Franken UI's own custom properties (esp. its muted). */
+  --nv-hero: #001c43;
+  --nv-panel: #0a1f44;
+  --nv-track: #0d284d;
+  --nv-line: #22345a;
+  --on-nv: #ffffff;
+  --on-nv-dim: #9fb0cf;      /* muted text on navy (>=4.5:1 on hero) */
+
+  /* Ink + neutrals on white */
+  --ink: #0b1b3a;            /* navy headings on white */
+  --body: #35415a;          /* body text */
+  --ft-muted: #5a677f;
+  --line: #e6e9f1;
+  --surface: #ffffff;
+  --panel-2: #f3f5fb;        /* light chips / keypad */
+
+  /* Semantic (sampled) */
+  --green: #0f7a4d;   --green-tint: #dcfce7;
+  --amber: #b45309;   --amber-tint: #fef1d6;
+  --red:   #ba1a1a;   --red-tint:   #fbe1e1;
+  --purple:#6b40ad;   --purple-tint:#ece3fb;
+  --info-bg:#d9e2ff;  --info-ink:#1c3a86;
+
+  --r-hero: 26px;
+  --r-card: 18px;
+  --r-btn: 14px;
+  --r-pill: 999px;
+
+  --shadow-card: 0 1px 2px rgba(11,27,58,.04), 0 12px 30px -18px rgba(11,27,58,.30);
+  --shadow-nav: 0 10px 30px -10px rgba(0,28,67,.34), 0 3px 10px -4px rgba(0,28,67,.20);
+}
+
+.ft-app {
+  color: var(--body);
+  background: var(--surface);
+  min-height: 100dvh;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* --- App page shell ------------------------------------------------------- */
+.ft-page {
+  max-width: 26rem;
+  margin: 0 auto;
+  padding: 16px 16px calc(96px + env(safe-area-inset-bottom, 0px));
+}
+
+/* --- Top bar (crest + wordmark + avatar) ---------------------------------- */
+.ft-top {
+  max-width: 26rem;
+  margin: 0 auto;
+  padding: 14px 16px 10px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.ft-top__brand { display: flex; align-items: center; gap: 9px; text-decoration: none; }
+.ft-top__crest { width: 26px; height: 26px; object-fit: contain; }
+.ft-top__mark { font-size: 1.15rem; font-weight: 750; letter-spacing: -.02em; color: var(--ink); }
+.ft-top__avatar {
+  margin-left: auto;
+  width: 38px; height: 38px; border-radius: 50%;
+  display: grid; place-items: center;
+  background: var(--nv-hero); color: #fff;
+  font-size: .82rem; font-weight: 650; letter-spacing: .01em;
+  text-decoration: none; overflow: hidden;
+  box-shadow: 0 1px 2px rgba(0,28,67,.35);
+}
+.ft-top__avatar img { width: 100%; height: 100%; object-fit: cover; }
+.ft-top__avatar:focus-visible { outline: none; box-shadow: 0 0 0 3px rgba(0,28,67,.35); }
+
+/* --- Greeting ------------------------------------------------------------- */
+.ft-greet { margin: 6px 0 16px; }
+.ft-greet__hi { font-size: 1.5rem; line-height: 1.15; font-weight: 750; letter-spacing: -.02em; color: var(--ink); text-wrap: balance; }
+.ft-greet__date { margin-top: 3px; font-size: .875rem; color: var(--ft-muted); }
+
+/* --- Section header ------------------------------------------------------- */
+.ft-sec { display: flex; align-items: center; gap: 12px; margin: 22px 0 12px; }
+.ft-sec__title { font-size: 1.15rem; font-weight: 750; letter-spacing: -.01em; color: var(--ink); }
+.ft-chip {
+  margin-left: auto;
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 7px 13px; border-radius: var(--r-pill);
+  background: var(--panel-2); color: var(--ink);
+  font-size: .8rem; font-weight: 600; text-decoration: none;
+  border: 1px solid transparent;
+  transition: background-color .16s ease;
+}
+.ft-chip:hover { background: #e9edf7; }
+.ft-chip:focus-visible { outline: none; border-color: var(--nv-hero); }
+
+/* ==========================================================================
+   HERO — drenched navy check-in card
+   ========================================================================== */
+.ft-hero {
+  position: relative;
+  background: var(--nv-hero);
+  color: var(--on-nv);
+  border-radius: var(--r-hero);
+  padding: 22px 20px;
+  box-shadow: 0 18px 40px -22px rgba(0,28,67,.55);
+}
+.ft-hero__top { display: flex; align-items: center; margin-bottom: 16px; }
+.ft-eyebrow {
+  font-size: .72rem; font-weight: 700; letter-spacing: .12em;
+  text-transform: uppercase; color: var(--on-nv-dim);
+}
+.ft-hero__status {
+  margin-left: auto;
+  display: inline-flex; align-items: center; gap: 7px;
+  padding: 6px 12px; border-radius: var(--r-pill);
+  background: rgba(255,255,255,.08); border: 1px solid rgba(255,255,255,.14);
+  font-size: .72rem; font-weight: 650; letter-spacing: .04em; text-transform: uppercase;
+  color: var(--on-nv-dim);
+}
+.ft-hero__status .ft-dot { width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
+.ft-hero__status.is-live { color: #6ee7b7; background: rgba(21,146,95,.16); border-color: rgba(110,231,183,.28); }
+
+.ft-hero__title {
+  font-size: 1.7rem; line-height: 1.14; font-weight: 750; letter-spacing: -.02em;
+  color: #fff; text-wrap: balance; margin-bottom: 18px;
+}
+.ft-hero__title .sub { display: block; font-size: .95rem; font-weight: 500; color: var(--on-nv-dim); letter-spacing: 0; margin-top: 5px; }
+
+.ft-meta { display: grid; grid-template-columns: 1fr 1fr; gap: 12px 16px; }
+.ft-meta__item { display: flex; align-items: center; gap: 9px; font-size: .9rem; color: #dfe6f2; }
+.ft-meta__item uk-icon, .ft-meta__item svg { width: 17px; height: 17px; color: var(--on-nv-dim); flex: none; }
+
+/* Segmented modality control */
+.ft-seg-label { margin: 20px 0 9px; font-size: .72rem; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; color: var(--on-nv-dim); }
+.ft-seg {
+  display: flex; gap: 4px; padding: 4px;
+  background: var(--nv-track); border-radius: var(--r-btn);
+  border: 1px solid var(--nv-line);
+}
+.ft-seg__opt {
+  flex: 1 1 0;
+  display: inline-flex; align-items: center; justify-content: center; gap: 7px;
+  min-height: 42px; padding: 0 8px; border-radius: 10px;
+  font-size: .86rem; font-weight: 600; text-decoration: none;
+  color: var(--on-nv-dim); background: transparent; border: 1px solid transparent;
+  transition: background-color .16s ease, color .16s ease;
+}
+.ft-seg__opt uk-icon, .ft-seg__opt svg { width: 16px; height: 16px; }
+.ft-seg__opt:hover { color: #fff; }
+.ft-seg__opt.is-active {
+  background: var(--nv-panel); color: #fff;
+  border-color: rgba(255,255,255,.16);
+  box-shadow: 0 2px 8px -3px rgba(0,0,0,.5);
+}
+.ft-seg__opt:focus-visible { outline: none; box-shadow: inset 0 0 0 2px rgba(255,255,255,.6); }
+
+/* CTA area inside hero */
+.ft-hero__actions { margin-top: 20px; display: flex; flex-direction: column; gap: 12px; }
+.ft-cta {
+  display: inline-flex; align-items: center; justify-content: center; gap: 10px;
+  width: 100%; min-height: 54px; padding: 0 18px;
+  border-radius: var(--r-pill); border: 0; cursor: pointer;
+  background: #fff; color: var(--nv-hero);
+  font-size: 1rem; font-weight: 650; text-decoration: none;
+  transition: transform .06s ease, box-shadow .16s ease, background-color .16s ease;
+}
+.ft-cta uk-icon, .ft-cta svg { width: 20px; height: 20px; }
+.ft-cta:hover { background: #f2f5fc; }
+.ft-cta:active { transform: translateY(1px); }
+.ft-cta:focus-visible { outline: none; box-shadow: 0 0 0 3px rgba(255,255,255,.55); }
+.ft-cta--ghost { background: rgba(255,255,255,.06); color: #fff; border: 1px solid rgba(255,255,255,.22); }
+.ft-cta--ghost:hover { background: rgba(255,255,255,.12); }
+
+.ft-or { display: flex; align-items: center; gap: 12px; color: var(--on-nv-dim); font-size: .82rem; }
+.ft-or::before, .ft-or::after { content: ""; height: 1px; flex: 1; background: rgba(255,255,255,.16); }
+
+/* Teams-link input (Online modality) */
+.ft-field { margin-top: 4px; }
+.ft-field__label { display: block; font-size: .82rem; font-weight: 600; color: #fff; margin-bottom: 8px; }
+.ft-input-nv {
+  display: flex; align-items: center; gap: 10px;
+  background: #fff; border-radius: var(--r-btn); padding: 0 14px; min-height: 52px;
+}
+.ft-input-nv uk-icon, .ft-input-nv svg { width: 18px; height: 18px; color: var(--ft-muted); flex: none; }
+.ft-input-nv input { border: 0; outline: 0; width: 100%; font-size: .92rem; color: var(--ink); background: transparent; }
+.ft-hero__hint { margin-top: 10px; font-size: .82rem; color: var(--on-nv-dim); line-height: 1.5; }
+.ft-hero__link { display: block; text-align: center; margin-top: 14px; color: var(--on-nv-dim); font-size: .86rem; font-weight: 600; text-decoration: none; }
+.ft-hero__link:hover { color: #fff; }
+
+/* ==========================================================================
+   Today's schedule list
+   ========================================================================== */
+.ft-list { display: flex; flex-direction: column; gap: 10px; }
+.ft-row {
+  display: block; text-decoration: none;
+  background: var(--surface); border: 1px solid var(--line);
+  border-radius: var(--r-card); padding: 14px 16px;
+  box-shadow: var(--shadow-card);
+  transition: border-color .16s ease, transform .06s ease;
+}
+a.ft-row:hover { border-color: #cdd5e6; }
+a.ft-row:active { transform: translateY(1px); }
+.ft-row__top { display: flex; align-items: center; gap: 10px; margin-bottom: 4px; }
+.ft-row__time { font-size: .82rem; font-weight: 600; color: var(--ft-muted); }
+.ft-row__title { font-size: .98rem; font-weight: 650; color: var(--ink); }
+.ft-row__meta { margin-top: 5px; font-size: .82rem; color: var(--ft-muted); display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.ft-row__meta uk-icon, .ft-row__meta svg { width: 14px; height: 14px; vertical-align: -2px; }
+
+/* ==========================================================================
+   Status pills (semantic)
+   ========================================================================== */
+.ft-pill {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 5px 11px; border-radius: var(--r-pill);
+  font-size: .74rem; font-weight: 650; letter-spacing: .02em; white-space: nowrap;
+}
+.ft-pill uk-icon, .ft-pill svg { width: 13px; height: 13px; }
+.ft-pill .ft-dot { width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
+.ft-pill--f2f      { background: var(--nv-hero); color: #fff; }
+.ft-pill--online   { background: var(--info-bg); color: var(--info-ink); }
+.ft-pill--hybrid,
+.ft-pill--blended  { background: var(--purple-tint); color: var(--purple); }
+.ft-pill--active   { background: var(--green-tint); color: var(--green); }
+.ft-pill--upcoming { background: var(--panel-2); color: var(--ft-muted); }
+.ft-pill--late     { background: var(--amber-tint); color: var(--amber); }
+.ft-pill--absent   { background: var(--red-tint); color: var(--red); }
+.ft-pill--done     { background: var(--panel-2); color: var(--ft-muted); }
+.ft-pill--merged   { background: #e7ecf7; color: var(--nv-hero); }
+
+/* Merged-group section list inside a card */
+.ft-row__sections { margin-top: 8px; display: flex; flex-direction: column; gap: 6px; }
+.ft-subrow { display: flex; align-items: center; gap: 8px; font-size: .84rem; color: var(--body); }
+.ft-subrow__sec { font-weight: 650; color: var(--ink); }
+.ft-subrow__room { margin-left: auto; color: var(--ft-muted); display: inline-flex; align-items: center; gap: 5px; }
+.ft-subrow__room uk-icon, .ft-subrow__room svg { width: 13px; height: 13px; }
+.ft-divide { height: 1px; background: var(--line); margin: 2px 0; }
+
+/* ==========================================================================
+   Bottom tab bar — icon-only, floating, navy active square
+   ========================================================================== */
+.ft-tabbar {
+  position: fixed; left: 0; right: 0; bottom: 0; z-index: 40;
+  padding: 0 20px calc(env(safe-area-inset-bottom, 0px) + 14px);
+  pointer-events: none;
+}
+.ft-tabbar__row {
+  pointer-events: auto;
+  max-width: 22rem; margin: 0 auto;
+  display: flex; align-items: center; justify-content: space-around;
+  gap: 6px; padding: 9px 14px;
+  background: rgba(255,255,255,.82);
+  -webkit-backdrop-filter: saturate(180%) blur(20px);
+  backdrop-filter: saturate(180%) blur(20px);
+  border: 1px solid rgba(0,28,67,.08);
+  border-radius: 22px; box-shadow: var(--shadow-nav);
+}
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .ft-tabbar__row { background: #fff; }
+}
+.ft-tab {
+  display: grid; place-items: center;
+  width: 46px; height: 46px; border-radius: 14px;
+  color: #7a879c; text-decoration: none;
+  transition: background-color .16s ease, color .16s ease;
+}
+.ft-tab uk-icon, .ft-tab svg { width: 23px; height: 23px; }
+.ft-tab:hover { color: var(--nv-hero); }
+.ft-tab:active { background: rgba(0,28,67,.05); }
+.ft-tab:focus-visible { outline: none; box-shadow: 0 0 0 2px var(--nv-hero); }
+.ft-tab.is-active { background: var(--nv-hero); color: #fff; }
+
+/* ==========================================================================
+   Account menu (avatar dropdown in the top bar)
+   ========================================================================== */
+.ft-acct { margin-left: auto; position: relative; }
+.ft-acct > summary { list-style: none; cursor: pointer; }
+.ft-acct > summary::-webkit-details-marker { display: none; }
+.ft-acct__menu {
+  position: absolute; right: 0; top: calc(100% + 8px); z-index: 50;
+  min-width: 210px; background: #fff; border: 1px solid var(--line);
+  border-radius: 14px; box-shadow: var(--shadow-card); padding: 8px;
+}
+.ft-acct__who { padding: 8px 10px 10px; border-bottom: 1px solid var(--line); margin-bottom: 4px; }
+.ft-acct__who b { display: block; color: var(--ink); font-size: .92rem; font-weight: 650; }
+.ft-acct__who span { font-size: .78rem; color: var(--ft-muted); }
+.ft-acct__item {
+  display: flex; align-items: center; gap: 9px; padding: 10px;
+  border-radius: 10px; color: var(--ink); text-decoration: none;
+  font-size: .9rem; font-weight: 550;
+}
+.ft-acct__item uk-icon, .ft-acct__item svg { width: 17px; height: 17px; color: var(--ft-muted); }
+.ft-acct__item:hover { background: var(--panel-2); }
+
+@media (prefers-reduced-motion: reduce) {
+  .ft-cta, .ft-seg__opt, .ft-row, .ft-tab, .ft-chip { transition: none; }
+}

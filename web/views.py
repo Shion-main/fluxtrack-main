@@ -99,6 +99,12 @@ def logout_view(request):
 
 @login_required
 def home(request):
+    # Faculty open straight into their app shell (Schedule) so the bottom nav is
+    # present the moment they sign in -- the launcher card grid is for roles whose
+    # surfaces don't yet share a persistent nav. Superusers (no FACULTY role) still
+    # get the launcher.
+    if request.user.role == Role.FACULTY:
+        return redirect("faculty_schedule")
     return render(request, "web/home.html", {"surfaces": SURFACES.get(request.user.role, [])})
 
 

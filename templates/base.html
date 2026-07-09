@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <title>{% block title %}FluxTrack{% endblock %}</title>
   <link rel="manifest" href="/manifest.webmanifest">
-  <meta name="theme-color" content="#0a0a0a">
+  <meta name="theme-color" content="#001c43">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <link rel="icon" type="image/png" sizes="32x32" href="/icon-32.png">
   <link rel="icon" type="image/png" sizes="192x192" href="/icon-192.png">
@@ -13,6 +13,7 @@
   <!-- Franken UI (Tailwind) — CDN for dev; standalone-CLI build wired later (SRS §2.4) -->
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/franken-ui@2.1.2/dist/css/core.min.css"/>
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/franken-ui@2.1.2/dist/css/utilities.min.css"/>
+  <link rel="stylesheet" href="{% static 'faculty/faculty.css' %}"/>
   <script src="https://cdn.jsdelivr.net/npm/franken-ui@2.1.2/dist/js/core.iife.js" defer></script>
   <script src="https://cdn.jsdelivr.net/npm/franken-ui@2.1.2/dist/js/icon.iife.js" defer></script>
   <script src="https://cdn.jsdelivr.net/npm/htmx.org@2.0.6/dist/htmx.min.js" defer></script>
@@ -24,19 +25,42 @@
   {% block head %}{% endblock %}
 </head>
 <body class="bg-background text-foreground" hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'>
-  {% if user.is_authenticated %}
-  <header class="border-b border-border sticky top-0 z-10 bg-background/95 backdrop-blur">
-    <div class="uk-container max-w-5xl h-14 flex items-center gap-3">
-      <a href="/" class="font-semibold">FluxTrack</a>
-      <span class="uk-label uk-label-secondary">{{ user.get_role_display }}</span>
-      <nav class="ml-auto flex items-center gap-1">
-        {% if user.is_staff %}<a href="/admin/" class="uk-btn uk-btn-ghost uk-btn-sm">Admin</a>{% endif %}
-        <span class="uk-text-small uk-text-muted hidden sm:inline">{{ user.get_full_name|default:user.username }}</span>
-        <a href="/logout" class="uk-btn uk-btn-secondary uk-btn-sm">Sign out</a>
-      </nav>
-    </div>
-  </header>
+  {% with un=request.resolver_match.url_name %}
+  {% if un == "faculty_schedule" or un == "faculty_scan" or un == "faculty_modality_new" or un == "faculty_modality_mine" %}
+  {% elif user.is_authenticated %}
+    {# Standard shell for all other roles (launcher, checker, IFO, dean, admin).
+       Faculty pages render their own top chrome, so no global header there. #}
+    <header class="border-b border-border sticky top-0 z-30 bg-background/95 backdrop-blur">
+      <div class="uk-container max-w-5xl h-14 flex items-center gap-3">
+        <a href="/" class="font-semibold">FluxTrack</a>
+        <span class="uk-label uk-label-secondary">{{ user.get_role_display }}</span>
+        <nav class="ml-auto flex items-center gap-1">
+          {% if user.is_staff %}<a href="/admin/" class="uk-btn uk-btn-ghost uk-btn-sm">Admin</a>{% endif %}
+          <span class="uk-text-small uk-text-muted hidden sm:inline">{{ user.get_full_name|default:user.username }}</span>
+          <a href="/logout" class="uk-btn uk-btn-secondary uk-btn-sm">Sign out</a>
+        </nav>
+      </div>
+    </header>
   {% endif %}
+
   <main>{% block content %}{% endblock %}</main>
+
+  {% if un == "faculty_schedule" or un == "faculty_modality_mine" %}
+  {# Bottom tab bar shows on the primary tabs, not on the full-screen scan /
+     sub-flow screens. Three real destinations in the prototype's icon style. #}
+  <nav class="ft-tabbar" aria-label="Faculty">
+    <div class="ft-tabbar__row">
+      <a href="/faculty/schedule" class="ft-tab {% if un == 'faculty_schedule' %}is-active{% endif %}"
+         aria-label="Home"{% if un == 'faculty_schedule' %} aria-current="page"{% endif %}>
+        <uk-icon icon="house"></uk-icon></a>
+      <a href="/faculty/scan" class="ft-tab" aria-label="Check in">
+        <uk-icon icon="scan-line"></uk-icon></a>
+      <a href="/faculty/modality/mine" class="ft-tab {% if un == 'faculty_modality_mine' %}is-active{% endif %}"
+         aria-label="Requests"{% if un == 'faculty_modality_mine' %} aria-current="page"{% endif %}>
+        <uk-icon icon="arrow-left-right"></uk-icon></a>
+    </div>
+  </nav>
+  {% endif %}
+  {% endwith %}
 </body>
 </html>

@@ -22,6 +22,7 @@ from django.views.decorators.http import require_http_methods
 from accounts.models import Role
 from campus.models import Room
 from ops.availability import available_rooms_for, available_times_for
+from scheduling.merge import _effective_is_online, merged_sibling_ids
 from scheduling.models import (
     AcademicTerm,
     Modality,
@@ -53,18 +54,92 @@ def faculty_required(view):
     return wrapped
 
 
+def _greeting(now):
+    """Time-of-day greeting for the Home dashboard header."""
+    h = now.hour
+    if h < 12:
+        return "Good morning"
+    if h < 18:
+        return "Good afternoon"
+    return "Good evening"
+
+
+def _group_merged(sessions):
+    """Collapse co-scheduled "merged" sections into single cards (D-01).
+
+    A faculty teaching two sections at the same exact instant (same room/course,
+    or any two online) is ONE presence event -- one check-in covers the group
+    (scheduling.merge.propagate_merged_present). So the schedule should show them
+    as one card, not duplicate rows. Uses the same pure D-01 detector as the
+    check-in/verify/sweep seams so the display can never disagree with the fill.
+
+    Returns a list of "card" dicts in schedule order, each aggregating its group:
+    the representative session plus distinct rooms, total headcount, and count.
+    """
+    for s in sessions:  # annotate the fields the pure detector reads
+        s.course_code = s.schedule.course_code
+        s.is_online = _effective_is_online(s)
+
+    cards, used = [], set()
+    for anchor in sessions:
+        if anchor.id in used:
+            continue
+        sibs = merged_sibling_ids(anchor, sessions)
+        group = [anchor] + [s for s in sessions if s.id in sibs]
+        for s in group:
+            used.add(s.id)
+        rooms = list(dict.fromkeys(s.room.code for s in group))  # distinct, ordered
+        cards.append({
+            "rep": anchor,
+            "sessions": group,
+            "merged": len(group) > 1,
+            "count": len(group),
+            "rooms": rooms,
+            "rooms_label": ", ".join(rooms),
+            "students": sum(s.schedule.enrolled_count for s in group),
+            "modality": anchor.declared_modality or anchor.schedule.modality,
+        })
+    return cards
+
+
 @faculty_required
 def schedule(request):
-    today = timezone.localdate()
+    now = timezone.localtime()
+    today = now.date()
     week_end = today + timedelta(days=7)
     sessions = (Session.objects.filter(faculty=request.user,
                                        date__gte=today, date__lt=week_end)
-                .select_related("schedule", "room").order_by("date", "scheduled_start"))
+                .select_related("schedule", "room__floor__building")
+                .order_by("date", "scheduled_start"))
     todays, upcoming = [], []
     for s in sessions:
         (todays if s.date == today else upcoming).append(s)
-    return render(request, "faculty/schedule.html",
-                  {"todays": todays, "upcoming": upcoming, "today": today})
+
+    today_cards = _group_merged(todays)
+    week_cards = _group_merged(upcoming)
+
+    # Hero "check-in" card: the merged group the faculty most likely acts on now --
+    # an in-progress group first, else the next one still ahead today, else the
+    # next upcoming this week. ``hero_live`` drives the In-session vs Upcoming pill.
+    def _is_active(card):
+        return any(s.status == SessionStatus.ACTIVE for s in card["sessions"])
+
+    def _is_next(card):
+        return any(s.status == SessionStatus.SCHEDULED and s.scheduled_end >= now
+                   for s in card["sessions"])
+
+    hero = next((c for c in today_cards if _is_active(c)), None)
+    hero_live = hero is not None
+    if hero is None:
+        hero = next((c for c in today_cards if _is_next(c)), None)
+    if hero is None:
+        hero = today_cards[0] if today_cards else (week_cards[0] if week_cards else None)
+
+    return render(request, "faculty/schedule.html", {
+        "today_cards": today_cards, "week_cards": week_cards, "today": today,
+        "greeting": _greeting(now), "hero": hero, "hero_live": hero_live,
+        "hero_modality": hero["modality"] if hero else "", "modalities": Modality,
+    })
 
 
 @faculty_required

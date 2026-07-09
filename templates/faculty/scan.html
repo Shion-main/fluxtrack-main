@@ -4,12 +4,11 @@
 <script src="https://cdn.jsdelivr.net/npm/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
 {% endblock %}
 {% block content %}
-<div class="max-w-md mx-auto px-4 pt-4 pb-24">
-  <div class="flex items-center gap-2 mb-4">
-    <a href="/" class="uk-btn uk-btn-ghost uk-btn-icon" aria-label="Back">
-      <uk-icon icon="arrow-left" class="size-5"></uk-icon></a>
-    <h1 class="uk-h3">Check in</h1>
-  </div>
+<div class="max-w-md mx-auto px-4 pt-5 pb-28 sm:pb-16">
+  <header class="mb-5">
+    <h1 class="uk-h3 mb-0.5">Check in</h1>
+    <p class="uk-text-small uk-text-muted">Scan the room QR or enter its six-digit code.</p>
+  </header>
 
   <div class="uk-card uk-card-body">
     <button id="cam-btn" class="uk-btn uk-btn-primary w-full h-12 text-base" onclick="startCamera()">

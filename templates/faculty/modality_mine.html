@@ -9,14 +9,15 @@ hidden control is UX, not the guard. Franken UI (uk-*). ASCII-only.
 {% endcomment %}
 {% block title %}My modality requests - FluxTrack{% endblock %}
 {% block content %}
-<div class="max-w-2xl mx-auto px-4 pt-4 pb-24">
-  <div class="flex items-center gap-2 mb-4">
-    <a href="/faculty/schedule" class="uk-btn uk-btn-ghost uk-btn-icon" aria-label="Back">
-      <uk-icon icon="arrow-left" class="size-5"></uk-icon></a>
-    <h1 class="uk-h3">My modality requests</h1>
-    <a href="/faculty/modality/new" class="uk-btn uk-btn-primary uk-btn-sm ml-auto">
+<div class="max-w-2xl mx-auto px-4 pt-5 pb-28 sm:pb-16">
+  <header class="flex items-center gap-3 mb-5">
+    <div class="min-w-0">
+      <h1 class="uk-h3 mb-0.5">My modality requests</h1>
+      <p class="uk-text-small uk-text-muted">Track your shift requests and their decisions.</p>
+    </div>
+    <a href="/faculty/modality/new" class="uk-btn uk-btn-primary uk-btn-sm ml-auto shrink-0">
       <uk-icon icon="plus" class="size-4"></uk-icon> New request</a>
-  </div>
+  </header>
 
   {% if error %}
   <div class="uk-alert uk-alert-destructive mb-4" role="alert" data-error="1">

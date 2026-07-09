@@ -1,45 +1,164 @@
 {% extends "base.html" %}
-{% block title %}My schedule · FluxTrack{% endblock %}
+{% load static %}
+{% block title %}Home · FluxTrack{% endblock %}
 {% block content %}
-<div class="max-w-md mx-auto px-4 pt-4 pb-24">
-  <div class="flex items-center gap-2 mb-4">
-    <a href="/" class="uk-btn uk-btn-ghost uk-btn-icon" aria-label="Back">
-      <uk-icon icon="arrow-left" class="size-5"></uk-icon></a>
-    <h1 class="uk-h3">My schedule</h1>
-    <a href="/faculty/scan" class="uk-btn uk-btn-primary uk-btn-sm ml-auto">
-      <uk-icon icon="scan-line" class="size-4"></uk-icon> Check in</a>
-  </div>
+<div class="ft-app">
 
-  <h3 class="uk-h4 mb-2">Today · {{ today|date:"D, M j" }}</h3>
-  {% for s in todays %}
-  <div class="uk-card uk-card-body mb-2">
-    <div class="flex items-center justify-between">
-      <div>
-        <p class="font-semibold">{{ s.schedule.course_code }}-{{ s.schedule.section }}</p>
-        <p class="uk-text-small uk-text-muted">
-          {{ s.scheduled_start|time:"g:i A" }}–{{ s.scheduled_end|time:"g:i A" }} · {{ s.room.code }}
-        </p>
+  <header class="ft-top">
+    <a href="/faculty/schedule" class="ft-top__brand">
+      <img class="ft-top__crest" src="{% static 'brand/mmcm-crest.png' %}" alt="">
+      <span class="ft-top__mark">FluxTrack</span>
+    </a>
+    <details class="ft-acct">
+      <summary class="ft-top__avatar" aria-label="Account and sign out">{{ user.first_name|default:user.username|slice:":1"|upper }}{{ user.last_name|slice:":1"|upper }}</summary>
+      <div class="ft-acct__menu">
+        <div class="ft-acct__who">
+          <b>{{ user.get_full_name|default:user.username }}</b>
+          <span>{{ user.get_role_display }}{% if user.department %} · {{ user.department.name }}{% endif %}</span>
+        </div>
+        <a class="ft-acct__item" href="/logout"><uk-icon icon="log-out"></uk-icon> Sign out</a>
       </div>
-      {% if s.status == "active" %}<span class="uk-label uk-label-primary">In session</span>
-      {% elif s.status == "completed" %}<span class="uk-label uk-label-secondary">Done</span>
-      {% elif s.status == "absent" %}<span class="uk-label uk-label-destructive">Absent</span>
-      {% else %}<span class="uk-label">{{ s.get_status_display }}</span>{% endif %}
-    </div>
-  </div>
-  {% empty %}
-  <p class="uk-text-small uk-text-muted mb-4">No classes today.</p>
-  {% endfor %}
+    </details>
+  </header>
 
-  <h3 class="uk-h4 mt-6 mb-2">This week</h3>
-  {% for s in upcoming %}
-  <div class="flex items-center gap-3 py-2 border-b border-border uk-text-small">
-    <span class="uk-label uk-label-secondary w-20 justify-center">{{ s.date|date:"D M j" }}</span>
-    <span class="whitespace-nowrap">{{ s.scheduled_start|time:"g:i A" }}–{{ s.scheduled_end|time:"g:i A" }}</span>
-    <span class="font-medium">{{ s.schedule.course_code }}-{{ s.schedule.section }}</span>
-    <span class="uk-text-muted ml-auto">{{ s.room.code }}</span>
+  <div class="ft-page">
+    <div class="ft-greet">
+      <div class="ft-greet__hi">{{ greeting }}, {{ user.first_name|default:user.get_full_name|default:user.username }}</div>
+      <div class="ft-greet__date">{{ today|date:"l, F j" }}</div>
+    </div>
+
+    {% if hero %}
+    <section class="ft-hero">
+      <div class="ft-hero__top">
+        <span class="ft-eyebrow">Check-in</span>
+        {% if hero_live %}
+        <span class="ft-hero__status is-live"><span class="ft-dot"></span> In session</span>
+        {% else %}
+        <span class="ft-hero__status"><span class="ft-dot"></span> Upcoming</span>
+        {% endif %}
+      </div>
+
+      <h1 class="ft-hero__title">{{ hero.rep.schedule.course_code }}
+        {% if hero.merged %}
+        <span class="sub">{{ hero.count }} merged sections · {% for s in hero.sessions %}{{ s.schedule.section }}{% if not forloop.last %} + {% endif %}{% endfor %}</span>
+        {% else %}
+        <span class="sub">Section {{ hero.rep.schedule.section }}</span>
+        {% endif %}
+      </h1>
+
+      <div class="ft-meta">
+        <div class="ft-meta__item"><uk-icon icon="map-pin"></uk-icon> {{ hero.rooms_label }}</div>
+        {% if hero.merged %}
+        <div class="ft-meta__item"><uk-icon icon="layers"></uk-icon> {{ hero.count }} sections</div>
+        {% elif hero.rep.room.floor.building.code %}
+        <div class="ft-meta__item"><uk-icon icon="building-2"></uk-icon> {{ hero.rep.room.floor.building.code }}{% if hero.rep.room.floor.number %} · Flr {{ hero.rep.room.floor.number }}{% endif %}</div>
+        {% endif %}
+        <div class="ft-meta__item"><uk-icon icon="users"></uk-icon> {{ hero.students }} Students</div>
+        <div class="ft-meta__item"><uk-icon icon="clock"></uk-icon> {{ hero.rep.scheduled_start|time:"g:i" }} - {{ hero.rep.scheduled_end|time:"g:i A" }}</div>
+      </div>
+
+      <div class="ft-seg-label">Class modality</div>
+      <div class="ft-seg" role="group" aria-label="Class modality">
+        {% for value, label in modalities.choices %}
+          {% if value == hero_modality %}
+          <span class="ft-seg__opt is-active" aria-current="true">
+            <uk-icon icon="{% if value == 'f2f' %}presentation{% elif value == 'blended' %}video{% else %}monitor{% endif %}"></uk-icon> {{ label }}</span>
+          {% else %}
+          <a class="ft-seg__opt" href="/faculty/modality/new" title="Request to switch to {{ label }}">
+            <uk-icon icon="{% if value == 'f2f' %}presentation{% elif value == 'blended' %}video{% else %}monitor{% endif %}"></uk-icon> {{ label }}</a>
+          {% endif %}
+        {% endfor %}
+      </div>
+
+      {% if hero_modality == "online" %}
+      <div class="ft-hero__actions">
+        <div class="ft-field">
+          <span class="ft-field__label">Teams meeting link</span>
+          <div class="ft-input-nv">
+            <uk-icon icon="link"></uk-icon>
+            <input type="text" value="{{ hero.rep.teams_link }}" placeholder="No link set yet" readonly>
+          </div>
+        </div>
+        <p class="ft-hero__hint">Online sessions are verified by a roving checker through Teams. Keep the link current so students can join.</p>
+        <a class="ft-hero__link" href="/faculty/modality/new">Request a modality change</a>
+      </div>
+      {% else %}
+      <div class="ft-hero__actions">
+        <a class="ft-cta" href="/faculty/scan"><uk-icon icon="qr-code"></uk-icon> Scan Room QR</a>
+        <div class="ft-or">or</div>
+        <a class="ft-cta ft-cta--ghost" href="/faculty/scan?manual=1">Input Room Code</a>
+      </div>
+      {% if hero.merged %}<p class="ft-hero__hint" style="text-align:center">One check-in covers all {{ hero.count }} merged sections.</p>{% endif %}
+      {% endif %}
+    </section>
+    {% else %}
+    <section class="ft-hero">
+      <div class="ft-hero__top"><span class="ft-eyebrow">Check-in</span></div>
+      <h1 class="ft-hero__title">No classes ahead<span class="sub">You have nothing scheduled in the next 7 days.</span></h1>
+    </section>
+    {% endif %}
+
+    <div class="ft-sec">
+      <div class="ft-sec__title">Today's Schedule</div>
+    </div>
+    <div class="ft-list">
+      {% for c in today_cards %}
+      <div class="ft-row">
+        <div class="ft-row__top">
+          <span class="ft-row__time">{{ c.rep.scheduled_start|time:"g:i" }} - {{ c.rep.scheduled_end|time:"g:i A" }}</span>
+          {% if c.rep.status == "active" %}<span class="ft-pill ft-pill--active" style="margin-left:auto"><span class="ft-dot"></span> In session</span>
+          {% elif c.rep.status == "completed" %}<span class="ft-pill ft-pill--done" style="margin-left:auto">Done</span>
+          {% elif c.rep.status == "absent" %}<span class="ft-pill ft-pill--absent" style="margin-left:auto">Absent</span>
+          {% elif c.modality == "f2f" %}<span class="ft-pill ft-pill--f2f" style="margin-left:auto">F2F</span>
+          {% elif c.modality == "blended" %}<span class="ft-pill ft-pill--blended" style="margin-left:auto">Blended</span>
+          {% else %}<span class="ft-pill ft-pill--online" style="margin-left:auto">Online</span>{% endif %}
+        </div>
+
+        {% if c.merged %}
+        <div class="ft-row__title">{{ c.rep.schedule.course_code }} <span class="ft-pill ft-pill--merged" style="vertical-align:middle"><uk-icon icon="layers"></uk-icon> Merged · {{ c.count }}</span></div>
+        <div class="ft-row__sections">
+          {% for s in c.sessions %}
+          <div class="ft-subrow">
+            <span class="ft-subrow__sec">{{ s.schedule.course_code }} · {{ s.schedule.section }}</span>
+            <span class="ft-subrow__room"><uk-icon icon="map-pin"></uk-icon> {{ s.room.code }} · {{ s.schedule.enrolled_count }}</span>
+          </div>
+          {% endfor %}
+        </div>
+        {% else %}
+        <div class="ft-row__title">{{ c.rep.schedule.course_code }} · {{ c.rep.schedule.section }}</div>
+        <div class="ft-row__meta"><uk-icon icon="map-pin"></uk-icon> {{ c.rooms_label }} <span>·</span> {{ c.students }} students</div>
+        {% endif %}
+      </div>
+      {% empty %}
+      <div class="ft-row"><div class="ft-row__meta" style="margin:0"><uk-icon icon="coffee"></uk-icon> No classes today.</div></div>
+      {% endfor %}
+    </div>
+
+    {% if week_cards %}
+    <div class="ft-sec">
+      <div class="ft-sec__title">This week</div>
+    </div>
+    <div class="ft-list">
+      {% for c in week_cards %}
+      <div class="ft-row">
+        <div class="ft-row__top">
+          <span class="ft-row__time">{{ c.rep.date|date:"D, M j" }} · {{ c.rep.scheduled_start|time:"g:i" }} - {{ c.rep.scheduled_end|time:"g:i A" }}</span>
+          {% if c.merged %}<span class="ft-pill ft-pill--merged" style="margin-left:auto"><uk-icon icon="layers"></uk-icon> Merged · {{ c.count }}</span>
+          {% elif c.modality == "f2f" %}<span class="ft-pill ft-pill--f2f" style="margin-left:auto">F2F</span>
+          {% elif c.modality == "blended" %}<span class="ft-pill ft-pill--blended" style="margin-left:auto">Blended</span>
+          {% else %}<span class="ft-pill ft-pill--online" style="margin-left:auto">Online</span>{% endif %}
+        </div>
+        {% if c.merged %}
+        <div class="ft-row__title">{% for s in c.sessions %}{{ s.schedule.course_code }} · {{ s.schedule.section }}{% if not forloop.last %} + {% endif %}{% endfor %}</div>
+        <div class="ft-row__meta"><uk-icon icon="map-pin"></uk-icon> {{ c.rooms_label }}</div>
+        {% else %}
+        <div class="ft-row__title">{{ c.rep.schedule.course_code }} · {{ c.rep.schedule.section }}</div>
+        <div class="ft-row__meta"><uk-icon icon="map-pin"></uk-icon> {{ c.rooms_label }}</div>
+        {% endif %}
+      </div>
+      {% endfor %}
+    </div>
+    {% endif %}
   </div>
-  {% empty %}
-  <p class="uk-text-small uk-text-muted">Nothing else scheduled this week.</p>
-  {% endfor %}
 </div>
 {% endblock %}
