@@ -239,11 +239,11 @@ Plans:
   3. A user's mute preferences suppress muted notifications from both the in-app list and push.
   4. A failed push to a dead endpoint never breaks the scan, approval, or job that triggered it.
 
-**Plans**: 5 plans
+**Plans**: 1/5 plans executed
 
 Plans:
 
-- [ ] 05-01-PLAN.md — Notification foundation: mute model + pushed_at + single category->type map + helpers (D-04/D-05/D-06)
+- [x] 05-01-PLAN.md — Notification foundation: mute model + pushed_at + single category->type map + helpers (D-04/D-05/D-06)
 - [ ] 05-02-PLAN.md — Web push dependency (pywebpush) + VAPID config/keypair + legitimacy gate (NOTIF-02)
 - [ ] 05-03-PLAN.md — Fault-isolated push delivery: scheduler push_outbox job + 410/404 pruning (NOTIF-02, criterion #4)
 - [ ] 05-04-PLAN.md — In-app read surface: context processor, polled bell + dropdown + full page, auto-read, mute UI (NOTIF-01/NOTIF-03)
@@ -317,7 +317,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8
 | 2. Correctness Foundations | 5/5 | Complete    | 2026-07-02 |
 | 3. Duty Assignments & Checker Verification | 6/6 | Complete    | 2026-07-03 |
 | 4. Modality Shift Approval & SRS v1.2 | 8/8 | Complete    | 2026-07-03 |
-| 5. Notifications — Read Surface & Web Push | 0/TBD | Not started | - |
+| 5. Notifications — Read Surface & Web Push | 1/5 | In Progress|  |
 | 6. Reporting Engine & Reporting Surfaces | 0/TBD | Not started | - |
 | 7. Remaining Operational Surfaces | 0/TBD | Not started | - |
 | 8. Auth Cutover & AWS Deployment | 0/TBD | Not started | - |

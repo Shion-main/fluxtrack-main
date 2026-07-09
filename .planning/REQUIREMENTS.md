@@ -60,9 +60,9 @@ roadmap does NOT create phases for them.
 
 ### Notifications (NOTIF)
 
-- [ ] **NOTIF-01**: Every role sees an in-app notification list (polled) reading the `Notification` rows created by `notify()`
-- [ ] **NOTIF-02**: Subscribed clients receive web-push (VAPID) for floor activity and key events (wrong-room, force handover, room conflict, weekly report ready)
-- [ ] **NOTIF-03**: Per-user mute preferences suppress muted notifications
+- [x] **NOTIF-01**: Every role sees an in-app notification list (polled) reading the `Notification` rows created by `notify()`
+- [x] **NOTIF-02**: Subscribed clients receive web-push (VAPID) for floor activity and key events (wrong-room, force handover, room conflict, weekly report ready)
+- [x] **NOTIF-03**: Per-user mute preferences suppress muted notifications
 
 ### Reporting (RPT)
 
@@ -168,9 +168,9 @@ phase (see ROADMAP.md). Status values: Pending / In progress / Complete.
 | MOD-05 | Phase 4 | Complete |
 | MOD-06 | Phase 4 | Complete |
 | DOC-01 | Phase 4 | Complete |
-| NOTIF-01 | Phase 5 | Pending |
-| NOTIF-02 | Phase 5 | Pending |
-| NOTIF-03 | Phase 5 | Pending |
+| NOTIF-01 | Phase 5 | Complete |
+| NOTIF-02 | Phase 5 | Complete |
+| NOTIF-03 | Phase 5 | Complete |
 | RPT-01 | Phase 6 | Pending |
 | RPT-02 | Phase 6 | Pending |
 | RPT-03 | Phase 6 | Pending |
