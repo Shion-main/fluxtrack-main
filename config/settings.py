@@ -23,6 +23,15 @@ def env_bool(key, default=False):
     return env(key, str(default)).lower() in ("1", "true", "yes", "on")
 
 
+# --- Web push (VAPID, NOTIF-02) ---
+# Self-signed application server key: the private PEM signs every push and is a
+# secret (threat T-05-03) — kept out of git via *.pem/keys/ and referenced by
+# path, never inlined. Empty defaults keep the app booting when push is
+# unconfigured; the 05-03 outbox sender treats an empty key path as "push off".
+VAPID_PUBLIC_KEY = env("VAPID_PUBLIC_KEY", "")
+VAPID_PRIVATE_KEY_PATH = env("VAPID_PRIVATE_KEY_PATH", "")
+VAPID_SUB = env("VAPID_SUB", "")
+
 # --- Core ---
 SECRET_KEY = env("SECRET_KEY", "dev-insecure-change-me")
 DEBUG = env_bool("DEBUG", True)
@@ -209,4 +218,5 @@ FLUXTRACK_POLICY = {
     "reporting_week_start": "monday",
     "sweep_interval_minutes": 5,   # ENV-04: dedicated-scheduler sweep cadence (JOB-02)
     "modality_shift_lead_days": 2,  # MOD-01/D-02: modality-shift lead-time gate in whole calendar days (Asia/Manila)
+    "push_outbox_interval_seconds": 15,  # D-09/NOTIF-02: scheduler cadence draining the push outbox (policy-driven, never hardcoded)
 }

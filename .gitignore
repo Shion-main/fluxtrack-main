@@ -12,6 +12,11 @@ db.sqlite3-journal
 /staticfiles/
 .env
 
+# Web push VAPID keys — the private key PEM is a secret (threat T-05-03),
+# never committed; the whole keys/ dir is generated locally per-environment.
+*.pem
+keys/
+
 # OS / editor
 .DS_Store
 Thumbs.db

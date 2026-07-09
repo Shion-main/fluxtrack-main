@@ -15,6 +15,9 @@ pypandoc_binary==1.17       # bundled pandoc engine for DOC-01 SRS md->docx (pan
 # BlockingScheduler/jobstore API (ENV-04 relies on 3.x); do NOT adopt 4.0.
 APScheduler>=3.10,<4
 
+# Web push (NOTIF-02) — VAPID send; pulls py-vapid + http-ece, uses existing cryptography
+pywebpush>=2.3,<3
+
 # Identity (Entra ID SSO) — python-social-auth wiring against Microsoft Entra ID
 social-auth-app-django==6.0.0   # social_django: models, URLs, views, middleware, pipeline
 
