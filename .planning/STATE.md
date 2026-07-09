@@ -5,8 +5,8 @@ milestone_name: "**Goal**: Faculty can request a lead-time-gated modality shift 
 current_phase: 05
 current_phase_name: notifications-read-surface-web-push
 status: executing
-stopped_at: Phase 5 planned — 5 plans across 3 waves, plan-checker PASSED
-last_updated: "2026-07-09T14:19:19.810Z"
+stopped_at: Completed 05-03-PLAN.md
+last_updated: "2026-07-09T14:39:58.036Z"
 last_activity: 2026-07-09
 last_activity_desc: Phase 05 execution started
 progress:
@@ -29,7 +29,7 @@ See: .planning/PROJECT.md (updated 2026-07-02)
 ## Current Position
 
 Phase: 05 (notifications-read-surface-web-push) — EXECUTING
-Plan: 3 of 5
+Plan: 4 of 5
 Status: Ready to execute
 Last activity: 2026-07-09 — Phase 05 execution started
 
@@ -96,6 +96,7 @@ Progress: [████████░░] 80%
 | Phase 04.2 P04 | 15min | 2 tasks | 2 files |
 | Phase 05 P01 | 10min | 3 tasks | 4 files |
 | Phase 05 P02 | 3min | 2 tasks tasks | 5 files files |
+| Phase 05 P03 | 14min | 3 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -168,6 +169,8 @@ Recent decisions affecting current work:
 - [Phase ?]: 04.2-03: online Checker Verify propagates present across the online merged group via the D-01 course_code/V-room key (no teams_link clause); online Flag-not-present propagates ABSENT immediately; F2F flag stays record-only (D-07 per-modality)
 - [Phase ?]: 04.2-03: merge-filled siblings get NO CheckerValidation (D-09) so verified_by_checker/CHK-04 coverage stays honest
 - [Phase 05]: 05-02: pywebpush pinned + installed (py-vapid 1.9.4 + http-ece 1.2.1); VAPID_PUBLIC_KEY/PRIVATE_KEY_PATH/SUB read via env() with empty-safe defaults so the app boots unconfigured; private key referenced by path only, PEM gitignored via *.pem+keys/ and git check-ignore verified (T-05-03); push_outbox_interval_seconds=15 added to FLUXTRACK_POLICY (D-09, policy-driven cadence); package-legitimacy gate T-05-SC approved by operator after pypi.org verification.
+- [Phase 05]: 05-03: Web push is fault-isolated by construction (D-09) -- send_push_outbox runs ONLY in the scheduler push_outbox job (4th job on the single BlockingScheduler), never in a web worker, so a hung endpoint cannot touch the triggering request (criterion #4).
+- [Phase 05]: 05-03: Prune subscriptions ONLY on WebPushException 404/410; transient 5xx/timeout/network are kept and treated as handled this pass (T-05-08), so a flaky vendor never drops live endpoints.
 
 ### Pending Todos
 
@@ -191,6 +194,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-07-09T14:18:48.535Z
-Stopped at: Phase 5 planned — 5 plans across 3 waves, plan-checker PASSED
-Resume file: .planning/phases/05-notifications-read-surface-web-push/05-01-PLAN.md
+Last session: 2026-07-09T14:39:58.022Z
+Stopped at: Completed 05-03-PLAN.md
+Resume file: None
