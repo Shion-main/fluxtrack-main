@@ -26,6 +26,7 @@ from django.core.management.base import BaseCommand
 
 from ops.jobrun import run_job
 from ops.policy import get_policy
+from ops.push import send_push_outbox
 from scheduling.jobs import detect_room_conflicts, sweep_no_shows
 
 # Materialize cadence (discretion): re-fill the session horizon every 6 hours.
@@ -58,11 +59,14 @@ def _job_weekly_report():
 
 
 def build_scheduler():
-    """Return a configured, UNSTARTED BlockingScheduler with exactly 3 jobs (ENV-04).
+    """Return a configured, UNSTARTED BlockingScheduler with exactly 4 jobs (ENV-04).
 
     Constructing (not starting) here keeps wiring unit-testable and guarantees the
     scheduler exists in exactly one place. Each job is wrapped in run_job so every
-    execution records a JobRun and failures alert System Admins.
+    execution records a JobRun and failures alert System Admins. The push_outbox
+    job (NOTIF-02, D-09) runs the web-push send/prune pass HERE -- never in a web
+    worker -- so a hung push endpoint can never touch the triggering request
+    (criterion #4).
     """
     sched = BlockingScheduler(timezone=settings.TIME_ZONE)  # Asia/Manila
 
@@ -85,6 +89,16 @@ def build_scheduler():
         id="weekly_report", max_instances=1, coalesce=True,
         replace_existing=True)
 
+    # Push outbox cadence from policy (default 15s) — never hardcoded (Conventions
+    # §3). Wrapped in run_job so a bad pass records a failed JobRun and NEVER
+    # re-raises, keeping this BlockingScheduler alive (criterion #4). max_instances
+    # =1 + coalesce prevent pile-up if a pass runs long (T-05-07).
+    sched.add_job(
+        lambda: run_job("push_outbox", send_push_outbox),
+        IntervalTrigger(seconds=get_policy("push_outbox_interval_seconds")),
+        id="push_outbox", max_instances=1, coalesce=True,
+        misfire_grace_time=60, replace_existing=True)
+
     return sched
 
 
@@ -94,9 +108,11 @@ class Command(BaseCommand):
     def handle(self, *args, **o):
         sched = build_scheduler()
         interval = get_policy("sweep_interval_minutes")
+        push_interval = get_policy("push_outbox_interval_seconds")
         self.stdout.write(self.style.SUCCESS(
             f"Scheduler started -> materialize (every {_MATERIALIZE_INTERVAL_HOURS}h), "
-            f"sweep (every {interval} min), weekly_report (Mon 06:00). "
+            f"sweep (every {interval} min), weekly_report (Mon 06:00), "
+            f"push_outbox (every {push_interval} s). "
             "Ctrl-C to stop."))
         try:
             sched.start()  # blocks the process

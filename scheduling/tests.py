@@ -503,22 +503,24 @@ class RoomConflictTests(_JobFixtureMixin, TestCase):
 
 # ---------------------------------------------------------------------------
 # ENV-04 scheduler wiring: `runscheduler.build_scheduler()` registers EXACTLY the
-# 3 jobs (materialize / sweep / weekly_report) on one BlockingScheduler and hands
-# it back UNSTARTED, so a single dedicated `manage.py runscheduler` process owns
-# all jobs and nothing double-fires across web workers. Import is method-local so
-# only this class goes RED before runscheduler.py exists (Task 3).
+# 4 jobs (materialize / sweep / weekly_report / push_outbox) on one BlockingScheduler
+# and hands it back UNSTARTED, so a single dedicated `manage.py runscheduler`
+# process owns all jobs and nothing double-fires across web workers. push_outbox
+# (05-03, NOTIF-02/D-09) runs the web-push send/prune pass here, never in a web
+# worker. Import is method-local so only this class goes RED before runscheduler.py
+# exists (Task 3).
 # ---------------------------------------------------------------------------
 class SchedulerWiringTests(TestCase):
-    """ENV-04: build_scheduler() wires exactly 3 jobs and returns them unstarted."""
+    """ENV-04: build_scheduler() wires exactly 4 jobs and returns them unstarted."""
 
-    def test_build_scheduler_registers_exactly_three_jobs_unstarted(self):
+    def test_build_scheduler_registers_exactly_four_jobs_unstarted(self):
         from scheduling.management.commands.runscheduler import build_scheduler
         sched = build_scheduler()
         try:
             self.assertFalse(sched.running)  # never started by build_scheduler()
             self.assertEqual(
                 {j.id for j in sched.get_jobs()},
-                {"materialize", "sweep", "weekly_report"})
+                {"materialize", "sweep", "weekly_report", "push_outbox"})
         finally:
             if getattr(sched, "running", False):
                 sched.shutdown(wait=False)
