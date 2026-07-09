@@ -1,0 +1,14 @@
+{% comment %}Global notification bell wrapper (NOTIF-01, D-02). Authored here but
+MOUNTED into BOTH shells (base.html header + the faculty app-shell) by 05-05, so
+the bell rides the shared context processor (poll_ms + unread) -- it cannot be
+supplied per-view (RESEARCH Pitfall 4).
+
+The container polls GET /notifications/bell on the policy-driven cadence and
+swaps in _bell_inner (badge + read-only preview). The badge only clears when the
+user OPENS the dropdown (which fetches /notifications/dropdown and marks read,
+D-03) -- the poll itself never marks read.{% endcomment %}
+<div id="notif-bell" class="relative inline-flex"
+     hx-get="/notifications/bell" hx-trigger="load, every {{ poll_ms }}ms"
+     hx-target="this" hx-swap="innerHTML">
+  {% include "notifications/_bell_inner.html" %}
+</div>

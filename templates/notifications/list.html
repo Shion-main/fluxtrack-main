@@ -1,0 +1,19 @@
+{% extends "base.html" %}
+{% comment %}Full-page notification history (NOTIF-01). Opening this page marks the
+shown rows read server-side (D-03, list_page view); the rows themselves are
+rendered through the shared _rows partial with Django auto-escaping (T-05-10).{% endcomment %}
+{% block title %}Notifications - FluxTrack{% endblock %}
+{% block content %}
+<div class="uk-container max-w-2xl pt-8 pb-16">
+  <div class="flex items-center gap-2 mb-1">
+    <h1 class="uk-h2">Notifications</h1>
+    <a href="/notifications/settings" class="uk-btn uk-btn-ghost uk-btn-sm ml-auto">
+      <uk-icon icon="settings" class="size-4 mr-1"></uk-icon>Settings</a>
+  </div>
+  <p class="uk-text-muted mb-6">Your recent notifications.</p>
+
+  <div class="uk-card uk-card-body p-0">
+    {% include "notifications/_rows.html" %}
+  </div>
+</div>
+{% endblock %}

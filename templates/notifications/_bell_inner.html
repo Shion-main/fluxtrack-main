@@ -1,0 +1,24 @@
+{% comment %}Polled bell payload (NOTIF-01, D-02): the badge count + a read-only
+preview of the latest few rows. Returned by GET /notifications/bell, which is
+strictly READ-ONLY -- rendering this NEVER marks anything read. Opening the
+dropdown fires GET /notifications/dropdown, which is the action that marks the
+shown rows read (D-03).{% endcomment %}
+<button id="notif-bell-toggle" type="button"
+        class="uk-btn uk-btn-ghost uk-btn-icon relative" aria-label="Notifications">
+  <uk-icon icon="bell"></uk-icon>
+  {% if unread > 0 %}
+  <span class="absolute -top-1 -right-1 min-w-4 h-4 px-1 rounded-full bg-primary text-primary-foreground text-center"
+        style="font-size:10px;line-height:1rem" aria-label="{{ unread }} unread">{{ unread }}</span>
+  {% endif %}
+</button>
+<div class="uk-card uk-card-body p-0 w-80" uk-drop="mode: click; pos: bottom-right">
+  <div class="flex items-center justify-between px-4 py-2 border-b border-border">
+    <span class="font-semibold uk-text-small">Notifications</span>
+    <a href="/notifications" class="uk-text-small text-primary">See all</a>
+  </div>
+  <div id="notif-dropdown-body"
+       hx-get="/notifications/dropdown" hx-trigger="click from:#notif-bell-toggle"
+       hx-target="this" hx-swap="innerHTML">
+    {% include "notifications/_rows.html" %}
+  </div>
+</div>

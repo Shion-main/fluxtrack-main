@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+{% comment %}Mute settings (NOTIF-03). Three category groups (Room / Reports /
+System); each form toggles a NotificationMute row for request.user (presence =
+muted, D-05). POST to /notifications/mute is CSRF-protected via {% csrf_token %}
+(and the global hx-headers X-CSRFToken on <body>) and is POST-only (T-05-11). The
+#push-controls div is an inert placeholder the 05-05 push client populates.{% endcomment %}
+{% block title %}Notification settings - FluxTrack{% endblock %}
+{% block content %}
+<div class="uk-container max-w-2xl pt-8 pb-16">
+  <div class="flex items-center gap-2 mb-1">
+    <a href="/notifications" class="uk-btn uk-btn-ghost uk-btn-icon" aria-label="Back">
+      <uk-icon icon="arrow-left" class="size-5"></uk-icon></a>
+    <h1 class="uk-h2">Notification settings</h1>
+  </div>
+  <p class="uk-text-muted mb-6">Choose which notification groups to mute.</p>
+
+  <div id="mute-controls" class="uk-card uk-card-body">
+    {% for g in groups %}
+    <form method="post" action="/notifications/mute"
+          hx-post="/notifications/mute" hx-target="#mute-controls"
+          hx-select="#mute-controls" hx-swap="outerHTML"
+          class="flex items-center justify-between py-3 border-b border-border last:border-0">
+      {% csrf_token %}
+      <input type="hidden" name="category" value="{{ g.value }}">
+      <div>
+        <div class="font-medium">{{ g.label }}</div>
+        <div class="uk-text-muted uk-text-small">{% if g.muted %}Muted{% else %}On{% endif %}</div>
+      </div>
+      <button type="submit"
+              class="uk-btn uk-btn-sm {% if g.muted %}uk-btn-default{% else %}uk-btn-primary{% endif %}">
+        {% if g.muted %}Unmute{% else %}Mute{% endif %}
+      </button>
+    </form>
+    {% endfor %}
+  </div>
+
+  <div class="uk-card uk-card-body mt-4">
+    <div class="font-medium mb-1">Push notifications</div>
+    <p class="uk-text-muted uk-text-small mb-3">Enable browser push for key alerts.</p>
+    {% comment %}05-05 push client populates this (Enable / Blocked state); inert here.{% endcomment %}
+    <div id="push-controls"></div>
+  </div>
+</div>
+{% endblock %}

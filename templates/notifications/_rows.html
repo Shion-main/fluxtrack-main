@@ -1,0 +1,16 @@
+{% comment %}Shared notification row rendering (NOTIF-01) used by the dropdown
+preview and the full-page history. Notification title/body are rendered with
+Django auto-escaping and NEVER `|safe` -- a crafted room/course string cannot
+inject markup (threat T-05-10).{% endcomment %}
+{% for n in rows %}
+<a href="{{ n.link|default:'/notifications' }}"
+   class="block px-4 py-2 hover:bg-muted border-b border-border last:border-0">
+  <div class="flex items-start justify-between gap-2">
+    <span class="uk-text-small font-medium">{{ n.title }}</span>
+    <span class="uk-text-muted whitespace-nowrap" style="font-size:11px">{{ n.created_at|timesince }} ago</span>
+  </div>
+  {% if n.body %}<p class="uk-text-muted uk-text-small mt-1">{{ n.body }}</p>{% endif %}
+</a>
+{% empty %}
+<p class="uk-text-muted uk-text-small px-4 py-3">No notifications.</p>
+{% endfor %}
