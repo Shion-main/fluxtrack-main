@@ -1,0 +1,276 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>graphify - .planning\graphs\session-04.2\out\graph.html</title>
+<script src="https://unpkg.com/vis-network/standalone/umd/vis-network.min.js"></script>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: #0f0f1a; color: #e0e0e0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; display: flex; height: 100vh; overflow: hidden; }
+  #graph { flex: 1; }
+  #sidebar { width: 280px; background: #1a1a2e; border-left: 1px solid #2a2a4e; display: flex; flex-direction: column; overflow: hidden; }
+  #search-wrap { padding: 12px; border-bottom: 1px solid #2a2a4e; }
+  #search { width: 100%; background: #0f0f1a; border: 1px solid #3a3a5e; color: #e0e0e0; padding: 7px 10px; border-radius: 6px; font-size: 13px; outline: none; }
+  #search:focus { border-color: #4E79A7; }
+  #search-results { max-height: 140px; overflow-y: auto; padding: 4px 12px; border-bottom: 1px solid #2a2a4e; display: none; }
+  .search-item { padding: 4px 6px; cursor: pointer; border-radius: 4px; font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .search-item:hover { background: #2a2a4e; }
+  #info-panel { padding: 14px; border-bottom: 1px solid #2a2a4e; min-height: 140px; }
+  #info-panel h3 { font-size: 13px; color: #aaa; margin-bottom: 8px; text-transform: uppercase; letter-spacing: 0.05em; }
+  #info-content { font-size: 13px; color: #ccc; line-height: 1.6; }
+  #info-content .field { margin-bottom: 5px; }
+  #info-content .field b { color: #e0e0e0; }
+  #info-content .empty { color: #555; font-style: italic; }
+  .neighbor-link { display: block; padding: 2px 6px; margin: 2px 0; border-radius: 3px; cursor: pointer; font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; border-left: 3px solid #333; }
+  .neighbor-link:hover { background: #2a2a4e; }
+  #neighbors-list { max-height: 160px; overflow-y: auto; margin-top: 4px; }
+  #legend-wrap { flex: 1; overflow-y: auto; padding: 12px; }
+  #legend-wrap h3 { font-size: 13px; color: #aaa; margin-bottom: 10px; text-transform: uppercase; letter-spacing: 0.05em; }
+  .legend-item { display: flex; align-items: center; gap: 8px; padding: 4px 0; cursor: pointer; border-radius: 4px; font-size: 12px; }
+  .legend-item:hover { background: #2a2a4e; padding-left: 4px; }
+  .legend-item.dimmed { opacity: 0.35; }
+  .legend-dot { width: 12px; height: 12px; border-radius: 50%; flex-shrink: 0; }
+  .legend-label { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .legend-count { color: #666; font-size: 11px; }
+  #stats { padding: 10px 14px; border-top: 1px solid #2a2a4e; font-size: 11px; color: #555; }
+  #legend-controls { display: flex; gap: 6px; margin-bottom: 8px; }
+  #legend-controls button { flex: 1; background: #0f0f1a; border: 1px solid #3a3a5e; color: #aaa; padding: 4px 0; border-radius: 4px; font-size: 11px; cursor: pointer; }
+  #legend-controls button:hover { border-color: #4E79A7; color: #e0e0e0; }
+</style>
+</head>
+<body>
+<div id="graph"></div>
+<div id="sidebar">
+  <div id="search-wrap">
+    <input id="search" type="text" placeholder="Search nodes..." autocomplete="off">
+    <div id="search-results"></div>
+  </div>
+  <div id="info-panel">
+    <h3>Node Info</h3>
+    <div id="info-content"><span class="empty">Click a node to inspect it</span></div>
+  </div>
+  <div id="legend-wrap">
+    <h3>Communities</h3>
+    <div id="legend-controls">
+      <button onclick="toggleAllCommunities(false)">Show All</button>
+      <button onclick="toggleAllCommunities(true)">Hide All</button>
+    </div>
+    <div id="legend"></div>
+  </div>
+  <div id="stats">47 nodes &middot; 69 edges &middot; 8 communities</div>
+</div>
+<script>
+const RAW_NODES = [{"id": "session_merged_sibling_ids", "label": "merged_sibling_ids", "color": {"background": "#B07AA1", "border": "#B07AA1", "highlight": {"background": "#ffffff", "border": "#B07AA1"}}, "size": 31.0, "font": {"size": 12, "color": "#ffffff"}, "title": "merged_sibling_ids", "community": 6, "community_name": "D-01 Detector & Refinement", "source_file": ".planning/graphs/session-04.2/SESSION.md", "file_type": "code", "degree": 7}, {"id": "session_propagate_merged_present", "label": "propagate_merged_present", "color": {"background": "#4E79A7", "border": "#4E79A7", "highlight": {"background": "#ffffff", "border": "#4E79A7"}}, "size": 37.0, "font": {"size": 12, "color": "#ffffff"}, "title": "propagate_merged_present", "community": 0, "community_name": "Merge Core & Transaction Rules", "source_file": ".planning/graphs/session-04.2/SESSION.md", "file_type": "code", "degree": 9}, {"id": "session_propagate_merged_absent", "label": "propagate_merged_absent", "color": {"background": "#4E79A7", "border": "#4E79A7", "highlight": {"background": "#ffffff", "border": "#4E79A7"}}, "size": 22.0, "font": {"size": 12, "color": "#ffffff"}, "title": "propagate_merged_absent", "community": 0, "community_name": "Merge Core & Transaction Rules", "source_file": ".planning/graphs/session-04.2/SESSION.md", "file_type": "code", "degree": 4}, {"id": "session_checkinmethod_merged", "label": "CheckinMethod.MERGED", "color": {"background": "#4E79A7", "border": "#4E79A7", "highlight": {"background": "#ffffff", "border": "#4E79A7"}}, "size": 19.0, "font": {"size": 12, "color": "#ffffff"}, "title": "CheckinMethod.MERGED", "community": 0, "community_name": "Merge Core & Transaction Rules", "source_file": ".planning/graphs/session-04.2/SESSION.md", "file_type": "code", "degree": 3}, {"id": "session_make_merge_fixture", "label": "make_merge_fixture", "color": {"background": "#4E79A7", "border": "#4E79A7", "highlight": {"background": "#ffffff", "border": "#4E79A7"}}, "size": 13.0, "font": {"size": 0, "color": "#ffffff"}, "title": "make_merge_fixture", "community": 0, "community_name": "Merge Core & Transaction Rules", "source_file": ".planning/graphs/session-04.2/SESSION.md", "file_type": "code", "degree": 1}, {"id": "session_audit_merge_coverage", "label": "audit_merge_coverage", "color": {"background": "#FF9DA7", "border": "#FF9DA7", "highlight": {"background": "#ffffff", "border": "#FF9DA7"}}, "size": 25.0, "font": {"size": 12, "color": "#ffffff"}, "title": "audit_merge_coverage", "community": 7, "community_name": "Live-Term Coverage Audit", "source_file": ".planning/graphs/session-04.2/SESSION.md", "file_type": "code", "degree": 5}, {"id": "session_scan_apply", "label": "web/scan.py _apply", "color": {"background": "#4E79A7", "border": "#4E79A7", "highlight": {"background": "#ffffff", "border": "#4E79A7"}}, "size": 16.0, "font": {"size": 12, "color": "#ffffff"}, "title": "web/scan.py _apply", "community": 0, "community_name": "Merge Core & Transaction Rules", "source_file": ".planning/graphs/session-04.2/SESSION.md", "file_type": "code", "degree": 2}, {"id": "session_checker_apply_action", "label": "web/checker.py _apply_action", "color": {"background": "#4E79A7", "border": "#4E79A7", "highlight": {"background": "#ffffff", "border": "#4E79A7"}}, "size": 25.0, "font": {"size": 12, "color": "#ffffff"}, "title": "web/checker.py _apply_action", "community": 0, "community_name": "Merge Core & Transaction Rules", "source_file": ".planning/graphs/session-04.2/SESSION.md", "file_type": "code", "degree": 5}, {"id": "session_jobs_sweep", "label": "scheduling/jobs.py sweep", "color": {"background": "#F28E2B", "border": "#F28E2B", "highlight": {"background": "#ffffff", "border": "#F28E2B"}}, "size": 16.0, "font": {"size": 12, "color": "#ffffff"}, "title": "scheduling/jobs.py sweep", "community": 1, "community_name": "Sweep Invariant (JOB-02)", "source_file": ".planning/graphs/session-04.2/SESSION.md", "file_type": "code", "degree": 2}, {"id": "session_migration_0004", "label": "0004_alter_session_checkin_method", "color": {"background": "#4E79A7", "border": "#4E79A7", "highlight": {"background": "#ffffff", "border": "#4E79A7"}}, "size": 13.0, "font": {"size": 0, "color": "#ffffff"}, "title": "0004_alter_session_checkin_method", "community": 0, "community_name": "Merge Core & Transaction Rules", "source_file": ".planning/graphs/session-04.2/SESSION.md", "file_type": "code", "degree": 1}, {"id": "session_materialize_candidates", "label": "_materialize_candidates", "color": {"background": "#B07AA1", "border": "#B07AA1", "highlight": {"background": "#ffffff", "border": "#B07AA1"}}, "size": 16.0, "font": {"size": 12, "color": "#ffffff"}, "title": "_materialize_candidates", "community": 6, "community_name": "D-01 Detector & Refinement", "source_file": ".planning/graphs/session-04.2/SESSION.md", "file_type": "code", "degree": 2}, {"id": "session_is_no_show_past_grace", "label": "resolver.is_no_show_past_grace", "color": {"background": "#B07AA1", "border": "#B07AA1", "highlight": {"background": "#ffffff", "border": "#B07AA1"}}, "size": 13.0, "font": {"size": 0, "color": "#ffffff"}, "title": "resolver.is_no_show_past_grace", "community": 6, "community_name": "D-01 Detector & Refinement", "source_file": ".planning/graphs/session-04.2/SESSION.md", "file_type": "code", "degree": 1}, {"id": "session_plan_01", "label": "Plan 04.2-01 (Merge Core)", "color": {"background": "#4E79A7", "border": "#4E79A7", "highlight": {"background": "#ffffff", "border": "#4E79A7"}}, "size": 40.0, "font": {"size": 12, "color": "#ffffff"}, "title": "Plan 04.2-01 (Merge Core)", "community": 0, "community_name": "Merge Core & Transaction Rules", "source_file": ".planning/graphs/session-04.2/SESSION.md", "file_type": "concept", "degree": 10}, {"id": "session_plan_02", "label": "Plan 04.2-02 (Faculty Scan Seam)", "color": {"background": "#E15759", "border": "#E15759", "highlight": {"background": "#ffffff", "border": "#E15759"}}, "size": 34.0, "font": {"size": 12, "color": "#ffffff"}, "title": "Plan 04.2-02 (Faculty Scan Seam)", "community": 2, "community_name": "Faculty Scan Seam", "source_file": ".planning/graphs/session-04.2/SESSION.md", "file_type": "concept", "degree": 8}, {"id": "session_plan_03", "label": "Plan 04.2-03 (Checker Online Seam)", "color": {"background": "#76B7B2", "border": "#76B7B2", "highlight": {"background": "#ffffff", "border": "#76B7B2"}}, "size": 31.0, "font": {"size": 12, "color": "#ffffff"}, "title": "Plan 04.2-03 (Checker Online Seam)", "community": 3, "community_name": "Checker Online Seam", "source_file": ".planning/graphs/session-04.2/SESSION.md", "file_type": "concept", "degree": 7}, {"id": "session_plan_04", "label": "Plan 04.2-04 (Sweep-Unchanged Proof + Audit)", "color": {"background": "#F28E2B", "border": "#F28E2B", "highlight": {"background": "#ffffff", "border": "#F28E2B"}}, "size": 31.0, "font": {"size": 12, "color": "#ffffff"}, "title": "Plan 04.2-04 (Sweep-Unchanged Proof + Audit)", "community": 1, "community_name": "Sweep Invariant (JOB-02)", "source_file": ".planning/graphs/session-04.2/SESSION.md", "file_type": "concept", "degree": 7}, {"id": "session_d01", "label": "D-01 (merge detection key)", "color": {"background": "#B07AA1", "border": "#B07AA1", "highlight": {"background": "#ffffff", "border": "#B07AA1"}}, "size": 19.0, "font": {"size": 12, "color": "#ffffff"}, "title": "D-01 (merge detection key)", "community": 6, "community_name": "D-01 Detector & Refinement", "source_file": ".planning/graphs/session-04.2/SESSION.md", "file_type": "concept", "degree": 3}, {"id": "session_d01_refinement2", "label": "D-01 Refinement #2 (online arm)", "color": {"background": "#B07AA1", "border": "#B07AA1", "highlight": {"background": "#ffffff", "border": "#B07AA1"}}, "size": 31.0, "font": {"size": 12, "color": "#ffffff"}, "title": "D-01 Refinement #2 (online arm)", "community": 6, "community_name": "D-01 Detector & Refinement", "source_file": ".planning/graphs/session-04.2/SESSION.md", "file_type": "concept", "degree": 7}, {"id": "session_d04", "label": "D-04 (single transaction)", "color": {"background": "#4E79A7", "border": "#4E79A7", "highlight": {"background": "#ffffff", "border": "#4E79A7"}}, "size": 13.0, "font": {"size": 0, "color": "#ffffff"}, "title": "D-04 (single transaction)", "community": 0, "community_name": "Merge Core & Transaction Rules", "source_file": ".planning/graphs/session-04.2/SESSION.md", "file_type": "concept", "degree": 1}, {"id": "session_d05", "label": "D-05 (status guard)", "color": {"background": "#4E79A7", "border": "#4E79A7", "highlight": {"background": "#ffffff", "border": "#4E79A7"}}, "size": 13.0, "font": {"size": 0, "color": "#ffffff"}, "title": "D-05 (status guard)", "community": 0, "community_name": "Merge Core & Transaction Rules", "source_file": ".planning/graphs/session-04.2/SESSION.md", "file_type": "concept", "degree": 1}, {"id": "session_d07", "label": "D-07 (per-modality not-present)", "color": {"background": "#4E79A7", "border": "#4E79A7", "highlight": {"background": "#ffffff", "border": "#4E79A7"}}, "size": 13.0, "font": {"size": 0, "color": "#ffffff"}, "title": "D-07 (per-modality not-present)", "community": 0, "community_name": "Merge Core & Transaction Rules", "source_file": ".planning/graphs/session-04.2/SESSION.md", "file_type": "concept", "degree": 1}, {"id": "session_d08", "label": "D-08 (shared scheduled_start absent)", "color": {"background": "#F28E2B", "border": "#F28E2B", "highlight": {"background": "#ffffff", "border": "#F28E2B"}}, "size": 13.0, "font": {"size": 0, "color": "#ffffff"}, "title": "D-08 (shared scheduled_start absent)", "community": 1, "community_name": "Sweep Invariant (JOB-02)", "source_file": ".planning/graphs/session-04.2/SESSION.md", "file_type": "concept", "degree": 1}, {"id": "session_d09", "label": "D-09 (no CheckerValidation for merge-fill)", "color": {"background": "#76B7B2", "border": "#76B7B2", "highlight": {"background": "#ffffff", "border": "#76B7B2"}}, "size": 19.0, "font": {"size": 12, "color": "#ffffff"}, "title": "D-09 (no CheckerValidation for merge-fill)", "community": 3, "community_name": "Checker Online Seam", "source_file": ".planning/graphs/session-04.2/SESSION.md", "file_type": "concept", "degree": 3}, {"id": "session_criterion1", "label": "Criterion #1", "color": {"background": "#E15759", "border": "#E15759", "highlight": {"background": "#ffffff", "border": "#E15759"}}, "size": 13.0, "font": {"size": 0, "color": "#ffffff"}, "title": "Criterion #1", "community": 2, "community_name": "Faculty Scan Seam", "source_file": ".planning/graphs/session-04.2/SESSION.md", "file_type": "concept", "degree": 1}, {"id": "session_criterion2", "label": "Criterion #2", "color": {"background": "#F28E2B", "border": "#F28E2B", "highlight": {"background": "#ffffff", "border": "#F28E2B"}}, "size": 13.0, "font": {"size": 0, "color": "#ffffff"}, "title": "Criterion #2", "community": 1, "community_name": "Sweep Invariant (JOB-02)", "source_file": ".planning/graphs/session-04.2/SESSION.md", "file_type": "concept", "degree": 1}, {"id": "session_criterion3", "label": "Criterion #3", "color": {"background": "#EDC948", "border": "#EDC948", "highlight": {"background": "#ffffff", "border": "#EDC948"}}, "size": 19.0, "font": {"size": 12, "color": "#ffffff"}, "title": "Criterion #3", "community": 5, "community_name": "Verification Gap & Owner Decision", "source_file": ".planning/graphs/session-04.2/SESSION.md", "file_type": "concept", "degree": 3}, {"id": "session_criterion4", "label": "Criterion #4", "color": {"background": "#F28E2B", "border": "#F28E2B", "highlight": {"background": "#ffffff", "border": "#F28E2B"}}, "size": 13.0, "font": {"size": 0, "color": "#ffffff"}, "title": "Criterion #4", "community": 1, "community_name": "Sweep Invariant (JOB-02)", "source_file": ".planning/graphs/session-04.2/SESSION.md", "file_type": "concept", "degree": 1}, {"id": "session_criterion5", "label": "Criterion #5", "color": {"background": "#76B7B2", "border": "#76B7B2", "highlight": {"background": "#ffffff", "border": "#76B7B2"}}, "size": 16.0, "font": {"size": 12, "color": "#ffffff"}, "title": "Criterion #5", "community": 3, "community_name": "Checker Online Seam", "source_file": ".planning/graphs/session-04.2/SESSION.md", "file_type": "concept", "degree": 2}, {"id": "session_job02b", "label": "JOB-02b", "color": {"background": "#F28E2B", "border": "#F28E2B", "highlight": {"background": "#ffffff", "border": "#F28E2B"}}, "size": 13.0, "font": {"size": 0, "color": "#ffffff"}, "title": "JOB-02b", "community": 1, "community_name": "Sweep Invariant (JOB-02)", "source_file": ".planning/graphs/session-04.2/SESSION.md", "file_type": "concept", "degree": 1}, {"id": "session_scan01", "label": "SCAN-01", "color": {"background": "#E15759", "border": "#E15759", "highlight": {"background": "#ffffff", "border": "#E15759"}}, "size": 13.0, "font": {"size": 0, "color": "#ffffff"}, "title": "SCAN-01", "community": 2, "community_name": "Faculty Scan Seam", "source_file": ".planning/graphs/session-04.2/SESSION.md", "file_type": "concept", "degree": 1}, {"id": "session_chk02", "label": "CHK-02", "color": {"background": "#76B7B2", "border": "#76B7B2", "highlight": {"background": "#ffffff", "border": "#76B7B2"}}, "size": 13.0, "font": {"size": 0, "color": "#ffffff"}, "title": "CHK-02", "community": 3, "community_name": "Checker Online Seam", "source_file": ".planning/graphs/session-04.2/SESSION.md", "file_type": "concept", "degree": 1}, {"id": "session_chk03", "label": "CHK-03", "color": {"background": "#76B7B2", "border": "#76B7B2", "highlight": {"background": "#ffffff", "border": "#76B7B2"}}, "size": 13.0, "font": {"size": 0, "color": "#ffffff"}, "title": "CHK-03", "community": 3, "community_name": "Checker Online Seam", "source_file": ".planning/graphs/session-04.2/SESSION.md", "file_type": "concept", "degree": 1}, {"id": "session_chk04", "label": "CHK-04", "color": {"background": "#76B7B2", "border": "#76B7B2", "highlight": {"background": "#ffffff", "border": "#76B7B2"}}, "size": 16.0, "font": {"size": 12, "color": "#ffffff"}, "title": "CHK-04", "community": 3, "community_name": "Checker Online Seam", "source_file": ".planning/graphs/session-04.2/SESSION.md", "file_type": "concept", "degree": 2}, {"id": "session_fac03", "label": "FAC-03", "color": {"background": "#E15759", "border": "#E15759", "highlight": {"background": "#ffffff", "border": "#E15759"}}, "size": 13.0, "font": {"size": 0, "color": "#ffffff"}, "title": "FAC-03", "community": 2, "community_name": "Faculty Scan Seam", "source_file": ".planning/graphs/session-04.2/SESSION.md", "file_type": "concept", "degree": 1}, {"id": "session_fac04", "label": "FAC-04", "color": {"background": "#E15759", "border": "#E15759", "highlight": {"background": "#ffffff", "border": "#E15759"}}, "size": 13.0, "font": {"size": 0, "color": "#ffffff"}, "title": "FAC-04", "community": 2, "community_name": "Faculty Scan Seam", "source_file": ".planning/graphs/session-04.2/SESSION.md", "file_type": "concept", "degree": 1}, {"id": "session_fac09", "label": "FAC-09", "color": {"background": "#E15759", "border": "#E15759", "highlight": {"background": "#ffffff", "border": "#E15759"}}, "size": 13.0, "font": {"size": 0, "color": "#ffffff"}, "title": "FAC-09", "community": 2, "community_name": "Faculty Scan Seam", "source_file": ".planning/graphs/session-04.2/SESSION.md", "file_type": "concept", "degree": 1}, {"id": "session_execute_phase_orchestrator", "label": "execute-phase orchestrator", "color": {"background": "#59A14F", "border": "#59A14F", "highlight": {"background": "#ffffff", "border": "#59A14F"}}, "size": 22.0, "font": {"size": 12, "color": "#ffffff"}, "title": "execute-phase orchestrator", "community": 4, "community_name": "Execution Orchestration", "source_file": ".planning/graphs/session-04.2/SESSION.md", "file_type": "concept", "degree": 4}, {"id": "session_gsd_executor", "label": "gsd-executor", "color": {"background": "#59A14F", "border": "#59A14F", "highlight": {"background": "#ffffff", "border": "#59A14F"}}, "size": 16.0, "font": {"size": 12, "color": "#ffffff"}, "title": "gsd-executor", "community": 4, "community_name": "Execution Orchestration", "source_file": ".planning/graphs/session-04.2/SESSION.md", "file_type": "concept", "degree": 2}, {"id": "session_gsd_verifier", "label": "gsd-verifier", "color": {"background": "#EDC948", "border": "#EDC948", "highlight": {"background": "#ffffff", "border": "#EDC948"}}, "size": 19.0, "font": {"size": 12, "color": "#ffffff"}, "title": "gsd-verifier", "community": 5, "community_name": "Verification Gap & Owner Decision", "source_file": ".planning/graphs/session-04.2/SESSION.md", "file_type": "concept", "degree": 3}, {"id": "session_wave_model", "label": "GSD wave model", "color": {"background": "#59A14F", "border": "#59A14F", "highlight": {"background": "#ffffff", "border": "#59A14F"}}, "size": 19.0, "font": {"size": 12, "color": "#ffffff"}, "title": "GSD wave model", "community": 4, "community_name": "Execution Orchestration", "source_file": ".planning/graphs/session-04.2/SESSION.md", "file_type": "concept", "degree": 3}, {"id": "session_wave1", "label": "Wave 1", "color": {"background": "#59A14F", "border": "#59A14F", "highlight": {"background": "#ffffff", "border": "#59A14F"}}, "size": 19.0, "font": {"size": 12, "color": "#ffffff"}, "title": "Wave 1", "community": 4, "community_name": "Execution Orchestration", "source_file": ".planning/graphs/session-04.2/SESSION.md", "file_type": "concept", "degree": 3}, {"id": "session_wave2", "label": "Wave 2", "color": {"background": "#59A14F", "border": "#59A14F", "highlight": {"background": "#ffffff", "border": "#59A14F"}}, "size": 25.0, "font": {"size": 12, "color": "#ffffff"}, "title": "Wave 2", "community": 4, "community_name": "Execution Orchestration", "source_file": ".planning/graphs/session-04.2/SESSION.md", "file_type": "concept", "degree": 5}, {"id": "session_owner", "label": "Owner Joshua Sabuero", "color": {"background": "#EDC948", "border": "#EDC948", "highlight": {"background": "#ffffff", "border": "#EDC948"}}, "size": 13.0, "font": {"size": 0, "color": "#ffffff"}, "title": "Owner Joshua Sabuero", "community": 5, "community_name": "Verification Gap & Owner Decision", "source_file": ".planning/graphs/session-04.2/SESSION.md", "file_type": "concept", "degree": 1}, {"id": "session_verification_gap", "label": "The Verification Gap (criterion #3 FAILED)", "color": {"background": "#EDC948", "border": "#EDC948", "highlight": {"background": "#ffffff", "border": "#EDC948"}}, "size": 19.0, "font": {"size": 12, "color": "#ffffff"}, "title": "The Verification Gap (criterion #3 FAILED)", "community": 5, "community_name": "Verification Gap & Owner Decision", "source_file": ".planning/graphs/session-04.2/SESSION.md", "file_type": "concept", "degree": 3}, {"id": "session_owner_decision", "label": "The Owner Decision", "color": {"background": "#EDC948", "border": "#EDC948", "highlight": {"background": "#ffffff", "border": "#EDC948"}}, "size": 19.0, "font": {"size": 12, "color": "#ffffff"}, "title": "The Owner Decision", "community": 5, "community_name": "Verification Gap & Owner Decision", "source_file": ".planning/graphs/session-04.2/SESSION.md", "file_type": "concept", "degree": 3}, {"id": "session_active_term", "label": "'2nd Term SY 2025-2026'", "color": {"background": "#FF9DA7", "border": "#FF9DA7", "highlight": {"background": "#ffffff", "border": "#FF9DA7"}}, "size": 13.0, "font": {"size": 0, "color": "#ffffff"}, "title": "&#x27;2nd Term SY 2025-2026&#x27;", "community": 7, "community_name": "Live-Term Coverage Audit", "source_file": ".planning/graphs/session-04.2/SESSION.md", "file_type": "concept", "degree": 1}, {"id": "session_mssql_localdb", "label": "MSSQL LocalDB", "color": {"background": "#59A14F", "border": "#59A14F", "highlight": {"background": "#ffffff", "border": "#59A14F"}}, "size": 16.0, "font": {"size": 12, "color": "#ffffff"}, "title": "MSSQL LocalDB", "community": 4, "community_name": "Execution Orchestration", "source_file": ".planning/graphs/session-04.2/SESSION.md", "file_type": "concept", "degree": 2}];
+const RAW_EDGES = [{"from": "session_merged_sibling_ids", "to": "session_propagate_merged_present", "label": "calls", "title": "calls [EXTRACTED]", "dashes": false, "width": 2, "color": {"opacity": 0.7}, "confidence": "EXTRACTED"}, {"from": "session_merged_sibling_ids", "to": "session_propagate_merged_absent", "label": "calls", "title": "calls [EXTRACTED]", "dashes": false, "width": 2, "color": {"opacity": 0.7}, "confidence": "EXTRACTED"}, {"from": "session_merged_sibling_ids", "to": "session_d01", "label": "implements", "title": "implements [EXTRACTED]", "dashes": false, "width": 2, "color": {"opacity": 0.7}, "confidence": "EXTRACTED"}, {"from": "session_merged_sibling_ids", "to": "session_is_no_show_past_grace", "label": "semantically_similar_to", "title": "semantically_similar_to [INFERRED]", "dashes": true, "width": 1, "color": {"opacity": 0.35}, "confidence": "INFERRED"}, {"from": "session_merged_sibling_ids", "to": "session_plan_01", "label": "implements", "title": "implements [EXTRACTED]", "dashes": false, "width": 2, "color": {"opacity": 0.7}, "confidence": "EXTRACTED"}, {"from": "session_merged_sibling_ids", "to": "session_d01_refinement2", "label": "amends", "title": "amends [EXTRACTED]", "dashes": false, "width": 2, "color": {"opacity": 0.7}, "confidence": "EXTRACTED"}, {"from": "session_merged_sibling_ids", "to": "session_materialize_candidates", "label": "depends_on", "title": "depends_on [INFERRED]", "dashes": true, "width": 1, "color": {"opacity": 0.35}, "confidence": "INFERRED"}, {"from": "session_propagate_merged_present", "to": "session_checkinmethod_merged", "label": "references", "title": "references [EXTRACTED]", "dashes": false, "width": 2, "color": {"opacity": 0.7}, "confidence": "EXTRACTED"}, {"from": "session_propagate_merged_present", "to": "session_d04", "label": "implements", "title": "implements [EXTRACTED]", "dashes": false, "width": 2, "color": {"opacity": 0.7}, "confidence": "EXTRACTED"}, {"from": "session_propagate_merged_present", "to": "session_d05", "label": "implements", "title": "implements [EXTRACTED]", "dashes": false, "width": 2, "color": {"opacity": 0.7}, "confidence": "EXTRACTED"}, {"from": "session_propagate_merged_present", "to": "session_mssql_localdb", "label": "depends_on", "title": "depends_on [INFERRED]", "dashes": true, "width": 1, "color": {"opacity": 0.35}, "confidence": "INFERRED"}, {"from": "session_propagate_merged_present", "to": "session_propagate_merged_absent", "label": "semantically_similar_to", "title": "semantically_similar_to [INFERRED]", "dashes": true, "width": 1, "color": {"opacity": 0.35}, "confidence": "INFERRED"}, {"from": "session_propagate_merged_present", "to": "session_plan_01", "label": "implements", "title": "implements [EXTRACTED]", "dashes": false, "width": 2, "color": {"opacity": 0.7}, "confidence": "EXTRACTED"}, {"from": "session_propagate_merged_present", "to": "session_scan_apply", "label": "calls", "title": "calls [EXTRACTED]", "dashes": false, "width": 2, "color": {"opacity": 0.7}, "confidence": "EXTRACTED"}, {"from": "session_propagate_merged_present", "to": "session_checker_apply_action", "label": "calls", "title": "calls [EXTRACTED]", "dashes": false, "width": 2, "color": {"opacity": 0.7}, "confidence": "EXTRACTED"}, {"from": "session_propagate_merged_absent", "to": "session_plan_01", "label": "implements", "title": "implements [EXTRACTED]", "dashes": false, "width": 2, "color": {"opacity": 0.7}, "confidence": "EXTRACTED"}, {"from": "session_propagate_merged_absent", "to": "session_checker_apply_action", "label": "calls", "title": "calls [EXTRACTED]", "dashes": false, "width": 2, "color": {"opacity": 0.7}, "confidence": "EXTRACTED"}, {"from": "session_checkinmethod_merged", "to": "session_migration_0004", "label": "depends_on", "title": "depends_on [EXTRACTED]", "dashes": false, "width": 2, "color": {"opacity": 0.7}, "confidence": "EXTRACTED"}, {"from": "session_checkinmethod_merged", "to": "session_plan_01", "label": "implements", "title": "implements [EXTRACTED]", "dashes": false, "width": 2, "color": {"opacity": 0.7}, "confidence": "EXTRACTED"}, {"from": "session_make_merge_fixture", "to": "session_plan_01", "label": "implements", "title": "implements [EXTRACTED]", "dashes": false, "width": 2, "color": {"opacity": 0.7}, "confidence": "EXTRACTED"}, {"from": "session_audit_merge_coverage", "to": "session_plan_04", "label": "implements", "title": "implements [EXTRACTED]", "dashes": false, "width": 2, "color": {"opacity": 0.7}, "confidence": "EXTRACTED"}, {"from": "session_audit_merge_coverage", "to": "session_d01", "label": "references", "title": "references [EXTRACTED]", "dashes": false, "width": 2, "color": {"opacity": 0.7}, "confidence": "EXTRACTED"}, {"from": "session_audit_merge_coverage", "to": "session_active_term", "label": "references", "title": "references [EXTRACTED]", "dashes": false, "width": 2, "color": {"opacity": 0.7}, "confidence": "EXTRACTED"}, {"from": "session_audit_merge_coverage", "to": "session_d01_refinement2", "label": "references", "title": "references [EXTRACTED]", "dashes": false, "width": 2, "color": {"opacity": 0.7}, "confidence": "EXTRACTED"}, {"from": "session_audit_merge_coverage", "to": "session_gsd_verifier", "label": "calls", "title": "calls [EXTRACTED]", "dashes": false, "width": 2, "color": {"opacity": 0.7}, "confidence": "EXTRACTED"}, {"from": "session_scan_apply", "to": "session_plan_02", "label": "implements", "title": "implements [EXTRACTED]", "dashes": false, "width": 2, "color": {"opacity": 0.7}, "confidence": "EXTRACTED"}, {"from": "session_checker_apply_action", "to": "session_plan_03", "label": "implements", "title": "implements [EXTRACTED]", "dashes": false, "width": 2, "color": {"opacity": 0.7}, "confidence": "EXTRACTED"}, {"from": "session_checker_apply_action", "to": "session_d07", "label": "implements", "title": "implements [EXTRACTED]", "dashes": false, "width": 2, "color": {"opacity": 0.7}, "confidence": "EXTRACTED"}, {"from": "session_checker_apply_action", "to": "session_d09", "label": "implements", "title": "implements [EXTRACTED]", "dashes": false, "width": 2, "color": {"opacity": 0.7}, "confidence": "EXTRACTED"}, {"from": "session_jobs_sweep", "to": "session_plan_04", "label": "references", "title": "references [EXTRACTED]", "dashes": false, "width": 2, "color": {"opacity": 0.7}, "confidence": "EXTRACTED"}, {"from": "session_jobs_sweep", "to": "session_d08", "label": "implements", "title": "implements [EXTRACTED]", "dashes": false, "width": 2, "color": {"opacity": 0.7}, "confidence": "EXTRACTED"}, {"from": "session_materialize_candidates", "to": "session_d01_refinement2", "label": "references", "title": "references [EXTRACTED]", "dashes": false, "width": 2, "color": {"opacity": 0.7}, "confidence": "EXTRACTED"}, {"from": "session_plan_01", "to": "session_wave1", "label": "references", "title": "references [EXTRACTED]", "dashes": false, "width": 2, "color": {"opacity": 0.7}, "confidence": "EXTRACTED"}, {"from": "session_plan_01", "to": "session_plan_02", "label": "depends_on", "title": "depends_on [EXTRACTED]", "dashes": false, "width": 2, "color": {"opacity": 0.7}, "confidence": "EXTRACTED"}, {"from": "session_plan_01", "to": "session_plan_03", "label": "depends_on", "title": "depends_on [EXTRACTED]", "dashes": false, "width": 2, "color": {"opacity": 0.7}, "confidence": "EXTRACTED"}, {"from": "session_plan_01", "to": "session_plan_04", "label": "depends_on", "title": "depends_on [EXTRACTED]", "dashes": false, "width": 2, "color": {"opacity": 0.7}, "confidence": "EXTRACTED"}, {"from": "session_plan_01", "to": "session_gsd_executor", "label": "implements", "title": "implements [INFERRED]", "dashes": true, "width": 1, "color": {"opacity": 0.35}, "confidence": "INFERRED"}, {"from": "session_plan_02", "to": "session_criterion1", "label": "delivers", "title": "delivers [EXTRACTED]", "dashes": false, "width": 2, "color": {"opacity": 0.7}, "confidence": "EXTRACTED"}, {"from": "session_plan_02", "to": "session_wave2", "label": "references", "title": "references [EXTRACTED]", "dashes": false, "width": 2, "color": {"opacity": 0.7}, "confidence": "EXTRACTED"}, {"from": "session_plan_02", "to": "session_scan01", "label": "delivers", "title": "delivers [INFERRED]", "dashes": true, "width": 1, "color": {"opacity": 0.35}, "confidence": "INFERRED"}, {"from": "session_plan_02", "to": "session_fac03", "label": "delivers", "title": "delivers [INFERRED]", "dashes": true, "width": 1, "color": {"opacity": 0.35}, "confidence": "INFERRED"}, {"from": "session_plan_02", "to": "session_fac04", "label": "delivers", "title": "delivers [INFERRED]", "dashes": true, "width": 1, "color": {"opacity": 0.35}, "confidence": "INFERRED"}, {"from": "session_plan_02", "to": "session_fac09", "label": "delivers", "title": "delivers [INFERRED]", "dashes": true, "width": 1, "color": {"opacity": 0.35}, "confidence": "INFERRED"}, {"from": "session_plan_03", "to": "session_criterion3", "label": "delivers", "title": "delivers [EXTRACTED]", "dashes": false, "width": 2, "color": {"opacity": 0.7}, "confidence": "EXTRACTED"}, {"from": "session_plan_03", "to": "session_wave2", "label": "references", "title": "references [EXTRACTED]", "dashes": false, "width": 2, "color": {"opacity": 0.7}, "confidence": "EXTRACTED"}, {"from": "session_plan_03", "to": "session_chk02", "label": "delivers", "title": "delivers [INFERRED]", "dashes": true, "width": 1, "color": {"opacity": 0.35}, "confidence": "INFERRED"}, {"from": "session_plan_03", "to": "session_chk03", "label": "delivers", "title": "delivers [INFERRED]", "dashes": true, "width": 1, "color": {"opacity": 0.35}, "confidence": "INFERRED"}, {"from": "session_plan_03", "to": "session_chk04", "label": "delivers", "title": "delivers [INFERRED]", "dashes": true, "width": 1, "color": {"opacity": 0.35}, "confidence": "INFERRED"}, {"from": "session_plan_04", "to": "session_criterion2", "label": "delivers", "title": "delivers [EXTRACTED]", "dashes": false, "width": 2, "color": {"opacity": 0.7}, "confidence": "EXTRACTED"}, {"from": "session_plan_04", "to": "session_criterion4", "label": "delivers", "title": "delivers [EXTRACTED]", "dashes": false, "width": 2, "color": {"opacity": 0.7}, "confidence": "EXTRACTED"}, {"from": "session_plan_04", "to": "session_wave2", "label": "references", "title": "references [EXTRACTED]", "dashes": false, "width": 2, "color": {"opacity": 0.7}, "confidence": "EXTRACTED"}, {"from": "session_plan_04", "to": "session_job02b", "label": "delivers", "title": "delivers [INFERRED]", "dashes": true, "width": 1, "color": {"opacity": 0.35}, "confidence": "INFERRED"}, {"from": "session_d01", "to": "session_d01_refinement2", "label": "amends", "title": "amends [EXTRACTED]", "dashes": false, "width": 2, "color": {"opacity": 0.7}, "confidence": "EXTRACTED"}, {"from": "session_d01_refinement2", "to": "session_criterion3", "label": "delivers", "title": "delivers [EXTRACTED]", "dashes": false, "width": 2, "color": {"opacity": 0.7}, "confidence": "EXTRACTED"}, {"from": "session_d01_refinement2", "to": "session_criterion5", "label": "references", "title": "references [EXTRACTED]", "dashes": false, "width": 2, "color": {"opacity": 0.7}, "confidence": "EXTRACTED"}, {"from": "session_d01_refinement2", "to": "session_owner_decision", "label": "rationale_for", "title": "rationale_for [EXTRACTED]", "dashes": false, "width": 2, "color": {"opacity": 0.7}, "confidence": "EXTRACTED"}, {"from": "session_d09", "to": "session_chk04", "label": "references", "title": "references [EXTRACTED]", "dashes": false, "width": 2, "color": {"opacity": 0.7}, "confidence": "EXTRACTED"}, {"from": "session_d09", "to": "session_criterion5", "label": "conceptually_related_to", "title": "conceptually_related_to [INFERRED]", "dashes": true, "width": 1, "color": {"opacity": 0.35}, "confidence": "INFERRED"}, {"from": "session_criterion3", "to": "session_verification_gap", "label": "references", "title": "references [EXTRACTED]", "dashes": false, "width": 2, "color": {"opacity": 0.7}, "confidence": "EXTRACTED"}, {"from": "session_execute_phase_orchestrator", "to": "session_gsd_executor", "label": "references", "title": "references [EXTRACTED]", "dashes": false, "width": 2, "color": {"opacity": 0.7}, "confidence": "EXTRACTED"}, {"from": "session_execute_phase_orchestrator", "to": "session_gsd_verifier", "label": "references", "title": "references [EXTRACTED]", "dashes": false, "width": 2, "color": {"opacity": 0.7}, "confidence": "EXTRACTED"}, {"from": "session_execute_phase_orchestrator", "to": "session_wave_model", "label": "implements", "title": "implements [EXTRACTED]", "dashes": false, "width": 2, "color": {"opacity": 0.7}, "confidence": "EXTRACTED"}, {"from": "session_execute_phase_orchestrator", "to": "session_mssql_localdb", "label": "depends_on", "title": "depends_on [EXTRACTED]", "dashes": false, "width": 2, "color": {"opacity": 0.7}, "confidence": "EXTRACTED"}, {"from": "session_gsd_verifier", "to": "session_verification_gap", "label": "references", "title": "references [EXTRACTED]", "dashes": false, "width": 2, "color": {"opacity": 0.7}, "confidence": "EXTRACTED"}, {"from": "session_wave_model", "to": "session_wave1", "label": "references", "title": "references [EXTRACTED]", "dashes": false, "width": 2, "color": {"opacity": 0.7}, "confidence": "EXTRACTED"}, {"from": "session_wave_model", "to": "session_wave2", "label": "references", "title": "references [EXTRACTED]", "dashes": false, "width": 2, "color": {"opacity": 0.7}, "confidence": "EXTRACTED"}, {"from": "session_wave1", "to": "session_wave2", "label": "depends_on", "title": "depends_on [EXTRACTED]", "dashes": false, "width": 2, "color": {"opacity": 0.7}, "confidence": "EXTRACTED"}, {"from": "session_owner", "to": "session_owner_decision", "label": "references", "title": "references [EXTRACTED]", "dashes": false, "width": 2, "color": {"opacity": 0.7}, "confidence": "EXTRACTED"}, {"from": "session_verification_gap", "to": "session_owner_decision", "label": "rationale_for", "title": "rationale_for [INFERRED]", "dashes": true, "width": 1, "color": {"opacity": 0.35}, "confidence": "INFERRED"}];
+const LEGEND = [{"cid": 0, "color": "#4E79A7", "label": "Merge Core &amp; Transaction Rules", "count": 11}, {"cid": 1, "color": "#F28E2B", "label": "Sweep Invariant (JOB-02)", "count": 6}, {"cid": 2, "color": "#E15759", "label": "Faculty Scan Seam", "count": 6}, {"cid": 3, "color": "#76B7B2", "label": "Checker Online Seam", "count": 6}, {"cid": 4, "color": "#59A14F", "label": "Execution Orchestration", "count": 6}, {"cid": 5, "color": "#EDC948", "label": "Verification Gap &amp; Owner Decision", "count": 5}, {"cid": 6, "color": "#B07AA1", "label": "D-01 Detector &amp; Refinement", "count": 5}, {"cid": 7, "color": "#FF9DA7", "label": "Live-Term Coverage Audit", "count": 2}];
+
+// HTML-escape helper — prevents XSS when injecting graph data into innerHTML
+function esc(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+}
+
+// Build vis datasets
+const nodesDS = new vis.DataSet(RAW_NODES.map(n => ({
+  id: n.id, label: n.label, color: n.color, size: n.size,
+  font: n.font, title: n.title,
+  _community: n.community, _community_name: n.community_name,
+  _source_file: n.source_file, _file_type: n.file_type, _degree: n.degree,
+})));
+
+const edgesDS = new vis.DataSet(RAW_EDGES.map((e, i) => ({
+  id: i, from: e.from, to: e.to,
+  label: '',
+  title: e.title,
+  dashes: e.dashes,
+  width: e.width,
+  color: e.color,
+  arrows: { to: { enabled: true, scaleFactor: 0.5 } },
+})));
+
+const container = document.getElementById('graph');
+const network = new vis.Network(container, { nodes: nodesDS, edges: edgesDS }, {
+  physics: {
+    enabled: true,
+    solver: 'forceAtlas2Based',
+    forceAtlas2Based: {
+      gravitationalConstant: -60,
+      centralGravity: 0.005,
+      springLength: 120,
+      springConstant: 0.08,
+      damping: 0.4,
+      avoidOverlap: 0.8,
+    },
+    stabilization: { iterations: 200, fit: true },
+  },
+  interaction: {
+    hover: true,
+    tooltipDelay: 100,
+    hideEdgesOnDrag: true,
+    navigationButtons: false,
+    keyboard: false,
+  },
+  nodes: { shape: 'dot', borderWidth: 1.5 },
+  edges: { smooth: { type: 'continuous', roundness: 0.2 }, selectionWidth: 3 },
+});
+
+network.once('stabilizationIterationsDone', () => {
+  network.setOptions({ physics: { enabled: false } });
+});
+
+function showInfo(nodeId) {
+  const n = nodesDS.get(nodeId);
+  if (!n) return;
+  const neighborIds = network.getConnectedNodes(nodeId);
+  const neighborItems = neighborIds.map(nid => {
+    const nb = nodesDS.get(nid);
+    const color = nb ? nb.color.background : '#555';
+    return `<span class="neighbor-link" style="border-left-color:${esc(color)}" onclick="focusNode(${JSON.stringify(nid)})">${esc(nb ? nb.label : nid)}</span>`;
+  }).join('');
+  document.getElementById('info-content').innerHTML = `
+    <div class="field"><b>${esc(n.label)}</b></div>
+    <div class="field">Type: ${esc(n._file_type || 'unknown')}</div>
+    <div class="field">Community: ${esc(n._community_name)}</div>
+    <div class="field">Source: ${esc(n._source_file || '-')}</div>
+    <div class="field">Degree: ${n._degree}</div>
+    ${neighborIds.length ? `<div class="field" style="margin-top:8px;color:#aaa;font-size:11px">Neighbors (${neighborIds.length})</div><div id="neighbors-list">${neighborItems}</div>` : ''}
+  `;
+}
+
+function focusNode(nodeId) {
+  network.focus(nodeId, { scale: 1.4, animation: true });
+  network.selectNodes([nodeId]);
+  showInfo(nodeId);
+}
+
+// Track hovered node — hover detection is more reliable than click params
+let hoveredNodeId = null;
+network.on('hoverNode', params => {
+  hoveredNodeId = params.node;
+  container.style.cursor = 'pointer';
+});
+network.on('blurNode', () => {
+  hoveredNodeId = null;
+  container.style.cursor = 'default';
+});
+container.addEventListener('click', () => {
+  if (hoveredNodeId !== null) {
+    showInfo(hoveredNodeId);
+    network.selectNodes([hoveredNodeId]);
+  }
+});
+network.on('click', params => {
+  if (params.nodes.length > 0) {
+    showInfo(params.nodes[0]);
+  } else if (hoveredNodeId === null) {
+    document.getElementById('info-content').innerHTML = '<span class="empty">Click a node to inspect it</span>';
+  }
+});
+
+const searchInput = document.getElementById('search');
+const searchResults = document.getElementById('search-results');
+searchInput.addEventListener('input', () => {
+  const q = searchInput.value.toLowerCase().trim();
+  searchResults.innerHTML = '';
+  if (!q) { searchResults.style.display = 'none'; return; }
+  const matches = RAW_NODES.filter(n => n.label.toLowerCase().includes(q)).slice(0, 20);
+  if (!matches.length) { searchResults.style.display = 'none'; return; }
+  searchResults.style.display = 'block';
+  matches.forEach(n => {
+    const el = document.createElement('div');
+    el.className = 'search-item';
+    el.textContent = n.label;
+    el.style.borderLeft = `3px solid ${n.color.background}`;
+    el.style.paddingLeft = '8px';
+    el.onclick = () => {
+      network.focus(n.id, { scale: 1.5, animation: true });
+      network.selectNodes([n.id]);
+      showInfo(n.id);
+      searchResults.style.display = 'none';
+      searchInput.value = '';
+    };
+    searchResults.appendChild(el);
+  });
+});
+document.addEventListener('click', e => {
+  if (!searchResults.contains(e.target) && e.target !== searchInput)
+    searchResults.style.display = 'none';
+});
+
+const hiddenCommunities = new Set();
+
+function toggleAllCommunities(hide) {
+  document.querySelectorAll('.legend-item').forEach(item => {
+    hide ? item.classList.add('dimmed') : item.classList.remove('dimmed');
+  });
+  LEGEND.forEach(c => {
+    if (hide) hiddenCommunities.add(c.cid); else hiddenCommunities.delete(c.cid);
+  });
+  const updates = RAW_NODES.map(n => ({ id: n.id, hidden: hide }));
+  nodesDS.update(updates);
+}
+
+const legendEl = document.getElementById('legend');
+LEGEND.forEach(c => {
+  const item = document.createElement('div');
+  item.className = 'legend-item';
+  item.innerHTML = `<div class="legend-dot" style="background:${c.color}"></div>
+    <span class="legend-label">${c.label}</span>
+    <span class="legend-count">${c.count}</span>`;
+  item.onclick = () => {
+    if (hiddenCommunities.has(c.cid)) {
+      hiddenCommunities.delete(c.cid);
+      item.classList.remove('dimmed');
+    } else {
+      hiddenCommunities.add(c.cid);
+      item.classList.add('dimmed');
+    }
+    const updates = RAW_NODES
+      .filter(n => n.community === c.cid)
+      .map(n => ({ id: n.id, hidden: hiddenCommunities.has(c.cid) }));
+    nodesDS.update(updates);
+  };
+  legendEl.appendChild(item);
+});
+</script>
+<script>
+// Render hyperedges as shaded regions
+const hyperedges = [{"id": "wave2_seams_import_merge_core", "label": "Wave-2 seams import the merge core", "nodes": ["session_scan_apply", "session_checker_apply_action", "session_audit_merge_coverage", "session_merged_sibling_ids"], "relation": "participate_in", "confidence": "INFERRED", "confidence_score": 0.85, "source_file": ".planning/graphs/session-04.2/SESSION.md"}, {"id": "merge_governing_decisions", "label": "D-decisions governing merge behavior", "nodes": ["session_d01", "session_d04", "session_d05", "session_d07", "session_d08", "session_d09"], "relation": "form", "confidence": "EXTRACTED", "confidence_score": 0.9, "source_file": ".planning/graphs/session-04.2/SESSION.md"}, {"id": "gap_closure_loop", "label": "Verification gap closure loop", "nodes": ["session_verification_gap", "session_gsd_verifier", "session_owner_decision", "session_d01_refinement2"], "relation": "participate_in", "confidence": "INFERRED", "confidence_score": 0.85, "source_file": ".planning/graphs/session-04.2/SESSION.md"}];
+// afterDrawing passes ctx already transformed to network coordinate space.
+// Draw node positions raw — no manual pan/zoom/DPR math needed.
+network.on('afterDrawing', function(ctx) {
+    hyperedges.forEach(h => {
+        const positions = h.nodes
+            .map(nid => network.getPositions([nid])[nid])
+            .filter(p => p !== undefined);
+        if (positions.length < 2) return;
+        ctx.save();
+        ctx.globalAlpha = 0.12;
+        ctx.fillStyle = '#6366f1';
+        ctx.strokeStyle = '#6366f1';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        // Centroid and expanded hull in network coordinates
+        const cx = positions.reduce((s, p) => s + p.x, 0) / positions.length;
+        const cy = positions.reduce((s, p) => s + p.y, 0) / positions.length;
+        const expanded = positions.map(p => ({
+            x: cx + (p.x - cx) * 1.15,
+            y: cy + (p.y - cy) * 1.15
+        }));
+        ctx.moveTo(expanded[0].x, expanded[0].y);
+        expanded.slice(1).forEach(p => ctx.lineTo(p.x, p.y));
+        ctx.closePath();
+        ctx.fill();
+        ctx.globalAlpha = 0.4;
+        ctx.stroke();
+        // Label
+        ctx.globalAlpha = 0.8;
+        ctx.fillStyle = '#4f46e5';
+        ctx.font = 'bold 11px sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText(h.label, cx, cy - 5);
+        ctx.restore();
+    });
+});
+</script>
+</body>
+</html>

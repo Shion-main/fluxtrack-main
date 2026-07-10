@@ -19,10 +19,10 @@ SQL Server database. See `FluxTrack_SRS.md`.
 
 ## Run the app
 ```
-py -3.12 manage.py runserver 127.0.0.1:8020
+py -3.12 manage.py runserver 8000
 ```
-Open http://127.0.0.1:8020 → dev-login (click any role).
-Admin: http://127.0.0.1:8020/admin — sign in as `sysadmin` / `devpass123`.
+Open http://localhost:8000 → dev-login (click any role).
+Admin: http://localhost:8000/admin — sign in as `sysadmin` / `devpass123`.
 
 Dev users (all password `devpass123`): `faculty` `checker` `ifo` `hr` `guard` `dean` `sysadmin`.
 
