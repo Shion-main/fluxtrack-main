@@ -262,11 +262,28 @@ Plans:
   4. HR can view verified session-level attendance, filter/search by faculty, department, date range, and term, and export it as CSV for external payroll.
   5. A single failing aggregate shows an error in its own card while the rest of the page still renders.
 
-**Plans**: TBD
+**Plans**: 7 plans
 
 Plans:
 
-- [ ] 06-01: TBD
+**Wave 1**
+
+- [ ] 06-01-PLAN.md — Pure aggregate layer (faculty_attendance/dept_summary/faculty_scorecard/safe_card) + reporting fixture + unit tests (RPT-01/04/05) [Wave 1]
+- [ ] 06-02-PLAN.md — ReportLab package-legitimacy gate + install (RPT-03 dependency) [Wave 1]
+
+**Wave 2** *(blocked on Wave 1)*
+
+- [ ] 06-03-PLAN.md — CSV + PDF render layer (build_csv/build_pdf) + shared CSV-injection neutralizer (RPT-03) [Wave 2]
+- [ ] 06-04-PLAN.md — IFO-09 dashboard + faculty-scorecard drill-down + per-card isolation (IFO-09/RPT-04/05) [Wave 2]
+
+**Wave 3** *(blocked on Wave 2)*
+
+- [ ] 06-05-PLAN.md — Weekly report generation + JOB-03 stub fill + notify IFO+Dean(s) + on-demand command (RPT-02) [Wave 3]
+- [ ] 06-06-PLAN.md — Dean dashboard + dept-scoped reporting/scorecard + CSV/PDF export (read-only, IDOR-safe) (DEAN-01/02/03/04) [Wave 3]
+
+**Wave 4** *(blocked on Wave 3)*
+
+- [ ] 06-07-PLAN.md — HR session-level attendance list + faculty/dept/date/term filters + streaming payroll CSV export (HR-01/02/03) [Wave 4]
 
 ### Phase 7: Remaining Operational Surfaces
 
@@ -318,7 +335,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8
 | 3. Duty Assignments & Checker Verification | 6/6 | Complete    | 2026-07-03 |
 | 4. Modality Shift Approval & SRS v1.2 | 8/8 | Complete    | 2026-07-03 |
 | 5. Notifications — Read Surface & Web Push | 4/5 | In Progress|  |
-| 6. Reporting Engine & Reporting Surfaces | 0/TBD | Not started | - |
+| 6. Reporting Engine & Reporting Surfaces | 0/7 | Planned | - |
 | 7. Remaining Operational Surfaces | 0/TBD | Not started | - |
 | 8. Auth Cutover & AWS Deployment | 0/TBD | Not started | - |
 
