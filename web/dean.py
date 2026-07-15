@@ -259,7 +259,7 @@ def report_export(request, fmt):
     if fmt == "csv":
         data, content_type, ext = build_csv(rows), "text/csv", "csv"
     elif fmt == "pdf":
-        data = build_pdf(rows, start, dept)
+        data = build_pdf(rows, start, end, dept)
         content_type, ext = "application/pdf", "pdf"
     else:
         raise Http404("Unknown export format.")

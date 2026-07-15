@@ -75,25 +75,41 @@ def build_csv(rows):
     return buf.getvalue().encode("utf-8")
 
 
-def build_pdf(rows, week_start, department):
+def pdf_title(period_start, period_end, department):
+    """The PDF header title for a report over [period_start, period_end] (RPT-03).
+
+    Names the department code (or ``All`` when ``department`` is ``None``) and the
+    ACTUAL date range as ``{start} to {end}`` -- accurate for both a Mon-Sun weekly
+    report and a Dean's ad-hoc multi-week range (the old hardcoded "week of {start}"
+    mislabeled any non-weekly export, code-review ME-01). Pure: strings in, str out,
+    unit-testable without building a whole PDF.
+    """
+    dept_label = department.code if department is not None else "All"
+    return f"Attendance Report - {dept_label} - {period_start} to {period_end}"
+
+
+def build_pdf(rows, period_start, period_end, department):
     """RPT-03: consolidated report as a printable PDF via ReportLab Platypus.
 
     Renders a landscape-A4 ``SimpleDocTemplate`` over an in-memory ``BytesIO``: a
-    title naming the department code (or ``All`` when ``department`` is ``None``) and
-    the week, then a ``Table`` with a repeating header row (``repeatRows=1``) styled
-    with the brand-navy header fill, a thin grid, and zebra data rows. Bounded to one
-    department / one week (T-06-09 accepts in-memory), so no streaming is needed.
+    title (see :func:`pdf_title`) naming the department code (or ``All`` when
+    ``department`` is ``None``) and the ACTUAL ``period_start`` to ``period_end``
+    range, then a ``Table`` with a repeating header row (``repeatRows=1``) styled with
+    the brand-navy header fill, a thin grid, and zebra data rows. Bounded to one
+    department / one range (T-06-09 accepts in-memory), so no streaming is needed.
     Empty ``rows`` render the title plus a single "No data" line -- never a zero-row
     table that would error. Returns ``bytes`` starting with the ``%PDF`` signature.
+
+    Both bounds are passed (not just the start) so a Dean's ad-hoc range -- which is
+    NOT clamped to 7 days -- is labeled honestly instead of "week of {start}".
     """
     buf = io.BytesIO()
     doc = SimpleDocTemplate(buf, pagesize=landscape(A4))
     styles = getSampleStyleSheet()
 
-    dept_label = department.code if department is not None else "All"
     story = [
         Paragraph(
-            f"Weekly Attendance - {dept_label} - week of {week_start}",
+            pdf_title(period_start, period_end, department),
             styles["Title"],
         ),
         Spacer(1, 12),

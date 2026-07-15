@@ -8,7 +8,7 @@ are constructed directly.
 """
 from django.test import SimpleTestCase
 
-from scheduling.report_render import build_csv, build_pdf, csv_safe
+from scheduling.report_render import build_csv, build_pdf, csv_safe, pdf_title
 from scheduling.reporting import FacultyRow
 
 
@@ -89,12 +89,30 @@ class CsvInjectionTests(SimpleTestCase):
 class PdfBuildTests(SimpleTestCase):
     def test_returns_pdf_signature_bytes(self):
         rows = [_row("Cruz Maria"), _row("Santos Jose")]
-        pdf = build_pdf(rows, "2026-07-13", None)
+        pdf = build_pdf(rows, "2026-07-13", "2026-07-19", None)
         self.assertIsInstance(pdf, bytes)
         self.assertTrue(pdf.startswith(b"%PDF"))
         self.assertGreater(len(pdf), 500)
 
     def test_empty_rows_still_valid_pdf(self):
-        pdf = build_pdf([], "2026-07-13", None)
+        pdf = build_pdf([], "2026-07-13", "2026-07-19", None)
         self.assertTrue(pdf.startswith(b"%PDF"))
         self.assertGreater(len(pdf), 300)
+
+
+class PdfTitleTests(SimpleTestCase):
+    """ME-01: the PDF title labels the ACTUAL range, not a hardcoded 'week of'."""
+
+    def test_range_label_reflects_both_bounds(self):
+        # A Dean's ad-hoc, non-weekly range must read as "{start} to {end}".
+        title = pdf_title("2026-07-06", "2026-08-31", None)
+        self.assertEqual(
+            title, "Attendance Report - All - 2026-07-06 to 2026-08-31")
+        self.assertNotIn("week of", title)
+
+    def test_department_code_in_title(self):
+        class _Dept:
+            code = "CCS"
+        title = pdf_title("2026-07-06", "2026-07-12", _Dept())
+        self.assertIn("CCS", title)
+        self.assertIn("2026-07-06 to 2026-07-12", title)

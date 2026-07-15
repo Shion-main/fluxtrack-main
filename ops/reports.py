@@ -95,7 +95,8 @@ def generate_weekly_report(week_start, week_end, department):
     pdf_name = f"reports/{week_start}/{code}.pdf"
 
     report.csv_path = _save_overwrite(csv_name, build_csv(rows))
-    report.pdf_path = _save_overwrite(pdf_name, build_pdf(rows, week_start, department))
+    report.pdf_path = _save_overwrite(
+        pdf_name, build_pdf(rows, week_start, week_end, department))
     report.save(update_fields=["csv_path", "pdf_path"])
     return report
 
