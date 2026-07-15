@@ -70,7 +70,7 @@ roadmap does NOT create phases for them.
 - [x] **RPT-04**: A faculty scorecard (scheduled vs held, attendance %, absences, early-ends, modality breakdown, selectable period) computes from the same shared aggregates
 - [x] **RPT-03**: Reports export as both CSV and printable PDF, per department or all
 - [x] **RPT-05**: A single failed aggregate degrades gracefully (its section shows an error, the page still renders)
-- [ ] **RPT-02**: The weekly report generates on demand and auto-weekly (JOB-03), stored, notifying IFO and the relevant Dean(s)
+- [x] **RPT-02**: The weekly report generates on demand and auto-weekly (JOB-03), stored, notifying IFO and the relevant Dean(s)
 
 ### Dean (DEAN)
 
@@ -172,7 +172,7 @@ phase (see ROADMAP.md). Status values: Pending / In progress / Complete.
 | NOTIF-02 | Phase 5 | Complete |
 | NOTIF-03 | Phase 5 | Complete |
 | RPT-01 | Phase 6 | Complete |
-| RPT-02 | Phase 6 | Pending |
+| RPT-02 | Phase 6 | Complete |
 | RPT-03 | Phase 6 | Complete |
 | RPT-04 | Phase 6 | Complete |
 | RPT-05 | Phase 6 | Complete |
