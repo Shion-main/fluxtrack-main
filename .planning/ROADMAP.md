@@ -262,7 +262,7 @@ Plans:
   4. HR can view verified session-level attendance, filter/search by faculty, department, date range, and term, and export it as CSV for external payroll.
   5. A single failing aggregate shows an error in its own card while the rest of the page still renders.
 
-**Plans**: 3/7 plans executed
+**Plans**: 4/7 plans executed
 
 Plans:
 
@@ -274,7 +274,7 @@ Plans:
 **Wave 2** *(blocked on Wave 1)*
 
 - [x] 06-03-PLAN.md — CSV + PDF render layer (build_csv/build_pdf) + shared CSV-injection neutralizer (RPT-03) [Wave 2]
-- [ ] 06-04-PLAN.md — IFO-09 dashboard + faculty-scorecard drill-down + per-card isolation (IFO-09/RPT-04/05) [Wave 2]
+- [x] 06-04-PLAN.md — IFO-09 dashboard + faculty-scorecard drill-down + per-card isolation (IFO-09/RPT-04/05) [Wave 2]
 
 **Wave 3** *(blocked on Wave 2)*
 
@@ -335,7 +335,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8
 | 3. Duty Assignments & Checker Verification | 6/6 | Complete    | 2026-07-03 |
 | 4. Modality Shift Approval & SRS v1.2 | 8/8 | Complete    | 2026-07-03 |
 | 5. Notifications — Read Surface & Web Push | 4/5 | In Progress|  |
-| 6. Reporting Engine & Reporting Surfaces | 3/7 | In Progress|  |
+| 6. Reporting Engine & Reporting Surfaces | 4/7 | In Progress|  |
 | 7. Remaining Operational Surfaces | 0/TBD | Not started | - |
 | 8. Auth Cutover & AWS Deployment | 0/TBD | Not started | - |
 
