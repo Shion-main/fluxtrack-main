@@ -31,20 +31,19 @@ created: 2026-07-15
 
 ## Spacing Scale
 
-Declared values (Tailwind/Franken 4px base — all multiples of 4, matching existing template usage `gap-1/2/3`, `mb-1/6/8`, `pt-8`, `pb-16`, `px-4`, `h-14`):
+Declared values (Tailwind/Franken 4px base — standard set {4, 8, 16, 24, 32, 48, 64}, matching existing template usage `mb-1/6/8`, `pt-8`, `pb-16`, `px-4`, `h-14`):
 
 | Token | Value | Tailwind util | Usage |
 |-------|-------|---------------|-------|
 | xs | 4px | `gap-1` | Icon-to-label gap inside pills/buttons |
-| sm | 8px | `gap-2` | Compact element spacing, label groups |
-| — | 12px | `gap-3` | Card grid gap, filter-control gap |
-| md | 16px | `px-4` / `gap-4` | Default element + container horizontal padding |
+| sm | 8px | `gap-2` | Compact element + tight filter-control gaps |
+| md | 16px | `px-4` / `gap-4` | Default element spacing, container horizontal padding, **card-grid gap**, filter-bar gap |
 | lg | 24px | `mb-6` | Below intro paragraph / section spacing |
 | xl | 32px | `pt-8` / `mb-8` | Page top padding, major section break |
 | 2xl | 48px | `pb-12` | Card interior vertical rhythm on tall cards |
 | 3xl | 64px | `pb-16` | Page bottom padding |
 
-Exceptions: **none** on the reporting surfaces. (The faculty `ft-*` navy system uses non-4 radii/heights — 14/18/22/26px, 42/46/54px — but that system is scoped to faculty routes and is not used by any Phase 6 surface.)
+Exceptions: **none** on the reporting surfaces — every value is in {4, 8, 16, 24, 32, 48, 64}. (The faculty `ft-*` navy system uses non-4 radii/heights — 14/18/22/26px, 42/46/54px — but that system is scoped to faculty routes and is not used by any Phase 6 surface.)
 
 ---
 
@@ -54,12 +53,14 @@ Franken `uk-font-sm` base; standard shell uses `uk-h2/h3/h4`, `font-semibold`, `
 
 | Role | Size | Weight | Line Height | Franken hook |
 |------|------|--------|-------------|--------------|
-| Body | 14px | 400 | 1.5 | default body / table cells |
 | Label | 12px | 600 | 1.4 | `uk-text-small` — metric captions, table meta, timestamps, status pills |
-| Heading | 24px | 600 | 1.25 | `uk-h3` — page titles on report/scorecard/HR; section headers `uk-h4` (20px/600) |
+| Body | 14px | 400 | 1.5 | default body / table cells |
+| Heading | 20px | 600 | 1.25 | `uk-h3`/`uk-h4` — page titles (report/scorecard/HR) and section headers share one tier |
 | Display | 30px | 600 | 1.2 | `uk-h2` — big metric numbers on summary cards; IFO dashboard title |
 
-Weights declared: **Regular 400** (body) + **Semibold 600** (all emphasis, headings, metrics, labels). Numeric metric values are set in `uk-h2`/`uk-h3` semibold; captions in `uk-text-small uk-text-muted`.
+Exactly 4 sizes: 12 / 14 / 20 / 30. `uk-h3` and `uk-h4` both resolve to the single 20px heading tier (no separate 24px tier).
+
+Weights declared: **Regular 400** (body) + **Semibold 600** (all emphasis, headings, metrics, labels). Numeric metric values use the 30px display tier (`uk-h2`) semibold; captions use `uk-text-small uk-text-muted` (12px label tier).
 
 ---
 
@@ -96,13 +97,13 @@ Attendance-% badge thresholds (≥90 green · 75–89 amber · <75 red) are an *
 | Component | Franken class | Reused from | Phase 6 use |
 |-----------|---------------|-------------|-------------|
 | Summary card | `uk-card uk-card-body` | `ifo/rooms.html` | IFO-09 / DEAN-04 KPI cards |
-| Card grid | `grid gap-3 sm:grid-cols-2 lg:grid-cols-3` | `ifo/rooms.html` | Dashboard card rows (DEAN-04 = 4 cards: Faculty, Sessions, Absences, Attendance %) |
+| Card grid | `grid gap-4 sm:grid-cols-2 lg:grid-cols-3` | `ifo/rooms.html` (grid idiom; gap normalized to 16px) | Dashboard card rows (DEAN-04 = 4 cards: Faculty, Sessions, Absences, Attendance %) |
 | Data table | `uk-table uk-table-divider uk-table-small` | Franken (new usage) | Weekly report (one row/faculty), HR session list |
 | Status pill | `uk-label` + semantic tint | `ifo/rooms.html`, `faculty.css` pills | Attendance %, held/absent, checker-verified |
 | Role label | `uk-label uk-label-secondary` / `-primary` | `base.html` header, `ifo/live.html` | "polling", "latest report", dept badge |
 | Button (primary) | `uk-btn uk-btn-primary uk-btn-sm` | `ifo/rooms.html` | Generate report / primary export |
 | Button (secondary) | `uk-btn uk-btn-secondary uk-btn-sm` | `ifo/rooms.html`, `base.html` | Export CSV / Download PDF (download anchors) |
-| Icon button (back) | `uk-btn uk-btn-ghost uk-btn-icon` + `uk-icon icon="arrow-left"` | `ifo/live.html`, `dean/queue.html` | Back nav on detail pages |
+| Icon button (back) | `uk-btn uk-btn-ghost uk-btn-icon` + `aria-label="Back"` + `uk-icon icon="arrow-left"` | `ifo/live.html`, `dean/queue.html` | Back nav on detail pages (icon-only button MUST carry `aria-label="Back"`) |
 | Filter inputs | `uk-input`, `uk-select` | Franken (new usage) | Date-range + term + faculty/dept filters |
 | htmx panel swap | `hx-get … hx-trigger … hx-swap="innerHTML"` into `#panel` | `ifo/live.html`, `dean/queue.html` | Refresh cards/table on filter submit |
 
@@ -116,7 +117,7 @@ Icons (Lucide via `uk-icon`): `file-text` (PDF/report), `download` (export), `ca
 
 A single GET filter bar reused by IFO-09, the faculty scorecard (period), the Dean dashboard, and the HR list. Server-rendered `<form>`; on submit, htmx swaps the results panel (`hx-get` + `hx-target="#report-panel" hx-swap="innerHTML"`), falling back to a full GET navigation without JS.
 
-- Layout: `uk-card uk-card-body` filter bar, `flex flex-wrap items-end gap-3`.
+- Layout: `uk-card uk-card-body` filter bar, `flex flex-wrap items-end gap-4` (tight control clusters may use `gap-2`).
 - Controls: **From** (`<input type="date" class="uk-input">`), **To** (`<input type="date" class="uk-input">`), **Term** (`<select class="uk-select">` populated from `AcademicTerm`, active term preselected), and for HR additionally **Faculty** and **Department** (`uk-select` / searchable `uk-input` with `search` icon).
 - Apply button: `uk-btn uk-btn-primary uk-btn-sm` labelled **"Apply"**; a `uk-btn uk-btn-ghost uk-btn-sm` **"Reset"** clears to the default range.
 - Active-filter state uses the navy accent (`uk-btn-primary`), inactive stays secondary/ghost.
@@ -124,7 +125,7 @@ A single GET filter bar reused by IFO-09, the faculty scorecard (period), the De
 
 ### Pattern B — Summary (KPI) card
 
-`uk-card uk-card-body` containing: caption (`uk-text-small uk-text-muted`, e.g. "Attendance %") on top, big value (`uk-h2` semibold, navy for the highlighted Attendance-% card, foreground otherwise), optional sub-line (`uk-text-small uk-text-muted`, e.g. "of 214 scheduled"). Cards sit in the `grid gap-3 sm:grid-cols-2 lg:grid-cols-3` grid. DEAN-04 = Faculty / Sessions / Absences / Attendance %.
+`uk-card uk-card-body` containing: caption (`uk-text-small uk-text-muted`, e.g. "Attendance %") on top, big value (`uk-h2` semibold / 30px display tier, navy for the highlighted Attendance-% card, foreground otherwise), optional sub-line (`uk-text-small uk-text-muted`, e.g. "of 214 scheduled"). Cards sit in the `grid gap-4 sm:grid-cols-2 lg:grid-cols-3` grid. DEAN-04 = Faculty / Sessions / Absences / Attendance %.
 
 ### Pattern C — Export affordances (download, not browser-print)
 
