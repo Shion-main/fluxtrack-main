@@ -5,7 +5,7 @@ inside the uk-table body of hr/attendance.html. ASCII-only.{% endcomment %}
 {% for s in sessions %}
 <tr>
   <td>
-    <div class="font-medium">{{ s.faculty.get_full_name|default:s.faculty.username }}</div>
+    <div class="font-semibold">{{ s.faculty.get_full_name|default:s.faculty.username }}</div>
     <div class="uk-text-small uk-text-muted">{% if s.faculty.department %}{{ s.faculty.department.code }}{% else %}--{% endif %}</div>
   </td>
   <td>
@@ -27,7 +27,7 @@ inside the uk-table body of hr/attendance.html. ASCII-only.{% endcomment %}
   <td class="uk-text-small">{% if s.checkin_method %}{{ s.get_checkin_method_display }}{% else %}--{% endif %}</td>
   <td>
     {% if s.is_verified %}
-    <span class="uk-label" style="background:#e7ecf7;color:#001c43">Verified</span>
+    <span class="uk-label" style="background:var(--navy-tint);color:var(--navy)">Verified</span>
     {% else %}
     <span class="uk-text-small uk-text-muted">--</span>
     {% endif %}

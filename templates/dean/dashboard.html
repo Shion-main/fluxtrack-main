@@ -51,7 +51,7 @@ NO write controls -- the surface is read-only. ASCII-only.{% endcomment %}
   <h3 class="uk-h4 mt-8 mb-2">Latest weekly report</h3>
   {% if latest_report %}
     <div class="uk-card uk-card-body">
-      <div class="flex items-center justify-between flex-wrap gap-3">
+      <div class="flex items-center justify-between flex-wrap gap-4">
         <div>
           <div class="uk-text-small uk-text-muted">Week of</div>
           <div class="uk-h4 mb-0">{{ latest_report.week_start|date:'M j, Y' }}</div>
@@ -63,7 +63,7 @@ NO write controls -- the surface is read-only. ASCII-only.{% endcomment %}
             <uk-icon icon="file-text" class="size-4"></uk-icon> Download PDF</a>
         </div>
       </div>
-      <p class="uk-text-small mt-3 mb-0">
+      <p class="uk-text-small mt-4 mb-0">
         <a href="/dean/reports" class="inline-flex items-center gap-1">View full department reporting <uk-icon icon="chevron-right" class="size-4"></uk-icon></a></p>
     </div>
   {% else %}
