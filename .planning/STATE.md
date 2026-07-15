@@ -4,11 +4,11 @@ milestone: v1.2
 milestone_name: "**Goal**: Faculty can request a lead-time-gated modality shift that a Dean approves, with rooms auto-released or auto-assigned, and the SRS brought back in sync with reality."
 current_phase: 06
 current_phase_name: Reporting Engine & Reporting Surfaces
-status: executing
-stopped_at: "Phase 06 — 06-07 COMPLETE (HR session-level attendance surface: hr_required cross-department read-only list + streaming injection-safe payroll CSV export, HR-01/02/03, 14 tests green); Phase 06 all 7 plans complete"
-last_updated: "2026-07-15T16:30:00.000Z"
+status: complete
+stopped_at: "Phase 06 COMPLETE + VERIFIED (7/7 plans; gsd-verifier 5/5 success criteria passed against live tests; 06-VERIFICATION.md status=passed). Optional gates not yet run: code-review, secure-phase, ui-review, verify-work UAT."
+last_updated: "2026-07-15T17:00:00.000Z"
 last_activity: 2026-07-15
-last_activity_desc: 06-07 HR attendance surface (HR-01/02/03) complete — Phase 06 done (7/7)
+last_activity_desc: Phase 06 executed (7/7) + phase-goal verification PASSED (5/5). Ready for Phase 07 or optional quality gates.
 progress:
   total_phases: 11
   completed_phases: 8
