@@ -102,7 +102,10 @@ def _filtered_sessions(request):
           .select_related("schedule", "schedule__term", "faculty",
                           "faculty__department", "room")
           .annotate(is_verified=Exists(verified_sq))
-          .order_by("date", "scheduled_start"))
+          # Newest-first: the page cap then shows the most RECENT sessions, not
+          # the oldest historical rows once volume exceeds one page (code-review
+          # HIGH). The CSV export streams the full set in the same order.
+          .order_by("-date", "-scheduled_start"))
 
     faculty_raw = (request.GET.get("faculty") or "").strip()
     dept_raw = (request.GET.get("department") or "").strip()

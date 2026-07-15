@@ -254,8 +254,14 @@ def scorecard(request, faculty_id):
     reports/scorecard.html; the back link is pointed at the Dean report via
     ``back_url`` so it never sends a Dean to the IFO-only dashboard.
     """
+    dept = request.user.department
+    if dept is None:
+        # NULL-department Dean: nothing is scoped in. Without this guard
+        # department=None becomes department__isnull=True and would match
+        # NULL-department faculty -- refuse, consistent with dashboard/reports.
+        raise Http404("No department.")
     faculty = get_object_or_404(
-        get_user_model(), pk=faculty_id, department=request.user.department)
+        get_user_model(), pk=faculty_id, department=dept)
     start, end, as_of, note = _reporting_range(request)
     card = safe_card(
         faculty_scorecard, faculty=faculty, start=start, end=end, as_of=as_of)
@@ -311,8 +317,14 @@ def weekly_download(request, pk, fmt):
     server-side. The stored bytes are served from ``default_storage`` under the
     server-built path; a missing file/path 404s (never a 500).
     """
+    dept = request.user.department
+    if dept is None:
+        # NULL-department Dean: department=None becomes department__isnull=True
+        # and would match the org-wide ALL-departments roll-up report (stored
+        # with department=None). Refuse -- a Dean never sees the consolidated file.
+        raise Http404("No department.")
     report = get_object_or_404(
-        WeeklyReport, pk=pk, department=request.user.department)
+        WeeklyReport, pk=pk, department=dept)
     if fmt == "csv":
         path, content_type = report.csv_path, "text/csv"
     elif fmt == "pdf":

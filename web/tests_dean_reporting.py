@@ -163,6 +163,44 @@ class DeanExportTests(_DeanBase):
         self.assertEqual(resp.status_code, 404)
 
 
+@override_settings(MEDIA_ROOT=_TMP_MEDIA)
+class DeanNullDepartmentScopeTests(TestCase):
+    """T-06-01 regression: a Dean whose ``department`` is NULL must never reach
+    the org-wide (department=None) roll-up report or NULL-department faculty.
+
+    Without an explicit guard, ``get_object_or_404(..., department=None)`` becomes
+    ``department__isnull=True`` -- which matches the ALL-departments roll-up
+    WeeklyReport (stored with department=None) and NULL-department faculty. The
+    code-review CRITICAL: scorecard/weekly_download lacked the NULL guard the
+    dashboard/reports/export views already had. These lock the fix.
+    """
+
+    def setUp(self):
+        self.fx = make_reporting_fixture()
+        User = get_user_model()
+        self.dean = User.objects.create(
+            username="dn_dean_null", email="dn_dean_null@mcm.edu.ph",
+            role=Role.DEAN, department=None, is_active=True)
+        self.client.force_login(self.dean)
+
+    def test_null_dept_dean_cannot_download_all_rollup_report(self):
+        # The org-wide consolidated roll-up is stored with department=None.
+        rollup = generate_weekly_report(self.fx.week_start, self.fx.sun, None)
+        resp = self.client.get(
+            reverse("dean_weekly_download", args=[rollup.pk, "csv"]))
+        self.assertEqual(resp.status_code, 404)
+
+    def test_null_dept_dean_scorecard_404s(self):
+        url = reverse("dean_scorecard", args=[self.fx.faculty_a.id])
+        resp = self.client.get(url)
+        self.assertEqual(resp.status_code, 404)
+
+    def test_null_dept_dean_dashboard_is_empty_not_crash(self):
+        # The already-guarded views stay calm (200, no ALL-departments leak).
+        resp = self.client.get(reverse("dean_dashboard"))
+        self.assertEqual(resp.status_code, 200)
+
+
 class ReadOnlyTests(_DeanBase):
     """DEAN-01 / T-06-07: the Dean reporting surface exposes NO write endpoint."""
 
