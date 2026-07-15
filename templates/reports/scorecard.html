@@ -1,0 +1,75 @@
+{% extends "base.html" %}
+{% comment %}RPT-04 shared faculty scorecard (full page, A-DRILL). Standard Franken
+shell. Back button carries the active from/to range. On the safe_card error path it
+includes the shared reports/_error_card.html (never a 500). Created here and REUSED
+by the Dean surface (06-06). Attendance pill uses the A-COLOR tokens. ASCII-only.
+{% endcomment %}
+{% block title %}Attendance scorecard - FluxTrack{% endblock %}
+{% block content %}
+<div class="uk-container max-w-4xl pt-8 pb-16">
+  <div class="flex items-center gap-2 mb-4">
+    <a href="/ifo/dashboard?from={{ date_from|date:'Y-m-d' }}&to={{ date_to|date:'Y-m-d' }}"
+       class="uk-btn uk-btn-ghost uk-btn-icon" aria-label="Back">
+      <uk-icon icon="arrow-left" class="size-5"></uk-icon></a>
+    <h1 class="uk-h3">Attendance scorecard &mdash; {{ faculty.get_full_name|default:faculty.username }}</h1>
+  </div>
+  {% if range_note %}
+  <p class="uk-text-small mb-4" style="color:var(--amber)">{{ range_note }}</p>
+  {% endif %}
+
+  {% if card.1 %}
+    {% include "reports/_error_card.html" %}
+  {% else %}
+    <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-4 mb-8">
+      <div class="uk-card uk-card-body">
+        <div class="uk-text-small uk-text-muted flex items-center gap-1">
+          <uk-icon icon="layers" class="size-4"></uk-icon> Sessions</div>
+        <div class="uk-h2 mt-1">{{ card.0.held }}<span class="uk-text-muted uk-text-small"> / {{ card.0.scheduled }}</span></div>
+        <div class="uk-text-small uk-text-muted">held / scheduled</div>
+      </div>
+      <div class="uk-card uk-card-body">
+        <div class="uk-text-small uk-text-muted flex items-center gap-1">
+          <uk-icon icon="percent" class="size-4"></uk-icon> Attendance %</div>
+        {% with pct=card.0.attendance_pct %}
+        <div class="mt-1"><span class="uk-label" style="{% if pct >= 90 %}background:var(--green-tint);color:var(--green){% elif pct >= 75 %}background:var(--amber-tint);color:var(--amber){% else %}background:var(--red-tint);color:var(--red){% endif %};font-size:1.4rem;padding:2px 10px">{{ pct }}%</span></div>
+        {% endwith %}
+      </div>
+      <div class="uk-card uk-card-body">
+        <div class="uk-text-small uk-text-muted flex items-center gap-1">
+          <uk-icon icon="calendar-x" class="size-4"></uk-icon> Absences</div>
+        <div class="uk-h2 mt-1">{{ card.0.absent }}</div>
+      </div>
+      <div class="uk-card uk-card-body">
+        <div class="uk-text-small uk-text-muted">Early ends</div>
+        <div class="uk-h2 mt-1">{{ card.0.early_ends }}</div>
+      </div>
+    </div>
+
+    <h3 class="uk-h4 mb-2">Effective modality</h3>
+    <div class="uk-card uk-card-body mb-8">
+      {% for label, n in modality_items %}
+      <div class="flex items-center justify-between {% if not forloop.first %}border-t border-border pt-2 mt-2{% endif %}">
+        <span>{{ label }}</span>
+        <span class="uk-label uk-label-secondary">{{ n }} held</span>
+      </div>
+      {% empty %}
+      <p class="uk-text-muted">No held sessions in this range.</p>
+      {% endfor %}
+    </div>
+
+    <h3 class="uk-h4 mb-2">Absences</h3>
+    <div class="uk-card uk-card-body p-0">
+      <table class="uk-table uk-table-divider uk-table-small mb-0">
+        <thead><tr><th>Course</th><th>Section</th><th>Date</th></tr></thead>
+        <tbody>
+          {% for a in card.0.absences %}
+          <tr><td>{{ a.course_code }}</td><td>{{ a.section }}</td><td>{{ a.date|date:'M j, Y' }}</td></tr>
+          {% empty %}
+          <tr><td colspan="3" class="uk-text-muted">No absences in this range.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  {% endif %}
+</div>
+{% endblock %}

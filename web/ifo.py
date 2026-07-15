@@ -272,3 +272,26 @@ def dashboard(request):
         "summary": summary, "rows": rows,
         "date_from": start, "date_to": end, "range_note": note,
     })
+
+
+@ifo_required
+def scorecard(request, faculty_id):
+    """RPT-04 drill-down: one faculty's full-page attendance scorecard (early-ends
+    + effective-modality breakdown + itemized absences) over the same selectable
+    range, reusing the shared ``faculty_scorecard`` aggregate. IFO is unscoped, so
+    any faculty is reachable (A-DRILL: a full page, not a modal). Wrapped in
+    ``safe_card`` so an aggregate failure renders the shared error card, not a 500.
+    """
+    faculty = get_object_or_404(get_user_model(), pk=faculty_id)
+    start, end, as_of, note = _reporting_range(request)
+    card = safe_card(
+        faculty_scorecard, faculty=faculty, start=start, end=end, as_of=as_of)
+    modality_items = None
+    if card[0] is not None:
+        labels = dict(Modality.choices)
+        modality_items = [(labels.get(k, k), n)
+                          for k, n in card[0].modality_breakdown.items()]
+    return render(request, "reports/scorecard.html", {
+        "faculty": faculty, "card": card, "modality_items": modality_items,
+        "date_from": start, "date_to": end, "range_note": note,
+    })

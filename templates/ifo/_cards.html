@@ -55,7 +55,10 @@ pills use the A-COLOR thresholds via the --green/--amber/--red tokens. ASCII-onl
       <tbody>
         {% for row in rows.0 %}
         <tr>
-          <td>{{ row.name }}</td>
+          <td>
+            <a class="inline-flex items-center gap-1" href="{% url 'ifo_scorecard' row.faculty_id %}?from={{ date_from|date:'Y-m-d' }}&to={{ date_to|date:'Y-m-d' }}">
+              {{ row.name }} <uk-icon icon="chevron-right" class="size-4"></uk-icon></a>
+          </td>
           <td class="uk-text-right">{{ row.scheduled }}</td>
           <td class="uk-text-right">{{ row.held }}</td>
           <td class="uk-text-right">{{ row.absent }}</td>
