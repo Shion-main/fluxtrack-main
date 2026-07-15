@@ -6,15 +6,15 @@ current_phase: 06
 current_phase_name: Reporting Engine & Reporting Surfaces
 status: executing
 stopped_at: Phase 06 — 06-02 COMPLETE (reportlab>=4.2,<5 pinned, PDF engine ready); next 06-03
-last_updated: "2026-07-15T14:49:00.000Z"
+last_updated: "2026-07-15T14:55:08.039Z"
 last_activity: 2026-07-15
-last_activity_desc: 06-02 ReportLab PDF engine prerequisite complete (reportlab 4.5.1 pinned, legitimacy gate approved)
+last_activity_desc: 06-02 ReportLab PDF engine prerequisite complete (legitimacy gate T-06-SC approved)
 progress:
   total_phases: 11
   completed_phases: 7
   total_plans: 47
   completed_plans: 42
-  percent: 66
+  percent: 64
 ---
 
 # Project State
@@ -29,10 +29,10 @@ See: .planning/PROJECT.md (updated 2026-07-02)
 ## Current Position
 
 Phase: 06 (Reporting Engine & Reporting Surfaces) — EXECUTING
-Plan: 06-02 COMPLETE (2/7) — ReportLab pinned (>=4.2,<5, installed 4.5.1) as the pure-Python PDF engine (RPT-03)
-Next: 06-03 (report PDF builder) — reportlab.platypus (Table, SimpleDocTemplate) is available
+Plan: 06-03 COMPLETE (3/7) — CSV/PDF render layer (scheduling/report_render.py): csv_safe() + build_csv() + build_pdf(), 11/11 tests green (RPT-03)
+Next: 06-04 — next reporting surface plan in wave order
 Status: Executing Phase 06
-Last activity: 2026-07-15 — 06-02 ReportLab PDF engine prerequisite complete (legitimacy gate T-06-SC approved)
+Last activity: 2026-07-15 — 06-03 render layer complete; csv_safe() is the single shared CSV-injection neutralizer reused by 06-05 and 06-07
 
 **Phase 4** (modality-shift-approval-srs-v1-2): PLANNED ✓ — 8 plans across 6 waves, verified (plan-checker passed). Ready: `/gsd-execute-phase 04`. Runs parallel to 03.1 per ROADMAP.
 
@@ -177,6 +177,7 @@ Recent decisions affecting current work:
 - [Phase 05]: 05-03: Prune subscriptions ONLY on WebPushException 404/410; transient 5xx/timeout/network are kept and treated as handled this pass (T-05-08), so a flaky vendor never drops live endpoints.
 - [Phase ?]: [Phase 05]: 05-04: global web.context.notifications processor supplies poll_ms (get_policy*1000, never hardcoded) + AnonymousUser-guarded unread + empty-safe vapid_public_key to BOTH shells (RESEARCH Pitfall 4); bell poll is READ-ONLY (D-02), only dropdown/list OPEN marks shown rows read (D-03), audit-silent; mute_toggle POST-only, category-validated, presence-as-mute (D-05); 12 read-surface tests green.
 - [Phase 06]: 06-02: reportlab pinned >=4.2,<5 (installed 4.5.1) as the pure-Python PDF engine for RPT-03 (06-03 builder / 06-05 weekly report / 06-06 Dean export); only image dep is Pillow (already present), no WeasyPrint/GTK/Pango/Cairo system libs. Package-legitimacy gate T-06-SC approved by operator after pypi.org verification — the SUS audit verdict is a download-telemetry false positive (unknown-downloads seam + newness of 5.0.0), not slopsquatting; conservative pin excludes the ~1-month-old 5.0.0.
+- [Phase 06]: 06-03: pure CSV/PDF render layer (scheduling/report_render.py) turns FacultyRow aggregates into bytes — build_csv() (stdlib csv.writer, header + one row/faculty, UTF-8 bytes) and build_pdf() (ReportLab Platypus, landscape A4, navy #001c43 header, repeatRows=1, %PDF bytes, empty-safe). csv_safe() is the SINGLE shared CSV-injection neutralizer (prefixes ' to leading = + - @ tab CR, T-06-02) imported by 06-05 weekly CSV and 06-07 payroll CSV so the two exports can never disagree. Render is pure: no ORM/default_storage/HttpResponse (caller's job). 11/11 tests green (CsvBuildTests/CsvInjectionTests/PdfBuildTests). RPT-03 complete.
 - [Phase ?]: [Phase 06]: 06-01: pure reporting aggregate layer (scheduling/reporting.py) reads Session.status truth (held=ACTIVE/COMPLETED, absent=ABSENT) via DB-side Count(filter=Q); verified via a SEPARATE grouped validations query so status counts stay honest; MERGED siblings held-but-unverified (04.2 D-09); filters local Session.date not UTC scheduled_start; safe_card isolates a raising card with a generic message (RPT-05, no exc-text leak). faculty_scorecard adds early-ends + effective-modality breakdown (declared_modality overrides schedule.modality).
 
 ### Pending Todos
@@ -201,6 +202,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-07-15T14:49:00.000Z
+Last session: 2026-07-15T14:55:08.025Z
 Stopped at: 06-02-PLAN.md COMPLETE — reportlab>=4.2,<5 pinned + installed (4.5.1); legitimacy gate T-06-SC approved; committed 5cdb397
 Resume file: .planning/phases/06-reporting-engine-reporting-surfaces/06-03-PLAN.md
