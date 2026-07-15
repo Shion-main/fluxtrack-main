@@ -3,12 +3,12 @@ gsd_state_version: 1.0
 milestone: v1.2
 milestone_name: "**Goal**: Faculty can request a lead-time-gated modality shift that a Dean approves, with rooms auto-released or auto-assigned, and the SRS brought back in sync with reality."
 current_phase: 06
-current_phase_name: reporting-engine-and-surfaces
-status: ready_to_plan
-stopped_at: Phase 05 COMPLETE (5/5 plans, human-verify approved); Phase 06 needs planning
+current_phase_name: reporting-engine-reporting-surfaces
+status: planned
+stopped_at: Phase 06 PLANNED (7 plans, 4 waves; UI-SPEC verified, plan-checker passed) — ready to execute
 last_updated: "2026-07-15T00:00:00.000Z"
 last_activity: 2026-07-15
-last_activity_desc: 05-05 web-push client Task 4 human-verify APPROVED; Phase 05 closed, all NOTIF criteria met
+last_activity_desc: Phase 06 research + UI-SPEC + 7 plans complete; plan-checker PASSED (1 warning fixed); ready for /gsd-execute-phase 06
 progress:
   total_phases: 11
   completed_phases: 7
