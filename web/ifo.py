@@ -262,7 +262,29 @@ def scorecard(request, faculty_id):
     return render(request, "reports/scorecard.html", {
         "faculty": faculty, "card": card, "modality_items": modality_items,
         "date_from": start, "date_to": end, "range_note": note,
+        "export_csv_url": f"/ifo/scorecard/{faculty.id}/export.csv",
     })
+
+
+@ifo_required
+@require_http_methods(["GET"])
+def scorecard_csv(request, faculty_id):
+    """RPT-04: export ONE faculty's attendance row for the current range as CSV.
+
+    The scorecard's declared primary CTA (UI-SPEC). Reuses the shared aggregate +
+    ``build_csv`` (csv_safe-neutralized name cells, T-06-02) rather than
+    re-implementing either: runs the unscoped ``faculty_attendance`` and keeps only
+    this faculty's row (IFO is unscoped, so any faculty is reachable). An
+    out-of-range faculty simply yields a header-only CSV. Read-only (GET-only).
+    """
+    faculty = get_object_or_404(get_user_model(), pk=faculty_id)
+    start, end, as_of, _note = _reporting_range(request)
+    rows = [r for r in faculty_attendance(start=start, end=end, as_of=as_of)
+            if r.faculty_id == faculty.id]
+    resp = HttpResponse(build_csv(rows), content_type="text/csv")
+    resp["Content-Disposition"] = (
+        f'attachment; filename="scorecard-{faculty.id}-{start}.csv"')
+    return resp
 
 
 # --- Weekly Consolidated Report surface (RPT-01/03) -------------------------

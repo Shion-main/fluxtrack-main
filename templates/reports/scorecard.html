@@ -12,6 +12,11 @@ by the Dean surface (06-06). Attendance pill uses the A-COLOR tokens. ASCII-only
        class="uk-btn uk-btn-ghost uk-btn-icon" aria-label="Back">
       <uk-icon icon="arrow-left" class="size-5"></uk-icon></a>
     <h1 class="uk-h3">Attendance scorecard &mdash; {{ faculty.get_full_name|default:faculty.username }}</h1>
+    {% if export_csv_url %}
+    <a href="{{ export_csv_url }}?from={{ date_from|date:'Y-m-d' }}&to={{ date_to|date:'Y-m-d' }}"
+       class="uk-btn uk-btn-primary uk-btn-sm ml-auto" download>
+      <uk-icon icon="download" class="size-4"></uk-icon> Export CSV</a>
+    {% endif %}
   </div>
   {% if range_note %}
   <p class="uk-text-small mb-4" style="color:var(--amber)">{{ range_note }}</p>

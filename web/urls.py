@@ -30,6 +30,8 @@ urlpatterns = [
          name="dean_report_export"),
     path("dean/scorecard/<int:faculty_id>", dean.scorecard,
          name="dean_scorecard"),
+    path("dean/scorecard/<int:faculty_id>/export.csv", dean.scorecard_export,
+         name="dean_scorecard_csv"),
     path("dean/reports/weekly/<int:pk>/<str:fmt>", dean.weekly_download,
          name="dean_weekly_download"),
     # Checker surfaces (CHK-01..05, CHK-07)
@@ -56,6 +58,8 @@ urlpatterns = [
     # IFO-09 reporting dashboard + scorecard drill-down (RPT-04/RPT-05)
     path("ifo/dashboard", ifo.dashboard, name="ifo_dashboard"),
     path("ifo/scorecard/<int:faculty_id>", ifo.scorecard, name="ifo_scorecard"),
+    path("ifo/scorecard/<int:faculty_id>/export.csv", ifo.scorecard_csv,
+         name="ifo_scorecard_csv"),
     # IFO Weekly Consolidated Report surface (RPT-01/03) -- unscoped, read-only
     path("ifo/reports", ifo.weekly_reports, name="ifo_weekly_reports"),
     path("ifo/reports/weekly/<int:pk>/<str:fmt>", ifo.weekly_download,

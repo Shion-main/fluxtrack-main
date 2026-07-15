@@ -236,7 +236,35 @@ def scorecard(request, faculty_id):
         "faculty": faculty, "card": card, "modality_items": modality_items,
         "date_from": start, "date_to": end, "range_note": note,
         "back_url": "/dean/reports",
+        "export_csv_url": f"/dean/scorecard/{faculty.id}/export.csv",
     })
+
+
+@dean_required
+@require_http_methods(["GET"])
+def scorecard_export(request, faculty_id):
+    """DEAN-02: export ONE faculty's attendance row as CSV, department-scoped.
+
+    The scorecard's declared primary CTA (UI-SPEC), kept strictly within the Dean's
+    OWN department: the same IDOR/BOLA control as ``scorecard`` -- a NULL-department
+    Dean and a foreign-department faculty both 404 SERVER-SIDE (T-06-01), never
+    crossing the boundary. Reuses the department-scoped ``faculty_attendance`` +
+    ``build_csv`` (csv_safe-neutralized, T-06-02); keeps only this faculty's row.
+    Read-only (GET-only).
+    """
+    dept = request.user.department
+    if dept is None:
+        raise Http404("No department.")
+    faculty = get_object_or_404(
+        get_user_model(), pk=faculty_id, department=dept)
+    start, end, as_of, _note = _reporting_range(request)
+    rows = [r for r in faculty_attendance(
+                start=start, end=end, department=dept, as_of=as_of)
+            if r.faculty_id == faculty.id]
+    resp = HttpResponse(build_csv(rows), content_type="text/csv")
+    resp["Content-Disposition"] = (
+        f'attachment; filename="scorecard-{faculty.id}-{start}.csv"')
+    return resp
 
 
 @dean_required

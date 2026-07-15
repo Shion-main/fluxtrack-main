@@ -86,6 +86,36 @@ class ScorecardDrilldownTests(_IfoBase):
             reverse("ifo_scorecard", args=[self.fx.faculty_a.id]))
         self.assertEqual(resp.status_code, 403)
 
+    def test_scorecard_page_has_export_csv_cta(self):
+        url = reverse("ifo_scorecard", args=[self.fx.faculty_a.id])
+        resp = self.client.get(url, self._range())
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, "Export CSV")
+        self.assertContains(
+            resp, reverse("ifo_scorecard_csv", args=[self.fx.faculty_a.id]))
+
+    def test_scorecard_csv_exports_this_faculty_only(self):
+        resp = self.client.get(
+            reverse("ifo_scorecard_csv", args=[self.fx.faculty_a.id]),
+            self._range())
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp["Content-Type"], "text/csv")
+        self.assertIn("attachment", resp["Content-Disposition"])
+        body = resp.content.decode("utf-8")
+        # This faculty's row is present; a different department's faculty is not.
+        self.assertIn(self.fx.faculty_a.last_name, body)
+        self.assertNotIn(self.fx.faculty_b.last_name, body)
+
+    def test_scorecard_csv_refused_for_non_ifo(self):
+        User = get_user_model()
+        other = User.objects.create(
+            username="rpt_fac_w", email="rpt_fac_w@mcm.edu.ph",
+            role=Role.FACULTY, is_active=True)
+        self.client.force_login(other)
+        resp = self.client.get(
+            reverse("ifo_scorecard_csv", args=[self.fx.faculty_a.id]))
+        self.assertEqual(resp.status_code, 403)
+
 
 class CardIsolationViewTests(_IfoBase):
     """RPT-05 end-to-end: when one aggregate raises, the dashboard still returns

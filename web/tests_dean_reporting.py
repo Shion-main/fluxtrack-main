@@ -89,6 +89,29 @@ class DeanScopeTests(_DeanBase):
         self.assertContains(resp, "Attendance scorecard")
         # The back link points at the Dean report, not the IFO-only dashboard.
         self.assertContains(resp, "/dean/reports")
+        # The scorecard's declared primary CTA (Export CSV) is present, scoped
+        # to the Dean's own export route.
+        self.assertContains(resp, "Export CSV")
+        self.assertContains(
+            resp, reverse("dean_scorecard_csv", args=[self.fx.faculty_a.id]))
+
+    def test_own_department_scorecard_csv_exports(self):
+        resp = self.client.get(
+            reverse("dean_scorecard_csv", args=[self.fx.faculty_a.id]),
+            self._range())
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp["Content-Type"], "text/csv")
+        self.assertIn("attachment", resp["Content-Disposition"])
+        body = resp.content.decode("utf-8")
+        self.assertIn(self.fx.faculty_a.last_name, body)
+
+    def test_foreign_department_scorecard_csv_404s(self):
+        # The scorecard CSV export must stay department-scoped: a foreign faculty
+        # 404s SERVER-SIDE (never a cross-department leak), mirroring scorecard().
+        resp = self.client.get(
+            reverse("dean_scorecard_csv", args=[self.fx.faculty_b.id]),
+            self._range())
+        self.assertEqual(resp.status_code, 404)
 
     def test_report_excludes_foreign_faculty(self):
         resp = self.client.get(reverse("dean_reports"), self._range())
@@ -210,6 +233,7 @@ class ReadOnlyTests(_DeanBase):
             reverse("dean_reports"),
             reverse("dean_report_export", args=["csv"]),
             reverse("dean_scorecard", args=[self.fx.faculty_a.id]),
+            reverse("dean_scorecard_csv", args=[self.fx.faculty_a.id]),
             reverse("dean_weekly_download", args=[1, "csv"]),
         ]
         for url in routes:
