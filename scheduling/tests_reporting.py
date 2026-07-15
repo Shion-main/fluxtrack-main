@@ -9,7 +9,7 @@ timezone-correct week boundary on the local Session.date DateField
 (WeekBoundaryTests). Django TestCase (not pytest); reference module constants
 (SessionStatus, HELD_STATUSES, Modality), never bare status strings.
 """
-from django.test import TestCase
+from django.test import SimpleTestCase, TestCase
 
 from scheduling.models import Modality, SessionStatus
 from scheduling.reporting import (
@@ -18,12 +18,32 @@ from scheduling.reporting import (
     DeptSummary,
     FacultyRow,
     Scorecard,
+    _pct,
     dept_summary,
     faculty_attendance,
     faculty_scorecard,
     safe_card,
 )
 from scheduling.test_support import make_reporting_fixture
+
+
+class PctRoundingTests(SimpleTestCase):
+    """LO-02: _pct uses ROUND_HALF_UP so a .5 tie rounds up predictably, not the
+    built-in round-half-to-even (banker's rounding)."""
+
+    def test_zero_denominator_is_zero(self):
+        self.assertEqual(_pct(0, 0), 0)
+
+    def test_exact_half_rounds_up_not_to_even(self):
+        # 100 * 1 / 8 = 12.5 -> conventional 13 (Python round(12.5) == 12).
+        self.assertEqual(_pct(1, 8), 13)
+        # 100 * 3 / 8 = 37.5 -> 38 (round(37.5) == 38 already, still correct).
+        self.assertEqual(_pct(3, 8), 38)
+
+    def test_non_tie_values_unchanged(self):
+        self.assertEqual(_pct(6, 8), 75)
+        self.assertEqual(_pct(1, 2), 50)
+        self.assertEqual(_pct(5, 6), 83)   # 83.33 -> 83
 
 
 class AggregateTests(TestCase):

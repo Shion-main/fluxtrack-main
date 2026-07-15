@@ -24,6 +24,7 @@ limit that broke ``reset_term``).
 """
 import logging
 from dataclasses import dataclass, field
+from decimal import ROUND_HALF_UP, Decimal
 
 from django.db.models import Case, CharField, Count, F, Q, When
 
@@ -88,11 +89,16 @@ def _pct(held, scheduled):
     """Attendance percentage, guarded against a zero denominator (pure arithmetic).
 
     Computed in Python from the returned ints to avoid MSSQL integer-division
-    surprises.
+    surprises. Uses explicit ROUND_HALF_UP (Decimal) rather than Python's built-in
+    round-half-to-even so an exact .5 tie rounds the conventionally-expected way
+    (e.g. 12.5 -> 13, not 12): a stakeholder computing the % by hand never sees an
+    off-by-one at a tie (code-review LO-02). Decimal division of the two ints is
+    exact input to quantize, avoiding binary-float artifacts.
     """
     if not scheduled:
         return 0
-    return round(100 * held / scheduled)
+    return int((Decimal(100 * held) / Decimal(scheduled)).quantize(
+        Decimal("1"), rounding=ROUND_HALF_UP))
 
 
 def _scoped_sessions(*, start, end, department=None, as_of=None, faculty=None):
