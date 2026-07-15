@@ -31,11 +31,12 @@ from datetime import timedelta
 from django.core.files.base import ContentFile
 from django.core.files.storage import default_storage
 
-from accounts.models import Role
+from accounts.models import Department, Role
 from ops.models import WeeklyReport
 from ops.notifications import WEEKLY_REPORT_READY
 from ops.notify import notify
 from ops.policy import get_policy
+from scheduling.models import ScheduleStatus, Session
 from scheduling.report_render import build_csv, build_pdf
 from scheduling.reporting import faculty_attendance
 
@@ -122,3 +123,43 @@ def notify_report_ready(department, week_start, link=""):
             role=Role.DEAN, is_active=True, department=department)
         notify(users=deans, type=WEEKLY_REPORT_READY,
                title=title, body=body, link=link)
+
+
+def generate_week_reports(week_start, week_end, link_base="/reports/"):
+    """Generate + notify EVERY department's report for the week + the ALL roll-up.
+
+    The ONE shared code path behind both JOB-03 (auto-weekly) and the on-demand
+    ``generate_weekly_report`` management command, so the two can never diverge.
+    Generates one report per Department that has ACTIVE-schedule sessions in the
+    range (Pitfall 2: derives dept ids from the same ``Session.date`` filter, never
+    a giant PK ``IN`` list), plus one ``department=None`` roll-up for IFO (A7). Each
+    report is stored idempotently and its recipients notified. Returns the count of
+    reports generated so the caller (JobRun.rows_affected / the CLI summary) has a
+    meaningful tally.
+    """
+    dept_ids = (
+        Session.objects.filter(
+            date__range=(week_start, week_end),
+            schedule__status=ScheduleStatus.ACTIVE,
+            faculty__department__isnull=False,
+        )
+        .values_list("faculty__department", flat=True)
+        .distinct()
+    )
+    departments = list(Department.objects.filter(id__in=list(dept_ids)))
+
+    link = f"{link_base}{week_start}/"
+    count = 0
+    for dept in departments:
+        generate_weekly_report(
+            week_start=week_start, week_end=week_end, department=dept)
+        notify_report_ready(dept, week_start, link=link)
+        count += 1
+
+    # The IFO-facing ALL roll-up (department=None) always generates (A7).
+    generate_weekly_report(
+        week_start=week_start, week_end=week_end, department=None)
+    notify_report_ready(None, week_start, link=link)
+    count += 1
+
+    return count

@@ -17,16 +17,20 @@ Dev:  a second terminal -> `py -3.12 manage.py runscheduler` (alongside runserve
 Prod: a second systemd unit on the same instance running this command.
 Output is ASCII-only (Windows console is cp1252) per Conventions §4.
 """
+from datetime import timedelta
+
 from apscheduler.schedulers.blocking import BlockingScheduler
 from apscheduler.triggers.cron import CronTrigger
 from apscheduler.triggers.interval import IntervalTrigger
 from django.conf import settings
 from django.core.management import call_command
 from django.core.management.base import BaseCommand
+from django.utils import timezone
 
 from ops.jobrun import run_job
 from ops.policy import get_policy
 from ops.push import send_push_outbox
+from ops.reports import generate_week_reports, report_week_bounds
 from scheduling.jobs import detect_room_conflicts, sweep_no_shows
 
 # Materialize cadence (discretion): re-fill the session horizon every 6 hours.
@@ -52,10 +56,18 @@ def _job_sweep():
 
 
 def _job_weekly_report():
-    """JOB-03 slot: stubbed until Phase 6 (RPT-01 report generation lands there)."""
-    # Registered now so the dedicated process owns all three jobs from day one;
-    # the report body (per-department CSV/PDF -> S3) is Phase 6 work.
-    return 0
+    """JOB-03: generate the PRIOR week's per-department reports + ALL roll-up.
+
+    Fires Mon 06:00 (see build_scheduler). Computes the prior completed Mon-Sun on
+    LOCAL Asia/Manila dates -- ``report_week_bounds(localdate() - 7 days)``, never a
+    UTC boundary (Pitfall 1) -- and delegates to the shared ``generate_week_reports``
+    service the on-demand command also uses, so auto-weekly and on-demand can never
+    diverge. Returns the count of reports generated so JobRun.rows_affected is
+    meaningful. This is a FILLED stub body: the job set (4 jobs) is unchanged
+    (ENV-04 / SchedulerWiringTests).
+    """
+    week_start, week_end = report_week_bounds(timezone.localdate() - timedelta(days=7))
+    return generate_week_reports(week_start, week_end)
 
 
 def build_scheduler():

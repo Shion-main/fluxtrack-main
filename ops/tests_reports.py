@@ -8,9 +8,11 @@ isolated temp MEDIA_ROOT so no real repo files are touched. ASCII-only.
 import shutil
 import tempfile
 from datetime import date
+from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
 from django.core.files.storage import default_storage
+from django.core.management import call_command
 from django.test import TestCase, override_settings
 
 from accounts.models import Role
@@ -151,3 +153,51 @@ class WeekBoundaryTests(TestCase):
             if r.faculty_id == fx.faculty_a.id)
 
         self.assertEqual(after.scheduled, base_scheduled + 1)
+
+
+@override_settings(MEDIA_ROOT=_MEDIA)
+class JobFillTests(TestCase):
+    """ENV-04 / RPT-02: filled JOB-03 generates a positive count, idempotently,
+    without disturbing the 4-job scheduler invariant."""
+
+    def _run_job_for_fixture_week(self, fx):
+        # The job reports on localdate()-7 days; pin "now" to the Monday AFTER the
+        # fixture week so the prior completed week IS the fixture's 2026-07-06 week.
+        from scheduling.management.commands import runscheduler
+        with patch.object(runscheduler.timezone, "localdate",
+                          return_value=fx.next_monday):
+            return runscheduler._job_weekly_report()
+
+    def test_job_generates_positive_count_and_rows(self):
+        fx = make_reporting_fixture()
+        count = self._run_job_for_fixture_week(fx)
+        # dept_a + dept_b (both have sessions that week) + the ALL roll-up.
+        self.assertEqual(count, 3)
+        self.assertEqual(WeeklyReport.objects.count(), 3)
+        self.assertTrue(
+            WeeklyReport.objects.filter(department=fx.dept_a).exists())
+        self.assertTrue(
+            WeeklyReport.objects.filter(department__isnull=True).exists())
+
+    def test_job_rerun_is_idempotent(self):
+        fx = make_reporting_fixture()
+        self._run_job_for_fixture_week(fx)
+        self._run_job_for_fixture_week(fx)
+        # Second run overwrites files, never adds rows (unique_together key).
+        self.assertEqual(WeeklyReport.objects.count(), 3)
+
+    def test_on_demand_command_generates_same_reports(self):
+        fx = make_reporting_fixture()
+        call_command("generate_weekly_report", week=str(fx.week_start))
+        self.assertEqual(WeeklyReport.objects.count(), 3)
+
+    def test_scheduler_still_registers_exactly_four_jobs(self):
+        from scheduling.management.commands.runscheduler import build_scheduler
+        sched = build_scheduler()
+        try:
+            self.assertEqual(
+                {j.id for j in sched.get_jobs()},
+                {"materialize", "sweep", "weekly_report", "push_outbox"})
+        finally:
+            if getattr(sched, "running", False):
+                sched.shutdown(wait=False)
