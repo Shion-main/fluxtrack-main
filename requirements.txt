@@ -10,6 +10,7 @@ whitenoise>=6.6              # static file serving on EC2
 qrcode[pil]>=7.4            # room QR posters (IFO-01)
 Pillow>=10.0
 pypandoc_binary==1.17       # bundled pandoc engine for DOC-01 SRS md->docx (pandoc not on PATH)
+reportlab>=4.2,<5   # printable weekly-report PDF (RPT-03); pure-Python, no system libs
 
 # Scheduled jobs (JOB-01/02/03) — pinned <4: the 4.0 pre-release rewrites the
 # BlockingScheduler/jobstore API (ENV-04 relies on 3.x); do NOT adopt 4.0.
