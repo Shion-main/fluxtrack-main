@@ -68,7 +68,7 @@ roadmap does NOT create phases for them.
 
 - [x] **RPT-01**: A Weekly Consolidated Attendance Report generates per department — one row per faculty (scheduled, held, absent, attendance %, checker-verified count) plus itemized absences — from pure, independently tested aggregate functions
 - [x] **RPT-04**: A faculty scorecard (scheduled vs held, attendance %, absences, early-ends, modality breakdown, selectable period) computes from the same shared aggregates
-- [ ] **RPT-03**: Reports export as both CSV and printable PDF, per department or all
+- [x] **RPT-03**: Reports export as both CSV and printable PDF, per department or all
 - [x] **RPT-05**: A single failed aggregate degrades gracefully (its section shows an error, the page still renders)
 - [ ] **RPT-02**: The weekly report generates on demand and auto-weekly (JOB-03), stored, notifying IFO and the relevant Dean(s)
 
@@ -173,7 +173,7 @@ phase (see ROADMAP.md). Status values: Pending / In progress / Complete.
 | NOTIF-03 | Phase 5 | Complete |
 | RPT-01 | Phase 6 | Complete |
 | RPT-02 | Phase 6 | Pending |
-| RPT-03 | Phase 6 | Pending |
+| RPT-03 | Phase 6 | Complete |
 | RPT-04 | Phase 6 | Complete |
 | RPT-05 | Phase 6 | Complete |
 | IFO-09 | Phase 6 | Pending |

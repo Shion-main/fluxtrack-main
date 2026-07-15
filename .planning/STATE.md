@@ -5,15 +5,15 @@ milestone_name: "**Goal**: Faculty can request a lead-time-gated modality shift 
 current_phase: 06
 current_phase_name: Reporting Engine & Reporting Surfaces
 status: executing
-stopped_at: Phase 06 — 06-01 COMPLETE (reporting aggregate layer; 20 tests green); next 06-02
-last_updated: "2026-07-15T15:10:00.000Z"
+stopped_at: Phase 06 — 06-02 COMPLETE (reportlab>=4.2,<5 pinned, PDF engine ready); next 06-03
+last_updated: "2026-07-15T14:49:00.000Z"
 last_activity: 2026-07-15
-last_activity_desc: 06-01 reporting aggregate layer complete
+last_activity_desc: 06-02 ReportLab PDF engine prerequisite complete (reportlab 4.5.1 pinned, legitimacy gate approved)
 progress:
   total_phases: 11
   completed_phases: 7
   total_plans: 47
-  completed_plans: 40
+  completed_plans: 42
   percent: 66
 ---
 
@@ -29,10 +29,10 @@ See: .planning/PROJECT.md (updated 2026-07-02)
 ## Current Position
 
 Phase: 06 (Reporting Engine & Reporting Surfaces) — EXECUTING
-Plan: 06-01 COMPLETE (1/7) — shared reporting aggregate layer built + unit-tested
-Next: 06-02 (weekly report render/generation) — the aggregates it consumes are ready
+Plan: 06-02 COMPLETE (2/7) — ReportLab pinned (>=4.2,<5, installed 4.5.1) as the pure-Python PDF engine (RPT-03)
+Next: 06-03 (report PDF builder) — reportlab.platypus (Table, SimpleDocTemplate) is available
 Status: Executing Phase 06
-Last activity: 2026-07-15 — 06-01 reporting aggregate layer complete (20 tests green)
+Last activity: 2026-07-15 — 06-02 ReportLab PDF engine prerequisite complete (legitimacy gate T-06-SC approved)
 
 **Phase 4** (modality-shift-approval-srs-v1-2): PLANNED ✓ — 8 plans across 6 waves, verified (plan-checker passed). Ready: `/gsd-execute-phase 04`. Runs parallel to 03.1 per ROADMAP.
 
@@ -100,6 +100,7 @@ Progress: [██████████] 100% (Phase 05)
 | Phase 05 P03 | 14min | 3 tasks | 4 files |
 | Phase 05 P04 | 7min | 3 tasks | 10 files |
 | Phase 06 P01 | 35min | 2 tasks | 3 files |
+| Phase 06 P02 | 2min | 2 tasks | 1 file |
 
 ## Accumulated Context
 
@@ -175,6 +176,7 @@ Recent decisions affecting current work:
 - [Phase 05]: 05-03: Web push is fault-isolated by construction (D-09) -- send_push_outbox runs ONLY in the scheduler push_outbox job (4th job on the single BlockingScheduler), never in a web worker, so a hung endpoint cannot touch the triggering request (criterion #4).
 - [Phase 05]: 05-03: Prune subscriptions ONLY on WebPushException 404/410; transient 5xx/timeout/network are kept and treated as handled this pass (T-05-08), so a flaky vendor never drops live endpoints.
 - [Phase ?]: [Phase 05]: 05-04: global web.context.notifications processor supplies poll_ms (get_policy*1000, never hardcoded) + AnonymousUser-guarded unread + empty-safe vapid_public_key to BOTH shells (RESEARCH Pitfall 4); bell poll is READ-ONLY (D-02), only dropdown/list OPEN marks shown rows read (D-03), audit-silent; mute_toggle POST-only, category-validated, presence-as-mute (D-05); 12 read-surface tests green.
+- [Phase 06]: 06-02: reportlab pinned >=4.2,<5 (installed 4.5.1) as the pure-Python PDF engine for RPT-03 (06-03 builder / 06-05 weekly report / 06-06 Dean export); only image dep is Pillow (already present), no WeasyPrint/GTK/Pango/Cairo system libs. Package-legitimacy gate T-06-SC approved by operator after pypi.org verification — the SUS audit verdict is a download-telemetry false positive (unknown-downloads seam + newness of 5.0.0), not slopsquatting; conservative pin excludes the ~1-month-old 5.0.0.
 - [Phase ?]: [Phase 06]: 06-01: pure reporting aggregate layer (scheduling/reporting.py) reads Session.status truth (held=ACTIVE/COMPLETED, absent=ABSENT) via DB-side Count(filter=Q); verified via a SEPARATE grouped validations query so status counts stay honest; MERGED siblings held-but-unverified (04.2 D-09); filters local Session.date not UTC scheduled_start; safe_card isolates a raising card with a generic message (RPT-05, no exc-text leak). faculty_scorecard adds early-ends + effective-modality breakdown (declared_modality overrides schedule.modality).
 
 ### Pending Todos
@@ -199,6 +201,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-07-15T15:10:00.000Z
-Stopped at: 06-01-PLAN.md COMPLETE — reporting aggregate layer committed (a3d8cf5, 2b8a459, 3025118, b30afbc); 20 tests green
-Resume file: .planning/phases/06-reporting-engine-reporting-surfaces/06-02-PLAN.md
+Last session: 2026-07-15T14:49:00.000Z
+Stopped at: 06-02-PLAN.md COMPLETE — reportlab>=4.2,<5 pinned + installed (4.5.1); legitimacy gate T-06-SC approved; committed 5cdb397
+Resume file: .planning/phases/06-reporting-engine-reporting-surfaces/06-03-PLAN.md
