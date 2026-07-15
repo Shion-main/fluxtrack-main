@@ -262,7 +262,7 @@ Plans:
   4. HR can view verified session-level attendance, filter/search by faculty, department, date range, and term, and export it as CSV for external payroll.
   5. A single failing aggregate shows an error in its own card while the rest of the page still renders.
 
-**Plans**: 5/7 plans executed
+**Plans**: 6/7 plans executed
 
 Plans:
 
@@ -279,7 +279,7 @@ Plans:
 **Wave 3** *(blocked on Wave 2)*
 
 - [x] 06-05-PLAN.md — Weekly report generation + JOB-03 stub fill + notify IFO+Dean(s) + on-demand command (RPT-02) [Wave 3]
-- [ ] 06-06-PLAN.md — Dean dashboard + dept-scoped reporting/scorecard + CSV/PDF export (read-only, IDOR-safe) (DEAN-01/02/03/04) [Wave 3]
+- [x] 06-06-PLAN.md — Dean dashboard + dept-scoped reporting/scorecard + CSV/PDF export (read-only, IDOR-safe) (DEAN-01/02/03/04) [Wave 3]
 
 **Wave 4** *(blocked on Wave 3)*
 
@@ -335,7 +335,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8
 | 3. Duty Assignments & Checker Verification | 6/6 | Complete    | 2026-07-03 |
 | 4. Modality Shift Approval & SRS v1.2 | 8/8 | Complete    | 2026-07-03 |
 | 5. Notifications — Read Surface & Web Push | 4/5 | In Progress|  |
-| 6. Reporting Engine & Reporting Surfaces | 5/7 | In Progress|  |
+| 6. Reporting Engine & Reporting Surfaces | 6/7 | In Progress|  |
 | 7. Remaining Operational Surfaces | 0/TBD | Not started | - |
 | 8. Auth Cutover & AWS Deployment | 0/TBD | Not started | - |
 

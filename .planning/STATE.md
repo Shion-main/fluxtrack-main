@@ -5,16 +5,16 @@ milestone_name: "**Goal**: Faculty can request a lead-time-gated modality shift 
 current_phase: 06
 current_phase_name: Reporting Engine & Reporting Surfaces
 status: executing
-stopped_at: Phase 06 — 06-05 COMPLETE (RPT-02 weekly report generation/storage/notify + filled JOB-03 + on-demand command, 14 tests green); next 06-06
-last_updated: "2026-07-15T15:18:19.892Z"
+stopped_at: Phase 06 — 06-06 COMPLETE (Dean reporting surface: dept-scoped dashboard/report/scorecard + CSV/PDF export + stored-report download, read-only + IDOR-safe, 12 tests green); next 06-07
+last_updated: "2026-07-15T16:00:00.000Z"
 last_activity: 2026-07-15
-last_activity_desc: 06-05 RPT-02 weekly report engine complete; idempotent per-dept + ALL roll-up via default_storage, notify() fan-out, 4-job invariant intact
+last_activity_desc: 06-06 Dean reporting surface (DEAN-01..04/RPT-03) complete
 progress:
   total_phases: 11
   completed_phases: 7
   total_plans: 47
   completed_plans: 45
-  percent: 64
+  percent: 66
 ---
 
 # Project State
@@ -29,10 +29,10 @@ See: .planning/PROJECT.md (updated 2026-07-02)
 ## Current Position
 
 Phase: 06 (Reporting Engine & Reporting Surfaces) — EXECUTING
-Plan: 06-05 COMPLETE (5/7) — RPT-02 weekly report engine: ops/reports.py (report_week_bounds/generate_weekly_report/notify_report_ready/generate_week_reports), filled JOB-03 _job_weekly_report, on-demand generate_weekly_report command; idempotent per-dept + ALL roll-up via default_storage, notify() fan-out to IFO + dept-scoped Deans; 4-job scheduler invariant intact; 14 tests green
-Next: 06-06 — next reporting surface plan in wave order
+Plan: 06-06 COMPLETE (6/7) — Dean reporting surface (DEAN-01..04/RPT-03): web/dean.py dashboard/reports/scorecard/report_export/weekly_download, all dean_required + GET-only + scoped to request.user.department; foreign-department scorecard/weekly_download 404 server-side (T-06-01 IDOR), POST rejected 405 (DEAN-01 read-only); reuses shared aggregate/render layers + _error_card.html/scorecard.html; 12 tests green
+Next: 06-07 — HR attendance view (final reporting surface in wave order)
 Status: Executing Phase 06
-Last activity: 2026-07-15 — 06-05 RPT-02 weekly report generation/storage/notification complete
+Last activity: 2026-07-15 — 06-06 Dean reporting surface (DEAN-01..04/RPT-03) complete
 
 **Phase 4** (modality-shift-approval-srs-v1-2): PLANNED ✓ — 8 plans across 6 waves, verified (plan-checker passed). Ready: `/gsd-execute-phase 04`. Runs parallel to 03.1 per ROADMAP.
 
@@ -103,6 +103,7 @@ Progress: [██████████] 100% (Phase 05)
 | Phase 06 P02 | 2min | 2 tasks | 1 file |
 | Phase 06 P04 | ~20min | 3 tasks | 8 files |
 | Phase 06 P05 | 18min | 2 tasks | 4 files |
+| Phase 06 P06 | ~20min | 3 tasks | 6 files |
 
 ## Accumulated Context
 
@@ -183,6 +184,7 @@ Recent decisions affecting current work:
 - [Phase ?]: [Phase 06]: 06-01: pure reporting aggregate layer (scheduling/reporting.py) reads Session.status truth (held=ACTIVE/COMPLETED, absent=ABSENT) via DB-side Count(filter=Q); verified via a SEPARATE grouped validations query so status counts stay honest; MERGED siblings held-but-unverified (04.2 D-09); filters local Session.date not UTC scheduled_start; safe_card isolates a raising card with a generic message (RPT-05, no exc-text leak). faculty_scorecard adds early-ends + effective-modality breakdown (declared_modality overrides schedule.modality).
 - [Phase 06]: 06-04: IFO-09 dashboard + RPT-04 scorecard drill-down (web/ifo.py dashboard/scorecard, both behind ifo_required). The 4 KPI cards derive from ONE safe_card(dept_summary); the per-faculty table is a SEPARATE safe_card(faculty_attendance) — patching dept_summary to raise proves per-card isolation end-to-end (KPI section errors, table section still renders, raw exception absent, T-06-04). _reporting_range() parses from/to, defaults to reporting_week_start-of-week..today, degrades invalid/reversed ranges to a friendly note (T-06-11, never 500); as_of=today always clamps the denominator. Drill-down is a FULL PAGE (A-DRILL) carrying from/to; attendance pills via --green/--amber/--red at >=90/75/<75 (A-COLOR). templates/reports/_error_card.html (generic copy only) + templates/reports/scorecard.html are shared partials reused by the Dean surface (06-06). 7 view-tests green; 3 web-suite failures are pre-existing dev-login/home-redirect issues (verified at ea3afb2), out of scope.
 - [Phase 06]: 06-05: JOB-03 filled via shared ops.reports.generate_week_reports service reused by on-demand generate_weekly_report command; idempotent per-dept + ALL roll-up stored via default_storage (server-built reports/{week}/{code} paths), notify() fans to IFO + dept-scoped Deans; 4-job scheduler invariant + NoImplicitScheduler intact (RPT-02/ENV-04/NOTIF-00). 14 tests green.
+- [Phase 06]: 06-06: Dean reporting surface (web/dean.py dashboard/reports/scorecard/report_export/weekly_download) is the department-scoped, READ-ONLY consumer of the shared aggregate/render layers. Every queryset scopes to request.user.department SERVER-SIDE; scorecard + weekly_download use get_object_or_404(..., department=request.user.department) so a foreign-department id 404s (T-06-01 IDOR/BOLA, refused not hidden). Every view is @require_http_methods(['GET']) so a POST is 405 (DEAN-01 read-only, T-06-07) — a bare Django view otherwise accepts any method. NULL-department Dean gets a zeroed DeptSummary/empty table, NEVER dept_summary(department=None) (edge-case cross-department leak closed). Export reuses build_csv/build_pdf (csv_safe intact, T-06-02); weekly_download streams default_storage bytes. Shared reports/scorecard.html back link parameterized via back_url (default /ifo/dashboard) so a Dean returns to /dean/reports. 12 tests green.
 
 ### Pending Todos
 
@@ -206,6 +208,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-07-15T15:17:30.958Z
-Stopped at: 06-05-PLAN.md COMPLETE — RPT-02 weekly report engine (service + filled JOB-03 + on-demand command); commits d112fa4, 40b651d; 14 tests green
-Resume file: .planning/phases/06-reporting-engine-reporting-surfaces/06-06-PLAN.md
+Last session: 2026-07-15T16:00:00.000Z
+Stopped at: 06-06-PLAN.md COMPLETE — Dean reporting surface (DEAN-01..04/RPT-03); commits 4afe804, 1280f58, 62e4157; 12 tests green
+Resume file: .planning/phases/06-reporting-engine-reporting-surfaces/06-07-PLAN.md

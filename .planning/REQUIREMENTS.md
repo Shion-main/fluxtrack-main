@@ -74,10 +74,10 @@ roadmap does NOT create phases for them.
 
 ### Dean (DEAN)
 
-- [ ] **DEAN-01**: A Dean's access is read-only and scoped to their assigned department(s)
-- [ ] **DEAN-04**: A Dean dashboard shows department-scoped summary cards (Faculty, Sessions, Absences, Attendance %) plus a latest-weekly-report card, reusing the RPT aggregates
-- [ ] **DEAN-02**: A Dean can view department-scoped attendance reporting and per-faculty scorecards
-- [ ] **DEAN-03**: A Dean can view and export the weekly report for their department(s)
+- [x] **DEAN-01**: A Dean's access is read-only and scoped to their assigned department(s)
+- [x] **DEAN-04**: A Dean dashboard shows department-scoped summary cards (Faculty, Sessions, Absences, Attendance %) plus a latest-weekly-report card, reusing the RPT aggregates
+- [x] **DEAN-02**: A Dean can view department-scoped attendance reporting and per-faculty scorecards
+- [x] **DEAN-03**: A Dean can view and export the weekly report for their department(s)
 
 ### Guard (GRD)
 
@@ -177,10 +177,10 @@ phase (see ROADMAP.md). Status values: Pending / In progress / Complete.
 | RPT-04 | Phase 6 | Complete |
 | RPT-05 | Phase 6 | Complete |
 | IFO-09 | Phase 6 | Complete |
-| DEAN-01 | Phase 6 | Pending |
-| DEAN-02 | Phase 6 | Pending |
-| DEAN-03 | Phase 6 | Pending |
-| DEAN-04 | Phase 6 | Pending |
+| DEAN-01 | Phase 6 | Complete |
+| DEAN-02 | Phase 6 | Complete |
+| DEAN-03 | Phase 6 | Complete |
+| DEAN-04 | Phase 6 | Complete |
 | HR-01 | Phase 6 | Pending |
 | HR-02 | Phase 6 | Pending |
 | HR-03 | Phase 6 | Pending |
