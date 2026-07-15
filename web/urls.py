@@ -41,6 +41,8 @@ urlpatterns = [
     path("ifo/live/rows", ifo.live_rows, name="ifo_live_rows"),
     path("ifo/assignments", ifo.assignments_list, name="ifo_assignments"),
     path("ifo/assignments/create", ifo.assignment_create, name="ifo_assignment_create"),
+    # IFO-09 reporting dashboard + scorecard drill-down (RPT-04/RPT-05)
+    path("ifo/dashboard", ifo.dashboard, name="ifo_dashboard"),
     # Notifications read surface (NOTIF-01) + mute settings (NOTIF-03)
     path("notifications/bell", notifications.bell, name="notif_bell"),
     path("notifications/dropdown", notifications.dropdown, name="notif_dropdown"),

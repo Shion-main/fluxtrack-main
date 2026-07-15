@@ -18,7 +18,10 @@ from accounts.models import Role
 from campus.models import Floor, Room
 from ops.models import AuditLog
 from ops.policy import get_policy
-from scheduling.models import AcademicTerm, ScheduleStatus, Session, SessionStatus
+from scheduling.models import (AcademicTerm, Modality, ScheduleStatus, Session,
+                                SessionStatus)
+from scheduling.reporting import (dept_summary, faculty_attendance,
+                                  faculty_scorecard, safe_card)
 from verification.models import (Assignment, AssignmentScope, AssignmentType,
                                  DutyRole)
 from verification.services import assign_online_sessions
@@ -209,3 +212,63 @@ def assignment_create(request):
     ctx = {"assignments": _active_assignments(), "created": a,
            **_assignment_form_ctx()}
     return render(request, "ifo/_assignment_form.html", ctx)
+
+
+# --- IFO-09 reporting dashboard + scorecard drill-down (RPT-04/RPT-05) -------
+_WEEKDAY_INDEX = {"monday": 0, "tuesday": 1, "wednesday": 2, "thursday": 3,
+                  "friday": 4, "saturday": 5, "sunday": 6}
+
+
+def _reporting_range(request):
+    """Resolve the (start, end, as_of, note) reporting window from GET params.
+
+    Optional ``from``/``to`` (ISO dates) select the window; absent or invalid
+    input falls back to the current reporting week (the configured
+    ``reporting_week_start`` weekday through today) with a friendly note rather
+    than raising a 500 (mirrors ``assignment_create`` validation; T-06-11).
+    ``as_of`` is always today so a future not-yet-missed session never lowers
+    attendance % (RESEARCH A5).
+    """
+    today = timezone.localdate()
+    start_day = _WEEKDAY_INDEX.get(
+        str(get_policy("reporting_week_start")).lower(), 0)
+    default_start = today - timedelta(days=(today.weekday() - start_day) % 7)
+
+    from_raw = (request.GET.get("from") or "").strip()
+    to_raw = (request.GET.get("to") or "").strip()
+    start = parse_date(from_raw) if from_raw else None
+    end = parse_date(to_raw) if to_raw else None
+
+    note = None
+    if (from_raw and start is None) or (to_raw and end is None):
+        note = ("That date range wasn't valid, so we're showing the "
+                "current week.")
+        start = end = None
+    if start is None:
+        start = default_start
+    if end is None:
+        end = today
+    if start > end:
+        note = ("The start date was after the end date, so we're showing "
+                "the current week.")
+        start, end = default_start, today
+    return start, end, today, note
+
+
+@ifo_required
+def dashboard(request):
+    """IFO-09: an unscoped reporting dashboard of summary cards over a selectable
+    range. Each section is wrapped in ``safe_card`` so one raising aggregate shows
+    its own inline error card while the rest of the page renders (RPT-05). The
+    dashboard is read-only and point-in-time -- it refreshes on filter Apply, it
+    is NOT continuously polled (assumption A-POLL).
+    """
+    start, end, as_of, note = _reporting_range(request)
+    summary = safe_card(
+        dept_summary, start=start, end=end, department=None, as_of=as_of)
+    rows = safe_card(
+        faculty_attendance, start=start, end=end, department=None, as_of=as_of)
+    return render(request, "ifo/dashboard.html", {
+        "summary": summary, "rows": rows,
+        "date_from": start, "date_to": end, "range_note": note,
+    })

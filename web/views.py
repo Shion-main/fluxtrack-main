@@ -41,7 +41,7 @@ SURFACES = {
         {"title": "Rooms", "desc": "Per-room schedules and QR posters.", "icon": "building", "href": "/ifo/rooms"},
         {"title": "Live today", "desc": "Room status, polled.", "icon": "radio", "href": "/ifo/live"},
         {"title": "Assignments", "desc": "Post Checkers/Guards; grant online duty.", "icon": "user-plus", "href": "/ifo/assignments"},
-        {"title": "Reports", "desc": "Weekly consolidated attendance.", "icon": "file-text", "href": "#"},
+        {"title": "Reports", "desc": "Weekly consolidated attendance.", "icon": "file-text", "href": "/ifo/dashboard"},
     ],
     Role.HR_ADMIN: [
         {"title": "Attendance", "desc": "Verified records; export CSV.", "icon": "clipboard-list", "href": "#"},

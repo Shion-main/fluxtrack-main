@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+{% comment %}IFO-09 reporting dashboard shell. Standard Franken shell (base.html).
+A Pattern-A GET filter bar (From/To + Apply/Reset) refreshes the results panel;
+the panel body lives in ifo/_cards.html so a filter submit renders point-in-time
+(A-POLL: refresh on Apply, not continuously polled). Unscoped -- IFO sees all
+departments (IFO-09). ASCII-only.{% endcomment %}
+{% block title %}Reporting - FluxTrack{% endblock %}
+{% block content %}
+<div class="uk-container max-w-5xl pt-8 pb-16">
+  <div class="flex items-center gap-2 mb-1">
+    <h1 class="uk-h2">Reporting</h1>
+    <span class="uk-label uk-label-secondary">All departments</span>
+  </div>
+  <p class="uk-text-muted mb-6">Attendance summary over a selectable range (IFO-09). Point-in-time &mdash; refresh with Apply.</p>
+
+  <form method="get" class="uk-card uk-card-body mb-6">
+    <div class="flex flex-wrap items-end gap-4">
+      <label class="flex flex-col gap-1">
+        <span class="uk-text-small uk-text-muted">From</span>
+        <input type="date" name="from" class="uk-input" value="{{ date_from|date:'Y-m-d' }}">
+      </label>
+      <label class="flex flex-col gap-1">
+        <span class="uk-text-small uk-text-muted">To</span>
+        <input type="date" name="to" class="uk-input" value="{{ date_to|date:'Y-m-d' }}">
+      </label>
+      <button type="submit" class="uk-btn uk-btn-primary uk-btn-sm">Apply</button>
+      <a href="/ifo/dashboard" class="uk-btn uk-btn-ghost uk-btn-sm">Reset</a>
+    </div>
+    {% if range_note %}
+    <p class="uk-text-small mt-2" style="color:var(--amber)">{{ range_note }}</p>
+    {% endif %}
+  </form>
+
+  <div id="report-panel">
+    {% include "ifo/_cards.html" %}
+  </div>
+</div>
+{% endblock %}

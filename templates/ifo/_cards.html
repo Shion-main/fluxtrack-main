@@ -1,0 +1,72 @@
+{% comment %}IFO-09 results panel (RPT-05). Two independent sections, each with its
+own safe_card (value, error) pair: the KPI summary cards (dept_summary) and the
+per-faculty attendance table (faculty_attendance). Each section checks its own
+error and includes the shared reports/_error_card.html on failure, so one raising
+aggregate errors in its own card while the sibling section still renders. Attendance
+pills use the A-COLOR thresholds via the --green/--amber/--red tokens. ASCII-only.
+{% endcomment %}
+{% if summary.1 %}
+  {% include "reports/_error_card.html" %}
+{% else %}
+  <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+    <div class="uk-card uk-card-body">
+      <div class="uk-text-small uk-text-muted flex items-center gap-1">
+        <uk-icon icon="users" class="size-4"></uk-icon> Faculty</div>
+      <div class="uk-h2 mt-1">{{ summary.0.faculty_count }}</div>
+    </div>
+    <div class="uk-card uk-card-body">
+      <div class="uk-text-small uk-text-muted flex items-center gap-1">
+        <uk-icon icon="layers" class="size-4"></uk-icon> Sessions</div>
+      <div class="uk-h2 mt-1">{{ summary.0.held }}<span class="uk-text-muted uk-text-small"> / {{ summary.0.scheduled }}</span></div>
+      <div class="uk-text-small uk-text-muted">held / scheduled</div>
+    </div>
+    <div class="uk-card uk-card-body">
+      <div class="uk-text-small uk-text-muted flex items-center gap-1">
+        <uk-icon icon="calendar-x" class="size-4"></uk-icon> Absences</div>
+      <div class="uk-h2 mt-1">{{ summary.0.absent }}</div>
+    </div>
+    <div class="uk-card uk-card-body">
+      <div class="uk-text-small uk-text-muted flex items-center gap-1">
+        <uk-icon icon="percent" class="size-4"></uk-icon> Attendance %</div>
+      {% with pct=summary.0.attendance_pct %}
+      <div class="mt-1">
+        <span class="uk-label" style="{% if pct >= 90 %}background:var(--green-tint);color:var(--green){% elif pct >= 75 %}background:var(--amber-tint);color:var(--amber){% else %}background:var(--red-tint);color:var(--red){% endif %};font-size:1.4rem;padding:2px 10px">{{ pct }}%</span>
+      </div>
+      {% endwith %}
+    </div>
+  </div>
+{% endif %}
+
+<h3 class="uk-h4 mt-8 mb-2">Faculty</h3>
+{% if rows.1 %}
+  {% include "reports/_error_card.html" %}
+{% else %}
+  <div class="uk-card uk-card-body p-0">
+    <table class="uk-table uk-table-divider uk-table-small uk-table-middle mb-0">
+      <thead>
+        <tr>
+          <th>Faculty</th>
+          <th class="uk-text-right">Scheduled</th>
+          <th class="uk-text-right">Held</th>
+          <th class="uk-text-right">Absent</th>
+          <th class="uk-text-right">Attendance %</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in rows.0 %}
+        <tr>
+          <td>{{ row.name }}</td>
+          <td class="uk-text-right">{{ row.scheduled }}</td>
+          <td class="uk-text-right">{{ row.held }}</td>
+          <td class="uk-text-right">{{ row.absent }}</td>
+          <td class="uk-text-right">
+            <span class="uk-label" style="{% if row.attendance_pct >= 90 %}background:var(--green-tint);color:var(--green){% elif row.attendance_pct >= 75 %}background:var(--amber-tint);color:var(--amber){% else %}background:var(--red-tint);color:var(--red){% endif %}">{{ row.attendance_pct }}%</span>
+          </td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="5" class="uk-text-muted">No attendance in this range. No sessions were scheduled for the selected dates. Adjust the range above.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+{% endif %}
