@@ -80,9 +80,11 @@ class AggregateTests(TestCase):
         self.assertEqual(rows, [])
 
     def test_as_of_clamps_future_scheduled_session(self):
-        # as_of = Monday excludes the Wednesday SCHEDULED session from the denominator.
+        # as_of = Tuesday keeps Mon+Tue sessions but excludes the future Wednesday
+        # SCHEDULED session from the denominator (a not-yet-missed session must not
+        # lower attendance %).
         rows = faculty_attendance(
-            start=self.fx.week_start, end=self.fx.sun, as_of=self.fx.week_start)
+            start=self.fx.week_start, end=self.fx.sun, as_of=self.fx.tue)
         row = self._row(rows, self.fx.faculty_a)
         self.assertEqual(row.scheduled, 7)  # 8 minus the future Wednesday SCHEDULED
 
