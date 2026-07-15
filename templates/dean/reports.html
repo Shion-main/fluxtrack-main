@@ -1,0 +1,80 @@
+{% extends "base.html" %}
+{% comment %}DEAN-02 department-scoped attendance report (read-only, DEAN-01).
+Standard Franken shell, max-w-4xl. Pattern-A GET filter bar (From/To + Apply/Reset),
+the department-scoped faculty uk-table (one row/faculty, names link to the Dean
+scorecard drill-down), and Pattern-C CSV/PDF export anchors to dean_report_export.
+Server-scoped to the Dean's OWN department -- no department control is exposed. NO
+write controls. ASCII-only.{% endcomment %}
+{% block title %}Department reporting - FluxTrack{% endblock %}
+{% block content %}
+<div class="uk-container max-w-4xl pt-8 pb-16">
+  <div class="flex items-center gap-2 mb-1">
+    <a href="/dean/dashboard" class="uk-btn uk-btn-ghost uk-btn-icon" aria-label="Back">
+      <uk-icon icon="arrow-left" class="size-5"></uk-icon></a>
+    <h1 class="uk-h2">Department reporting</h1>
+    {% if department %}<span class="uk-label uk-label-secondary">{{ department.code }}</span>{% endif %}
+  </div>
+  <p class="uk-text-muted mb-6">Per-faculty attendance for your department over a selectable range (DEAN-02). Read-only.</p>
+
+  <form method="get" class="uk-card uk-card-body mb-6">
+    <div class="flex flex-wrap items-end gap-4">
+      <label class="flex flex-col gap-1">
+        <span class="uk-text-small uk-text-muted">From</span>
+        <input type="date" name="from" class="uk-input" value="{{ date_from|date:'Y-m-d' }}">
+      </label>
+      <label class="flex flex-col gap-1">
+        <span class="uk-text-small uk-text-muted">To</span>
+        <input type="date" name="to" class="uk-input" value="{{ date_to|date:'Y-m-d' }}">
+      </label>
+      <button type="submit" class="uk-btn uk-btn-primary uk-btn-sm">Apply</button>
+      <a href="/dean/reports" class="uk-btn uk-btn-ghost uk-btn-sm">Reset</a>
+      <span class="grow"></span>
+      <a href="/dean/reports/export/csv?from={{ date_from|date:'Y-m-d' }}&to={{ date_to|date:'Y-m-d' }}"
+         class="uk-btn uk-btn-secondary uk-btn-sm" download>
+        <uk-icon icon="download" class="size-4"></uk-icon> Export CSV</a>
+      <a href="/dean/reports/export/pdf?from={{ date_from|date:'Y-m-d' }}&to={{ date_to|date:'Y-m-d' }}"
+         class="uk-btn uk-btn-primary uk-btn-sm" download>
+        <uk-icon icon="file-text" class="size-4"></uk-icon> Download PDF</a>
+    </div>
+    {% if range_note %}
+    <p class="uk-text-small mt-2" style="color:var(--amber)">{{ range_note }}</p>
+    {% endif %}
+  </form>
+
+  {% if rows.1 %}
+    {% include "reports/_error_card.html" %}
+  {% else %}
+  <div class="uk-card uk-card-body p-0">
+    <table class="uk-table uk-table-divider uk-table-small uk-table-middle mb-0">
+      <thead>
+        <tr>
+          <th>Faculty</th>
+          <th class="uk-text-right">Scheduled</th>
+          <th class="uk-text-right">Held</th>
+          <th class="uk-text-right">Absent</th>
+          <th class="uk-text-right">Attendance %</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in rows.0 %}
+        <tr>
+          <td>
+            <a class="inline-flex items-center gap-1" href="{% url 'dean_scorecard' row.faculty_id %}?from={{ date_from|date:'Y-m-d' }}&to={{ date_to|date:'Y-m-d' }}">
+              {{ row.name }} <uk-icon icon="chevron-right" class="size-4"></uk-icon></a>
+          </td>
+          <td class="uk-text-right">{{ row.scheduled }}</td>
+          <td class="uk-text-right">{{ row.held }}</td>
+          <td class="uk-text-right">{{ row.absent }}</td>
+          <td class="uk-text-right">
+            <span class="uk-label" style="{% if row.attendance_pct >= 90 %}background:var(--green-tint);color:var(--green){% elif row.attendance_pct >= 75 %}background:var(--amber-tint);color:var(--amber){% else %}background:var(--red-tint);color:var(--red){% endif %}">{{ row.attendance_pct }}%</span>
+          </td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="5" class="uk-text-muted">No attendance in this range. No sessions were scheduled for the selected department and dates. Adjust the range above.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% endif %}
+</div>
+{% endblock %}

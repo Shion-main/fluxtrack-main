@@ -8,7 +8,7 @@ by the Dean surface (06-06). Attendance pill uses the A-COLOR tokens. ASCII-only
 {% block content %}
 <div class="uk-container max-w-4xl pt-8 pb-16">
   <div class="flex items-center gap-2 mb-4">
-    <a href="/ifo/dashboard?from={{ date_from|date:'Y-m-d' }}&to={{ date_to|date:'Y-m-d' }}"
+    <a href="{{ back_url|default:'/ifo/dashboard' }}?from={{ date_from|date:'Y-m-d' }}&to={{ date_to|date:'Y-m-d' }}"
        class="uk-btn uk-btn-ghost uk-btn-icon" aria-label="Back">
       <uk-icon icon="arrow-left" class="size-5"></uk-icon></a>
     <h1 class="uk-h3">Attendance scorecard &mdash; {{ faculty.get_full_name|default:faculty.username }}</h1>

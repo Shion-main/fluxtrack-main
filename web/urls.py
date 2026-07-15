@@ -25,6 +25,13 @@ urlpatterns = [
     path("dean/requests/<int:pk>/reject", dean.reject, name="dean_reject"),
     # Dean reporting surface (DEAN-01..04, RPT-03) -- read-only, dept-scoped
     path("dean/dashboard", dean.dashboard, name="dean_dashboard"),
+    path("dean/reports", dean.reports, name="dean_reports"),
+    path("dean/reports/export/<str:fmt>", dean.report_export,
+         name="dean_report_export"),
+    path("dean/scorecard/<int:faculty_id>", dean.scorecard,
+         name="dean_scorecard"),
+    path("dean/reports/weekly/<int:pk>/<str:fmt>", dean.weekly_download,
+         name="dean_weekly_download"),
     # Checker surfaces (CHK-01..05, CHK-07)
     path("checker/scan", checker.scan_page, name="checker_scan"),
     path("checker/resolve", checker.resolve, name="checker_resolve"),

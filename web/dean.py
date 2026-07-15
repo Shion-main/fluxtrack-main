@@ -218,3 +218,112 @@ def dashboard(request):
         "department": dept, "summary": summary, "latest_report": latest,
         "date_from": start, "date_to": end, "range_note": note,
     })
+
+
+@dean_required
+@require_http_methods(["GET"])
+def reports(request):
+    """DEAN-02: the department-scoped attendance report (read-only, DEAN-01).
+
+    Renders one ``faculty_attendance`` row per faculty in ``request.user.department``
+    ONLY (a foreign department's faculty are never in the queryset), with Pattern-C
+    CSV/PDF export anchors. A NULL-department Dean sees an empty table (nothing
+    scoped in), never an unscoped all-departments result.
+    """
+    dept = request.user.department
+    start, end, as_of, note = _reporting_range(request)
+    if dept is None:
+        rows = ([], None)
+    else:
+        rows = safe_card(
+            faculty_attendance, start=start, end=end, department=dept, as_of=as_of)
+    return render(request, "dean/reports.html", {
+        "department": dept, "rows": rows,
+        "date_from": start, "date_to": end, "range_note": note,
+    })
+
+
+@dean_required
+@require_http_methods(["GET"])
+def scorecard(request, faculty_id):
+    """DEAN-02 drill-down: one faculty's full-page scorecard, department-scoped.
+
+    The IDOR/BOLA control (T-06-01): ``get_object_or_404(User, pk=faculty_id,
+    department=request.user.department)`` -- a faculty in ANOTHER department 404s
+    server-side (refused, not merely hidden). Reuses the shared
+    reports/scorecard.html; the back link is pointed at the Dean report via
+    ``back_url`` so it never sends a Dean to the IFO-only dashboard.
+    """
+    faculty = get_object_or_404(
+        get_user_model(), pk=faculty_id, department=request.user.department)
+    start, end, as_of, note = _reporting_range(request)
+    card = safe_card(
+        faculty_scorecard, faculty=faculty, start=start, end=end, as_of=as_of)
+    modality_items = None
+    if card[0] is not None:
+        labels = dict(Modality.choices)
+        modality_items = [(labels.get(k, k), n)
+                          for k, n in card[0].modality_breakdown.items()]
+    return render(request, "reports/scorecard.html", {
+        "faculty": faculty, "card": card, "modality_items": modality_items,
+        "date_from": start, "date_to": end, "range_note": note,
+        "back_url": "/dean/reports",
+    })
+
+
+@dean_required
+@require_http_methods(["GET"])
+def report_export(request, fmt):
+    """DEAN-03/RPT-03: ad-hoc CSV/PDF export of the current department range.
+
+    Builds the department-scoped ``FacultyRow`` list for ``request.user.department``
+    and returns ``build_csv``/``build_pdf`` bytes as an attachment (the render layer
+    is REUSED, not re-implemented; ``build_csv`` already csv_safe-neutralizes name
+    cells, T-06-02). A NULL-department Dean exports an empty (header-only) report.
+    An unknown ``fmt`` 404s.
+    """
+    dept = request.user.department
+    start, end, as_of, _note = _reporting_range(request)
+    rows = ([] if dept is None
+            else faculty_attendance(
+                start=start, end=end, department=dept, as_of=as_of))
+    code = dept.code if dept is not None else "none"
+    if fmt == "csv":
+        data, content_type, ext = build_csv(rows), "text/csv", "csv"
+    elif fmt == "pdf":
+        data = build_pdf(rows, start, dept)
+        content_type, ext = "application/pdf", "pdf"
+    else:
+        raise Http404("Unknown export format.")
+    resp = HttpResponse(data, content_type=content_type)
+    resp["Content-Disposition"] = (
+        f'attachment; filename="attendance-{code}-{start}.{ext}"')
+    return resp
+
+
+@dean_required
+@require_http_methods(["GET"])
+def weekly_download(request, pk, fmt):
+    """DEAN-03: stream a STORED WeeklyReport's csv/pdf, department-scoped.
+
+    The IDOR/BOLA control (T-06-01): ``get_object_or_404(WeeklyReport, pk=pk,
+    department=request.user.department)`` -- another department's report pk 404s
+    server-side. The stored bytes are served from ``default_storage`` under the
+    server-built path; a missing file/path 404s (never a 500).
+    """
+    report = get_object_or_404(
+        WeeklyReport, pk=pk, department=request.user.department)
+    if fmt == "csv":
+        path, content_type = report.csv_path, "text/csv"
+    elif fmt == "pdf":
+        path, content_type = report.pdf_path, "application/pdf"
+    else:
+        raise Http404("Unknown export format.")
+    if not path or not default_storage.exists(path):
+        raise Http404("Report file not found.")
+    with default_storage.open(path, "rb") as fh:
+        data = fh.read()
+    filename = path.rsplit("/", 1)[-1]
+    resp = HttpResponse(data, content_type=content_type)
+    resp["Content-Disposition"] = f'attachment; filename="{filename}"'
+    return resp
