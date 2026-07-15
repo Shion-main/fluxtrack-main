@@ -2,19 +2,19 @@
 gsd_state_version: 1.0
 milestone: v1.2
 milestone_name: "**Goal**: Faculty can request a lead-time-gated modality shift that a Dean approves, with rooms auto-released or auto-assigned, and the SRS brought back in sync with reality."
-current_phase: 05
-current_phase_name: notifications-read-surface-web-push
-status: executing
-stopped_at: 05-05-PLAN.md Tasks 1-3 committed; at Task 4 blocking human-verify UAT
-last_updated: "2026-07-09T14:58:39.000Z"
-last_activity: 2026-07-09
-last_activity_desc: 05-05 web-push client Tasks 1-3 done; awaiting manual push UAT (Task 4)
+current_phase: 06
+current_phase_name: reporting-engine-and-surfaces
+status: ready_to_plan
+stopped_at: Phase 05 COMPLETE (5/5 plans, human-verify approved); Phase 06 needs planning
+last_updated: "2026-07-15T00:00:00.000Z"
+last_activity: 2026-07-15
+last_activity_desc: 05-05 web-push client Task 4 human-verify APPROVED; Phase 05 closed, all NOTIF criteria met
 progress:
   total_phases: 11
-  completed_phases: 6
+  completed_phases: 7
   total_plans: 40
-  completed_plans: 38
-  percent: 55
+  completed_plans: 39
+  percent: 64
 ---
 
 # Project State
@@ -24,18 +24,18 @@ progress:
 See: .planning/PROJECT.md (updated 2026-07-02)
 
 **Core value:** A faculty member checks in with one action, and the resulting attendance record is trustworthy — presence physically verified, lateness captured, ghost bookings detected.
-**Current focus:** Phase 05 — notifications-read-surface-web-push
+**Current focus:** Phase 06 — reporting-engine-and-surfaces (needs planning)
 
 ## Current Position
 
-Phase: 05 (notifications-read-surface-web-push) — EXECUTING
-Plan: 5 of 5
-Status: Ready to execute
-Last activity: 2026-07-09 — Phase 05 execution started
+Phase: 05 (notifications-read-surface-web-push) — COMPLETE ✓ (5/5 plans, human-verify approved 2026-07-15)
+Next: Phase 06 (reporting-engine-and-surfaces) — READY TO PLAN (`/gsd-plan-phase 06`)
+Status: Phase 05 closed; all NOTIF-01/02/03 criteria met + push fault-isolation verified
+Last activity: 2026-07-15 — Phase 05 human-verify UAT approved
 
 **Phase 4** (modality-shift-approval-srs-v1-2): PLANNED ✓ — 8 plans across 6 waves, verified (plan-checker passed). Ready: `/gsd-execute-phase 04`. Runs parallel to 03.1 per ROADMAP.
 
-Progress: [████████░░] 80%
+Progress: [██████████] 100% (Phase 05)
 
 ## Performance Metrics
 
