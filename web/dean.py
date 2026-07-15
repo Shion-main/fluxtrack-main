@@ -15,15 +15,31 @@ Clones the established web/ifo.py role-gate + validated-POST shape and mirrors t
 04-07 faculty surface (web/faculty.py) for consistency. ASCII-only by convention
 (Windows cp1252).
 """
+from datetime import timedelta
 from functools import wraps
 
+from django.contrib.auth import get_user_model
 from django.contrib.auth.decorators import login_required
 from django.core.exceptions import PermissionDenied
+from django.core.files.storage import default_storage
+from django.http import Http404, HttpResponse
 from django.shortcuts import get_object_or_404, render
+from django.utils import timezone
+from django.utils.dateparse import parse_date
 from django.views.decorators.http import require_http_methods
 
 from accounts.models import Role
-from scheduling.models import ModalityShiftRequest, ModalityShiftStatus
+from ops.models import WeeklyReport
+from ops.policy import get_policy
+from scheduling.models import Modality, ModalityShiftRequest, ModalityShiftStatus
+from scheduling.report_render import build_csv, build_pdf
+from scheduling.reporting import (
+    DeptSummary,
+    dept_summary,
+    faculty_attendance,
+    faculty_scorecard,
+    safe_card,
+)
 from scheduling.services import (
     ModalityShiftError,
     apply_approval,
@@ -128,3 +144,77 @@ def reject(request, pk):
     ctx = _queue_ctx(request.user, error=error, message=message)
     return render(request, "dean/_queue.html", ctx,
                   status=400 if error else 200)
+
+
+# --- DEAN reporting surface (DEAN-01..04, RPT-03) ---------------------------
+# The read-only, department-scoped consumer of the same shared aggregate/render
+# layers IFO-09 uses. EVERY queryset below is scoped to request.user.department
+# server-side; a crafted faculty_id / report pk / department param NEVER crosses
+# the boundary (T-06-01 IDOR/BOLA). Every view is GET-only (T-06-07 read-only).
+_WEEKDAY_INDEX = {"monday": 0, "tuesday": 1, "wednesday": 2, "thursday": 3,
+                  "friday": 4, "saturday": 5, "sunday": 6}
+
+
+def _reporting_range(request):
+    """Resolve the (start, end, as_of, note) reporting window from GET params.
+
+    A short local parser mirroring ``web.ifo._reporting_range`` (deliberately NOT
+    imported across role modules): optional ``from``/``to`` ISO dates select the
+    window; absent or invalid input degrades to the current reporting week (the
+    configured ``reporting_week_start`` weekday through today) with a friendly note
+    rather than raising a 500 (T-06-11). ``as_of`` is always today so a future
+    not-yet-missed session never lowers attendance %.
+    """
+    today = timezone.localdate()
+    start_day = _WEEKDAY_INDEX.get(
+        str(get_policy("reporting_week_start")).lower(), 0)
+    default_start = today - timedelta(days=(today.weekday() - start_day) % 7)
+
+    from_raw = (request.GET.get("from") or "").strip()
+    to_raw = (request.GET.get("to") or "").strip()
+    start = parse_date(from_raw) if from_raw else None
+    end = parse_date(to_raw) if to_raw else None
+
+    note = None
+    if (from_raw and start is None) or (to_raw and end is None):
+        note = ("That date range wasn't valid, so we're showing the "
+                "current week.")
+        start = end = None
+    if start is None:
+        start = default_start
+    if end is None:
+        end = today
+    if start > end:
+        note = ("The start date was after the end date, so we're showing "
+                "the current week.")
+        start, end = default_start, today
+    return start, end, today, note
+
+
+@dean_required
+@require_http_methods(["GET"])
+def dashboard(request):
+    """DEAN-04: a department-scoped reporting dashboard (read-only, DEAN-01).
+
+    Scopes strictly to ``request.user.department`` -- the four KPI cards derive
+    from ONE ``safe_card(dept_summary)`` call over the current reporting week, and
+    the latest-weekly-report card is the newest ``WeeklyReport`` for THIS department
+    only. A Dean with a NULL department (edge case) sees a calm, empty, no-crash
+    dashboard -- never an unscoped ALL-departments roll-up. Point-in-time (refresh
+    on filter Apply); never continuously polled.
+    """
+    dept = request.user.department
+    start, end, as_of, note = _reporting_range(request)
+    if dept is None:
+        # NULL-department Dean: nothing is scoped in -> a zeroed, no-crash card.
+        # NEVER dept_summary(department=None), which would leak ALL departments.
+        summary = (DeptSummary(0, 0, 0, 0, 0), None)
+        latest = None
+    else:
+        summary = safe_card(
+            dept_summary, start=start, end=end, department=dept, as_of=as_of)
+        latest = WeeklyReport.objects.filter(department=dept).first()
+    return render(request, "dean/dashboard.html", {
+        "department": dept, "summary": summary, "latest_report": latest,
+        "date_from": start, "date_to": end, "range_note": note,
+    })

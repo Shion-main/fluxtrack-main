@@ -52,7 +52,7 @@ SURFACES = {
     ],
     Role.DEAN: [
         {"title": "Modality approvals", "desc": "Pending shift requests from your department.", "icon": "check-check", "href": "/dean/requests"},
-        {"title": "Department oversight", "desc": "Reporting and scorecards.", "icon": "bar-chart", "href": "#"},
+        {"title": "Department oversight", "desc": "Reporting and scorecards.", "icon": "bar-chart", "href": "/dean/dashboard"},
     ],
     Role.SYSTEM_ADMIN: [
         {"title": "Users & settings", "desc": "Provision users, policy values.", "icon": "settings", "href": "/admin/"},

@@ -23,6 +23,8 @@ urlpatterns = [
     path("dean/requests", dean.queue, name="dean_queue"),
     path("dean/requests/<int:pk>/approve", dean.approve, name="dean_approve"),
     path("dean/requests/<int:pk>/reject", dean.reject, name="dean_reject"),
+    # Dean reporting surface (DEAN-01..04, RPT-03) -- read-only, dept-scoped
+    path("dean/dashboard", dean.dashboard, name="dean_dashboard"),
     # Checker surfaces (CHK-01..05, CHK-07)
     path("checker/scan", checker.scan_page, name="checker_scan"),
     path("checker/resolve", checker.resolve, name="checker_resolve"),
