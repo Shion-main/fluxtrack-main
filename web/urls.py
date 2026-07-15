@@ -43,6 +43,7 @@ urlpatterns = [
     path("checker/online/<int:session_id>", checker.online_open, name="checker_online_open"),
     # HR Admin session-level attendance surface (HR-01/02/03) -- read-only, cross-dept
     path("hr/attendance", hr.attendance, name="hr_attendance"),
+    path("hr/attendance.csv", hr.attendance_csv, name="hr_attendance_csv"),
     # IFO Admin surfaces
     path("ifo/rooms", ifo.rooms_list, name="ifo_rooms"),
     path("ifo/rooms/<str:code>", ifo.room_detail, name="ifo_room_detail"),

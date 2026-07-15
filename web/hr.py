@@ -19,23 +19,34 @@ become an executable Excel formula. NO database write is performed inside the
 streaming generator (MSSQL HY010/cursor-open trap avoided). ASCII-only by
 convention (Windows cp1252).
 """
+import csv
 from functools import wraps
 
 from django.contrib.auth import get_user_model
 from django.contrib.auth.decorators import login_required
 from django.core.exceptions import PermissionDenied
 from django.db.models import Exists, OuterRef, Q
+from django.http import StreamingHttpResponse
 from django.shortcuts import render
+from django.utils import timezone
 from django.utils.dateparse import parse_date
 from django.views.decorators.http import require_http_methods
 
 from accounts.models import Department, Role
 from scheduling.models import AcademicTerm, Session, SessionStatus
+from scheduling.report_render import csv_safe
 from verification.models import CheckerValidation, ValidationAction
 
 # The on-screen list is capped -- the full (uncapped) set is what the CSV export
 # streams. This keeps the HTML page bounded while payroll still gets everything.
 HR_PAGE_SIZE = 200
+
+# CSV column contract (HR-03 payroll export). One constant so the header row and
+# every streamed data row can never drift.
+CSV_HEADER = [
+    "Faculty", "Department", "Course", "Section", "Date", "Scheduled start",
+    "Actual start", "Status", "Method", "Checker-verified",
+]
 
 
 def hr_required(view):
@@ -174,3 +185,65 @@ def attendance(request):
     ctx = {"sessions": sessions, "filters": filters,
            "page_size": HR_PAGE_SIZE, **_filter_choices()}
     return render(request, "hr/attendance.html", ctx)
+
+
+class _Echo:
+    """A write-only file-like object whose ``write`` returns the value written.
+
+    ``csv.writer`` writes each formatted row into this object; because ``write``
+    returns the string, the row is what the ``StreamingHttpResponse`` generator
+    yields -- no buffer is accumulated, so memory stays bounded at full-term scale
+    (the streaming CSV idiom; RESEARCH Pattern 3).
+    """
+
+    def write(self, value):
+        return value
+
+
+def _fmt_dt(dt):
+    """Render an aware datetime in local time for the payroll CSV, or '' if None."""
+    if dt is None:
+        return ""
+    return timezone.localtime(dt).strftime("%Y-%m-%d %H:%M")
+
+
+@hr_required
+@require_http_methods(["GET"])
+def attendance_csv(request):
+    """HR-03: stream the filtered session list as an injection-safe payroll CSV.
+
+    Applies the SAME ``_filtered_sessions`` parser as ``attendance`` so the export
+    scope always matches the on-screen filters, then streams
+    (``StreamingHttpResponse`` + ``queryset.iterator()``) so a full-term export
+    never buffers in memory (T-06-03). Text cells (faculty name, department, course,
+    section, method) are run through the REUSED ``scheduling.report_render.csv_safe``
+    so a faculty name beginning with ``= + - @`` can never become an Excel formula
+    (T-06-02). NO database write is performed inside the generator -- the
+    checker-verified status is the ``is_verified`` ANNOTATION resolved in the main
+    query, so no subquery runs while the server-side cursor is open (MSSQL
+    HY010/cursor-open trap avoided, T-06-15). Read-only (GET-only).
+    """
+    qs, _filters = _filtered_sessions(request)
+    writer = csv.writer(_Echo())
+
+    def rows():
+        yield writer.writerow(CSV_HEADER)
+        for s in qs.iterator():
+            dept = s.faculty.department
+            yield writer.writerow([
+                csv_safe(s.faculty.get_full_name() or s.faculty.username),
+                csv_safe(dept.code if dept else ""),
+                csv_safe(s.schedule.course_code),
+                csv_safe(s.schedule.section),
+                s.date.isoformat(),
+                _fmt_dt(s.scheduled_start),
+                _fmt_dt(s.actual_start),
+                _status_label(s.status),
+                csv_safe(s.get_checkin_method_display() if s.checkin_method else ""),
+                "yes" if s.is_verified else "no",
+            ])
+
+    filename = f"hr-attendance-{timezone.localdate().isoformat()}.csv"
+    resp = StreamingHttpResponse(rows(), content_type="text/csv")
+    resp["Content-Disposition"] = f'attachment; filename="{filename}"'
+    return resp
