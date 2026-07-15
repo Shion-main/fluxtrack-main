@@ -5,16 +5,16 @@ milestone_name: "**Goal**: Faculty can request a lead-time-gated modality shift 
 current_phase: 06
 current_phase_name: Reporting Engine & Reporting Surfaces
 status: executing
-stopped_at: Phase 06 — 06-06 COMPLETE (Dean reporting surface: dept-scoped dashboard/report/scorecard + CSV/PDF export + stored-report download, read-only + IDOR-safe, 12 tests green); next 06-07
-last_updated: "2026-07-15T16:00:00.000Z"
+stopped_at: "Phase 06 — 06-07 COMPLETE (HR session-level attendance surface: hr_required cross-department read-only list + streaming injection-safe payroll CSV export, HR-01/02/03, 14 tests green); Phase 06 all 7 plans complete"
+last_updated: "2026-07-15T16:30:00.000Z"
 last_activity: 2026-07-15
-last_activity_desc: 06-06 Dean reporting surface (DEAN-01..04/RPT-03) complete
+last_activity_desc: 06-07 HR attendance surface (HR-01/02/03) complete — Phase 06 done (7/7)
 progress:
   total_phases: 11
-  completed_phases: 7
+  completed_phases: 8
   total_plans: 47
-  completed_plans: 45
-  percent: 66
+  completed_plans: 46
+  percent: 73
 ---
 
 # Project State
@@ -28,11 +28,11 @@ See: .planning/PROJECT.md (updated 2026-07-02)
 
 ## Current Position
 
-Phase: 06 (Reporting Engine & Reporting Surfaces) — EXECUTING
-Plan: 06-06 COMPLETE (6/7) — Dean reporting surface (DEAN-01..04/RPT-03): web/dean.py dashboard/reports/scorecard/report_export/weekly_download, all dean_required + GET-only + scoped to request.user.department; foreign-department scorecard/weekly_download 404 server-side (T-06-01 IDOR), POST rejected 405 (DEAN-01 read-only); reuses shared aggregate/render layers + _error_card.html/scorecard.html; 12 tests green
-Next: 06-07 — HR attendance view (final reporting surface in wave order)
-Status: Executing Phase 06
-Last activity: 2026-07-15 — 06-06 Dean reporting surface (DEAN-01..04/RPT-03) complete
+Phase: 06 (Reporting Engine & Reporting Surfaces) — ALL PLANS COMPLETE (7/7)
+Plan: 06-07 COMPLETE (7/7) — HR session-level attendance surface (HR-01/02/03): web/hr.py hr_required + attendance() list + attendance_csv() streaming export; cross-department read-only (GET-only, POST 405); four independent filters (faculty/dept/date/term) + search, invalid date -> friendly notice not 500; is_verified via Exists() annotation so no subquery inside the .iterator() generator (MSSQL cursor-safe); reuses csv_safe for injection neutralization; 14 tests green
+Next: Phase 06 complete — verify-work / next phase
+Status: Phase 06 complete
+Last activity: 2026-07-15 — 06-07 HR attendance surface (HR-01/02/03) complete
 
 **Phase 4** (modality-shift-approval-srs-v1-2): PLANNED ✓ — 8 plans across 6 waves, verified (plan-checker passed). Ready: `/gsd-execute-phase 04`. Runs parallel to 03.1 per ROADMAP.
 
@@ -104,6 +104,7 @@ Progress: [██████████] 100% (Phase 05)
 | Phase 06 P04 | ~20min | 3 tasks | 8 files |
 | Phase 06 P05 | 18min | 2 tasks | 4 files |
 | Phase 06 P06 | ~20min | 3 tasks | 6 files |
+| Phase 06 P07 | ~20min | 3 tasks | 6 files |
 
 ## Accumulated Context
 
@@ -184,6 +185,7 @@ Recent decisions affecting current work:
 - [Phase ?]: [Phase 06]: 06-01: pure reporting aggregate layer (scheduling/reporting.py) reads Session.status truth (held=ACTIVE/COMPLETED, absent=ABSENT) via DB-side Count(filter=Q); verified via a SEPARATE grouped validations query so status counts stay honest; MERGED siblings held-but-unverified (04.2 D-09); filters local Session.date not UTC scheduled_start; safe_card isolates a raising card with a generic message (RPT-05, no exc-text leak). faculty_scorecard adds early-ends + effective-modality breakdown (declared_modality overrides schedule.modality).
 - [Phase 06]: 06-04: IFO-09 dashboard + RPT-04 scorecard drill-down (web/ifo.py dashboard/scorecard, both behind ifo_required). The 4 KPI cards derive from ONE safe_card(dept_summary); the per-faculty table is a SEPARATE safe_card(faculty_attendance) — patching dept_summary to raise proves per-card isolation end-to-end (KPI section errors, table section still renders, raw exception absent, T-06-04). _reporting_range() parses from/to, defaults to reporting_week_start-of-week..today, degrades invalid/reversed ranges to a friendly note (T-06-11, never 500); as_of=today always clamps the denominator. Drill-down is a FULL PAGE (A-DRILL) carrying from/to; attendance pills via --green/--amber/--red at >=90/75/<75 (A-COLOR). templates/reports/_error_card.html (generic copy only) + templates/reports/scorecard.html are shared partials reused by the Dean surface (06-06). 7 view-tests green; 3 web-suite failures are pre-existing dev-login/home-redirect issues (verified at ea3afb2), out of scope.
 - [Phase 06]: 06-05: JOB-03 filled via shared ops.reports.generate_week_reports service reused by on-demand generate_weekly_report command; idempotent per-dept + ALL roll-up stored via default_storage (server-built reports/{week}/{code} paths), notify() fans to IFO + dept-scoped Deans; 4-job scheduler invariant + NoImplicitScheduler intact (RPT-02/ENV-04/NOTIF-00). 14 tests green.
+- [Phase 06]: 06-07: HR session-level attendance surface (web/hr.py hr_required + attendance() list + attendance_csv() streaming export) is the CROSS-DEPARTMENT, READ-ONLY final reporting surface. Unlike the Dean surface, department is a FILTER not a scope boundary (HR sees all departments). Four independent filters (faculty/dept/date-range/term) + search key on FK id + date__range only (never pk__in, the 2100-param trap, T-06-16); invalid date -> friendly inline notice, never a 500. attendance_csv streams (StreamingHttpResponse + queryset.iterator() + _Echo echo-writer) to bound memory (T-06-03) and reuses scheduling.report_render.csv_safe for formula-injection neutralization (T-06-02). KEY: checker-verified is an is_verified=Exists() ANNOTATION resolved in the main query, NOT the Session.verified_by_checker property — the property runs a per-object subquery that is fatal inside a streaming .iterator() generator on MSSQL (HY010/open-cursor, T-06-15). One shared _filtered_sessions parser keeps the list and export in lock-step. Every view GET-only so POST is 405 (T-06-07). 14 tests green. Phase 06 complete (7/7).
 - [Phase 06]: 06-06: Dean reporting surface (web/dean.py dashboard/reports/scorecard/report_export/weekly_download) is the department-scoped, READ-ONLY consumer of the shared aggregate/render layers. Every queryset scopes to request.user.department SERVER-SIDE; scorecard + weekly_download use get_object_or_404(..., department=request.user.department) so a foreign-department id 404s (T-06-01 IDOR/BOLA, refused not hidden). Every view is @require_http_methods(['GET']) so a POST is 405 (DEAN-01 read-only, T-06-07) — a bare Django view otherwise accepts any method. NULL-department Dean gets a zeroed DeptSummary/empty table, NEVER dept_summary(department=None) (edge-case cross-department leak closed). Export reuses build_csv/build_pdf (csv_safe intact, T-06-02); weekly_download streams default_storage bytes. Shared reports/scorecard.html back link parameterized via back_url (default /ifo/dashboard) so a Dean returns to /dean/reports. 12 tests green.
 
 ### Pending Todos
@@ -208,6 +210,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-07-15T16:00:00.000Z
-Stopped at: 06-06-PLAN.md COMPLETE — Dean reporting surface (DEAN-01..04/RPT-03); commits 4afe804, 1280f58, 62e4157; 12 tests green
-Resume file: .planning/phases/06-reporting-engine-reporting-surfaces/06-07-PLAN.md
+Last session: 2026-07-15T16:30:00.000Z
+Stopped at: 06-07-PLAN.md COMPLETE — HR session-level attendance surface (HR-01/02/03); commits d25dcdf, 6536c84, 3cad8cb; 14 tests green. Phase 06 all 7 plans complete.
+Resume file: none — Phase 06 complete; proceed to verify-work or the next phase

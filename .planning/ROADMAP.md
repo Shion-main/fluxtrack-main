@@ -32,7 +32,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 04.1: Real-Data Integration — Full 2T SY2025-26 Term Load** (INSERTED) - Harden the importer to read the real .xlsx sources and load the whole term: 114-room master (names+capacities), online/blended/gym meetings, ~200 deduped instructors, ~2,021 schedules, materialized into a live checkable term (completed 2026-07-07)
 - [x] **Phase 04.2: Co-Scheduled Session Attendance** (INSERTED) - Attendance handling for one instructor teaching 2+ sections at the same time in different rooms (129 slots, 54/200 profs): a single scan/verification must cover the co-scheduled sibling sessions so the sweep never falsely marks them Absent (completed 2026-07-07; verification passed after same-day gap closure — criterion #3 online coverage now 152/152 via D-01 refinement #2, online merge key = faculty + exact start; see 04.2-VERIFICATION.md)
 - [ ] **Phase 5: Notifications — Read Surface & Web Push** - In-app polled list + VAPID web push + per-user mute preferences
-- [ ] **Phase 6: Reporting Engine & Reporting Surfaces** - One shared aggregate layer powering weekly report, scorecards, IFO/Dean/HR dashboards
+- [x] **Phase 6: Reporting Engine & Reporting Surfaces** - One shared aggregate layer powering weekly report, scorecards, IFO/Dean/HR dashboards (completed 2026-07-15)
 - [ ] **Phase 7: Remaining Operational Surfaces** - Guard monitor/locator, IFO room & booking ops, Faculty self-service, job monitoring
 - [ ] **Phase 8: Auth Cutover & AWS Deployment** - Entra ID SSO, Node-free Tailwind build, single-EC2 + RDS deploy
 
@@ -262,7 +262,7 @@ Plans:
   4. HR can view verified session-level attendance, filter/search by faculty, department, date range, and term, and export it as CSV for external payroll.
   5. A single failing aggregate shows an error in its own card while the rest of the page still renders.
 
-**Plans**: 6/7 plans executed
+**Plans**: 7/7 plans complete
 
 Plans:
 
@@ -283,7 +283,7 @@ Plans:
 
 **Wave 4** *(blocked on Wave 3)*
 
-- [ ] 06-07-PLAN.md — HR session-level attendance list + faculty/dept/date/term filters + streaming payroll CSV export (HR-01/02/03) [Wave 4]
+- [x] 06-07-PLAN.md — HR session-level attendance list + faculty/dept/date/term filters + streaming payroll CSV export (HR-01/02/03) [Wave 4]
 
 ### Phase 7: Remaining Operational Surfaces
 
@@ -335,7 +335,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8
 | 3. Duty Assignments & Checker Verification | 6/6 | Complete    | 2026-07-03 |
 | 4. Modality Shift Approval & SRS v1.2 | 8/8 | Complete    | 2026-07-03 |
 | 5. Notifications — Read Surface & Web Push | 4/5 | In Progress|  |
-| 6. Reporting Engine & Reporting Surfaces | 6/7 | In Progress|  |
+| 6. Reporting Engine & Reporting Surfaces | 7/7 | Complete   | 2026-07-15 |
 | 7. Remaining Operational Surfaces | 0/TBD | Not started | - |
 | 8. Auth Cutover & AWS Deployment | 0/TBD | Not started | - |
 

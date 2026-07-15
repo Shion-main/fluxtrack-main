@@ -89,9 +89,9 @@ roadmap does NOT create phases for them.
 
 ### HR (HR)
 
-- [ ] **HR-01**: HR can view verified attendance per faculty/session (present/absent, actual times, check-in method, checker-verification status)
-- [ ] **HR-02**: HR can filter/search by faculty, department, date range, and term
-- [ ] **HR-03**: HR can export session-level attendance as CSV for external payroll
+- [x] **HR-01**: HR can view verified attendance per faculty/session (present/absent, actual times, check-in method, checker-verification status)
+- [x] **HR-02**: HR can filter/search by faculty, department, date range, and term
+- [x] **HR-03**: HR can export session-level attendance as CSV for external payroll
 
 ### IFO — remaining (IFO)
 
@@ -181,9 +181,9 @@ phase (see ROADMAP.md). Status values: Pending / In progress / Complete.
 | DEAN-02 | Phase 6 | Complete |
 | DEAN-03 | Phase 6 | Complete |
 | DEAN-04 | Phase 6 | Complete |
-| HR-01 | Phase 6 | Pending |
-| HR-02 | Phase 6 | Pending |
-| HR-03 | Phase 6 | Pending |
+| HR-01 | Phase 6 | Complete |
+| HR-02 | Phase 6 | Complete |
+| HR-03 | Phase 6 | Complete |
 | GRD-01 | Phase 7 | Pending |
 | GRD-02 | Phase 7 | Pending |
 | GRD-03 | Phase 7 | Pending |
