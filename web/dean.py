@@ -15,7 +15,6 @@ Clones the established web/ifo.py role-gate + validated-POST shape and mirrors t
 04-07 faculty surface (web/faculty.py) for consistency. ASCII-only by convention
 (Windows cp1252).
 """
-from datetime import timedelta
 from functools import wraps
 
 from django.contrib.auth import get_user_model
@@ -24,13 +23,10 @@ from django.core.exceptions import PermissionDenied
 from django.core.files.storage import default_storage
 from django.http import Http404, HttpResponse
 from django.shortcuts import get_object_or_404, render
-from django.utils import timezone
-from django.utils.dateparse import parse_date
 from django.views.decorators.http import require_http_methods
 
 from accounts.models import Role
 from ops.models import WeeklyReport
-from ops.policy import get_policy
 from scheduling.models import Modality, ModalityShiftRequest, ModalityShiftStatus
 from scheduling.report_render import build_csv, build_pdf
 from scheduling.reporting import (
@@ -45,6 +41,7 @@ from scheduling.services import (
     apply_approval,
     reject_modality_shift,
 )
+from web.reporting_common import reporting_range as _reporting_range
 
 
 def dean_required(view):
@@ -151,44 +148,9 @@ def reject(request, pk):
 # layers IFO-09 uses. EVERY queryset below is scoped to request.user.department
 # server-side; a crafted faculty_id / report pk / department param NEVER crosses
 # the boundary (T-06-01 IDOR/BOLA). Every view is GET-only (T-06-07 read-only).
-_WEEKDAY_INDEX = {"monday": 0, "tuesday": 1, "wednesday": 2, "thursday": 3,
-                  "friday": 4, "saturday": 5, "sunday": 6}
-
-
-def _reporting_range(request):
-    """Resolve the (start, end, as_of, note) reporting window from GET params.
-
-    A short local parser mirroring ``web.ifo._reporting_range`` (deliberately NOT
-    imported across role modules): optional ``from``/``to`` ISO dates select the
-    window; absent or invalid input degrades to the current reporting week (the
-    configured ``reporting_week_start`` weekday through today) with a friendly note
-    rather than raising a 500 (T-06-11). ``as_of`` is always today so a future
-    not-yet-missed session never lowers attendance %.
-    """
-    today = timezone.localdate()
-    start_day = _WEEKDAY_INDEX.get(
-        str(get_policy("reporting_week_start")).lower(), 0)
-    default_start = today - timedelta(days=(today.weekday() - start_day) % 7)
-
-    from_raw = (request.GET.get("from") or "").strip()
-    to_raw = (request.GET.get("to") or "").strip()
-    start = parse_date(from_raw) if from_raw else None
-    end = parse_date(to_raw) if to_raw else None
-
-    note = None
-    if (from_raw and start is None) or (to_raw and end is None):
-        note = ("That date range wasn't valid, so we're showing the "
-                "current week.")
-        start = end = None
-    if start is None:
-        start = default_start
-    if end is None:
-        end = today
-    if start > end:
-        note = ("The start date was after the end date, so we're showing "
-                "the current week.")
-        start, end = default_start, today
-    return start, end, today, note
+# The (start, end, as_of, note) window parser is the single shared implementation
+# in web.reporting_common (imported as _reporting_range above); the IFO surface uses
+# the same one -- the pure range logic has no role-coupling to keep apart (LO-03).
 
 
 @dean_required
