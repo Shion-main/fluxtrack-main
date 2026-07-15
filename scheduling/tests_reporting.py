@@ -11,14 +11,16 @@ timezone-correct week boundary on the local Session.date DateField
 """
 from django.test import TestCase
 
-from scheduling.models import SessionStatus
+from scheduling.models import Modality, SessionStatus
 from scheduling.reporting import (
     HELD_STATUSES,
     AbsenceItem,
     DeptSummary,
     FacultyRow,
+    Scorecard,
     dept_summary,
     faculty_attendance,
+    faculty_scorecard,
     safe_card,
 )
 from scheduling.test_support import make_reporting_fixture
@@ -175,3 +177,80 @@ class CardIsolationTests(TestCase):
         value, error = safe_card(lambda a, b: a + b, 2, b=3)
         self.assertEqual(value, 5)
         self.assertIsNone(error)
+
+
+class ScorecardTests(TestCase):
+    """RPT-04: early-ends + effective-modality breakdown honoring declared_modality."""
+
+    def setUp(self):
+        self.fx = make_reporting_fixture()
+
+    def test_scorecard_slice_matches_faculty_attendance(self):
+        card = faculty_scorecard(
+            faculty=self.fx.faculty_a, start=self.fx.week_start, end=self.fx.sun)
+        self.assertIsInstance(card, Scorecard)
+        self.assertEqual(card.faculty_id, self.fx.faculty_a.id)
+        self.assertEqual(card.scheduled, 8)
+        self.assertEqual(card.held, 6)
+        self.assertEqual(card.absent, 1)
+        self.assertEqual(card.attendance_pct, 75)
+
+    def test_early_ends_counted(self):
+        card = faculty_scorecard(
+            faculty=self.fx.faculty_a, start=self.fx.week_start, end=self.fx.sun)
+        self.assertEqual(card.early_ends, 1)
+
+    def test_effective_modality_breakdown_counts_declared_online(self):
+        card = faculty_scorecard(
+            faculty=self.fx.faculty_a, start=self.fx.week_start, end=self.fx.sun)
+        # The declared-ONLINE-over-F2F session is counted ONLINE (effective wins).
+        self.assertEqual(card.modality_breakdown.get(Modality.ONLINE), 1)
+        # The remaining five held sessions are F2F.
+        self.assertEqual(card.modality_breakdown.get(Modality.F2F), 5)
+        # Breakdown counts held sessions only.
+        self.assertEqual(sum(card.modality_breakdown.values()), card.held)
+
+    def test_itemized_absences_present(self):
+        card = faculty_scorecard(
+            faculty=self.fx.faculty_a, start=self.fx.week_start, end=self.fx.sun)
+        self.assertEqual(len(card.absences), 1)
+        self.assertIsInstance(card.absences[0], AbsenceItem)
+        self.assertEqual(card.absences[0].date, self.fx.tue)
+
+    def test_empty_range_faculty_returns_zeroed_scorecard(self):
+        # The checker has no sessions -> zeroed Scorecard, no crash.
+        card = faculty_scorecard(
+            faculty=self.fx.checker, start=self.fx.week_start, end=self.fx.sun)
+        self.assertEqual(card.scheduled, 0)
+        self.assertEqual(card.held, 0)
+        self.assertEqual(card.absent, 0)
+        self.assertEqual(card.early_ends, 0)
+        self.assertEqual(card.attendance_pct, 0)
+        self.assertEqual(card.modality_breakdown, {})
+        self.assertEqual(card.absences, [])
+
+
+class WeekBoundaryTests(TestCase):
+    """RPT-02 / Pitfall 1: date__range on the local Session.date -- no UTC drift."""
+
+    def setUp(self):
+        self.fx = make_reporting_fixture()
+
+    def test_sunday_included_next_monday_excluded(self):
+        # A session on the Sunday of the target week is INCLUDED; one on the
+        # following Monday is EXCLUDED, when filtering by date__range on the local
+        # DateField (proving no UTC scheduled_start boundary drift).
+        self.fx.add_session(self.fx.faculty_b, self.fx.sun, SessionStatus.ABSENT)
+        self.fx.add_session(
+            self.fx.faculty_b, self.fx.next_monday, SessionStatus.ABSENT)
+
+        rows = faculty_attendance(
+            start=self.fx.week_start, end=self.fx.sun, department=self.fx.dept_b)
+        row = [r for r in rows if r.faculty_id == self.fx.faculty_b.id][0]
+        # Original 2 (Mon ACTIVE + Tue ABSENT) + the Sunday ABSENT = 3; the
+        # next-Monday session is out of range.
+        self.assertEqual(row.scheduled, 3)
+        self.assertEqual(row.absent, 2)
+        absence_dates = {a.date for a in row.absences}
+        self.assertIn(self.fx.sun, absence_dates)
+        self.assertNotIn(self.fx.next_monday, absence_dates)
