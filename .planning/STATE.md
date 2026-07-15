@@ -5,10 +5,10 @@ milestone_name: "**Goal**: Faculty can request a lead-time-gated modality shift 
 current_phase: 06
 current_phase_name: Reporting Engine & Reporting Surfaces
 status: complete
-stopped_at: "Phase 06 COMPLETE + VERIFIED (7/7 plans; gsd-verifier 5/5 success criteria passed against live tests; 06-VERIFICATION.md status=passed). Optional gates not yet run: code-review, secure-phase, ui-review, verify-work UAT."
-last_updated: "2026-07-15T17:00:00.000Z"
-last_activity: 2026-07-15
-last_activity_desc: Phase 06 executed (7/7) + phase-goal verification PASSED (5/5). Ready for Phase 07 or optional quality gates.
+stopped_at: "Phase 06 COMPLETE + VERIFIED + AUDITED (7/7 plans; verifier 5/5; security 18/18; code-review + UI audit run). Fixed: NULL-dept Dean BOLA (critical), HR oldest-first (high). Follow-up shipped: IFO Weekly Consolidated Report surface + scorecard Export CSV + build_pdf range title + low-severity sweep. 373 tests pass (3 pre-existing dev-login failures)."
+last_updated: "2026-07-16T00:00:00.000Z"
+last_activity: 2026-07-16
+last_activity_desc: Phase 06 audits (security/code/UI) + audit-driven fixes + IFO report surface follow-up complete. Ready to plan Phase 07.
 progress:
   total_phases: 11
   completed_phases: 8
