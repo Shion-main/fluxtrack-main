@@ -20,11 +20,13 @@ from campus.models import Building, Floor, Room
 from ops.models import Booking
 from scheduling.models import (
     AcademicTerm,
+    CheckinMethod,
     Modality,
     Schedule,
     Session,
     SessionStatus,
 )
+from verification.models import CheckerValidation, ValidationAction
 
 MANILA = ZoneInfo("Asia/Manila")
 
@@ -256,4 +258,168 @@ def make_merge_fixture(prefix="mmf"):
         online_anchor=online_anchor,
         online_sibling=online_sibling,
         make_extra_siblings=make_extra_siblings,
+    )
+
+
+def make_reporting_fixture(prefix="rpt"):
+    """Seed and return the canonical Phase-6 reporting object graph (RPT-01/04/05).
+
+    Mirrors make_shift_fixture's ``_aware`` + prefix-namespacing idiom so two calls
+    in one test never collide on a UNIQUE constraint. ASCII-only.
+
+    Two Departments (``dept_a`` with ``faculty_a``, ``dept_b`` with ``faculty_b``)
+    over ONE active term, all sessions inside the known Mon-Sun week beginning
+    ``IN_WINDOW_DATE`` (2026-07-06, a Monday). ``faculty_a`` carries one session of
+    every reporting-relevant shape so the aggregates are exercised end to end:
+
+      - ``s_scheduled``  : SCHEDULED, dated the coming Wednesday (future vs an
+        ``as_of`` of the Monday) -> counts in ``scheduled`` but not ``held``.
+      - ``s_active``     : ACTIVE   -> held.
+      - ``s_completed``  : COMPLETED -> held.
+      - ``s_absent``     : ABSENT   -> absent (itemized), never held.
+      - ``s_verified``   : ACTIVE + a ``verified`` CheckerValidation -> held AND
+        checker-verified.
+      - ``s_merged``     : ACTIVE + ``checkin_method=MERGED`` + NO validation ->
+        held but NOT verified (merge-filled siblings stay honest, 04.2 D-09).
+      - ``s_early``      : COMPLETED + ``ended_early=True`` -> held + early-end.
+      - ``s_online``     : ACTIVE + ``declared_modality=ONLINE`` over an F2F
+        schedule -> held, counted ONLINE in the effective-modality breakdown.
+
+    ``faculty_a`` totals over the full week (no ``as_of``): scheduled 8, held 6,
+    absent 1, verified 1, early_ends 1, attendance_pct 75.
+
+    ``faculty_b`` carries one ACTIVE (``s_b_active``) and one ABSENT
+    (``s_b_absent``) so department scoping visibly changes the result set.
+
+    ``add_session(faculty, date, status, **kwargs)`` seeds one more session (its own
+    fresh schedule/room) for boundary/edge tests.
+
+    Returns a SimpleNamespace keyed by role/object/date/session.
+    """
+    User = get_user_model()
+    counter = {"n": 0}
+
+    def _next():
+        counter["n"] += 1
+        return counter["n"]
+
+    week_start = IN_WINDOW_DATE          # 2026-07-06 (Monday)
+    tue = date(2026, 7, 7)
+    wed = date(2026, 7, 8)
+    sun = date(2026, 7, 12)
+    next_monday = date(2026, 7, 13)
+
+    term = AcademicTerm.objects.create(
+        name=f"{prefix} Term", start_date=date(2026, 1, 1),
+        end_date=date(2026, 12, 31), is_active=True,
+    )
+    dept_a = Department.objects.create(name=f"{prefix} Dept A", code=f"{prefix}-DA")
+    dept_b = Department.objects.create(name=f"{prefix} Dept B", code=f"{prefix}-DB")
+
+    building = Building.objects.create(name=f"{prefix} Hall", code=f"{prefix}-BLD")
+    floor = Floor.objects.create(building=building, number=1)
+
+    def _room():
+        n = _next()
+        return Room.objects.create(
+            floor=floor, code=f"{prefix}-R{n}", capacity=40,
+            qr_token=f"{prefix}-qr-{n}",
+            manual_code=f"{prefix[:1].upper()}{n:05d}"[:6],
+        )
+
+    room_a = _room()
+    room_b = _room()
+
+    faculty_a = User.objects.create(
+        username=f"{prefix}_fa", email=f"{prefix}_fa@mcm.edu.ph",
+        first_name="Ana", last_name="Alvarez",
+        role=Role.FACULTY, department=dept_a, is_active=True,
+    )
+    faculty_b = User.objects.create(
+        username=f"{prefix}_fb", email=f"{prefix}_fb@mcm.edu.ph",
+        first_name="Ben", last_name="Bautista",
+        role=Role.FACULTY, department=dept_b, is_active=True,
+    )
+    checker = User.objects.create(
+        username=f"{prefix}_chk", email=f"{prefix}_chk@mcm.edu.ph",
+        role=Role.CHECKER, department=dept_a, is_active=True,
+    )
+
+    teach_start, teach_end = time(8, 0), time(9, 30)
+
+    def _mk(faculty, room, d, status, *, modality=Modality.F2F, declared="",
+            ended_early=False, checkin_method=""):
+        n = _next()
+        sched = Schedule.objects.create(
+            term=term, course_code=f"{prefix}{n:03d}", section="A",
+            faculty=faculty, room=room, day_of_week=0,
+            start_time=teach_start, end_time=teach_end, modality=modality,
+        )
+        return Session.objects.create(
+            schedule=sched, faculty=faculty, room=room, date=d,
+            scheduled_start=_aware(d, teach_start),
+            scheduled_end=_aware(d, teach_end),
+            status=status, declared_modality=declared,
+            ended_early=ended_early, checkin_method=checkin_method,
+        )
+
+    # faculty_a: one session of every reporting-relevant shape.
+    s_scheduled = _mk(faculty_a, room_a, wed, SessionStatus.SCHEDULED)
+    s_active = _mk(faculty_a, room_a, week_start, SessionStatus.ACTIVE)
+    s_completed = _mk(faculty_a, room_a, week_start, SessionStatus.COMPLETED)
+    s_absent = _mk(faculty_a, room_a, tue, SessionStatus.ABSENT)
+    s_verified = _mk(faculty_a, room_a, week_start, SessionStatus.ACTIVE)
+    s_merged = _mk(
+        faculty_a, room_a, week_start, SessionStatus.ACTIVE,
+        checkin_method=CheckinMethod.MERGED,
+    )
+    s_early = _mk(
+        faculty_a, room_a, tue, SessionStatus.COMPLETED, ended_early=True,
+    )
+    s_online = _mk(
+        faculty_a, room_a, week_start, SessionStatus.ACTIVE,
+        modality=Modality.F2F, declared=Modality.ONLINE,
+    )
+
+    # Verified session gets a real CheckerValidation; the MERGED sibling gets none.
+    CheckerValidation.objects.create(
+        session=s_verified, room=room_a, checker=checker,
+        action=ValidationAction.VERIFIED,
+    )
+
+    # faculty_b (dept_b): one held + one absent, to prove department scoping.
+    s_b_active = _mk(faculty_b, room_b, week_start, SessionStatus.ACTIVE)
+    s_b_absent = _mk(faculty_b, room_b, tue, SessionStatus.ABSENT)
+
+    def add_session(faculty, d, status, **kwargs):
+        """Seed one more session (fresh schedule/room) for boundary/edge tests."""
+        room = room_a if faculty.department_id == dept_a.id else room_b
+        return _mk(faculty, room, d, status, **kwargs)
+
+    return SimpleNamespace(
+        term=term,
+        dept_a=dept_a,
+        dept_b=dept_b,
+        faculty_a=faculty_a,
+        faculty_b=faculty_b,
+        checker=checker,
+        building=building,
+        room_a=room_a,
+        room_b=room_b,
+        week_start=week_start,
+        tue=tue,
+        wed=wed,
+        sun=sun,
+        next_monday=next_monday,
+        s_scheduled=s_scheduled,
+        s_active=s_active,
+        s_completed=s_completed,
+        s_absent=s_absent,
+        s_verified=s_verified,
+        s_merged=s_merged,
+        s_early=s_early,
+        s_online=s_online,
+        s_b_active=s_b_active,
+        s_b_absent=s_b_absent,
+        add_session=add_session,
     )
