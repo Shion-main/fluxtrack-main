@@ -1,0 +1,104 @@
+{% extends "base.html" %}
+{% comment %}HR-01/HR-02/HR-03 session-level attendance list (read-only, HR-01).
+Standard Franken shell, max-w-5xl. Pattern-A GET filter bar (Faculty / Department /
+Term selects + From/To date range + free-text search, Apply/Reset), a dense
+uk-table of sessions (A-TABLE), Pattern-C Export CSV anchor, and Pattern-F empty +
+no-results states. HR is cross-department by design, so Department is a FILTER, not
+a scope boundary. NO write controls exist on this surface. ASCII-only.{% endcomment %}
+{% block title %}HR attendance - FluxTrack{% endblock %}
+{% block content %}
+<div class="uk-container max-w-5xl pt-8 pb-16">
+  <div class="flex items-center gap-2 mb-1">
+    <h1 class="uk-h2">Attendance</h1>
+    <span class="uk-label uk-label-secondary">Session-level</span>
+  </div>
+  <p class="uk-text-muted mb-6">Verified session records across all departments -- filter and export for payroll (HR-01/02/03). Read-only.</p>
+
+  <form method="get" class="uk-card uk-card-body mb-6">
+    <div class="flex flex-wrap items-end gap-4">
+      <label class="flex flex-col gap-1">
+        <span class="uk-text-small uk-text-muted">Faculty</span>
+        <select name="faculty" class="uk-select">
+          <option value="">All faculty</option>
+          {% for f in faculty_choices %}
+          <option value="{{ f.id }}" {% if filters.faculty == f.id|stringformat:'s' %}selected{% endif %}>{{ f.get_full_name|default:f.username }}</option>
+          {% endfor %}
+        </select>
+      </label>
+      <label class="flex flex-col gap-1">
+        <span class="uk-text-small uk-text-muted">Department</span>
+        <select name="department" class="uk-select">
+          <option value="">All departments</option>
+          {% for d in department_choices %}
+          <option value="{{ d.id }}" {% if filters.department == d.id|stringformat:'s' %}selected{% endif %}>{{ d.code }}</option>
+          {% endfor %}
+        </select>
+      </label>
+      <label class="flex flex-col gap-1">
+        <span class="uk-text-small uk-text-muted">Term</span>
+        <select name="term" class="uk-select">
+          <option value="">All terms</option>
+          {% for t in term_choices %}
+          <option value="{{ t.id }}" {% if filters.term == t.id|stringformat:'s' %}selected{% elif not filters.term and t.is_active %}selected{% endif %}>{{ t.name }}</option>
+          {% endfor %}
+        </select>
+      </label>
+      <label class="flex flex-col gap-1">
+        <span class="uk-text-small uk-text-muted">From</span>
+        <input type="date" name="from" class="uk-input" value="{{ filters.date_from }}">
+      </label>
+      <label class="flex flex-col gap-1">
+        <span class="uk-text-small uk-text-muted">To</span>
+        <input type="date" name="to" class="uk-input" value="{{ filters.date_to }}">
+      </label>
+      <label class="flex flex-col gap-1">
+        <span class="uk-text-small uk-text-muted">Search</span>
+        <span class="inline-flex items-center gap-1">
+          <uk-icon icon="search" class="size-4 uk-text-muted"></uk-icon>
+          <input type="search" name="q" class="uk-input" placeholder="Faculty or course" value="{{ filters.q }}">
+        </span>
+      </label>
+      <button type="submit" class="uk-btn uk-btn-primary uk-btn-sm">Apply</button>
+      <a href="/hr/attendance" class="uk-btn uk-btn-ghost uk-btn-sm">Reset</a>
+      <span class="grow"></span>
+      <a href="/hr/attendance.csv?faculty={{ filters.faculty }}&department={{ filters.department }}&term={{ filters.term }}&from={{ filters.date_from }}&to={{ filters.date_to }}&q={{ filters.q|urlencode }}"
+         class="uk-btn uk-btn-secondary uk-btn-sm" download>
+        <uk-icon icon="download" class="size-4"></uk-icon> Export CSV</a>
+    </div>
+    {% if filters.note %}
+    <p class="uk-text-small mt-2" style="color:var(--amber)">{{ filters.note }}</p>
+    {% endif %}
+  </form>
+
+  {% if sessions %}
+  <div class="uk-card uk-card-body p-0">
+    <table class="uk-table uk-table-divider uk-table-small uk-table-middle mb-0">
+      <thead>
+        <tr>
+          <th>Faculty</th>
+          <th>Course</th>
+          <th>Date</th>
+          <th>Scheduled</th>
+          <th>Actual</th>
+          <th>Status</th>
+          <th>Method</th>
+          <th>Checker</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% include "hr/_rows.html" %}
+      </tbody>
+    </table>
+  </div>
+  <p class="uk-text-small uk-text-muted mt-2">Showing up to {{ page_size }} rows. Export CSV for the full filtered set.</p>
+  {% else %}
+  <div class="uk-card uk-card-body">
+    {% if filters.any_applied %}
+    <p class="uk-text-muted">No sessions match these filters. Clear a filter or widen the date range.</p>
+    {% else %}
+    <p class="uk-text-muted">No attendance in this range. Sessions will appear here as they are held.</p>
+    {% endif %}
+  </div>
+  {% endif %}
+</div>
+{% endblock %}

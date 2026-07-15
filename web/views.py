@@ -44,7 +44,7 @@ SURFACES = {
         {"title": "Reports", "desc": "Weekly consolidated attendance.", "icon": "file-text", "href": "/ifo/dashboard"},
     ],
     Role.HR_ADMIN: [
-        {"title": "Attendance", "desc": "Verified records; export CSV.", "icon": "clipboard-list", "href": "#"},
+        {"title": "Attendance", "desc": "Verified records; export CSV.", "icon": "clipboard-list", "href": "/hr/attendance"},
     ],
     Role.GUARD: [
         {"title": "Floor monitor", "desc": "Live room status (read-only).", "icon": "shield", "href": "#"},

@@ -1,6 +1,6 @@
 from django.urls import path
 
-from . import checker, dean, faculty, ifo, notifications, push, scan, views
+from . import checker, dean, faculty, hr, ifo, notifications, push, scan, views
 
 urlpatterns = [
     path("", views.home, name="home"),
@@ -41,6 +41,8 @@ urlpatterns = [
     path("checker/floor/rows", checker.floor_rows, name="checker_floor_rows"),
     path("checker/online", checker.online_list, name="checker_online"),
     path("checker/online/<int:session_id>", checker.online_open, name="checker_online_open"),
+    # HR Admin session-level attendance surface (HR-01/02/03) -- read-only, cross-dept
+    path("hr/attendance", hr.attendance, name="hr_attendance"),
     # IFO Admin surfaces
     path("ifo/rooms", ifo.rooms_list, name="ifo_rooms"),
     path("ifo/rooms/<str:code>", ifo.room_detail, name="ifo_room_detail"),
