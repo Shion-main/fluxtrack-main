@@ -262,13 +262,13 @@ Plans:
   4. HR can view verified session-level attendance, filter/search by faculty, department, date range, and term, and export it as CSV for external payroll.
   5. A single failing aggregate shows an error in its own card while the rest of the page still renders.
 
-**Plans**: 7 plans
+**Plans**: 1/7 plans executed
 
 Plans:
 
 **Wave 1**
 
-- [ ] 06-01-PLAN.md — Pure aggregate layer (faculty_attendance/dept_summary/faculty_scorecard/safe_card) + reporting fixture + unit tests (RPT-01/04/05) [Wave 1]
+- [x] 06-01-PLAN.md — Pure aggregate layer (faculty_attendance/dept_summary/faculty_scorecard/safe_card) + reporting fixture + unit tests (RPT-01/04/05) [Wave 1]
 - [ ] 06-02-PLAN.md — ReportLab package-legitimacy gate + install (RPT-03 dependency) [Wave 1]
 
 **Wave 2** *(blocked on Wave 1)*
@@ -335,7 +335,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8
 | 3. Duty Assignments & Checker Verification | 6/6 | Complete    | 2026-07-03 |
 | 4. Modality Shift Approval & SRS v1.2 | 8/8 | Complete    | 2026-07-03 |
 | 5. Notifications — Read Surface & Web Push | 4/5 | In Progress|  |
-| 6. Reporting Engine & Reporting Surfaces | 0/7 | Planned | - |
+| 6. Reporting Engine & Reporting Surfaces | 1/7 | In Progress|  |
 | 7. Remaining Operational Surfaces | 0/TBD | Not started | - |
 | 8. Auth Cutover & AWS Deployment | 0/TBD | Not started | - |
 

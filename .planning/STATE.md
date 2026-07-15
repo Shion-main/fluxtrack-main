@@ -3,18 +3,18 @@ gsd_state_version: 1.0
 milestone: v1.2
 milestone_name: "**Goal**: Faculty can request a lead-time-gated modality shift that a Dean approves, with rooms auto-released or auto-assigned, and the SRS brought back in sync with reality."
 current_phase: 06
-current_phase_name: reporting-engine-reporting-surfaces
-status: planned
-stopped_at: Phase 06 PLANNED (7 plans, 4 waves; UI-SPEC verified, plan-checker passed) — ready to execute
-last_updated: "2026-07-15T00:00:00.000Z"
+current_phase_name: Reporting Engine & Reporting Surfaces
+status: executing
+stopped_at: Phase 06 — 06-01 COMPLETE (reporting aggregate layer; 20 tests green); next 06-02
+last_updated: "2026-07-15T15:10:00.000Z"
 last_activity: 2026-07-15
-last_activity_desc: Phase 06 research + UI-SPEC + 7 plans complete; plan-checker PASSED (1 warning fixed); ready for /gsd-execute-phase 06
+last_activity_desc: 06-01 reporting aggregate layer complete
 progress:
   total_phases: 11
   completed_phases: 7
-  total_plans: 40
-  completed_plans: 39
-  percent: 64
+  total_plans: 47
+  completed_plans: 40
+  percent: 66
 ---
 
 # Project State
@@ -24,14 +24,15 @@ progress:
 See: .planning/PROJECT.md (updated 2026-07-02)
 
 **Core value:** A faculty member checks in with one action, and the resulting attendance record is trustworthy — presence physically verified, lateness captured, ghost bookings detected.
-**Current focus:** Phase 06 — reporting-engine-and-surfaces (needs planning)
+**Current focus:** Phase 06 — Reporting Engine & Reporting Surfaces
 
 ## Current Position
 
-Phase: 05 (notifications-read-surface-web-push) — COMPLETE ✓ (5/5 plans, human-verify approved 2026-07-15)
-Next: Phase 06 (reporting-engine-and-surfaces) — READY TO PLAN (`/gsd-plan-phase 06`)
-Status: Phase 05 closed; all NOTIF-01/02/03 criteria met + push fault-isolation verified
-Last activity: 2026-07-15 — Phase 05 human-verify UAT approved
+Phase: 06 (Reporting Engine & Reporting Surfaces) — EXECUTING
+Plan: 06-01 COMPLETE (1/7) — shared reporting aggregate layer built + unit-tested
+Next: 06-02 (weekly report render/generation) — the aggregates it consumes are ready
+Status: Executing Phase 06
+Last activity: 2026-07-15 — 06-01 reporting aggregate layer complete (20 tests green)
 
 **Phase 4** (modality-shift-approval-srs-v1-2): PLANNED ✓ — 8 plans across 6 waves, verified (plan-checker passed). Ready: `/gsd-execute-phase 04`. Runs parallel to 03.1 per ROADMAP.
 
@@ -98,6 +99,7 @@ Progress: [██████████] 100% (Phase 05)
 | Phase 05 P02 | 3min | 2 tasks tasks | 5 files files |
 | Phase 05 P03 | 14min | 3 tasks | 4 files |
 | Phase 05 P04 | 7min | 3 tasks | 10 files |
+| Phase 06 P01 | 35min | 2 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -173,6 +175,7 @@ Recent decisions affecting current work:
 - [Phase 05]: 05-03: Web push is fault-isolated by construction (D-09) -- send_push_outbox runs ONLY in the scheduler push_outbox job (4th job on the single BlockingScheduler), never in a web worker, so a hung endpoint cannot touch the triggering request (criterion #4).
 - [Phase 05]: 05-03: Prune subscriptions ONLY on WebPushException 404/410; transient 5xx/timeout/network are kept and treated as handled this pass (T-05-08), so a flaky vendor never drops live endpoints.
 - [Phase ?]: [Phase 05]: 05-04: global web.context.notifications processor supplies poll_ms (get_policy*1000, never hardcoded) + AnonymousUser-guarded unread + empty-safe vapid_public_key to BOTH shells (RESEARCH Pitfall 4); bell poll is READ-ONLY (D-02), only dropdown/list OPEN marks shown rows read (D-03), audit-silent; mute_toggle POST-only, category-validated, presence-as-mute (D-05); 12 read-surface tests green.
+- [Phase ?]: [Phase 06]: 06-01: pure reporting aggregate layer (scheduling/reporting.py) reads Session.status truth (held=ACTIVE/COMPLETED, absent=ABSENT) via DB-side Count(filter=Q); verified via a SEPARATE grouped validations query so status counts stay honest; MERGED siblings held-but-unverified (04.2 D-09); filters local Session.date not UTC scheduled_start; safe_card isolates a raising card with a generic message (RPT-05, no exc-text leak). faculty_scorecard adds early-ends + effective-modality breakdown (declared_modality overrides schedule.modality).
 
 ### Pending Todos
 
@@ -196,6 +199,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-07-09T14:58:39.000Z
-Stopped at: 05-05-PLAN.md Task 4 (blocking human-verify UAT) — Tasks 1-3 committed (86b3ca1, 3078b3e, 23f2fec)
-Resume file: .planning/phases/05-notifications-read-surface-web-push/05-05-PLAN.md
+Last session: 2026-07-15T15:10:00.000Z
+Stopped at: 06-01-PLAN.md COMPLETE — reporting aggregate layer committed (a3d8cf5, 2b8a459, 3025118, b30afbc); 20 tests green
+Resume file: .planning/phases/06-reporting-engine-reporting-surfaces/06-02-PLAN.md

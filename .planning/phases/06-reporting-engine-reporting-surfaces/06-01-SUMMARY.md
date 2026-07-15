@@ -172,3 +172,8 @@ None - no external service configuration required. No new dependencies (ReportLa
 ---
 *Phase: 06-reporting-engine-reporting-surfaces*
 *Completed: 2026-07-15*
+
+## Self-Check: PASSED
+- Files: scheduling/reporting.py, scheduling/tests_reporting.py, 06-01-SUMMARY.md all present.
+- Commits: a3d8cf5, 2b8a459, 3025118, b30afbc all in history.
+- Tests: scheduling.tests_reporting 20/20 OK; full scheduling suite 179 OK (skipped=2).
