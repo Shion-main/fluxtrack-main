@@ -8,14 +8,20 @@ reaches the response -- T-06-04), and the T-06-11 filter validation (bad dates
 degrade to the default range with a friendly note, never a 500). Seeds the shared
 two-department multi-status make_reporting_fixture from 06-01. ASCII-only.
 """
+import tempfile
 from unittest import mock
 
 from django.contrib.auth import get_user_model
-from django.test import TestCase
+from django.test import TestCase, override_settings
 from django.urls import reverse
 
 from accounts.models import Role
+from ops.reports import generate_weekly_report
 from scheduling.test_support import make_reporting_fixture
+
+# Storage-touching download tests write real CSV/PDF bytes via default_storage;
+# isolate them under a throwaway MEDIA_ROOT so the repo tree is never polluted.
+_TMP_MEDIA = tempfile.mkdtemp(prefix="ifo_reporting_")
 
 
 class _IfoBase(TestCase):
@@ -120,3 +126,71 @@ class FilterValidationTests(_IfoBase):
              "to": self.fx.week_start.isoformat()})
         self.assertEqual(resp.status_code, 200)
         self.assertContains(resp, "current week")
+
+
+@override_settings(MEDIA_ROOT=_TMP_MEDIA)
+class IfoWeeklyReportsTests(_IfoBase):
+    """RPT-01/03: the IFO-wide Weekly Consolidated Report surface is UNSCOPED --
+    IFO can list and download BOTH a per-department report AND the org-wide
+    (department=None) roll-up; a non-IFO is refused; bad fmt / missing file 404."""
+
+    def test_index_lists_dept_and_rollup_for_the_week(self):
+        generate_weekly_report(self.fx.week_start, self.fx.sun, self.fx.dept_a)
+        generate_weekly_report(self.fx.week_start, self.fx.sun, None)
+        resp = self.client.get(reverse("ifo_weekly_reports"))
+        self.assertEqual(resp.status_code, 200)
+        # The per-department report and the "All departments" roll-up both appear.
+        self.assertContains(resp, self.fx.dept_a.code)
+        self.assertContains(resp, "All departments")
+        # The primary CTA the UI-SPEC/UI-REVIEW required exists on this surface.
+        self.assertContains(resp, "Download PDF")
+
+    def test_index_empty_state_when_no_reports(self):
+        resp = self.client.get(reverse("ifo_weekly_reports"))
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, "No weekly reports yet")
+
+    def test_ifo_downloads_per_department_report(self):
+        rep = generate_weekly_report(
+            self.fx.week_start, self.fx.sun, self.fx.dept_a)
+        resp = self.client.get(
+            reverse("ifo_weekly_download", args=[rep.pk, "csv"]))
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp["Content-Type"], "text/csv")
+        self.assertIn("attachment", resp["Content-Disposition"])
+
+    def test_ifo_downloads_the_none_rollup(self):
+        # The org-wide roll-up (department=None) is reachable by IFO (unscoped) --
+        # this is exactly what the Dean surface must NEVER resolve.
+        rollup = generate_weekly_report(self.fx.week_start, self.fx.sun, None)
+        resp = self.client.get(
+            reverse("ifo_weekly_download", args=[rollup.pk, "pdf"]))
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp["Content-Type"], "application/pdf")
+        self.assertIn("attachment", resp["Content-Disposition"])
+
+    def test_unknown_format_404s(self):
+        rep = generate_weekly_report(
+            self.fx.week_start, self.fx.sun, self.fx.dept_a)
+        resp = self.client.get(
+            reverse("ifo_weekly_download", args=[rep.pk, "xlsx"]))
+        self.assertEqual(resp.status_code, 404)
+
+    def test_missing_stored_file_404s(self):
+        rep = generate_weekly_report(
+            self.fx.week_start, self.fx.sun, self.fx.dept_a)
+        # A row whose stored path no longer resolves must 404, never 500.
+        rep.pdf_path = "reports/nope/missing.pdf"
+        rep.save(update_fields=["pdf_path"])
+        resp = self.client.get(
+            reverse("ifo_weekly_download", args=[rep.pk, "pdf"]))
+        self.assertEqual(resp.status_code, 404)
+
+    def test_non_ifo_refused(self):
+        User = get_user_model()
+        other = User.objects.create(
+            username="rpt_fac_z", email="rpt_fac_z@mcm.edu.ph",
+            role=Role.FACULTY, is_active=True)
+        self.client.force_login(other)
+        resp = self.client.get(reverse("ifo_weekly_reports"))
+        self.assertEqual(resp.status_code, 403)

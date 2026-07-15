@@ -263,3 +263,76 @@ def scorecard(request, faculty_id):
         "faculty": faculty, "card": card, "modality_items": modality_items,
         "date_from": start, "date_to": end, "range_note": note,
     })
+
+
+# --- Weekly Consolidated Report surface (RPT-01/03) -------------------------
+# The IFO-facing deliverable: an index of the STORED weekly reports (every
+# department PLUS the org-wide department=None roll-up) for a selected/most-recent
+# week, each downloadable as the stored PDF/CSV bytes. IFO is the institution-wide
+# role, so this surface is intentionally UNSCOPED -- unlike the department-scoped
+# Dean surface (web.dean.weekly_download), there is NO department filter and the
+# None roll-up is reachable. Every view is GET-only (read-only, T-06-07).
+
+
+@ifo_required
+@require_http_methods(["GET"])
+def weekly_reports(request):
+    """RPT-01/03: IFO-wide index of the stored weekly consolidated reports.
+
+    Lists every ``WeeklyReport`` stored for the most-recent week (or a ``?week=``
+    ISO date if supplied) -- one row per department PLUS the org-wide
+    ``department=None`` roll-up -- each offering a primary ``Download PDF`` and a
+    secondary ``Export CSV`` of the stored bytes. UNSCOPED by design: IFO sees all
+    departments and the consolidated roll-up. Read-only (GET-only). An institution
+    with no generated reports yet gets a calm Pattern-F empty state, never a crash.
+    """
+    week_raw = (request.GET.get("week") or "").strip()
+    week = parse_date(week_raw) if week_raw else None
+    if week is None:
+        latest = WeeklyReport.objects.order_by("-week_start").first()
+        week = latest.week_start if latest else None
+
+    weeks = list(
+        WeeklyReport.objects.order_by("-week_start")
+        .values_list("week_start", flat=True).distinct())
+
+    if week is not None:
+        # NULLs sort first in ASC on both SQLite and MSSQL, so the department=None
+        # roll-up leads the list; the template labels it "All departments".
+        reports = list(
+            WeeklyReport.objects.filter(week_start=week)
+            .select_related("department")
+            .order_by("department__code"))
+    else:
+        reports = []
+
+    return render(request, "ifo/weekly_reports.html", {
+        "reports": reports, "week": week, "weeks": weeks,
+    })
+
+
+@ifo_required
+@require_http_methods(["GET"])
+def weekly_download(request, pk, fmt):
+    """RPT-03: stream a STORED WeeklyReport's csv/pdf for IFO -- UNSCOPED.
+
+    Mirrors ``web.dean.weekly_download``'s storage-safety guard (server-built stored
+    path, a missing file/path 404s -- never a 500) but WITHOUT the department
+    scoping: IFO is institution-wide, so any report pk -- INCLUDING the org-wide
+    ``department=None`` roll-up -- resolves. Read-only (GET-only).
+    """
+    report = get_object_or_404(WeeklyReport, pk=pk)
+    if fmt == "csv":
+        path, content_type = report.csv_path, "text/csv"
+    elif fmt == "pdf":
+        path, content_type = report.pdf_path, "application/pdf"
+    else:
+        raise Http404("Unknown export format.")
+    if not path or not default_storage.exists(path):
+        raise Http404("Report file not found.")
+    with default_storage.open(path, "rb") as fh:
+        data = fh.read()
+    filename = path.rsplit("/", 1)[-1]
+    resp = HttpResponse(data, content_type=content_type)
+    resp["Content-Disposition"] = f'attachment; filename="{filename}"'
+    return resp

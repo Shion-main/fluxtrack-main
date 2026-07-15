@@ -56,6 +56,10 @@ urlpatterns = [
     # IFO-09 reporting dashboard + scorecard drill-down (RPT-04/RPT-05)
     path("ifo/dashboard", ifo.dashboard, name="ifo_dashboard"),
     path("ifo/scorecard/<int:faculty_id>", ifo.scorecard, name="ifo_scorecard"),
+    # IFO Weekly Consolidated Report surface (RPT-01/03) -- unscoped, read-only
+    path("ifo/reports", ifo.weekly_reports, name="ifo_weekly_reports"),
+    path("ifo/reports/weekly/<int:pk>/<str:fmt>", ifo.weekly_download,
+         name="ifo_weekly_download"),
     # Notifications read surface (NOTIF-01) + mute settings (NOTIF-03)
     path("notifications/bell", notifications.bell, name="notif_bell"),
     path("notifications/dropdown", notifications.dropdown, name="notif_dropdown"),
