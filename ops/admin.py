@@ -29,6 +29,12 @@ class AuditLogAdmin(admin.ModelAdmin):
     readonly_fields = ("actor", "event_type", "target_type", "target_id",
                        "payload", "ip_address", "created_at")
 
+    def has_add_permission(self, request):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
 
 @admin.register(WeeklyReport)
 class WeeklyReportAdmin(admin.ModelAdmin):
