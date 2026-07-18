@@ -18,8 +18,8 @@ from accounts.models import Role
 from campus.models import Floor, Room
 from ops.models import AuditLog, WeeklyReport
 from ops.policy import get_policy
-from scheduling.models import (AcademicTerm, Modality, ScheduleStatus, Session,
-                                SessionStatus)
+from scheduling.models import (AcademicTerm, DayOfWeek, Modality, Schedule,
+                                ScheduleStatus, Session, SessionStatus)
 from scheduling.report_render import build_csv
 from scheduling.reporting import (dept_summary, faculty_attendance,
                                   faculty_scorecard, safe_card)
@@ -194,6 +194,48 @@ def room_panel(request, code):
     })
 
 
+def _room_timetable(room, term):
+    """The room's week as a day-by-time grid, matching MMCM's printed schedule form.
+
+    A flat list of classes answers "what is booked here"; the grid answers "when
+    is this room FREE", which is the question a facilities office actually asks,
+    and it is the layout staff already recognise from the paper form.
+
+    Rows are the campus-wide block ladder for the term (every distinct start time
+    in use), not just this room's own times -- so a free slot shows as an empty
+    cell instead of vanishing, every room prints on the same grid, and two
+    printouts can be compared side by side.
+
+    A class occupies EVERY slot its window covers (half-open: start <= slot <
+    end), so a double-length class fills two rows exactly as it does on the paper
+    form, with no rowspan bookkeeping.
+    """
+    if term is None:
+        return None
+    slots = sorted(set(
+        Schedule.objects
+        .filter(term=term, status=ScheduleStatus.ACTIVE)
+        .values_list("start_time", flat=True)))
+    if not slots:
+        return None
+
+    scheds = list(room.schedules
+                  .filter(status=ScheduleStatus.ACTIVE, term=term)
+                  .select_related("faculty"))
+    rows = []
+    for slot in slots:
+        cells = []
+        for day_value, _label in DayOfWeek.choices:
+            cells.append(next(
+                (s for s in scheds
+                 if s.day_of_week == day_value and s.start_time <= slot < s.end_time),
+                None))
+        rows.append({"time": slot, "cells": cells})
+    return {"days": DayOfWeek.choices, "rows": rows,
+            "used": sum(1 for r in rows for c in r["cells"] if c is not None),
+            "capacity": len(rows) * len(DayOfWeek.choices)}
+
+
 @ifo_required
 def room_detail(request, code):
     room = get_object_or_404(Room.objects.select_related("floor__building"), code=code)
@@ -203,8 +245,11 @@ def room_detail(request, code):
                  if term else room.schedules.none())
     upcoming = (room.sessions.filter(date__gte=timezone.localdate())
                 .select_related("schedule", "faculty").order_by("date", "scheduled_start")[:10])
-    return render(request, "ifo/room_detail.html",
-                  {"room": room, "schedules": schedules, "upcoming": upcoming, "term": term})
+    return render(request, "ifo/room_detail.html", {
+        "room": room, "schedules": schedules, "upcoming": upcoming, "term": term,
+        "timetable": _room_timetable(room, term),
+        "printed_on": timezone.localtime(),
+    })
 
 
 def live(request):

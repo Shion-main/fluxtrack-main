@@ -1,0 +1,111 @@
+/* ============================================================================
+   FluxTrack — Room timetable grid + print
+   ----------------------------------------------------------------------------
+   A day-by-time grid modelled on MMCM's printed schedule form. The flat list it
+   replaces answered "what is booked in this room"; the grid answers "when is
+   this room FREE", which is the question the facilities office actually asks,
+   and it is a layout staff already read on paper.
+
+   Rows are the campus block ladder for the term (see web.ifo._room_timetable),
+   so a free slot is a visible empty cell rather than a missing line, and two
+   rooms' printouts line up for comparison.
+
+   Loaded by ifo/room_detail.html. ASCII-only.
+   ========================================================================== */
+
+.tt {
+  width: 100%; border-collapse: collapse;
+  font-size: .8rem; table-layout: fixed;
+}
+.tt th, .tt td {
+  border: 1px solid var(--line);
+  padding: 6px 7px; vertical-align: top; text-align: left;
+}
+.tt thead th {
+  background: var(--panel-2); color: var(--ink);
+  font-size: .74rem; font-weight: 700; letter-spacing: .03em; text-transform: uppercase;
+  text-align: center; white-space: nowrap;
+}
+/* The time column is the spine you scan down, so it is fixed-width, tabular and
+   right-aligned: the hour is what you are matching against, not the label. */
+.tt__time {
+  width: 84px; white-space: nowrap; text-align: right !important;
+  font-variant-numeric: tabular-nums;
+  background: var(--panel-2); color: var(--ft-muted);
+  font-size: .75rem; font-weight: 600;
+}
+.tt tbody th.tt__time { font-weight: 650; }
+
+.tt__on { background: var(--navy-tint); }
+.tt__course {
+  display: block; font-weight: 700; color: var(--ink); font-size: .78rem;
+  line-height: 1.25; overflow-wrap: anywhere;
+}
+/* Wraps rather than clips. Truncating a surname to "Mar-" in a 90px column
+   tells the reader nothing; two short lines cost a few pixels and stay useful. */
+.tt__who {
+  display: block; margin-top: 2px; font-size: .72rem; color: var(--body);
+  line-height: 1.3; overflow-wrap: anywhere;
+}
+.tt__tba { font-style: italic; color: var(--ft-muted); }
+.tt__mode {
+  display: inline-block; margin-top: 3px; padding: 1px 6px; border-radius: 999px;
+  background: #fff; color: var(--purple); border: 1px solid #d5c4f0;
+  font-size: .65rem; font-weight: 700;
+}
+.tt__off { text-align: center; color: var(--line); }
+
+.no-print { }
+.pr-head { display: none; }
+
+/* ============================================================================
+   PRINT
+   ----------------------------------------------------------------------------
+   Landscape, because seven day-columns plus a time spine do not fit portrait
+   without shrinking the text past readable. The console shell, page actions and
+   the on-screen-only sections are dropped: paper has no navigation, so anything
+   that exists to navigate is noise on it. Borders go to true black — the tinted
+   greys that read as "quiet" on screen print as muddy or vanish entirely on a
+   mono office printer.
+   ========================================================================== */
+@media print {
+  @page { size: A4 landscape; margin: 12mm; }
+
+  /* Chrome that only exists to navigate. */
+  .cns__side, .cns__bar, .cns__scrim, .cns__ham,
+  .no-print, #push-banner, .skip-link, #notif-bell { display: none !important; }
+
+  .cns, .cns__main { display: block; min-height: 0; }
+  .cns__body { padding: 0; max-width: none; }
+
+  /* Cards are a screen affordance; on paper the sheet is the container. */
+  .pr-flat, .uk-card {
+    border: 0 !important; box-shadow: none !important;
+    padding: 0 !important; margin: 0 !important; background: #fff !important;
+  }
+  .table-wrap { overflow: visible !important; }
+
+  .pr-head { display: block; margin-bottom: 10mm; }
+  .pr-head h1 {
+    font-size: 15pt; font-weight: 700; color: #000; letter-spacing: -.01em;
+  }
+  .pr-head p { margin-top: 2mm; font-size: 9pt; color: #333; line-height: 1.5; }
+
+  .tt { font-size: 8.5pt; }
+  .tt th, .tt td { border: 1px solid #000 !important; padding: 4px 5px; }
+  .tt thead th, .tt__time { background: #eee !important; color: #000 !important; }
+  .tt__on { background: #fff !important; }
+  .tt__course { color: #000; font-size: 8.5pt; }
+  .tt__who { color: #333; font-size: 7.5pt; }
+  .tt__mode {
+    border: 1px solid #666; color: #000; background: #fff !important; font-size: 6.5pt;
+  }
+  .tt__off { color: #999; }
+
+  /* A timetable split across a page break is unusable. */
+  .tt { page-break-inside: avoid; }
+  .tt tr { page-break-inside: avoid; }
+
+  body { background: #fff !important; }
+  * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+}

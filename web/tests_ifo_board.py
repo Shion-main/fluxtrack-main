@@ -25,9 +25,9 @@ from django.utils import timezone
 
 from accounts.models import Role
 from campus.models import Building, Floor, Room
-from scheduling.models import (AcademicTerm, Modality, Schedule, Session,
-                               SessionStatus)
-from web.ifo import _room_board, _room_tile
+from scheduling.models import (AcademicTerm, Modality, Schedule, ScheduleStatus,
+                               Session, SessionStatus)
+from web.ifo import _room_board, _room_tile, _room_timetable
 
 GRACE = timedelta(minutes=15)
 
@@ -242,3 +242,80 @@ class IfoBoardViewTests(_BoardBase):
         resp = self.client.get(reverse("ifo_room_panel", args=[room.code]))
         self.assertContains(resp, "Class is online")
         self.assertContains(resp, "meeting online")
+
+
+class RoomTimetableTests(_BoardBase):
+    """The room week as a day-by-time grid (IFO-11), modelled on MMCM's printed
+    schedule form. A flat list says what is booked; the grid says when the room
+    is FREE, which is the facilities question."""
+
+    def _sched(self, room, day, start, end, course="IT301", section="A"):
+        return Schedule.objects.create(
+            term=self.term, course_code=course, section=section,
+            faculty=self.faculty, room=room, day_of_week=day,
+            start_time=start, end_time=end, modality=Modality.F2F,
+            status=ScheduleStatus.ACTIVE)
+
+    def test_rows_are_the_campus_ladder_not_just_this_rooms_times(self):
+        """Every room prints on the same grid, so two printouts line up and a
+        free slot is a visible empty cell rather than a missing row."""
+        mine, other = self._room(), self._room()
+        self._sched(mine, 0, "10:00", "11:00")
+        self._sched(other, 1, "14:00", "15:00")     # only the OTHER room uses this
+
+        tt = _room_timetable(mine, self.term)
+        times = [r["time"].strftime("%H:%M") for r in tt["rows"]]
+        self.assertEqual(times, ["10:00", "14:00"])
+
+    def test_a_class_fills_every_block_it_covers(self):
+        """A double-length class fills both rows, as it does on the paper form."""
+        room = self._room()
+        self._sched(room, 0, "10:00", "13:00", course="LONG")
+        self._sched(room, 1, "11:30", "12:30", course="MID")   # creates a 11:30 rung
+
+        tt = _room_timetable(room, self.term)
+        by_time = {r["time"].strftime("%H:%M"): r["cells"] for r in tt["rows"]}
+        self.assertEqual(by_time["10:00"][0].course_code, "LONG")
+        self.assertEqual(by_time["11:30"][0].course_code, "LONG")   # still running
+
+    def test_a_slot_at_the_end_boundary_is_free(self):
+        """Half-open windows: a class ending at 11:00 does not occupy 11:00."""
+        room = self._room()
+        self._sched(room, 0, "10:00", "11:00")
+        self._sched(room, 1, "11:00", "12:00", course="NEXT")
+
+        tt = _room_timetable(room, self.term)
+        by_time = {r["time"].strftime("%H:%M"): r["cells"] for r in tt["rows"]}
+        self.assertIsNone(by_time["11:00"][0])      # Monday is free at 11:00
+
+    def test_all_seven_days_are_columns(self):
+        room = self._room()
+        self._sched(room, 0, "10:00", "11:00")
+        tt = _room_timetable(room, self.term)
+        self.assertEqual(len(tt["days"]), 7)
+        self.assertEqual(len(tt["rows"][0]["cells"]), 7)
+
+    def test_free_slots_are_none_and_counted(self):
+        room = self._room()
+        self._sched(room, 0, "10:00", "11:00")
+        tt = _room_timetable(room, self.term)
+        self.assertEqual(tt["used"], 1)
+        self.assertEqual(tt["capacity"], 7)          # 1 rung x 7 days
+        self.assertEqual(sum(1 for c in tt["rows"][0]["cells"] if c is None), 6)
+
+    def test_no_active_term_yields_no_timetable(self):
+        AcademicTerm.objects.update(is_active=False)
+        self.assertIsNone(_room_timetable(self._room(), None))
+
+    def test_page_renders_the_grid_and_a_print_masthead(self):
+        User = get_user_model()
+        ifo = User.objects.create(
+            username="ifo_tt", email="ifo_tt@mcm.edu.ph", role=Role.IFO_ADMIN)
+        self.client.force_login(ifo)
+        room = self._room()
+        self._sched(room, 0, "10:00", "11:00")
+        resp = self.client.get(reverse("ifo_room_detail", args=[room.code]))
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, 'class="tt"')
+        self.assertContains(resp, "pr-head")
+        self.assertContains(resp, "Room schedule")
