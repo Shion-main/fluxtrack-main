@@ -1,0 +1,51 @@
+{% comment %}
+Shared table pager. Expects the context produced by web.pagination.paginate:
+page / paginator / page_range / querystring / page_param.
+
+Renders nothing when there is only one page -- a pager under a 12-row table is
+noise, and its absence is itself the signal that you are seeing everything.
+
+The count sentence comes first and is the important half: "Showing 51-100 of 431"
+answers "am I looking at all of this?", which the old "up to 200 rows" cap never
+did. Links are plain GETs carrying the active filters, so pages stay linkable and
+the back button behaves. ASCII-only.
+{% endcomment %}
+{% if paginator.num_pages > 1 %}
+<nav class="pgr" aria-label="Pagination">
+  <p class="pgr__count">
+    Showing <b>{{ page.start_index }}</b>&ndash;<b>{{ page.end_index }}</b>
+    of <b>{{ paginator.count }}</b></p>
+
+  <div class="pgr__nav">
+    {% if page.has_previous %}
+    <a class="pgr__step" href="?{{ querystring }}{{ page_param }}={{ page.previous_page_number }}"
+       rel="prev" aria-label="Previous page">
+      <uk-icon icon="chevron-left"></uk-icon></a>
+    {% else %}
+    <span class="pgr__step is-off" aria-disabled="true"><uk-icon icon="chevron-left"></uk-icon></span>
+    {% endif %}
+
+    {% for n in page_range %}
+      {% if n == paginator.ELLIPSIS %}
+      <span class="pgr__gap" aria-hidden="true">{{ n }}</span>
+      {% elif n == page.number %}
+      <span class="pgr__n is-on" aria-current="page">{{ n }}</span>
+      {% else %}
+      <a class="pgr__n" href="?{{ querystring }}{{ page_param }}={{ n }}"
+         aria-label="Page {{ n }}">{{ n }}</a>
+      {% endif %}
+    {% endfor %}
+
+    {% if page.has_next %}
+    <a class="pgr__step" href="?{{ querystring }}{{ page_param }}={{ page.next_page_number }}"
+       rel="next" aria-label="Next page">
+      <uk-icon icon="chevron-right"></uk-icon></a>
+    {% else %}
+    <span class="pgr__step is-off" aria-disabled="true"><uk-icon icon="chevron-right"></uk-icon></span>
+    {% endif %}
+  </div>
+</nav>
+{% else %}
+<p class="pgr__count pgr__count--solo">
+  {{ paginator.count }} row{{ paginator.count|pluralize }}</p>
+{% endif %}

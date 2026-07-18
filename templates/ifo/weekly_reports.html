@@ -29,26 +29,26 @@ NO write controls. ASCII-only.{% endcomment %}
 
 {% if reports %}
 <div class="uk-card uk-card-body p-0 table-wrap">
-  <table class="uk-table uk-table-divider uk-table-small uk-table-middle mb-0">
+  <table class="tbl">
     <thead>
       <tr>
         <th scope="col">Report</th>
         <th scope="col">Week of</th>
-        <th scope="col" class="uk-text-right">Download</th>
+        <th scope="col" class="tbl__actions">Download</th>
       </tr>
     </thead>
     <tbody>
       {% for r in reports %}
       <tr>
-        <td>
+        <td class="tbl__id">
           {% if r.department %}
-          {{ r.department.name }} <span class="uk-text-small uk-text-muted">{{ r.department.code }}</span>
+          {{ r.department.name }} <span class="tbl__meta">{{ r.department.code }}</span>
           {% else %}
-          <span class="inline-flex items-center gap-1"><uk-icon icon="building-2" class="size-4"></uk-icon> All departments <span class="uk-label uk-label-primary">Roll-up</span></span>
+          <span class="inline-flex items-center gap-1"><uk-icon icon="building-2" class="size-4"></uk-icon> All departments <span class="pill pill--info">Roll-up</span></span>
           {% endif %}
         </td>
-        <td class="uk-text-nowrap">{{ r.week_start|date:'M j, Y' }}</td>
-        <td>
+        <td class="tbl__time">{{ r.week_start|date:'M j, Y' }}</td>
+        <td class="tbl__actions">
           <div class="flex items-center justify-end gap-2">
             <a href="{% url 'ifo_weekly_download' r.pk 'csv' %}" class="uk-btn uk-btn-secondary uk-btn-sm" download>
               <uk-icon icon="download" class="size-4"></uk-icon> Export CSV</a>

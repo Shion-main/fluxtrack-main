@@ -41,6 +41,7 @@ from scheduling.services import (
     apply_approval,
     reject_modality_shift,
 )
+from web.pagination import paginate
 from web.reporting_common import reporting_range as _reporting_range
 
 
@@ -199,9 +200,13 @@ def reports(request):
     else:
         rows = safe_card(
             faculty_attendance, start=start, end=end, department=dept, as_of=as_of)
+    # rows is (list_of_dicts, error). Paginate the list -- a large department can
+    # run well past a readable page, and the CSV/PDF exports still cover the full
+    # set. When there is an error, rows[0] is empty and the pager renders nothing.
+    pager = paginate(request, rows[0])
     return render(request, "dean/reports.html", {
         "department": dept, "rows": rows,
-        "date_from": start, "date_to": end, "range_note": note,
+        "date_from": start, "date_to": end, "range_note": note, **pager,
     })
 
 

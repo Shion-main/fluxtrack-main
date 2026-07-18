@@ -41,29 +41,29 @@ pills use the A-COLOR thresholds via the --green/--amber/--red tokens. ASCII-onl
 {% if rows.1 %}
   {% include "reports/_error_card.html" %}
 {% else %}
-  <div class="uk-card uk-card-body p-0 data-grid">
-    <table class="uk-table uk-table-divider uk-table-small uk-table-middle mb-0">
+  <div class="uk-card uk-card-body p-0 table-wrap">
+    <table class="tbl">
       <thead>
         <tr>
           <th scope="col">Faculty</th>
-          <th scope="col" class="uk-text-right">Scheduled</th>
-          <th scope="col" class="uk-text-right">Held</th>
-          <th scope="col" class="uk-text-right">Absent</th>
-          <th scope="col" class="uk-text-right">Attendance %</th>
+          <th scope="col" class="tbl__num">Scheduled</th>
+          <th scope="col" class="tbl__num">Held</th>
+          <th scope="col" class="tbl__num">Absent</th>
+          <th scope="col" class="tbl__num">Attendance</th>
         </tr>
       </thead>
       <tbody>
-        {% for row in rows.0 %}
+        {% for row in page.object_list %}
         <tr>
-          <td>
+          <td class="tbl__id">
             <a class="inline-flex items-center gap-1" href="{% url 'ifo_scorecard' row.faculty_id %}?from={{ date_from|date:'Y-m-d' }}&to={{ date_to|date:'Y-m-d' }}">
               {{ row.name }} <uk-icon icon="chevron-right" class="size-4"></uk-icon></a>
           </td>
-          <td class="uk-text-right">{{ row.scheduled }}</td>
-          <td class="uk-text-right">{{ row.held }}</td>
-          <td class="uk-text-right">{{ row.absent }}</td>
-          <td class="uk-text-right">
-            <span class="uk-label" style="{% if row.attendance_pct >= 90 %}background:var(--green-tint);color:var(--green){% elif row.attendance_pct >= 75 %}background:var(--amber-tint);color:var(--amber){% else %}background:var(--red-tint);color:var(--red){% endif %}">{{ row.attendance_pct }}%</span>
+          <td class="tbl__num">{{ row.scheduled }}</td>
+          <td class="tbl__num">{{ row.held }}</td>
+          <td class="tbl__num">{{ row.absent }}</td>
+          <td class="tbl__num">
+            <span class="pill {% if row.attendance_pct >= 90 %}pill--ok{% elif row.attendance_pct >= 75 %}pill--warn{% else %}pill--bad{% endif %}">{{ row.attendance_pct }}%</span>
           </td>
         </tr>
         {% empty %}
@@ -72,4 +72,5 @@ pills use the A-COLOR thresholds via the --green/--amber/--red tokens. ASCII-onl
       </tbody>
     </table>
   </div>
+  {% include "_pager.html" %}
 {% endif %}

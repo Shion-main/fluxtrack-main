@@ -68,7 +68,110 @@
   box-shadow: inset 0 -1px 0 hsl(var(--border));
 }
 
+/* ============================================================================
+   .tbl — the shared dense admin table
+   ----------------------------------------------------------------------------
+   Used by HR attendance, Dean reports, SysAdmin job runs, IFO weekly reports and
+   room detail. Replaces the ad-hoc `uk-table uk-table-divider uk-table-small
+   uk-table-middle` stacks so every table on the product reads the same way.
+
+   The readability problem these tables had was NOT density -- it was that every
+   cell carried equal visual weight, so a 50-row table read as a grey wall with
+   no entry point. Four rules fix that, in rough order of how much they matter:
+
+     1. Ink hierarchy per COLUMN, not per row. The identifying column (.tbl__id:
+        faculty, course, room, job) is --ink semibold; ordinary cells are --body;
+        timestamps and codes are --ft-muted. The eye now has a column to scan
+        down instead of a field of uniform text.
+     2. tabular-nums on every time / date / count, so digits sit in columns and a
+        misaligned value is visible without reading it.
+     3. Hairline row separators and NO zebra striping. Stripes add a second
+        competing rhythm and fight the status pills for attention; a 1px line
+        plus a hover highlight does the same job silently.
+     4. A quiet header. Uppercase micro-label in --ft-muted, so the column names
+        read as labels and never compete with the data underneath them.
+
+   Numeric columns right-align (.tbl__num) so magnitudes compare vertically.
+
+   NO sticky header, deliberately. `position: sticky` resolves against the
+   nearest scrolling ancestor, and .table-wrap must keep `overflow-x: auto` so a
+   wide table scrolls inside its card instead of breaking the page layout on a
+   phone. That overflow makes the wrapper the sticky container, so a
+   viewport-offset header renders pushed down at scroll 0 rather than pinned.
+   The two cannot coexist in CSS. Horizontal containment wins: it prevents a
+   real layout bug, whereas with the pager capping pages at 50 rows the header
+   only leaves the screen for the last half-screen of a page.
+   ========================================================================== */
+.tbl { width: 100%; border-collapse: collapse; font-size: .875rem; }
+.tbl thead th {
+  padding: 9px 12px; text-align: left; white-space: nowrap;
+  background: hsl(var(--background));
+  box-shadow: inset 0 -1px 0 hsl(var(--border));
+  font-size: .75rem; font-weight: 650; letter-spacing: .03em; text-transform: uppercase;
+  color: var(--ft-muted);
+}
+.tbl tbody tr { border-bottom: 1px solid var(--line); }
+.tbl tbody tr:last-child { border-bottom: 0; }
+.tbl tbody tr:hover { background: var(--neutral-wash); }
+.tbl td { padding: 9px 12px; color: var(--body); vertical-align: middle; }
+
+/* Column roles. */
+.tbl__id { color: var(--ink); font-weight: 600; }
+.tbl__meta { color: var(--ft-muted); font-size: .8rem; }
+.tbl__num, .tbl th.tbl__num { text-align: right; font-variant-numeric: tabular-nums; }
+.tbl__time { white-space: nowrap; font-variant-numeric: tabular-nums; color: var(--ft-muted); }
+.tbl__mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .82rem; }
+.tbl__actions { text-align: right; white-space: nowrap; }
+.tbl a { color: inherit; }
+.tbl tbody tr a:hover { text-decoration: underline; }
+
+/* Status pill, one definition instead of an inline style per table cell. */
+.pill {
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 2px 8px; border-radius: 999px;
+  font-size: .74rem; font-weight: 650; white-space: nowrap;
+}
+.pill uk-icon, .pill svg { width: 12px; height: 12px; }
+.pill--ok      { background: var(--green-tint);  color: var(--green); }
+.pill--bad     { background: var(--red-tint);    color: var(--red); }
+.pill--warn    { background: var(--amber-tint);  color: var(--amber); }
+.pill--info    { background: var(--navy-tint);   color: var(--navy); }
+.pill--neutral { background: var(--panel-2);     color: var(--ft-muted); }
+
+/* --- Pager ------------------------------------------------------------------ */
+.pgr {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 12px;
+  margin-top: 14px;
+}
+.pgr__count { font-size: .82rem; color: var(--ft-muted); font-variant-numeric: tabular-nums; }
+.pgr__count b { color: var(--body); font-weight: 650; }
+.pgr__count--solo { margin-top: 12px; }
+.pgr__nav { margin-left: auto; display: flex; align-items: center; gap: 3px; }
+.pgr__n, .pgr__step {
+  display: inline-grid; place-items: center; min-width: 32px; height: 32px;
+  padding: 0 7px; border-radius: 7px; text-decoration: none;
+  font-size: .82rem; font-weight: 550; font-variant-numeric: tabular-nums;
+  color: var(--body); border: 1px solid transparent;
+  transition: background-color .14s ease, border-color .14s ease;
+}
+.pgr__n:hover, .pgr__step:hover { background: hsl(var(--muted)); }
+.pgr__n:focus-visible, .pgr__step:focus-visible { outline: none; box-shadow: 0 0 0 2px hsl(var(--ring)); }
+.pgr__n.is-on {
+  background: hsl(var(--primary)); border-color: hsl(var(--primary));
+  color: hsl(var(--primary-foreground)); font-weight: 650;
+}
+.pgr__step uk-icon, .pgr__step svg { width: 16px; height: 16px; }
+.pgr__step.is-off { color: var(--line); pointer-events: none; }
+.pgr__gap { padding: 0 2px; color: var(--ft-muted); font-size: .82rem; }
+
+@media (max-width: 640px) {
+  .pgr__nav { margin-left: 0; }
+  /* Numbered pages are a fiddly tap target on a phone; prev/next is enough. */
+  .pgr__n:not(.is-on) { display: none; }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .skel::after { animation: none; }
   .js-poll { transition: none; }
+  .tbl tbody tr, .pgr__n, .pgr__step { transition: none; }
 }

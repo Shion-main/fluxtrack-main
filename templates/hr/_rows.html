@@ -1,35 +1,42 @@
-{% comment %}HR session-level attendance rows (HR-01). One <tr> per session: faculty,
-course/section, date, scheduled vs actual start, present/absent status pill, check-in
-method, and the honest checker-verified badge (derived from is_verified). Rendered
-inside the uk-table body of hr/attendance.html. ASCII-only.{% endcomment %}
+{% comment %}HR session-level attendance rows (HR-01). One <tr> per session, on the
+shared .tbl component.
+
+Six columns, not the previous eight: check-in Method and Checker-verified were both
+per-row detail nobody scans a COLUMN of, so they fold into the Status cell's second
+line. All eight fields are still in the CSV export (HR-03) -- the export is the
+record, the table is the read.
+
+Column ink follows the .tbl roles: Faculty is the identifying column (.tbl__id),
+times are .tbl__time (tabular-nums, so they align down the page and a late
+check-in is visible without reading it), department and section are .tbl__meta.
+ASCII-only.{% endcomment %}
 {% for s in sessions %}
 <tr>
+  {% comment %}Second lines render only when they carry something. A column of 50
+  identical "--" placeholders is pure noise that makes the real values harder to
+  find -- absence of the line IS the absence of the value.{% endcomment %}
   <td>
-    <div class="font-semibold">{{ s.faculty.get_full_name|default:s.faculty.username }}</div>
-    <div class="uk-text-small uk-text-muted">{% if s.faculty.department %}{{ s.faculty.department.code }}{% else %}--{% endif %}</div>
+    <div class="tbl__id">{{ s.faculty.get_full_name|default:s.faculty.username }}</div>
+    {% if s.faculty.department %}<div class="tbl__meta">{{ s.faculty.department.code }}</div>{% endif %}
   </td>
   <td>
     <div>{{ s.schedule.course_code }}</div>
-    <div class="uk-text-small uk-text-muted">{{ s.schedule.section }}</div>
+    <div class="tbl__meta">{{ s.schedule.section }}</div>
   </td>
-  <td class="uk-text-nowrap">{{ s.date|date:'Y-m-d' }}</td>
-  <td class="uk-text-nowrap">{{ s.scheduled_start|date:'H:i' }}</td>
-  <td class="uk-text-nowrap">{% if s.actual_start %}{{ s.actual_start|date:'H:i' }}{% else %}--{% endif %}</td>
+  <td class="tbl__time">{{ s.date|date:'Y-m-d' }}</td>
+  <td class="tbl__time">{{ s.scheduled_start|date:'H:i' }}</td>
+  <td class="tbl__time">{% if s.actual_start %}{{ s.actual_start|date:'H:i' }}{% else %}--{% endif %}</td>
   <td>
     {% if s.present_label == 'Present' %}
-    <span class="uk-label" style="background:var(--green-tint);color:var(--green)">Present</span>
+    <span class="pill pill--ok">Present</span>
     {% elif s.present_label == 'Absent' %}
-    <span class="uk-label" style="background:var(--red-tint);color:var(--red)">Absent</span>
+    <span class="pill pill--bad">Absent</span>
     {% else %}
-    <span class="uk-label uk-label-secondary">{{ s.present_label }}</span>
+    <span class="pill pill--neutral">{{ s.present_label }}</span>
     {% endif %}
-  </td>
-  <td class="uk-text-small">{% if s.checkin_method %}{{ s.get_checkin_method_display }}{% else %}--{% endif %}</td>
-  <td>
-    {% if s.is_verified %}
-    <span class="uk-label" style="background:var(--navy-tint);color:var(--navy)">Verified</span>
-    {% else %}
-    <span class="uk-text-small uk-text-muted">--</span>
+    {% if s.checkin_method or s.is_verified %}
+    <div class="tbl__meta" style="margin-top:3px">
+      {% if s.checkin_method %}{{ s.get_checkin_method_display }}{% endif %}{% if s.checkin_method and s.is_verified %} &middot; {% endif %}{% if s.is_verified %}verified{% endif %}</div>
     {% endif %}
   </td>
 </tr>

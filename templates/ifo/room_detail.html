@@ -14,18 +14,18 @@
 <div class="uk-card uk-card-body mb-6">
   <h3 class="uk-card-title mb-3">Weekly schedule{% if term %} · {{ term.name }}{% endif %}</h3>
   {% if schedules %}
-  <div class="overflow-x-auto">
-    <table class="uk-table uk-table-sm">
+  <div class="table-wrap">
+    <table class="tbl">
       <thead><tr><th scope="col">Day</th><th scope="col">Time</th><th scope="col">Course</th><th scope="col">Sec</th><th scope="col">Faculty</th><th scope="col">Mode</th></tr></thead>
       <tbody>
         {% for s in schedules %}
         <tr>
-          <td>{{ s.get_day_of_week_display|slice:":3" }}</td>
-          <td>{{ s.start_time|time:"g:i A" }}&ndash;{{ s.end_time|time:"g:i A" }}</td>
-          <td class="font-medium">{{ s.course_code }}</td>
+          <td class="tbl__time">{{ s.get_day_of_week_display|slice:":3" }}</td>
+          <td class="tbl__time">{{ s.start_time|time:"g:i A" }}&ndash;{{ s.end_time|time:"g:i A" }}</td>
+          <td class="tbl__id">{{ s.course_code }}</td>
           <td>{{ s.section }}</td>
           <td>{{ s.faculty.last_name|default:s.faculty.username }}</td>
-          <td><span class="uk-label uk-label-secondary">{{ s.get_modality_display }}</span></td>
+          <td><span class="pill pill--neutral">{{ s.get_modality_display }}</span></td>
         </tr>
         {% endfor %}
       </tbody>

@@ -13,6 +13,7 @@ from django.shortcuts import render
 
 from accounts.models import Role
 from ops.models import JobRun
+from web.pagination import paginate
 
 
 def sysadmin_required(view):
@@ -42,5 +43,11 @@ def jobs(request):
         run = JobRun.objects.filter(job_name=name).first()  # Meta ordering: -started_at
         if run is not None:
             latest.append({"run": run, "duration": _duration_s(run)})
-    recent = [{"run": r, "duration": _duration_s(r)} for r in JobRun.objects.all()[:25]]
-    return render(request, "sys/jobs.html", {"latest": latest, "recent": recent})
+    # Run history is PAGED rather than sliced to the newest 25. The scheduler adds
+    # a row every sweep interval, so the history is the fastest-growing table in
+    # the product -- and "the last 25 runs" is useless for the one question this
+    # surface exists to answer: when did this job START failing.
+    pager = paginate(request, JobRun.objects.all(), per_page=50)
+    recent = [{"run": r, "duration": _duration_s(r)} for r in pager["page"].object_list]
+    return render(request, "sys/jobs.html",
+                  {"latest": latest, "recent": recent, **pager})

@@ -26,6 +26,7 @@ from scheduling.reporting import (dept_summary, faculty_attendance,
 from verification.models import (Assignment, AssignmentScope, AssignmentType,
                                  DutyRole)
 from verification.services import assign_online_sessions
+from web.pagination import paginate
 from web.reporting_common import reporting_range as _reporting_range
 
 
@@ -363,9 +364,12 @@ def dashboard(request):
         dept_summary, start=start, end=end, department=None, as_of=as_of)
     rows = safe_card(
         faculty_attendance, start=start, end=end, department=None, as_of=as_of)
+    # Unscoped means every faculty member in the institution lands in one table --
+    # the largest list in the product. Paged; the exports still cover the full set.
+    pager = paginate(request, rows[0])
     return render(request, "ifo/dashboard.html", {
         "summary": summary, "rows": rows,
-        "date_from": start, "date_to": end, "range_note": note,
+        "date_from": start, "date_to": end, "range_note": note, **pager,
     })
 
 
