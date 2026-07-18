@@ -204,7 +204,31 @@
 }
 .sheet__x:hover { background: hsl(var(--muted)); color: hsl(var(--foreground)); }
 .sheet__x:focus-visible { outline: none; box-shadow: 0 0 0 2px hsl(var(--ring)); }
-.sheet__body { flex: 1; min-height: 0; overflow-y: auto; padding: 18px; }
+/* Scrolls, with the scrollbar hidden.
+   ---------------------------------------------------------------------------
+   Hiding the bar removes the ONLY thing telling you there is more content, which
+   is why a long panel reads as "cut off and stuck" rather than "scrollable". So
+   the bar is replaced, not just deleted: the two radial gradients below are
+   scroll shadows -- background-attachment:scroll pins them to the viewport of
+   the scroller while the two linear "cover" gradients are attached:local and
+   ride the content, so a shadow is visible at an edge ONLY when there is more
+   content past it. Pure CSS, no scroll listener.
+
+   overscroll-behavior:contain stops a flick at the end of the panel from
+   scrolling the board behind it, which in a drawer always feels like a bug. */
+.sheet__body {
+  flex: 1; min-height: 0; overflow-y: auto; padding: 18px;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;              /* Firefox */
+  -ms-overflow-style: none;           /* legacy Edge */
+  background:
+    linear-gradient(hsl(var(--background)) 30%, hsl(var(--background) / 0)) top    / 100% 26px no-repeat local,
+    linear-gradient(hsl(var(--background) / 0), hsl(var(--background)) 70%) bottom / 100% 26px no-repeat local,
+    radial-gradient(farthest-side at 50% 0,    rgba(11,27,58,.16), rgba(11,27,58,0)) top    / 100% 11px no-repeat scroll,
+    radial-gradient(farthest-side at 50% 100%, rgba(11,27,58,.16), rgba(11,27,58,0)) bottom / 100% 11px no-repeat scroll;
+}
+.sheet__body::-webkit-scrollbar { width: 0; height: 0; display: none; }
 .sheet__foot {
   flex: none; display: flex; gap: 8px; padding: 12px 18px;
   border-top: 1px solid hsl(var(--border)); background: hsl(var(--background));
