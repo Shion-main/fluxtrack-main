@@ -21,7 +21,7 @@ User = get_user_model()
 # the seed_demo role accounts before seed_demo is run). The passwordless-by-
 # username POST is unchanged, so any of the ~200 imported instructors is still
 # reachable by typing the username directly (only the visible list is curated).
-DEMO_USERNAMES = ["cdgaray", "cruz", "reyes", "santos", "dela", "ong", "admin"]
+DEMO_USERNAMES = ["cdgaray", "checker", "ifo", "hr", "guard", "dean", "sysadmin"]
 
 # Role → home-screen surface cards. Phase 4 wired the faculty modality-shift request
 # and Dean approval surfaces into the nav; remaining "#" hrefs are later-phase stubs
@@ -47,14 +47,15 @@ SURFACES = {
         {"title": "Attendance", "desc": "Verified records; export CSV.", "icon": "clipboard-list", "href": "/hr/attendance"},
     ],
     Role.GUARD: [
-        {"title": "Floor monitor", "desc": "Live room status (read-only).", "icon": "shield", "href": "#"},
-        {"title": "Faculty locator", "desc": "Find a professor on campus.", "icon": "search", "href": "#"},
+        {"title": "Floor monitor", "desc": "Live room status (read-only).", "icon": "shield", "href": "/guard/monitor"},
+        {"title": "Faculty locator", "desc": "Find a professor on campus.", "icon": "search", "href": "/guard/locate"},
     ],
     Role.DEAN: [
         {"title": "Modality approvals", "desc": "Pending shift requests from your department.", "icon": "check-check", "href": "/dean/requests"},
         {"title": "Department oversight", "desc": "Reporting and scorecards.", "icon": "bar-chart", "href": "/dean/dashboard"},
     ],
     Role.SYSTEM_ADMIN: [
+        {"title": "Job monitor", "desc": "Scheduled-job status: last run, success/failure, rows.", "icon": "activity", "href": "/sys/jobs"},
         {"title": "Users & settings", "desc": "Provision users, policy values.", "icon": "settings", "href": "/admin/"},
         {"title": "Audit log", "desc": "All write events.", "icon": "list", "href": "/admin/ops/auditlog/"},
     ],
@@ -99,12 +100,23 @@ def logout_view(request):
 
 @login_required
 def home(request):
-    # Faculty open straight into their app shell (Schedule) so the bottom nav is
-    # present the moment they sign in -- the launcher card grid is for roles whose
-    # surfaces don't yet share a persistent nav. Superusers (no FACULTY role) still
-    # get the launcher.
-    if request.user.role == Role.FACULTY:
-        return redirect("faculty_home")
+    # Each role opens straight into its primary working surface so navigation is
+    # immediate on sign-in. Roles that carry their own persistent nav -- Faculty
+    # and Checker (bottom tab bars) and HR (a single surface) -- redirect into it.
+    # Multi-surface roles without a persistent console yet (IFO, Dean, Guard,
+    # SysAdmin, and break-glass superusers) land on the role hub, which lists the
+    # surfaces they own. The demo-scaffold launcher is gone (web/home.html).
+    _direct_home = {
+        Role.FACULTY: "faculty_home",
+        Role.CHECKER: "checker_floor",
+        Role.HR_ADMIN: "hr_attendance",
+        Role.IFO_ADMIN: "ifo_live",
+        Role.DEAN: "dean_dashboard",
+        Role.GUARD: "guard_monitor",
+    }
+    target = _direct_home.get(request.user.role)
+    if target:
+        return redirect(target)
     return render(request, "web/home.html", {"surfaces": SURFACES.get(request.user.role, [])})
 
 

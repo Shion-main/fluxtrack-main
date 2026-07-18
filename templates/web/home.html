@@ -1,35 +1,49 @@
 {% extends "base.html" %}
-{% block title %}Home · FluxTrack{% endblock %}
+{% comment %}
+Role hub for multi-surface roles that don't yet have a persistent console
+(IFO, Dean, Guard, SysAdmin, break-glass superuser). Faculty/Checker/HR redirect
+straight to their working home (web/views.py home()). This is NOT the old demo
+launcher -- no build-phase copy, no tech-stack chips. A quiet institutional
+landing that lists the surfaces this role owns as a navigation list (not a card
+grid). Surfaces whose feature isn't built yet (href "#") render as disabled
+"Soon" rows. Neutral admin family (Franken tokens). ASCII-only.
+{% endcomment %}
+{% block title %}Home - FluxTrack{% endblock %}
 {% block content %}
-<div class="uk-container max-w-5xl pt-8 pb-16">
-  <h1 class="uk-h2 mb-1">Welcome, {{ user.get_full_name|default:user.username }}</h1>
-  <p class="uk-text-muted mb-8">Signed in as <strong>{{ user.get_role_display }}</strong>{% if user.department %} · {{ user.department.name }}{% endif %}.</p>
+<div class="uk-container max-w-2xl pt-10 pb-16">
+  <header class="mb-7">
+    <h1 class="uk-h2 mb-1">{{ user.get_full_name|default:user.username }}</h1>
+    <p class="uk-text-muted">{{ user.get_role_display }}{% if user.department %} &middot; {{ user.department.name }}{% endif %}</p>
+  </header>
 
-  <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+  <nav class="flex flex-col gap-2" aria-label="Your surfaces">
     {% for card in surfaces %}
-    <div class="uk-card uk-card-body">
-      <div class="flex items-center gap-2 mb-2">
-        <uk-icon icon="{{ card.icon }}" class="size-5"></uk-icon>
-        <h3 class="uk-card-title">{{ card.title }}</h3>
+    {% if card.href == "#" %}
+    <div class="flex items-center gap-4 rounded-md border border-border p-4 min-h-14 opacity-60"
+         aria-disabled="true">
+      <uk-icon icon="{{ card.icon }}" class="size-5 text-muted-foreground shrink-0"></uk-icon>
+      <div class="min-w-0">
+        <div class="font-semibold">{{ card.title }}</div>
+        <div class="uk-text-small uk-text-muted">{{ card.desc }}</div>
       </div>
-      <p class="uk-text-small uk-text-muted mb-4">{{ card.desc }}</p>
-      <a href="{{ card.href }}" class="uk-btn uk-btn-primary uk-btn-sm w-full">Open</a>
+      <span class="uk-label uk-label-secondary ml-auto shrink-0">Soon</span>
+    </div>
+    {% else %}
+    <a href="{{ card.href }}"
+       class="flex items-center gap-4 rounded-md border border-border p-4 min-h-14 hover:bg-muted transition-colors">
+      <uk-icon icon="{{ card.icon }}" class="size-5 text-muted-foreground shrink-0"></uk-icon>
+      <div class="min-w-0">
+        <div class="font-semibold">{{ card.title }}</div>
+        <div class="uk-text-small uk-text-muted">{{ card.desc }}</div>
+      </div>
+      <uk-icon icon="chevron-right" class="size-4 text-muted-foreground ml-auto shrink-0"></uk-icon>
+    </a>
+    {% endif %}
+    {% empty %}
+    <div class="rounded-md border border-border p-6 text-center">
+      <p class="uk-text-muted mb-0">No surfaces are assigned to your account yet. Contact the IFO if you expect access here.</p>
     </div>
     {% endfor %}
-  </div>
-
-  <div class="uk-card uk-card-body mt-8">
-    <h3 class="uk-card-title mb-2">Phase 1 — Foundation</h3>
-    <p class="uk-text-small uk-text-muted">
-      Data model (§5), admin, base UI, and PWA shell are live. Role surfaces, the scan
-      resolver, reporting, and scheduled jobs land in later phases.
-    </p>
-    <div class="mt-3 flex flex-wrap gap-2">
-      <span class="uk-label uk-label-primary">Django</span>
-      <span class="uk-label uk-label-secondary">htmx</span>
-      <span class="uk-label uk-label-secondary">Franken UI</span>
-      <span class="uk-label uk-label-secondary">PWA</span>
-    </div>
-  </div>
+  </nav>
 </div>
 {% endblock %}

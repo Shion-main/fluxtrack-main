@@ -148,7 +148,9 @@ class BellMountTests(TestCase):
         User = get_user_model()
         user = User.objects.create(username="ifo_bell", role=Role.IFO_ADMIN)
         self.client.force_login(user)
-        resp = self.client.get(reverse("home"))
+        # IFO home redirects into the admin console (ifo_live); the console top
+        # bar mounts the same bell partial as the old Franken shell (D-01).
+        resp = self.client.get(reverse("home"), follow=True)
         self.assertEqual(resp.status_code, 200)
         self.assertContains(resp, 'id="notif-bell"')
 
