@@ -1,0 +1,74 @@
+/* ============================================================================
+   FluxTrack — shared app utilities (both design families).
+   Skeleton loading placeholders, htmx in-flight feedback, responsive tables.
+   Loaded globally after tokens.css so both the navy floor family and the
+   shadcn-neutral admin family can use it. ASCII-only.
+   ========================================================================== */
+
+/* --- Skeleton loading -------------------------------------------------------
+   A shimmering placeholder that holds real layout while a polled/htmx surface
+   fetches its first content -- shown INSTEAD of bare "Loading..." text. */
+.skel-stack { display: flex; flex-direction: column; gap: 10px; }
+.skel {
+  position: relative; overflow: hidden;
+  background: #e4e9f2; border-radius: 8px;
+}
+.skel::after {
+  content: ""; position: absolute; inset: 0; transform: translateX(-100%);
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,.65), transparent);
+  animation: skel-shimmer 1.3s ease-in-out infinite;
+}
+.skel-row  { height: 46px; }
+.skel-line { height: 12px; }
+.skel-bar  { height: 8px; border-radius: 999px; }
+@keyframes skel-shimmer { 100% { transform: translateX(100%); } }
+
+/* --- htmx in-flight feedback ------------------------------------------------
+   A polled container marked .js-poll dims slightly while its refresh request is
+   in flight (htmx adds .htmx-request for the request's duration) -- honest
+   "working" feedback, not decoration. */
+.js-poll { transition: opacity .15s ease; }
+.js-poll.htmx-request { opacity: .72; }
+
+/* --- Visually-hidden (screen-reader only) ---------------------------------- */
+.sr-only {
+  position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+  overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0;
+}
+
+/* --- Skip-to-content link (keyboard a11y) ----------------------------------
+   Off-screen until focused, then pins to the top-left as a visible control. */
+.skip-link {
+  position: fixed; top: 8px; left: 8px; z-index: 100;
+  transform: translateY(-150%); transition: transform .15s ease;
+  background: var(--brand-navy, #001c43); color: #fff;
+  padding: 10px 16px; border-radius: 8px; font-size: .9rem; font-weight: 600;
+  text-decoration: none; box-shadow: 0 6px 20px -6px rgba(0,28,67,.5);
+}
+.skip-link:focus { transform: translateY(0); outline: none; }
+@media (prefers-reduced-motion: reduce) { .skip-link { transition: none; } }
+
+/* --- Responsive table wrapper ----------------------------------------------
+   Dense admin tables scroll horizontally inside their card instead of forcing
+   the whole page to overflow on narrow viewports. */
+.table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+
+/* --- Data grid --------------------------------------------------------------
+   A long table (100s of rows: live monitor, reporting) bounded to a scroll area
+   with a sticky header, so the page never grows unbounded and column labels
+   stay visible while scrolling. Both axes scroll (also covers wide tables). */
+.data-grid {
+  max-height: min(32rem, 68vh);
+  overflow: auto; -webkit-overflow-scrolling: touch;
+}
+.data-grid > table { margin: 0; }
+.data-grid thead th {
+  position: sticky; top: 0; z-index: 1;
+  background: hsl(var(--background));
+  box-shadow: inset 0 -1px 0 hsl(var(--border));
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .skel::after { animation: none; }
+  .js-poll { transition: none; }
+}

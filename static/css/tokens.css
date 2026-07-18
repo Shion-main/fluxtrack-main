@@ -1,0 +1,92 @@
+/* ============================================================================
+   FluxTrack — Design tokens (SINGLE SOURCE OF TRUTH)
+   ----------------------------------------------------------------------------
+   One file both design families read:
+
+     * Floor family  (navy native-app shell)  — Faculty, Checker, Guard.
+       Consumes the --nv-*, --ink, --body, --line, semantic + scale tokens
+       via the .ft-* component classes in faculty.css.
+
+     * Admin family  (quiet shadcn-neutral)    — IFO, Dean, HR, SysAdmin.
+       Franken UI's shadcn tokens (--primary/--ring/--destructive/...), tuned
+       here to MMCM brand instead of stock near-black.
+
+   Load order (see base.html): Franken core -> Franken utilities -> THIS FILE
+   -> faculty.css. Loading after Franken lets the admin override win by source
+   order; loading before faculty.css lets .ft-* rules resolve these tokens.
+
+   Brand values are defined ONCE as hex (--brand-*) and, because Franken wraps
+   its tokens in hsl(), ALSO as the matching HSL triplet in the admin block.
+   The two forms are the same colour — keep them in sync by hand.
+   ASCII-only.
+   ========================================================================== */
+
+:root {
+  /* ---- Brand (MMCM institutional) ---------------------------------------- */
+  --brand-navy: #001c43;   /* = hsl(215 100% 13%)  -> admin --primary     */
+  --brand-red:  #ec1f28;   /* = hsl(357 84% 52%)   -> admin --destructive */
+
+  /* ---- Navy floor-family scale (sampled from the Figma prototype) -------- */
+  --nv-hero:  var(--brand-navy);   /* drenched check-in hero            */
+  --nv-panel: #0a1f44;             /* raised panel / active segment     */
+  --nv-track: #0d284d;             /* segmented-control track           */
+  --nv-line:  #22345a;             /* hairline on navy                  */
+  --on-nv:     #ffffff;            /* text on navy                      */
+  --on-nv-dim: #9fb0cf;            /* muted text on navy (>=4.5:1 hero)  */
+
+  /* ---- Ink + neutrals on white (shared by both families) ---------------- */
+  --ink:      #0b1b3a;   /* navy headings on white  */
+  --body:     #35415a;   /* body text               */
+  --ft-muted: #5a677f;   /* muted text (NOT Franken's --muted; that clashes) */
+  --line:     #e6e9f1;   /* hairline on white       */
+  --surface:  #ffffff;   /* card / page surface     */
+  --panel-2:  #f3f5fb;   /* light chips / keypad    */
+
+  /* ---- Semantic status (shared: floor pills + admin attendance pills) ---
+     Text tokens are tuned to clear WCAG AA (>=4.5:1) on their -tint background:
+     --amber is #9e4a08 (5.46:1 on --amber-tint), not the old #b45309 (4.49). */
+  --green:  #0f7a4d;   --green-tint:  #dcfce7;
+  --amber:  #9e4a08;   --amber-tint:  #fef1d6;
+  --red:    #ba1a1a;   --red-tint:    #fbe1e1;
+  --purple: #6b40ad;   --purple-tint: #ece3fb;
+  --navy:   var(--brand-navy);   --navy-tint: #e7ecf7;
+  --info-bg: #d9e2ff;  --info-ink: #1c3a86;
+
+  /* ---- Semantic washes: a very faint full-card background per state, used to
+     signal status without a banned side-stripe (body ink stays >=9:1 on them). */
+  --green-wash: #f1fef5;
+  --amber-wash: #fff9ef;
+  --red-wash:   #fdf3f3;
+  --info-wash:  #f0f3ff;
+  --neutral-wash: #f7f8fc;
+
+  /* ---- Radii (floor family; admin radius is Franken's uk-radii-md) ------ */
+  --r-hero: 26px;
+  --r-card: 18px;
+  --r-btn:  14px;
+  --r-pill: 999px;
+
+  /* ---- Shadows ---------------------------------------------------------- */
+  --shadow-card: 0 1px 2px rgba(11,27,58,.04), 0 12px 30px -18px rgba(11,27,58,.30);
+  --shadow-nav:  0 10px 30px -10px rgba(0,28,67,.34), 0 3px 10px -4px rgba(0,28,67,.20);
+}
+
+/* ============================================================================
+   ADMIN FAMILY — polished shadcn-neutral, tied to MMCM brand
+   ----------------------------------------------------------------------------
+   Franken defines these on `.uk-theme-neutral`; we scope to `html.uk-theme-
+   neutral` (one point more specific) so the override wins even irrespective of
+   load order. Surfaces (--background/--card/--muted/--border) stay Franken's
+   stock neutral on purpose: PRODUCT.md wants working surfaces quiet. We brand
+   only the ACCENT (primary), the FOCUS RING, and DESTRUCTIVE so the desktop
+   tools read as one system with the navy login + floor shell.
+   Values are HSL triplets (no hsl() wrapper) — Franken applies hsl(var(--x)).
+   Only the light theme is targeted; the app ships no `.dark` toggle yet.
+   ========================================================================== */
+html.uk-theme-neutral {
+  --primary:              215 100% 13%;  /* MMCM navy #001c43  (was 0 0% 9%)   */
+  --primary-foreground:   0 0% 98%;      /* white text on navy                 */
+  --ring:                 215 90% 25%;   /* branded navy focus ring (was grey) */
+  --destructive:          357 84% 52%;   /* MMCM red #ec1f28  (was 357 100% 45%) */
+  --destructive-foreground: 0 0% 100%;
+}

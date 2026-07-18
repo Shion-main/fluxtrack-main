@@ -6,42 +6,11 @@
    so it never leaks into other roles' surfaces. Palette sampled from the PNGs.
    ASCII-only.
    ========================================================================== */
-:root {
-  /* Navy scale (sampled: hero #001c43, panel #0a1f44, track #0d284d).
-     Tokens live on :root so the fixed tab bar resolves them even when it is
-     rendered outside a .ft-app wrapper. Names are ft- and nv- prefixed to
-     avoid any clash with Franken UI's own custom properties (esp. its muted). */
-  --nv-hero: #001c43;
-  --nv-panel: #0a1f44;
-  --nv-track: #0d284d;
-  --nv-line: #22345a;
-  --on-nv: #ffffff;
-  --on-nv-dim: #9fb0cf;      /* muted text on navy (>=4.5:1 on hero) */
 
-  /* Ink + neutrals on white */
-  --ink: #0b1b3a;            /* navy headings on white */
-  --body: #35415a;          /* body text */
-  --ft-muted: #5a677f;
-  --line: #e6e9f1;
-  --surface: #ffffff;
-  --panel-2: #f3f5fb;        /* light chips / keypad */
-
-  /* Semantic (sampled) */
-  --green: #0f7a4d;   --green-tint: #dcfce7;
-  --amber: #b45309;   --amber-tint: #fef1d6;
-  --red:   #ba1a1a;   --red-tint:   #fbe1e1;
-  --purple:#6b40ad;   --purple-tint:#ece3fb;
-  --navy:  #001c43;   --navy-tint:  #e7ecf7;
-  --info-bg:#d9e2ff;  --info-ink:#1c3a86;
-
-  --r-hero: 26px;
-  --r-card: 18px;
-  --r-btn: 14px;
-  --r-pill: 999px;
-
-  --shadow-card: 0 1px 2px rgba(11,27,58,.04), 0 12px 30px -18px rgba(11,27,58,.30);
-  --shadow-nav: 0 10px 30px -10px rgba(0,28,67,.34), 0 3px 10px -4px rgba(0,28,67,.20);
-}
+/* Design tokens (--nv-*, --ink, --body, --line, semantic, --r-*, --shadow-*)
+   moved to static/css/tokens.css — the single source of truth loaded just
+   before this file in base.html. The .ft-* rules below resolve them from
+   :root there. Do NOT redefine them here. */
 
 .ft-app {
   color: var(--body);
@@ -436,8 +405,179 @@ a.ft-row:active { transform: translateY(1px); }
 .ft-key--ghost { visibility: hidden; pointer-events: none; }
 .ft-key--action uk-icon, .ft-key--action svg { width: 24px; height: 24px; color: var(--ft-muted); }
 
+/* ==========================================================================
+   Check-in outcome cards — semantic result of a scan (sheet-over-navy #outcome)
+   ========================================================================== */
+/* Status is carried by a faint full-card wash + a full 1px semantic border + the
+   tinted icon badge + the title text -- never a colored side-stripe (banned). */
+.ft-outcome {
+  background: #fff; border: 1px solid var(--line);
+  border-radius: var(--r-card); padding: 18px; box-shadow: var(--shadow-card);
+}
+.ft-outcome + .ft-outcome { margin-top: 12px; }
+.ft-outcome__head { display: flex; align-items: center; gap: 12px; margin-bottom: 10px; }
+.ft-outcome__icon {
+  width: 40px; height: 40px; border-radius: 12px; flex: none;
+  display: grid; place-items: center;
+}
+.ft-outcome__icon uk-icon, .ft-outcome__icon svg { width: 20px; height: 20px; }
+.ft-outcome__title { font-size: 1.05rem; font-weight: 700; color: var(--ink); letter-spacing: -.01em; line-height: 1.2; }
+.ft-outcome__body { font-size: .9rem; color: var(--body); line-height: 1.5; }
+.ft-outcome__form { margin-top: 14px; display: flex; flex-direction: column; gap: 10px; }
+
+.ft-outcome--ok      { background: var(--green-wash); border-color: var(--green-tint); }
+.ft-outcome--ok      .ft-outcome__icon { background: var(--green-tint); color: var(--green); }
+.ft-outcome--warn    { background: var(--amber-wash); border-color: var(--amber-tint); }
+.ft-outcome--warn    .ft-outcome__icon { background: var(--amber-tint); color: var(--amber); }
+.ft-outcome--bad     { background: var(--red-wash); border-color: var(--red-tint); }
+.ft-outcome--bad     .ft-outcome__icon { background: var(--red-tint); color: var(--red); }
+.ft-outcome--info    { background: var(--info-wash); border-color: var(--info-bg); }
+.ft-outcome--info    .ft-outcome__icon { background: var(--info-bg); color: var(--info-ink); }
+.ft-outcome--neutral { background: var(--neutral-wash); }
+.ft-outcome--neutral .ft-outcome__icon { background: var(--panel-2); color: var(--ft-muted); }
+
+/* ==========================================================================
+   Status pills — Requests (modality) extra semantics
+   ========================================================================== */
+.ft-pill--pending  { background: var(--amber-tint); color: var(--amber); }
+.ft-pill--approved { background: var(--green-tint); color: var(--green); }
+
+/* Small ghost button (Withdraw, secondary row actions) */
+.ft-btn-ghost-sm {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 8px 14px; border-radius: var(--r-pill);
+  border: 1px solid var(--line); background: #fff; color: var(--ink);
+  font-size: .82rem; font-weight: 600; cursor: pointer; text-decoration: none;
+  transition: background-color .14s ease, border-color .14s ease;
+}
+.ft-btn-ghost-sm uk-icon, .ft-btn-ghost-sm svg { width: 14px; height: 14px; }
+.ft-btn-ghost-sm:hover { background: var(--panel-2); border-color: #cdd5e6; }
+.ft-btn-ghost-sm:focus-visible { outline: none; box-shadow: 0 0 0 3px rgba(0,28,67,.15); }
+
+/* ==========================================================================
+   Forms on a white sheet (navy-accented). Native controls, navy focus/accent.
+   Used by Requests; reused by later floor-role forms (Checker/Guard).
+   ========================================================================== */
+.ft-form { display: flex; flex-direction: column; gap: 18px; }
+.ft-form__group { display: flex; flex-direction: column; gap: 8px; }
+.ft-form__divide { border: 0; border-top: 1px solid var(--line); margin: 2px 0; }
+.ft-label { font-size: .84rem; font-weight: 650; color: var(--ink); }
+.ft-help { font-size: .8rem; color: var(--ft-muted); line-height: 1.45; }
+
+.ft-control {
+  width: 100%; min-height: 46px; padding: 0 13px;
+  background: #fff; color: var(--ink);
+  border: 1.5px solid var(--line); border-radius: var(--r-btn);
+  font-size: .92rem; font-family: inherit;
+  transition: border-color .14s ease, box-shadow .14s ease;
+}
+select.ft-control { padding-right: 32px; }
+textarea.ft-control { min-height: 88px; padding: 10px 13px; resize: vertical; }
+.ft-control:focus { outline: none; border-color: var(--nv-hero); box-shadow: 0 0 0 3px rgba(0,28,67,.10); }
+.ft-control::placeholder { color: #6b7288; }  /* 4.79:1 on white (AA) */
+.ft-num { width: 76px; text-align: center; }
+
+.ft-form input[type="radio"], .ft-form input[type="checkbox"] {
+  width: 18px; height: 18px; accent-color: var(--nv-hero); flex: none;
+}
+
+.ft-fieldset { border: 1px solid var(--line); border-radius: var(--r-card); padding: 14px 14px 16px; }
+.ft-legend { padding: 0 6px; font-size: .72rem; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: var(--ft-muted); }
+
+.ft-choice { display: flex; align-items: flex-start; gap: 10px; cursor: pointer; }
+.ft-choice__title { font-weight: 650; color: var(--ink); font-size: .92rem; }
+.ft-choice__meta { display: block; font-size: .82rem; color: var(--ft-muted); margin-top: 2px; }
+
+.ft-inline { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: .9rem; color: var(--body); }
+.ft-inline .ft-control { width: auto; min-height: 40px; }
+
+.ft-alert-error {
+  display: flex; gap: 10px; align-items: flex-start;
+  background: var(--red-tint); color: var(--red);
+  border-radius: var(--r-card); padding: 12px 14px; font-size: .86rem; font-weight: 550;
+}
+.ft-alert-error uk-icon, .ft-alert-error svg { width: 17px; height: 17px; flex: none; margin-top: 1px; }
+
+/* ==========================================================================
+   Checker floor board — coverage bar, priority queue, room cards
+   ========================================================================== */
+.ft-cover { background: #fff; border: 1px solid var(--line); border-radius: var(--r-card); padding: 15px 16px; box-shadow: var(--shadow-card); }
+.ft-cover__top { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 11px; }
+.ft-cover__n { font-size: 1.15rem; font-weight: 750; color: var(--ink); }
+.ft-bar { height: 8px; width: 100%; border-radius: 999px; background: var(--panel-2); overflow: hidden; }
+.ft-bar__fill { height: 100%; background: var(--nv-hero); border-radius: 999px; }
+
+/* Priority queue list */
+.ft-queue { background: #fff; border: 1px solid var(--line); border-radius: var(--r-card); padding: 14px 16px; box-shadow: var(--shadow-card); }
+.ft-queue__title { font-size: .82rem; font-weight: 700; color: var(--ink); margin-bottom: 8px; }
+.ft-queue__row { display: flex; align-items: center; gap: 10px; min-height: 44px; text-decoration: none; }
+.ft-queue__room { font-weight: 700; color: var(--ink); }
+
+/* Compact info card (room cards, online rows). Status = faint full-card wash +
+   the semantic icon + the state pill -- no colored side-stripe (banned). */
+.ft-card {
+  display: block; text-decoration: none;
+  background: #fff; border: 1px solid var(--line);
+  border-radius: var(--r-card); padding: 13px 15px; box-shadow: var(--shadow-card);
+  transition: border-color .16s ease, transform .06s ease;
+}
+a.ft-card:hover { border-color: #cdd5e6; }
+a.ft-card:active { transform: translateY(1px); }
+.ft-card__head { display: flex; align-items: center; gap: 8px; margin-bottom: 5px; }
+.ft-card__room { margin-left: auto; font-weight: 700; color: var(--ink); }
+.ft-card__meta { font-size: .82rem; color: var(--ft-muted); }
+.ft-card--neutral { background: var(--neutral-wash); }
+.ft-card--neutral .ft-card__head uk-icon, .ft-card--neutral .ft-card__head svg { color: var(--ft-muted); }
+.ft-card--ok   { background: var(--green-wash); border-color: var(--green-tint); }
+.ft-card--ok   .ft-card__head uk-icon, .ft-card--ok .ft-card__head svg { color: var(--green); }
+.ft-card--warn { background: var(--amber-wash); border-color: var(--amber-tint); }
+.ft-card--warn .ft-card__head uk-icon, .ft-card--warn .ft-card__head svg { color: var(--amber); }
+.ft-card--bad  { background: var(--red-wash); border-color: var(--red-tint); }
+.ft-card--bad  .ft-card__head uk-icon, .ft-card--bad .ft-card__head svg { color: var(--red); }
+.ft-card--info { background: var(--info-wash); border-color: var(--info-bg); }
+.ft-card--info .ft-card__head uk-icon, .ft-card--info .ft-card__head svg { color: var(--info-ink); }
+
+/* Faculty identity block (checker active-unverified) */
+.ft-idrow { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; }
+.ft-idrow__photo { width: 56px; height: 56px; border-radius: 50%; object-fit: cover; border: 1px solid var(--line); flex: none; }
+.ft-idrow__ph { width: 56px; height: 56px; border-radius: 50%; background: var(--panel-2); color: var(--ft-muted); display: grid; place-items: center; font-weight: 700; flex: none; }
+.ft-idrow__name { font-weight: 700; color: var(--ink); }
+
+/* Status / offline banner */
+.ft-banner {
+  display: flex; align-items: center; gap: 9px;
+  background: var(--amber-tint); color: var(--amber);
+  border-radius: var(--r-card); padding: 11px 14px; font-size: .86rem; font-weight: 600;
+}
+.ft-banner uk-icon, .ft-banner svg { width: 16px; height: 16px; flex: none; }
+
+/* Danger button (Send flag / not present) */
+.ft-btn-danger {
+  display: inline-flex; align-items: center; justify-content: center; gap: 10px;
+  width: 100%; min-height: 48px; padding: 0 18px; border: 0; border-radius: var(--r-btn);
+  cursor: pointer; background: var(--red); color: #fff;
+  font-size: .95rem; font-weight: 650; text-decoration: none;
+  transition: background-color .14s ease, transform .06s ease;
+}
+.ft-btn-danger uk-icon, .ft-btn-danger svg { width: 18px; height: 18px; }
+.ft-btn-danger:hover { background: #a01414; }
+.ft-btn-danger:active { transform: translateY(1px); }
+.ft-btn-danger:focus-visible { outline: none; box-shadow: 0 0 0 3px rgba(186,26,26,.3); }
+
+/* Secondary full-width action (Confirm empty / manual resolve) */
+.ft-btn-soft {
+  display: inline-flex; align-items: center; justify-content: center; gap: 10px;
+  width: 100%; min-height: 48px; padding: 0 18px; cursor: pointer;
+  background: var(--panel-2); color: var(--ink); border: 1px solid var(--line);
+  border-radius: var(--r-btn); font-size: .95rem; font-weight: 600; text-decoration: none;
+  transition: background-color .14s ease;
+}
+.ft-btn-soft uk-icon, .ft-btn-soft svg { width: 18px; height: 18px; }
+.ft-btn-soft:hover { background: #e9edf7; }
+
 @media (prefers-reduced-motion: reduce) {
-  .ft-cta, .ft-seg__opt, .ft-row, .ft-tab, .ft-chip,
-  .ft-btn-navy, .ft-key, .ft-otp__box { transition: none; }
+  .ft-cta, .ft-seg__opt, .ft-row, .ft-tab, .ft-chip, .ft-btn-ghost-sm,
+  .ft-btn-navy, .ft-key, .ft-otp__box, .ft-control, .ft-card, .ft-btn-danger,
+  .ft-btn-soft { transition: none; }
   .ft-otp__box.is-active::after { animation: none; }
 }
