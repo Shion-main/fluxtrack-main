@@ -1,54 +1,52 @@
-{% extends "base.html" %}
+{% extends "ifo/_console.html" %}
 {% block title %}{{ room.code }} · FluxTrack{% endblock %}
-{% block content %}
-<div class="uk-container max-w-4xl pt-8 pb-16">
-  <div class="flex items-center gap-2 mb-1">
-    <a href="/ifo/rooms" class="uk-btn uk-btn-ghost uk-btn-icon"><uk-icon icon="arrow-left" class="size-5"></uk-icon></a>
-    <h1 class="uk-h2">{{ room.code }}</h1>
-    <span class="uk-label uk-label-secondary">{{ room.floor.building.name }} · Floor {{ room.floor.number }}</span>
-    <a href="/ifo/rooms/{{ room.code }}/poster" target="_blank" class="uk-btn uk-btn-secondary uk-btn-sm ml-auto">
-      <uk-icon icon="qr-code" class="size-4"></uk-icon> QR poster</a>
-  </div>
-  <p class="uk-text-muted mb-8">{{ room.name|default:"" }}{% if room.capacity %} · capacity {{ room.capacity }}{% endif %}</p>
+{% block console_title %}{{ room.code }}{% endblock %}
+{% block page_actions %}
+<a href="/ifo/rooms/{{ room.code }}/poster" target="_blank" class="uk-btn uk-btn-secondary uk-btn-sm">
+  <uk-icon icon="qr-code" class="size-4"></uk-icon> QR poster</a>
+{% endblock %}
+{% block console %}
+<p class="uk-text-muted mb-6">
+  <a href="/ifo/rooms" class="inline-flex items-center gap-1"><uk-icon icon="chevron-left" class="size-4"></uk-icon> Rooms</a>
+  <span class="mx-2">&middot;</span>
+  {{ room.floor.building.name }} · Floor {{ room.floor.number }}{% if room.name %} · {{ room.name }}{% endif %}{% if room.capacity %} · capacity {{ room.capacity }}{% endif %}</p>
 
-  <div class="uk-card uk-card-body mb-6">
-    <h3 class="uk-card-title mb-3">Weekly schedule{% if term %} · {{ term.name }}{% endif %}</h3>
-    {% if schedules %}
-    <div class="overflow-x-auto">
-      <table class="uk-table uk-table-sm">
-        <thead><tr><th>Day</th><th>Time</th><th>Course</th><th>Sec</th><th>Faculty</th><th>Mode</th></tr></thead>
-        <tbody>
-          {% for s in schedules %}
-          <tr>
-            <td>{{ s.get_day_of_week_display|slice:":3" }}</td>
-            <td>{{ s.start_time|time:"g:i A" }}–{{ s.end_time|time:"g:i A" }}</td>
-            <td class="font-medium">{{ s.course_code }}</td>
-            <td>{{ s.section }}</td>
-            <td>{{ s.faculty.last_name|default:s.faculty.username }}</td>
-            <td><span class="uk-label uk-label-secondary">{{ s.get_modality_display }}</span></td>
-          </tr>
-          {% endfor %}
-        </tbody>
-      </table>
-    </div>
-    {% else %}<p class="uk-text-muted uk-text-small">No recurring classes in this room for the active term.</p>{% endif %}
+<div class="uk-card uk-card-body mb-6">
+  <h3 class="uk-card-title mb-3">Weekly schedule{% if term %} · {{ term.name }}{% endif %}</h3>
+  {% if schedules %}
+  <div class="overflow-x-auto">
+    <table class="uk-table uk-table-sm">
+      <thead><tr><th scope="col">Day</th><th scope="col">Time</th><th scope="col">Course</th><th scope="col">Sec</th><th scope="col">Faculty</th><th scope="col">Mode</th></tr></thead>
+      <tbody>
+        {% for s in schedules %}
+        <tr>
+          <td>{{ s.get_day_of_week_display|slice:":3" }}</td>
+          <td>{{ s.start_time|time:"g:i A" }}&ndash;{{ s.end_time|time:"g:i A" }}</td>
+          <td class="font-medium">{{ s.course_code }}</td>
+          <td>{{ s.section }}</td>
+          <td>{{ s.faculty.last_name|default:s.faculty.username }}</td>
+          <td><span class="uk-label uk-label-secondary">{{ s.get_modality_display }}</span></td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
   </div>
+  {% else %}<p class="uk-text-muted uk-text-small">No recurring classes in this room for the active term.</p>{% endif %}
+</div>
 
-  <div class="uk-card uk-card-body">
-    <h3 class="uk-card-title mb-3">Upcoming sessions</h3>
-    {% if upcoming %}
-    <ul class="space-y-2">
-      {% for se in upcoming %}
-      <li class="flex items-center gap-3 uk-text-small">
-        <span class="uk-label uk-label-secondary">{{ se.date|date:"D M j" }}</span>
-        <span>{{ se.scheduled_start|time:"g:i A" }}</span>
-        <span class="font-medium">{{ se.schedule.course_code }}-{{ se.schedule.section }}</span>
-        <span class="uk-text-muted ml-auto">{{ se.get_status_display }}</span>
-      </li>
-      {% endfor %}
-    </ul>
-    {% else %}<p class="uk-text-muted uk-text-small">No upcoming sessions. Run
-      <code>materialize_sessions</code>.</p>{% endif %}
-  </div>
+<div class="uk-card uk-card-body">
+  <h3 class="uk-card-title mb-3">Upcoming sessions</h3>
+  {% if upcoming %}
+  <ul class="space-y-2">
+    {% for se in upcoming %}
+    <li class="flex items-center gap-3 uk-text-small">
+      <span class="uk-label uk-label-secondary">{{ se.date|date:"D M j" }}</span>
+      <span>{{ se.scheduled_start|time:"g:i A" }}</span>
+      <span class="font-medium">{{ se.schedule.course_code }}-{{ se.schedule.section }}</span>
+      <span class="uk-text-muted ml-auto">{{ se.get_status_display }}</span>
+    </li>
+    {% endfor %}
+  </ul>
+  {% else %}<p class="uk-text-muted uk-text-small">No upcoming sessions. Run <code>materialize_sessions</code>.</p>{% endif %}
 </div>
 {% endblock %}

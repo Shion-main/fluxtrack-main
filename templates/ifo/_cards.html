@@ -8,7 +8,7 @@ pills use the A-COLOR thresholds via the --green/--amber/--red tokens. ASCII-onl
 {% if summary.1 %}
   {% include "reports/_error_card.html" %}
 {% else %}
-  <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+  <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
     <div class="uk-card uk-card-body">
       <div class="uk-text-small uk-text-muted flex items-center gap-1">
         <uk-icon icon="users" class="size-4"></uk-icon> Faculty</div>
@@ -41,15 +41,15 @@ pills use the A-COLOR thresholds via the --green/--amber/--red tokens. ASCII-onl
 {% if rows.1 %}
   {% include "reports/_error_card.html" %}
 {% else %}
-  <div class="uk-card uk-card-body p-0">
+  <div class="uk-card uk-card-body p-0 data-grid">
     <table class="uk-table uk-table-divider uk-table-small uk-table-middle mb-0">
       <thead>
         <tr>
-          <th>Faculty</th>
-          <th class="uk-text-right">Scheduled</th>
-          <th class="uk-text-right">Held</th>
-          <th class="uk-text-right">Absent</th>
-          <th class="uk-text-right">Attendance %</th>
+          <th scope="col">Faculty</th>
+          <th scope="col" class="uk-text-right">Scheduled</th>
+          <th scope="col" class="uk-text-right">Held</th>
+          <th scope="col" class="uk-text-right">Absent</th>
+          <th scope="col" class="uk-text-right">Attendance %</th>
         </tr>
       </thead>
       <tbody>

@@ -3,9 +3,9 @@ it never receives or prints the raw exception text (information-disclosure
 control). safe_card() returns (None, generic_message) on failure; this card is
 included on the error branch. Reused by the IFO dashboard and the Dean surface
 (06-06). ASCII-only.{% endcomment %}
-<div class="uk-card uk-card-body border-border" style="border-left:3px solid var(--red-tint)">
+<div class="uk-card uk-card-body" style="background:var(--red-wash);border:1px solid var(--red-tint)">
   <div class="flex items-start gap-2">
-    <uk-icon icon="triangle-alert" class="size-4" style="color:var(--amber)"></uk-icon>
+    <uk-icon icon="triangle-alert" class="size-4" style="color:var(--red)"></uk-icon>
     <div>
       <div class="uk-text-small font-semibold">Couldn't load this section</div>
       <p class="uk-text-small uk-text-muted mt-1">This metric failed to load. The rest of the page is unaffected &mdash; refresh to try again.</p>

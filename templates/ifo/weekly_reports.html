@@ -1,77 +1,70 @@
-{% extends "base.html" %}
-{% comment %}RPT-01/03 IFO Weekly Consolidated Report surface. Standard Franken shell,
-max-w-4xl. Lists the STORED weekly reports for the most-recent (or a selected) week:
-one row per department PLUS the org-wide "All departments" roll-up (department is
-None), each with a Pattern-C primary Download PDF + secondary Export CSV anchor to
-ifo_weekly_download. UNSCOPED -- IFO sees all departments and the roll-up. Calm
-Pattern-F empty state when nothing has been generated yet. NO write controls.
-ASCII-only.{% endcomment %}
+{% extends "ifo/_console.html" %}
+{% comment %}RPT-01/03 IFO Weekly Consolidated Report surface, in the IFO console shell.
+Lists the STORED weekly reports for the most-recent (or a selected) week: one row per
+department PLUS the org-wide "All departments" roll-up (department is None), each with a
+Pattern-C primary Download PDF + secondary Export CSV anchor to ifo_weekly_download.
+UNSCOPED -- IFO sees all departments and the roll-up. Calm Pattern-F empty state.
+NO write controls. ASCII-only.{% endcomment %}
 {% block title %}Weekly Consolidated Report - FluxTrack{% endblock %}
-{% block content %}
-<div class="uk-container max-w-4xl pt-8 pb-16">
-  <div class="flex items-center gap-2 mb-1">
-    <a href="/ifo/dashboard" class="uk-btn uk-btn-ghost uk-btn-icon" aria-label="Back">
-      <uk-icon icon="arrow-left" class="size-5"></uk-icon></a>
-    <h1 class="uk-h2">Weekly Consolidated Report</h1>
-    <span class="uk-label uk-label-secondary">All departments</span>
-  </div>
-  <p class="uk-text-muted mb-6">Download the stored weekly attendance reports (RPT-01/03). Each department has its own report; the institution-wide roll-up covers every department. Read-only.</p>
+{% block console_title %}Weekly reports{% endblock %}
+{% block page_actions %}<span class="uk-label uk-label-secondary">All departments</span>{% endblock %}
+{% block console %}
+<p class="uk-text-muted mb-6">Download the stored weekly attendance reports (RPT-01/03). Each department has its own report; the institution-wide roll-up covers every department. Read-only.</p>
 
-  {% if weeks %}
-  <form method="get" class="uk-card uk-card-body mb-6">
-    <div class="flex flex-wrap items-end gap-4">
-      <label class="flex flex-col gap-1">
-        <span class="uk-text-small uk-text-muted">Week of</span>
-        <select name="week" class="uk-select" onchange="this.form.submit()">
-          {% for w in weeks %}
-          <option value="{{ w|date:'Y-m-d' }}" {% if w == week %}selected{% endif %}>{{ w|date:'M j, Y' }}</option>
-          {% endfor %}
-        </select>
-      </label>
-      <button type="submit" class="uk-btn uk-btn-primary uk-btn-sm">Apply</button>
-    </div>
-  </form>
-  {% endif %}
-
-  {% if reports %}
-  <div class="uk-card uk-card-body p-0">
-    <table class="uk-table uk-table-divider uk-table-small uk-table-middle mb-0">
-      <thead>
-        <tr>
-          <th>Report</th>
-          <th>Week of</th>
-          <th class="uk-text-right">Download</th>
-        </tr>
-      </thead>
-      <tbody>
-        {% for r in reports %}
-        <tr>
-          <td>
-            {% if r.department %}
-            {{ r.department.name }} <span class="uk-text-small uk-text-muted">{{ r.department.code }}</span>
-            {% else %}
-            <span class="inline-flex items-center gap-1"><uk-icon icon="building-2" class="size-4"></uk-icon> All departments <span class="uk-label uk-label-primary">Roll-up</span></span>
-            {% endif %}
-          </td>
-          <td class="uk-text-nowrap">{{ r.week_start|date:'M j, Y' }}</td>
-          <td>
-            <div class="flex items-center justify-end gap-2">
-              <a href="{% url 'ifo_weekly_download' r.pk 'csv' %}" class="uk-btn uk-btn-secondary uk-btn-sm" download>
-                <uk-icon icon="download" class="size-4"></uk-icon> Export CSV</a>
-              <a href="{% url 'ifo_weekly_download' r.pk 'pdf' %}" class="uk-btn uk-btn-primary uk-btn-sm" download>
-                <uk-icon icon="file-text" class="size-4"></uk-icon> Download PDF</a>
-            </div>
-          </td>
-        </tr>
+{% if weeks %}
+<form method="get" class="uk-card uk-card-body mb-6">
+  <div class="flex flex-wrap items-end gap-4">
+    <label class="flex flex-col gap-1">
+      <span class="uk-text-small uk-text-muted">Week of</span>
+      <select name="week" class="uk-select" onchange="this.form.submit()">
+        {% for w in weeks %}
+        <option value="{{ w|date:'Y-m-d' }}" {% if w == week %}selected{% endif %}>{{ w|date:'M j, Y' }}</option>
         {% endfor %}
-      </tbody>
-    </table>
+      </select>
+    </label>
+    <button type="submit" class="uk-btn uk-btn-primary uk-btn-sm">Apply</button>
   </div>
-  {% else %}
-  <div class="uk-card uk-card-body">
-    <p class="uk-text-muted mb-1">No weekly reports yet.</p>
-    <p class="uk-text-small uk-text-muted mb-0">Consolidated reports are generated automatically each week. Once the first week completes, the department reports and the institution-wide roll-up will appear here to download. In the meantime, <a href="/ifo/dashboard">view the live reporting dashboard</a>.</p>
-  </div>
-  {% endif %}
+</form>
+{% endif %}
+
+{% if reports %}
+<div class="uk-card uk-card-body p-0 table-wrap">
+  <table class="uk-table uk-table-divider uk-table-small uk-table-middle mb-0">
+    <thead>
+      <tr>
+        <th scope="col">Report</th>
+        <th scope="col">Week of</th>
+        <th scope="col" class="uk-text-right">Download</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for r in reports %}
+      <tr>
+        <td>
+          {% if r.department %}
+          {{ r.department.name }} <span class="uk-text-small uk-text-muted">{{ r.department.code }}</span>
+          {% else %}
+          <span class="inline-flex items-center gap-1"><uk-icon icon="building-2" class="size-4"></uk-icon> All departments <span class="uk-label uk-label-primary">Roll-up</span></span>
+          {% endif %}
+        </td>
+        <td class="uk-text-nowrap">{{ r.week_start|date:'M j, Y' }}</td>
+        <td>
+          <div class="flex items-center justify-end gap-2">
+            <a href="{% url 'ifo_weekly_download' r.pk 'csv' %}" class="uk-btn uk-btn-secondary uk-btn-sm" download>
+              <uk-icon icon="download" class="size-4"></uk-icon> Export CSV</a>
+            <a href="{% url 'ifo_weekly_download' r.pk 'pdf' %}" class="uk-btn uk-btn-primary uk-btn-sm" download>
+              <uk-icon icon="file-text" class="size-4"></uk-icon> Download PDF</a>
+          </div>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
 </div>
+{% else %}
+<div class="uk-card uk-card-body">
+  <p class="uk-text-muted mb-1">No weekly reports yet.</p>
+  <p class="uk-text-small uk-text-muted mb-0">Consolidated reports are generated automatically each week. Once the first week completes, the department reports and the institution-wide roll-up will appear here to download. In the meantime, <a href="/ifo/dashboard">view the live reporting dashboard</a>.</p>
+</div>
+{% endif %}
 {% endblock %}

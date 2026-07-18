@@ -1,0 +1,60 @@
+{% extends "base.html" %}
+{% load static %}
+{% comment %}
+Shared admin console shell (IFO, Dean). A persistent left-sidebar app-shell that
+role consoles specialize by filling {% block console_nav %} (and console_home /
+console_navlabel). Leaf pages then extend the role console and fill
+{% block console_title %}, the optional {% block page_actions %}, and
+{% block console %}. base.html suppresses its global header for console url_names.
+The active nav item is derived from the resolver url_name (`un`). ASCII-only.
+{% endcomment %}
+{% block head %}
+<link rel="stylesheet" href="{% static 'css/console.css' %}"/>
+{% endblock %}
+{% block content %}
+{% with un=request.resolver_match.url_name %}
+<div class="cns" id="cns">
+  <div class="cns__scrim" data-cns-close></div>
+
+  <aside class="cns__side">
+    <a href="{% block console_home %}/{% endblock %}" class="cns__brand">
+      <img src="{% static 'brand/mmcm-crest.png' %}" alt=""><b>FluxTrack</b></a>
+    <div class="cns__role">{% block console_role %}{{ user.get_role_display }}{% if user.department %} &middot; {{ user.department.code }}{% endif %}{% endblock %}</div>
+
+    <nav class="cns__nav" aria-label="{% block console_navlabel %}Menu{% endblock %}">
+      {% block console_nav %}{% endblock %}
+    </nav>
+
+    <div class="cns__foot">
+      <span class="cns__avatar">{{ user.first_name|default:user.username|slice:":1"|upper }}{{ user.last_name|slice:":1"|upper }}</span>
+      <span class="cns__who"><b>{{ user.get_full_name|default:user.username }}</b><span>{% if user.department %}{{ user.department.name }}{% else %}All departments{% endif %}</span></span>
+      <a href="/logout" class="cns__signout" aria-label="Sign out" title="Sign out"><uk-icon icon="log-out"></uk-icon></a>
+    </div>
+  </aside>
+
+  <main class="cns__main">
+    <header class="cns__bar">
+      <button type="button" class="cns__ham" data-cns-open aria-label="Open menu"><uk-icon icon="menu"></uk-icon></button>
+      <span class="cns__title">{% block console_title %}{% endblock %}</span>
+      <div class="cns__actions">
+        {% block page_actions %}{% endblock %}
+        {% include "notifications/_bell.html" %}
+      </div>
+    </header>
+    <div class="cns__body">
+      {% block console %}{% endblock %}
+    </div>
+  </main>
+</div>
+<script>
+  (function () {
+    var c = document.getElementById("cns");
+    if (!c) return;
+    c.addEventListener("click", function (e) {
+      if (e.target.closest("[data-cns-open]")) c.classList.add("is-open");
+      else if (e.target.closest("[data-cns-close]")) c.classList.remove("is-open");
+    });
+  })();
+</script>
+{% endwith %}
+{% endblock %}

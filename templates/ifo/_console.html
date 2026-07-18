@@ -1,0 +1,25 @@
+{% extends "_console.html" %}
+{% comment %}IFO console: the shared console shell with IFO navigation. Leaf IFO
+pages (live/rooms/assignments/dashboard/room_detail/weekly_reports) extend THIS
+and fill console_title / page_actions / console. ASCII-only.{% endcomment %}
+{% block console_home %}/ifo/live{% endblock %}
+{% block console_navlabel %}IFO{% endblock %}
+{% block console_nav %}
+  <a href="/ifo/live" class="cns__link {% if un == 'ifo_live' %}is-active{% endif %}"
+     {% if un == 'ifo_live' %}aria-current="page"{% endif %}>
+    <uk-icon icon="radio"></uk-icon> Live today</a>
+  <a href="/ifo/rooms" class="cns__link {% if un == 'ifo_rooms' or un == 'ifo_room_detail' %}is-active{% endif %}"
+     {% if un == 'ifo_rooms' or un == 'ifo_room_detail' %}aria-current="page"{% endif %}>
+    <uk-icon icon="building"></uk-icon> Rooms</a>
+  <a href="/ifo/assignments" class="cns__link {% if un == 'ifo_assignments' %}is-active{% endif %}"
+     {% if un == 'ifo_assignments' %}aria-current="page"{% endif %}>
+    <uk-icon icon="user-plus"></uk-icon> Assignments</a>
+
+  <div class="cns__sec">Reporting</div>
+  <a href="/ifo/dashboard" class="cns__link {% if un == 'ifo_dashboard' %}is-active{% endif %}"
+     {% if un == 'ifo_dashboard' %}aria-current="page"{% endif %}>
+    <uk-icon icon="bar-chart-3"></uk-icon> Dashboard</a>
+  <a href="/ifo/reports" class="cns__link {% if un == 'ifo_weekly_reports' %}is-active{% endif %}"
+     {% if un == 'ifo_weekly_reports' %}aria-current="page"{% endif %}>
+    <uk-icon icon="file-text"></uk-icon> Weekly reports</a>
+{% endblock %}
