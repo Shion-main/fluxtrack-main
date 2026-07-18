@@ -1,6 +1,11 @@
 {% extends "base.html" %}
 {% load static %}
-{% block title %}Request a shift · FluxTrack{% endblock %}
+{% comment %}Request-a-shift shell (MOD-01). The three-step form itself is the
+_modality_form.html partial, which htmx re-swaps into #modality-panel on a
+validation error. The intro line that used to sit above the panel is gone: each
+step now carries its own heading and sub-line, so a standing paragraph would
+just be a fourth thing to read before the first question. ASCII-only.{% endcomment %}
+{% block title %}Request a shift - FluxTrack{% endblock %}
 {% block content %}
 <div class="ft-app">
   <header class="ft-appbar">
@@ -9,11 +14,10 @@
     <span class="ft-appbar__title">Request a shift</span>
   </header>
   <div class="ft-page" style="padding-top:14px">
-    <p class="ft-help" style="margin-bottom:18px">
-      Move a class online, face-to-face, or blended. Your department Dean approves it.</p>
     <div id="modality-panel">
       {% include "faculty/_modality_form.html" %}
     </div>
   </div>
 </div>
+<script src="{% static 'faculty/modality.js' %}" defer></script>
 {% endblock %}

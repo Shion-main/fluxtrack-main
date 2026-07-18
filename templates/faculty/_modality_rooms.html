@@ -1,0 +1,33 @@
+{% comment %}Per-class room preference blocks, fetched on demand by modality.js
+when step 2 is reached with a Face-to-face/Blended target (MOD-01/D-05/D-15).
+
+Only the classes picked in step 1 are here, because availability is expensive to
+compute (see web.faculty.modality_rooms) and irrelevant for the rest. The room
+pick is a PREFERENCE: the server re-resolves rooms at Dean approval (D-06).
+ASCII-only.{% endcomment %}
+{% for row in schedule_rows %}
+<div class="ft-sub">
+  <div class="ft-sub__h">{{ row.schedule.course_code }}-{{ row.schedule.section }}</div>
+  <div class="ft-form__group">
+    <label class="ft-label" for="m-room-{{ row.schedule.id }}" style="font-size:.8rem">
+      Preferred room</label>
+    <select id="m-room-{{ row.schedule.id }}"
+            name="preferred_room_{{ row.schedule.id }}" class="ft-control">
+      <option value="">Let the app decide</option>
+      {% for r in row.rooms %}
+      <option value="{{ r.id }}" {% if row.preferred == r.id|stringformat:"s" %}selected{% endif %}>{{ r.code }}</option>
+      {% endfor %}
+    </select>
+    {% if row.next_session and not row.rooms %}
+    <p class="ft-help">No room is free at this class's current time -- the app will
+      look for an alternative.</p>
+    {% endif %}
+    {% if row.times %}
+    <p class="ft-help">Also free that day:
+      {% for start, end in row.times %}{{ start|time:"g:i A" }}{% if not forloop.last %}, {% endif %}{% endfor %}</p>
+    {% endif %}
+  </div>
+</div>
+{% empty %}
+<p class="ft-help">Pick a class first and its room options will appear here.</p>
+{% endfor %}

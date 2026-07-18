@@ -1,109 +1,203 @@
 {% comment %}
-MOD-01/D-05/D-15 availability-first submit form. htmx swaps this partial into
-#modality-panel after a POST so a validation error (status 400) renders inline; a
-successful submit returns HX-Redirect to /faculty/modality/mine (a full-page nav).
-The room pick is only a PREFERENCE -- the server re-resolves rooms at Dean approval
-(D-06) and never trusts the posted room pk. Leaving a room blank = "let the app
-decide" (D-05). Navy floor form (.ft-*). Use {% comment %} not {# #} so Django does
-not parse the {% %} tags in this header (03-02 parse-error lesson). ASCII-only.
+MOD-01/D-05/D-15 availability-first submit form, as a three-step flow.
+
+WHY STEPS. The previous version was one long scroll that asked "Shift to what?"
+BEFORE "which classes?", and rendered a Preferred-room dropdown under EVERY
+class regardless of the target modality -- an Online shift needs no room at all.
+The order now matches how the decision is actually made, and the room/time
+fields only exist for a Face-to-face/Blended target.
+
+ONE FORM, ONE POST. All three panels live in the same <form>, so the server
+contract is unchanged: htmx swaps this partial into #modality-panel after a POST
+so a validation error (status 400) renders inline; a successful submit returns
+HX-Redirect to /faculty/modality/mine (a full-page nav). There is no wizard
+state on the server.
+
+PROGRESSIVE ENHANCEMENT. Panels are only hidden once modality.js adds
+.is-stepped to the form. With JS off, all three render in sequence and the form
+submits exactly as it did before.
+
+The room pick is only a PREFERENCE -- the server re-resolves rooms at Dean
+approval (D-06) and never trusts the posted room pk. Leaving a room blank =
+"let the app decide" (D-05). Navy floor form (.ft-*).
+
+Use {% comment %} not {# #} so Django does not parse the {% %} tags in this
+header (03-02 parse-error lesson). ASCII-only.
 {% endcomment %}
 {% if error %}
 <div class="ft-alert-error" role="alert" data-error="1">
   <uk-icon icon="alert-triangle"></uk-icon> {{ error }}</div>
 {% endif %}
 
+{% if not schedule_rows %}
+<div class="ft-card ft-card--neutral" style="margin-top:16px">
+  <div class="ft-card__meta" style="margin:0">
+    You have no active classes to shift this term. Once your schedule is loaded,
+    your classes will appear here.</div>
+</div>
+{% else %}
+
 <form hx-post="/faculty/modality/new" hx-target="#modality-panel" hx-swap="innerHTML"
-      method="post" action="/faculty/modality/new" class="ft-form" style="margin-top:16px">
+      method="post" action="/faculty/modality/new" class="ft-form" data-modality-form
+      {% if error_step %}data-error-step="{{ error_step }}"{% endif %}
+      style="margin-top:4px">
   {% csrf_token %}
 
-  <div class="ft-form__group">
-    <label class="ft-label" for="m-target">Shift to</label>
-    <select id="m-target" name="target_modality" class="ft-control" required>
-      {% for value, label in modalities %}
-      <option value="{{ value }}">{{ label }}</option>
-      {% endfor %}
-    </select>
-    <p class="ft-help">
-      Online frees the room. Face-to-face / Blended books a room for you -- pick one
-      below or let the app decide.</p>
-  </div>
+  <ol class="ft-steps" data-steps aria-hidden="true">
+    <li class="ft-steps__i is-on"><span class="ft-steps__bar"></span><span class="ft-steps__n">Classes</span></li>
+    <li class="ft-steps__i"><span class="ft-steps__bar"></span><span class="ft-steps__n">Change</span></li>
+    <li class="ft-steps__i"><span class="ft-steps__bar"></span><span class="ft-steps__n">Review</span></li>
+  </ol>
 
-  <fieldset class="ft-fieldset">
-    <legend class="ft-legend">When</legend>
-    <div class="ft-form__group">
-      <label class="ft-inline">
-        <input type="radio" name="window_mode" value="weeks" checked>
-        <span>For the next</span>
-        <input type="number" name="weeks" min="1" max="16" value="1" class="ft-control ft-num">
-        <span>week(s)</span>
-      </label>
-      <p class="ft-help" style="padding-left:28px">
-        This class repeats weekly -- shifts the next N times it meets, starting at the
-        first date that clears the lead time. "1" = just the next class.</p>
-      <label class="ft-inline">
-        <input type="radio" name="window_mode" value="single">
-        <span>Just one session on</span>
-        <input type="date" name="on_date" class="ft-control" style="width:auto">
-      </label>
-    </div>
-  </fieldset>
+  {% comment %}--------------------------------------------- STEP 1: classes{% endcomment %}
+  <section class="ft-step" data-step="1" aria-label="Step 1: choose classes">
+    <h2 class="ft-step__h">Which classes are you shifting?</h2>
+    <p class="ft-step__sub">Pick one or more. They move together in a single
+      request, so your Dean reviews them once.</p>
 
-  <fieldset class="ft-fieldset">
-    <legend class="ft-legend">Classes to shift</legend>
-    <div class="ft-form__group">
+    <div class="ft-pick">
       {% for row in schedule_rows %}
-      <div class="ft-form__group" style="gap:10px">
-        <label class="ft-choice">
-          <input type="checkbox" name="schedules" value="{{ row.schedule.id }}">
-          <span>
-            <span class="ft-choice__title">{{ row.schedule.course_code }}-{{ row.schedule.section }}</span>
-            <span class="ft-choice__meta">
-              {{ row.schedule.get_day_of_week_display }}
-              {{ row.schedule.start_time|time:"g:i A" }}-{{ row.schedule.end_time|time:"g:i A" }}
-              · {{ row.schedule.room.code }} · {{ row.schedule.get_modality_display }}</span>
-          </span>
-        </label>
-
-        <div class="ft-form__group" style="padding-left:28px; gap:6px">
-          <label class="ft-label" for="m-room-{{ row.schedule.id }}" style="font-size:.8rem">
-            Preferred room (Face-to-face / Blended)</label>
-          <select id="m-room-{{ row.schedule.id }}"
-                  name="preferred_room_{{ row.schedule.id }}" class="ft-control">
-            <option value="">Let the app decide</option>
-            {% for r in row.rooms %}
-            <option value="{{ r.id }}">{{ r.code }}</option>
-            {% endfor %}
-          </select>
-          {% if row.next_session and not row.rooms %}
-          <p class="ft-help">No room free at the current time -- the app will look for an alternative.</p>
-          {% endif %}
-          {% if row.times %}
-          <p class="ft-help">Alternative times available that day:
-            {% for start, end in row.times %}{{ start|time:"g:i A" }}{% if not forloop.last %}, {% endif %}{% endfor %}</p>
-          {% endif %}
-        </div>
-        {% if not forloop.last %}<hr class="ft-form__divide">{% endif %}
-      </div>
-      {% empty %}
-      <p class="ft-help">You have no active classes to shift.</p>
+      <label class="ft-pick__card">
+        <input type="checkbox" name="schedules" value="{{ row.schedule.id }}"
+               {% if row.picked %}checked{% endif %} data-pick
+               data-label="{{ row.schedule.course_code }}-{{ row.schedule.section }}"
+               data-when="{{ row.schedule.get_day_of_week_display }} {{ row.schedule.start_time|time:'g:i A' }}">
+        <span class="ft-pick__body">
+          <span class="ft-pick__title">{{ row.schedule.course_code }}-{{ row.schedule.section }}</span>
+          <span class="ft-pick__meta">
+            {{ row.schedule.get_day_of_week_display }}
+            {{ row.schedule.start_time|time:"g:i A" }}&ndash;{{ row.schedule.end_time|time:"g:i A" }}
+            &middot; {{ row.schedule.room.code }}</span>
+        </span>
+        <span class="ft-pill ft-pill--{{ row.schedule.modality }}">{{ row.schedule.get_modality_display }}</span>
+      </label>
       {% endfor %}
     </div>
-  </fieldset>
+    <p class="ft-pick__count" data-pick-count aria-live="polite">No classes selected yet.</p>
 
-  <fieldset class="ft-fieldset">
-    <legend class="ft-legend">Move to a different time (optional, F2F / Blended)</legend>
-    <div class="grid grid-cols-2 gap-3">
-      <div class="ft-form__group">
-        <label class="ft-label" for="m-nst" style="font-size:.8rem">New start</label>
-        <input id="m-nst" type="time" name="new_start_time" class="ft-control">
-      </div>
-      <div class="ft-form__group">
-        <label class="ft-label" for="m-net" style="font-size:.8rem">New end</label>
-        <input id="m-net" type="time" name="new_end_time" class="ft-control">
+    <div class="ft-navrow">
+      <button type="button" class="ft-btn-navy" data-next disabled>
+        Continue <uk-icon icon="arrow-right"></uk-icon></button>
+    </div>
+  </section>
+
+  {% comment %}---------------------------------------------- STEP 2: change{% endcomment %}
+  <section class="ft-step" data-step="2" aria-label="Step 2: choose the change">
+    <h2 class="ft-step__h">What should change?</h2>
+    <p class="ft-step__sub">Online frees the room. Face-to-face and Blended book a
+      room for you.</p>
+
+    <div class="ft-form__group">
+      <span class="ft-label" id="m-target-label">Shift to</span>
+      {% comment %}Three options is a segmented control, not a select: on a phone
+      every option stays visible and is one tap.{% endcomment %}
+      <div class="ft-seg ft-seg--light" role="radiogroup" aria-labelledby="m-target-label">
+        {% for value, label in modalities %}
+        <label class="ft-seg__label">
+          <input type="radio" name="target_modality" value="{{ value }}"
+                 data-target-modality
+                 {% if form.target %}{% if form.target == value %}checked{% endif %}
+                 {% elif forloop.first %}checked{% endif %}>
+          <span class="ft-seg__opt">{{ label }}</span>
+        </label>
+        {% endfor %}
       </div>
     </div>
-    <p class="ft-help" style="margin-top:10px">Leave blank to keep the class at its scheduled time.</p>
-  </fieldset>
 
-  <button type="submit" class="ft-btn-navy"><uk-icon icon="send"></uk-icon> Submit request</button>
+    <fieldset class="ft-fieldset">
+      <legend class="ft-legend">When</legend>
+      <div class="ft-form__group">
+        <label class="ft-inline">
+          <input type="radio" name="window_mode" value="weeks" data-window="weeks"
+                 {% if form.window_mode != "single" %}checked{% endif %}>
+          <span>For the next</span>
+          <input type="number" name="weeks" min="1" max="16" value="{{ form.weeks|default:'1' }}" class="ft-control ft-num"
+                 data-weeks aria-label="Number of weeks">
+          <span>week(s)</span>
+        </label>
+        <p class="ft-help" style="padding-left:28px">
+          This class repeats weekly -- shifts the next N times it meets, starting at
+          the first date that clears the lead time. "1" = just the next class.</p>
+        <label class="ft-inline">
+          <input type="radio" name="window_mode" value="single" data-window="single"
+                 {% if form.window_mode == "single" %}checked{% endif %}>
+          <span>Just one session on</span>
+          <input type="date" name="on_date" class="ft-control" style="width:auto" data-on-date
+                 value="{{ form.on_date }}">
+        </label>
+      </div>
+    </fieldset>
+
+    {% comment %}Room + time only exist for a room-based target, and only for the
+    classes actually picked in step 1. modality.js hides this whole block for an
+    Online target and hides the per-class blocks of unpicked classes. Hidden
+    selects still post, but the server only reads preferred_room_<pk> for
+    schedules that were actually submitted, and an Online request never reaches
+    room resolution -- so a stale value cannot leak into the ticket.{% endcomment %}
+    <div data-room-block>
+      <fieldset class="ft-fieldset">
+        <legend class="ft-legend">Room preference</legend>
+        <p class="ft-help" style="margin-bottom:12px">Optional. Leave any of these on
+          "Let the app decide" and a free room is chosen for you at approval.</p>
+
+        {% comment %}Fetched by modality.js from /faculty/modality/rooms once
+        step 2 is reached with a room-based target, for the picked classes only.
+        Availability is far too expensive to render for every class up front --
+        it was 6.5s and 5488 queries on the real dataset.{% endcomment %}
+        <div id="room-picker" data-room-picker>
+          <div class="skel-stack" aria-hidden="true">
+            <div class="skel skel-row"></div>
+          </div>
+          <span class="sr-only">Loading room options...</span>
+        </div>
+      </fieldset>
+
+      <fieldset class="ft-fieldset" style="margin-top:18px">
+        <legend class="ft-legend">Move to a different time</legend>
+        <p class="ft-help" style="margin-bottom:12px">Optional. Leave blank to keep
+          each class at its scheduled time.</p>
+        <div class="grid grid-cols-2 gap-3">
+          <div class="ft-form__group">
+            <label class="ft-label" for="m-nst" style="font-size:.8rem">New start</label>
+            <input id="m-nst" type="time" name="new_start_time" class="ft-control" value="{{ form.new_start_time }}">
+          </div>
+          <div class="ft-form__group">
+            <label class="ft-label" for="m-net" style="font-size:.8rem">New end</label>
+            <input id="m-net" type="time" name="new_end_time" class="ft-control" value="{{ form.new_end_time }}">
+          </div>
+        </div>
+      </fieldset>
+    </div>
+
+    <div class="ft-navrow">
+      <button type="button" class="ft-btn-soft" data-back>
+        <uk-icon icon="arrow-left"></uk-icon> Back</button>
+      <button type="button" class="ft-btn-navy" data-next>
+        Review <uk-icon icon="arrow-right"></uk-icon></button>
+    </div>
+  </section>
+
+  {% comment %}---------------------------------------------- STEP 3: review{% endcomment %}
+  <section class="ft-step" data-step="3" aria-label="Step 3: review and submit">
+    <h2 class="ft-step__h">Check this is right</h2>
+    <p class="ft-step__sub">Your Dean sees exactly this.</p>
+
+    <div class="ft-summary">
+      <p class="ft-summary__line" data-summary>&nbsp;</p>
+      <div class="ft-summary__list" data-summary-list></div>
+    </div>
+
+    <p class="ft-note">
+      <uk-icon icon="info"></uk-icon>
+      <span>Rooms are confirmed when your Dean approves, so a preferred room is a
+        request, not a booking. You can withdraw this while it is still pending.</span></p>
+
+    <div class="ft-navrow">
+      <button type="button" class="ft-btn-soft" data-back>
+        <uk-icon icon="arrow-left"></uk-icon> Back</button>
+      <button type="submit" class="ft-btn-navy">
+        <uk-icon icon="send"></uk-icon> Submit request</button>
+    </div>
+  </section>
 </form>
+{% endif %}

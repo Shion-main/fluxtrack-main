@@ -20,6 +20,20 @@
   <link rel="stylesheet" href="{% static 'faculty/faculty.css' %}"/>
   <script src="https://cdn.jsdelivr.net/npm/franken-ui@2.1.2/dist/js/core.iife.js" defer></script>
   <script src="https://cdn.jsdelivr.net/npm/franken-ui@2.1.2/dist/js/icon.iife.js" defer></script>
+  {% comment %}htmx 2 does NOT swap non-2xx responses by default, so every
+  surface that renders its form partial back at status=400 for inline validation
+  -- faculty modality new/withdraw, dean approve/reject, ifo assignment create --
+  silently did nothing when a submit was refused: the server rendered the error,
+  htmx discarded it, and the user saw no response at all.
+
+  400 is this project's deliberate "here is your form back, with the error in
+  it" contract, so it swaps. Every OTHER 4xx/5xx keeps the default no-swap +
+  error behaviour, because a 403/500 body is not a form partial and must never
+  be pasted into the page. Order matters: first matching rule wins, so the
+  explicit 400 rule has to precede the [45].. catch-all. The meta tag must be
+  parsed before htmx initialises, hence in <head> above the deferred script.
+  {% endcomment %}
+  <meta name="htmx-config" content='{"responseHandling":[{"code":"204","swap":false},{"code":"[23]..","swap":true},{"code":"400","swap":true,"error":false},{"code":"[45]..","swap":false,"error":true}]}'>
   <script src="https://cdn.jsdelivr.net/npm/htmx.org@2.0.6/dist/htmx.min.js" defer></script>
   <script>
     if ('serviceWorker' in navigator) {
