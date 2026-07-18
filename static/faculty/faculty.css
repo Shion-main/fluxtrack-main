@@ -594,20 +594,34 @@ a.ft-card:active { transform: translateY(1px); }
    -- progressive enhancement, not a JS dependency.
    ========================================================================== */
 
-/* --- Step indicator -------------------------------------------------------- */
-.ft-steps { display: flex; gap: 8px; margin-bottom: 20px; }
+/* --- Step indicator --------------------------------------------------------
+   A filled-segment progress bar: segments behind you and the one you are on are
+   navy, the ones ahead are grey, and the current label is the only one in full
+   ink. Three segments is few enough that a bar plus a word beats a "Step 1 of 3"
+   counter -- the label tells you what the step IS, not just where it sits.
+
+   The bar is display:block on purpose. It is a <span>, and height has no effect
+   on an inline box, so without this the segments render at 0px and the whole
+   indicator silently collapses to a row of labels that reads as tabs. */
+.ft-steps { display: flex; gap: 8px; margin: 2px 0 22px; }
 .ft-steps__i { flex: 1 1 0; }
 .ft-steps__bar {
-  height: 4px; border-radius: 999px; background: var(--line);
-  transition: background-color .2s ease;
+  display: block; height: 5px; border-radius: 999px;
+  background: var(--panel-2); box-shadow: inset 0 0 0 1px var(--line);
+  transition: background-color .2s ease, box-shadow .2s ease;
 }
 .ft-steps__i.is-done .ft-steps__bar,
-.ft-steps__i.is-on .ft-steps__bar { background: var(--nv-hero); }
+.ft-steps__i.is-on .ft-steps__bar {
+  background: var(--nv-hero); box-shadow: none;
+}
 .ft-steps__n {
-  display: block; margin-top: 7px;
-  font-size: .72rem; font-weight: 600; color: var(--ft-muted);
+  display: block; margin-top: 8px;
+  font-size: .74rem; font-weight: 600; color: var(--ft-muted);
+  letter-spacing: -.005em;
 }
 .ft-steps__i.is-on .ft-steps__n { color: var(--ink); font-weight: 700; }
+/* Behind you but not current: readable, not shouting. */
+.ft-steps__i.is-done .ft-steps__n { color: var(--body); }
 
 /* --- Panels ---------------------------------------------------------------- */
 .ft-step__h { font-size: 1.12rem; font-weight: 700; color: var(--ink); letter-spacing: -.01em; }

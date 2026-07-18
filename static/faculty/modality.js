@@ -62,9 +62,21 @@
         s.hidden = Number(s.dataset.step) !== n;
       });
       markers.forEach(function (m, i) {
-        m.classList.toggle("is-on", i + 1 === n);
+        var on = i + 1 === n;
+        m.classList.toggle("is-on", on);
         m.classList.toggle("is-done", i + 1 < n);
+        // aria-current is what a screen reader uses to report position; the
+        // classes only carry the visual state.
+        if (on) m.setAttribute("aria-current", "step");
+        else m.removeAttribute("aria-current");
       });
+
+      var announce = form.querySelector("[data-step-announce]");
+      if (announce && markers[n - 1]) {
+        var label = markers[n - 1].querySelector(".ft-steps__n");
+        announce.textContent =
+          "Step " + n + " of " + markers.length + ": " + (label ? label.textContent : "");
+      }
       if (n === 2) syncConditional();
       if (n === 3) renderSummary();
 

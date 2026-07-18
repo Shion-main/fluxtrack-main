@@ -43,11 +43,19 @@ header (03-02 parse-error lesson). ASCII-only.
       style="margin-top:4px">
   {% csrf_token %}
 
-  <ol class="ft-steps" data-steps aria-hidden="true">
-    <li class="ft-steps__i is-on"><span class="ft-steps__bar"></span><span class="ft-steps__n">Classes</span></li>
-    <li class="ft-steps__i"><span class="ft-steps__bar"></span><span class="ft-steps__n">Change</span></li>
-    <li class="ft-steps__i"><span class="ft-steps__bar"></span><span class="ft-steps__n">Review</span></li>
+  {% comment %}Progress. Not aria-hidden: a wizard that hides where you are from
+  a screen reader is worse than one with no indicator at all. The list carries
+  the labels, aria-current marks the step you are on, and the live region below
+  announces movement (modality.js keeps both in sync).{% endcomment %}
+  <ol class="ft-steps" data-steps aria-label="Progress">
+    <li class="ft-steps__i is-on" aria-current="step">
+      <span class="ft-steps__bar"></span><span class="ft-steps__n">Classes</span></li>
+    <li class="ft-steps__i">
+      <span class="ft-steps__bar"></span><span class="ft-steps__n">Change</span></li>
+    <li class="ft-steps__i">
+      <span class="ft-steps__bar"></span><span class="ft-steps__n">Review</span></li>
   </ol>
+  <p class="sr-only" data-step-announce aria-live="polite">Step 1 of 3: Classes</p>
 
   {% comment %}--------------------------------------------- STEP 1: classes{% endcomment %}
   <section class="ft-step" data-step="1" aria-label="Step 1: choose classes">
@@ -64,10 +72,13 @@ header (03-02 parse-error lesson). ASCII-only.
                data-when="{{ row.schedule.get_day_of_week_display }} {{ row.schedule.start_time|time:'g:i A' }}">
         <span class="ft-pick__body">
           <span class="ft-pick__title">{{ row.schedule.course_code }}-{{ row.schedule.section }}</span>
+          {% comment %}Room codes carry a hyphen (A408-B) and browsers break at
+          hyphens, so the code splits across lines unless it is held together.
+          {% endcomment %}
           <span class="ft-pick__meta">
             {{ row.schedule.get_day_of_week_display }}
-            {{ row.schedule.start_time|time:"g:i A" }}&ndash;{{ row.schedule.end_time|time:"g:i A" }}
-            &middot; {{ row.schedule.room.code }}</span>
+            <span style="white-space:nowrap">{{ row.schedule.start_time|time:"g:i A" }}&ndash;{{ row.schedule.end_time|time:"g:i A" }}</span>
+            &middot; <span style="white-space:nowrap">{{ row.schedule.room.code }}</span></span>
         </span>
         <span class="ft-pill ft-pill--{{ row.schedule.modality }}">{{ row.schedule.get_modality_display }}</span>
       </label>

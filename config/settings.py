@@ -192,9 +192,31 @@ USE_TZ = True
 STATIC_URL = "/static/"
 STATIC_ROOT = BASE_DIR / "staticfiles"
 STATICFILES_DIRS = [BASE_DIR / "static"]
+# Manifest (hashed, far-future-cacheable) storage in production; plain storage in
+# development.
+#
+# The manifest backend is right for prod and actively hostile in dev: {% static %}
+# resolves through staticfiles.json, WhiteNoise loads that manifest ONCE at process
+# start, and runserver then serves the hashed copy out of STATIC_ROOT. So editing a
+# .css/.js file changed nothing on screen until you ran collectstatic AND restarted
+# the server -- and a stale manifest fails silently by serving the previous build,
+# which reads as "my CSS didn't apply" rather than as a build-step problem.
+#
+# In DEBUG the staticfiles app serves straight from STATICFILES_DIRS, so an edit is
+# live on reload with no build step.
+#
+# NOTE: the test runner forces DEBUG=False, so tests still resolve through the
+# manifest and still need `manage.py collectstatic` after adding a NEW static file
+# (a missing entry raises ValueError). That is a real packaging signal, so it is
+# left in place on purpose.
 STORAGES = {
     "default": {"BACKEND": "django.core.files.storage.FileSystemStorage"},
-    "staticfiles": {"BACKEND": "whitenoise.storage.CompressedManifestStaticFilesStorage"},
+    "staticfiles": {
+        "BACKEND": (
+            "django.contrib.staticfiles.storage.StaticFilesStorage" if DEBUG
+            else "whitenoise.storage.CompressedManifestStaticFilesStorage"
+        ),
+    },
 }
 MEDIA_URL = "/media/"
 MEDIA_ROOT = BASE_DIR / "media"
