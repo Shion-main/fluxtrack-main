@@ -138,6 +138,20 @@
 .pill--info    { background: var(--navy-tint);   color: var(--navy); }
 .pill--neutral { background: var(--panel-2);     color: var(--ft-muted); }
 
+/* --- Room code + virtual marker ---------------------------------------------
+   Rendered by templates/_room_code.html. A V-prefixed code only reads as
+   "virtual" to someone who already knows MMCM's naming rule, so the badge states
+   it. Purple means "not a physical space" consistently across the product --
+   it is the colour freed up when the board's old `online` tile state was
+   removed, which keeps the vocabulary small. */
+.rm { display: inline-flex; align-items: baseline; gap: 5px; }
+.rm__v {
+  flex: none; padding: 1px 6px; border-radius: 999px;
+  background: var(--purple-tint); color: var(--purple);
+  font-size: .62rem; font-weight: 700; letter-spacing: .04em; text-transform: uppercase;
+  white-space: nowrap;
+}
+
 /* --- Pager ------------------------------------------------------------------ */
 .pgr {
   display: flex; flex-wrap: wrap; align-items: center; gap: 12px;

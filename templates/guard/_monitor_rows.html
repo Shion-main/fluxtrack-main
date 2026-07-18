@@ -25,7 +25,7 @@ label (WCAG 1.4.1). Off-duty renders a calm "not on duty" card. ASCII-only.{% en
       {% elif se.status == 'absent' %}<uk-icon icon="x"></uk-icon><span class="ft-pill ft-pill--absent">Absent</span>
       {% elif se.status == 'completed' %}<uk-icon icon="check"></uk-icon><span class="ft-pill ft-pill--done">Done</span>
       {% else %}<uk-icon icon="clock"></uk-icon><span class="ft-pill ft-pill--upcoming">Scheduled</span>{% endif %}
-      <span class="ft-card__room">{{ se.room.code }}</span>
+      <span class="ft-card__room">{% include "_room_code.html" with room=se.room %}</span>
     </div>
     <div class="ft-card__meta">
       {{ se.scheduled_start|time:"g:i A" }} &middot; {{ se.schedule.course_code }}-{{ se.schedule.section }}

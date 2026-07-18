@@ -78,7 +78,7 @@ header (03-02 parse-error lesson). ASCII-only.
           <span class="ft-pick__meta">
             {{ row.schedule.get_day_of_week_display }}
             <span style="white-space:nowrap">{{ row.schedule.start_time|time:"g:i A" }}&ndash;{{ row.schedule.end_time|time:"g:i A" }}</span>
-            &middot; <span style="white-space:nowrap">{{ row.schedule.room.code }}</span></span>
+            &middot; {% include "_room_code.html" with room=row.schedule.room %}</span>
         </span>
         <span class="ft-pill ft-pill--{{ row.schedule.modality }}">{{ row.schedule.get_modality_display }}</span>
       </label>

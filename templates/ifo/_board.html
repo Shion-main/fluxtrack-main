@@ -43,11 +43,10 @@ are the client-side filter index. ASCII-only.
             hx-swap="innerHTML"
             aria-haspopup="dialog">
       <span class="tile__top">
-        <span class="tile__code">{{ t.room.code }}</span>
+        <span class="tile__code">{% include "_room_code.html" with room=t.room %}</span>
         {% if t.state == "absent" %}<uk-icon icon="alert-triangle"></uk-icon>
         {% elif t.state == "starting" %}<uk-icon icon="clock"></uk-icon>
         {% elif t.state == "in_session" %}<uk-icon icon="circle-check"></uk-icon>
-        {% elif t.state == "online" %}<uk-icon icon="monitor"></uk-icon>
         {% endif %}{% comment %}No icon on free/idle: those are the neutral
         default, not a colour-coded state, so the word alone already satisfies
         1.4.1. Leaving them blank means an icon on a tile MEANS something is
@@ -59,7 +58,6 @@ are the client-side filter index. ASCII-only.
         {% if t.state == "absent" %}Absent
         {% elif t.state == "starting" %}Starting
         {% elif t.state == "in_session" %}In session
-        {% elif t.state == "online" %}Online
         {% elif t.state == "free" %}Free
         {% else %}Idle{% endif %}
       </span>
@@ -76,7 +74,7 @@ are the client-side filter index. ASCII-only.
           no show &middot; {{ t.session.scheduled_start|time:"g:i A" }}
         {% elif t.state == "starting" %}
           due {{ t.session.scheduled_start|time:"g:i A" }}
-        {% elif t.state == "in_session" or t.state == "online" %}
+        {% elif t.state == "in_session" %}
           {{ t.session.schedule.course_code }} &middot; to {{ t.session.scheduled_end|time:"g:i A" }}
         {% elif t.state == "free" %}
           {% if t.next %}next {{ t.next.scheduled_start|time:"g:i A" }}

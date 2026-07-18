@@ -12,7 +12,7 @@ as every other room. ASCII-only.{% endcomment %}
 <link rel="stylesheet" href="{% static 'css/timetable.css' %}"/>
 {% endblock %}
 {% block title %}{{ room.code }} - FluxTrack{% endblock %}
-{% block console_title %}{{ room.code }}{% endblock %}
+{% block console_title %}{% include "_room_code.html" with room=room %}{% endblock %}
 {% block page_actions %}
 <button type="button" class="uk-btn uk-btn-secondary uk-btn-sm" onclick="window.print()">
   <uk-icon icon="printer" class="size-4"></uk-icon> Print</button>
@@ -29,7 +29,7 @@ as every other room. ASCII-only.{% endcomment %}
 room this is; on paper there is no chrome, so the sheet has to identify itself.
 {% endcomment %}
 <div class="pr-head">
-  <h1>Room schedule &mdash; {{ room.code }}</h1>
+  <h1>{% if room.is_virtual %}Virtual room schedule{% else %}Room schedule{% endif %} &mdash; {{ room.code }}</h1>
   <p>{{ room.floor.building.name }} &middot; Floor {{ room.floor.number }}{% if room.name %} &middot; {{ room.name }}{% endif %}{% if room.capacity %} &middot; {{ room.capacity }} seats{% endif %}
     {% if term %}<br>{{ term.name }}{% endif %}
     &middot; printed {{ printed_on|date:"M j, Y g:i A" }}</p>
@@ -68,12 +68,11 @@ room this is; on paper there is no chrome, so the sheet has to identify itself.
               {% if s.faculty.last_name %}{{ s.faculty.last_name }}
               {% elif s.faculty.get_full_name %}{{ s.faculty.get_full_name }}
               {% else %}<em class="tt__tba">Unassigned</em>{% endif %}</span>
-            {% comment %}Only Online is badged. On a ROOM grid the question is
-            whether the room is occupied: Blended still uses it, so badging it
-            put a pill on most cells and said nothing. Online means the booking
-            exists but the room is actually free -- the one case worth a mark.
-            {% endcomment %}
-            {% if s.modality == "online" %}<span class="tt__mode">Online &middot; room free</span>{% endif %}
+            {% comment %}No per-cell modality badge. An online class no longer
+            appears in a PHYSICAL room's grid at all (it does not use the room),
+            and in a VIRTUAL room every class is online, so a badge on each cell
+            would say the same thing 40 times. Virtual-ness is stated once, on
+            the room itself.{% endcomment %}
           </td>
           {% else %}
           {% comment %}A free slot is information, not absence -- the dash makes it
@@ -88,7 +87,13 @@ room this is; on paper there is no chrome, so the sheet has to identify itself.
   </div>
   <p class="uk-text-small uk-text-muted mt-3">
     Rows are the campus block ladder for the term, so every room prints on the
-    same grid. A class spanning two blocks fills both rows.</p>
+    same grid. A class spanning two blocks fills both rows.
+    {% if room.is_virtual %}
+      This is a <b>virtual room</b> &mdash; every class here meets online.
+    {% else %}
+      Classes that moved online are not listed: they do not use this room, so the
+      slot is free.
+    {% endif %}</p>
   {% else %}
   <p class="uk-text-muted uk-text-small">
     {% if not term %}No active term, so there is no timetable to build.

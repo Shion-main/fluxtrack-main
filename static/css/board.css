@@ -144,11 +144,6 @@
 .tile--in_session .tile__top uk-icon,
 .tile--in_session .tile__top svg { color: var(--green); }
 
-.tile--online { background: var(--purple-tint); border-color: #d5c4f0; }
-.tile--online .tile__state,
-.tile--online .tile__top uk-icon,
-.tile--online .tile__top svg { color: var(--purple); }
-
 .tile--free { background: var(--surface); }
 .tile--free .tile__state,
 .tile--free .tile__top uk-icon,
@@ -245,7 +240,6 @@
 .now--absent     { background: var(--red-wash);     border-color: #f0c4c4; }
 .now--starting   { background: var(--amber-wash);   border-color: #eed4a8; }
 .now--in_session { background: var(--green-wash);   border-color: #b7e4c9; }
-.now--online     { background: #f7f3fe;             border-color: #d5c4f0; }
 .now--free, .now--idle { background: var(--neutral-wash); }
 .now__state {
   display: flex; align-items: center; gap: 7px;
@@ -255,7 +249,6 @@
 .now--absent .now__state { color: var(--red); }
 .now--starting .now__state { color: var(--amber); }
 .now--in_session .now__state { color: var(--green); }
-.now--online .now__state { color: var(--purple); }
 .now--free .now__state, .now--idle .now__state { color: var(--ft-muted); }
 .now__who { margin-top: 9px; font-size: 1.12rem; font-weight: 650; color: var(--ink); letter-spacing: -.01em; }
 .now__course { margin-top: 2px; font-size: .88rem; color: var(--body); }

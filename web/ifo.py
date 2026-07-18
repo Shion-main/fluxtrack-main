@@ -47,31 +47,50 @@ def ifo_required(view):
 # fixed, physically-managed entity, so the room is the tile and the session is
 # what flows through it.
 #
-# Six states, derived per room from TODAY's sessions relative to `now`. Every
-# state carries colour + icon + text label (never colour alone, PRODUCT.md):
+# Five states, derived per room from the sessions that actually OCCUPY it today
+# (see _occupies), relative to `now`. Every state carries colour + icon + text
+# label (never colour alone, PRODUCT.md):
 #
 #   absent      no-show: marked ABSENT, or still SCHEDULED past the grace window
 #   starting    class window opened, still inside grace -- watch, not yet a problem
 #   in_session  faculty checked in, class running
-#   online      the current class is running online (declared_modality shift or a
-#               natively-online schedule) -- the room is legitimately empty. This
-#               is the state that stops a shifted class reading as a facilities
-#               mystery, so it is deliberately distinct from `free`.
 #   free        nothing running now, but the room has classes later today
 #   idle        nothing scheduled in this room today
 #
 # Sort order puts problems first so they can never hide below the fold.
 ROOM_STATE_ORDER = {
-    "absent": 0, "starting": 1, "in_session": 2, "online": 3, "free": 4, "idle": 5,
+    "absent": 0, "starting": 1, "in_session": 2, "free": 3, "idle": 4,
 }
 ROOM_PROBLEM_STATES = ("absent", "starting")
 
 
-def _room_tile(room, sessions, now, grace):
-    """Derive one room's live tile from its sessions for today.
+def _occupies(session, room):
+    """True when `session` actually uses `room`.
 
-    `sessions` must be today's sessions for THIS room, ordered by start.
+    An ONLINE class does not occupy a physical room -- nobody is in it, so it
+    must not appear in that room's schedule or affect its state; the room is
+    simply free. In a VIRTUAL room the online class is the whole point, so it
+    counts normally and its attendance (in session / absent) still matters to
+    the checker who verifies online duty.
+
+    This is what replaced the old dedicated `online` tile state. That state
+    existed to explain why a booked room looked empty; once an online class no
+    longer books a physical room, there is nothing left to explain.
     """
+    if room.is_virtual:
+        return True
+    effective = session.declared_modality or session.schedule.modality
+    return effective != Modality.ONLINE
+
+
+def _room_tile(room, sessions, now, grace):
+    """Derive one room's live tile from the sessions that occupy it today.
+
+    `sessions` must be today's sessions for THIS room, ordered by start; online
+    classes in a physical room are dropped here, so they neither show in the
+    room's list nor drive its state.
+    """
+    sessions = [s for s in sessions if _occupies(s, room)]
     current = next(
         (s for s in sessions if s.scheduled_start <= now < s.scheduled_end), None
     )
@@ -87,10 +106,7 @@ def _room_tile(room, sessions, now, grace):
         tile["state"] = "free" if sessions else "idle"
         return tile
 
-    effective = current.declared_modality or current.schedule.modality
-    if effective == Modality.ONLINE:
-        tile["state"] = "online"
-    elif current.status == SessionStatus.ACTIVE:
+    if current.status == SessionStatus.ACTIVE:
         tile["state"] = "in_session"
     elif current.status == SessionStatus.ABSENT:
         tile["state"] = "absent"
@@ -183,11 +199,17 @@ def room_panel(request, code):
                  .select_related("schedule", "faculty")
                  .order_by("scheduled_start"))
     tile = _room_tile(room, today, now, grace)
+    # Same rule as the tile: an online class is not in this physical room, so it
+    # is not in its day either.
+    today = [s for s in today if _occupies(s, room)]
 
     term = AcademicTerm.objects.filter(is_active=True).first()
-    schedules = (room.schedules.filter(status=ScheduleStatus.ACTIVE, term=term)
-                 .select_related("faculty").order_by("day_of_week", "start_time")
-                 if term else room.schedules.none())
+    schedules = list(
+        room.schedules.filter(status=ScheduleStatus.ACTIVE, term=term)
+        .select_related("faculty").order_by("day_of_week", "start_time")
+        if term else [])
+    if not room.is_virtual:
+        schedules = [s for s in schedules if s.modality != Modality.ONLINE]
     return render(request, "ifo/_room_panel.html", {
         "room": room, "tile": tile, "today": today, "schedules": schedules,
         "term": term, "now": timezone.localtime(now),
@@ -222,6 +244,11 @@ def _room_timetable(room, term):
     scheds = list(room.schedules
                   .filter(status=ScheduleStatus.ACTIVE, term=term)
                   .select_related("faculty"))
+    # An online class does not use a physical room, so it is not part of that
+    # room's timetable -- the slot reads free, which is the truth. In a virtual
+    # room the online classes ARE the timetable.
+    if not room.is_virtual:
+        scheds = [s for s in scheds if s.modality != Modality.ONLINE]
     rows = []
     for slot in slots:
         cells = []
@@ -240,11 +267,16 @@ def _room_timetable(room, term):
 def room_detail(request, code):
     room = get_object_or_404(Room.objects.select_related("floor__building"), code=code)
     term = AcademicTerm.objects.filter(is_active=True).first()
-    schedules = (room.schedules.filter(status=ScheduleStatus.ACTIVE, term=term)
-                 .select_related("faculty").order_by("day_of_week", "start_time")
-                 if term else room.schedules.none())
-    upcoming = (room.sessions.filter(date__gte=timezone.localdate())
-                .select_related("schedule", "faculty").order_by("date", "scheduled_start")[:10])
+    schedules = list(
+        room.schedules.filter(status=ScheduleStatus.ACTIVE, term=term)
+        .select_related("faculty").order_by("day_of_week", "start_time")
+        if term else [])
+    upcoming = [s for s in room.sessions.filter(date__gte=timezone.localdate())
+                .select_related("schedule", "faculty")
+                .order_by("date", "scheduled_start")[:40]
+                if _occupies(s, room)][:10]
+    if not room.is_virtual:
+        schedules = [s for s in schedules if s.modality != Modality.ONLINE]
     return render(request, "ifo/room_detail.html", {
         "room": room, "schedules": schedules, "upcoming": upcoming, "term": term,
         "timetable": _room_timetable(room, term),

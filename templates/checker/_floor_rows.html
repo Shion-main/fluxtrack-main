@@ -28,7 +28,7 @@ card.style.card = .ft-card--* accent, card.style.pill = .ft-pill--* chip.
   {% for se in queue %}
   <a href="/checker/scan" class="ft-queue__row">
     <span class="ft-dot" style="background:var(--amber)" aria-hidden="true"></span>
-    <span class="ft-queue__room">{{ se.room.code }}</span>
+    <span class="ft-queue__room">{% include "_room_code.html" with room=se.room %}</span>
     <span class="ft-card__meta">{{ se.schedule.course_code }}-{{ se.schedule.section }}</span>
     <span class="ft-pill ft-pill--late" style="margin-left:auto">{{ se.scheduled_start|timesince:now }} waiting</span>
   </a>

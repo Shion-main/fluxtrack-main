@@ -52,7 +52,7 @@
           {% for s in c.sessions %}
           <div class="ft-subrow">
             <span class="ft-subrow__sec">{{ s.schedule.course_code }} · {{ s.schedule.section }}</span>
-            <span class="ft-subrow__room"><uk-icon icon="map-pin"></uk-icon> {{ s.room.code }} · {{ s.schedule.enrolled_count }}</span>
+            <span class="ft-subrow__room"><uk-icon icon="map-pin"></uk-icon> {% include "_room_code.html" with room=s.room %} · {{ s.schedule.enrolled_count }}</span>
           </div>
           {% endfor %}
         </div>

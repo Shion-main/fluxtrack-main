@@ -117,26 +117,60 @@ class RoomTileStateTests(_BoardBase):
         tile = _room_tile(room, [s], _aware(self.today, 10, 30), GRACE)
         self.assertEqual(tile["state"], "absent")
 
-    def test_declared_online_frees_the_room(self):
-        """A modality shift to Online means the room is legitimately empty. Without
-        a distinct state this reads as an unexplained empty booked room."""
+    def test_a_shift_to_online_leaves_the_physical_room_idle(self):
+        """An online class does not use a physical room, so it is not in that
+        room's day at all -- the room is simply free (idle here, since that was
+        its only class). This replaced the old dedicated `online` tile state."""
         room = self._room()
         s = self._session(room, status=SessionStatus.SCHEDULED, declared=Modality.ONLINE)
         tile = _room_tile(room, [s], _aware(self.today, 10, 30), GRACE)
-        self.assertEqual(tile["state"], "online")
+        self.assertEqual(tile["state"], "idle")
+        self.assertIsNone(tile["session"])
+        self.assertEqual(tile["count"], 0)
 
-    def test_natively_online_schedule_is_online(self):
+    def test_a_natively_online_class_does_not_occupy_a_physical_room(self):
         room = self._room()
         s = self._session(room, status=SessionStatus.SCHEDULED, modality=Modality.ONLINE)
         tile = _room_tile(room, [s], _aware(self.today, 10, 30), GRACE)
-        self.assertEqual(tile["state"], "online")
+        self.assertEqual(tile["state"], "idle")
 
-    def test_online_wins_over_past_grace(self):
-        """An online class must never be reported as a no-show against its room."""
+    def test_an_online_class_is_never_a_no_show_against_a_physical_room(self):
+        """Past grace with nobody in the room is correct -- nobody was meant to be
+        in it. It must not be reported as an absence for that room."""
         room = self._room()
         s = self._session(room, status=SessionStatus.SCHEDULED, declared=Modality.ONLINE)
         tile = _room_tile(room, [s], _aware(self.today, 10, 45), GRACE)
-        self.assertEqual(tile["state"], "online")
+        self.assertNotEqual(tile["state"], "absent")
+        self.assertEqual(tile["state"], "idle")
+
+    def test_the_room_keeps_its_other_classes_when_one_moves_online(self):
+        """Only the shifted class leaves the room's day."""
+        room = self._room()
+        moved = self._session(room, start=(10, 0), end=(11, 0),
+                              status=SessionStatus.SCHEDULED, declared=Modality.ONLINE)
+        stays = self._session(room, start=(13, 0), end=(14, 0),
+                              status=SessionStatus.SCHEDULED)
+        tile = _room_tile(room, [moved, stays], _aware(self.today, 10, 30), GRACE)
+        self.assertEqual(tile["state"], "free")     # nothing NOW, but more later
+        self.assertEqual(tile["next"], stays)
+        self.assertEqual(tile["count"], 1)
+
+    def test_a_virtual_room_still_reports_its_online_classes(self):
+        """In a virtual room the online class IS the occupancy, and its
+        attendance still matters to whoever verifies online duty."""
+        room = Room.objects.create(
+            floor=self.floor, code="V901", qr_token="tokv", manual_code="MCV001")
+        self.assertTrue(room.is_virtual)
+        s = self._session(room, status=SessionStatus.ACTIVE, modality=Modality.ONLINE)
+        tile = _room_tile(room, [s], _aware(self.today, 10, 30), GRACE)
+        self.assertEqual(tile["state"], "in_session")
+
+    def test_a_virtual_room_reports_an_online_no_show(self):
+        room = Room.objects.create(
+            floor=self.floor, code="V902", qr_token="tokv2", manual_code="MCV002")
+        s = self._session(room, status=SessionStatus.ABSENT, modality=Modality.ONLINE)
+        tile = _room_tile(room, [s], _aware(self.today, 10, 30), GRACE)
+        self.assertEqual(tile["state"], "absent")
 
     def test_completed_inside_window_frees_the_room(self):
         room = self._room()
@@ -234,14 +268,17 @@ class IfoBoardViewTests(_BoardBase):
         self.assertContains(resp, "Right now")
         self.assertContains(resp, self.faculty.last_name)
 
-    def test_room_panel_names_the_online_shift(self):
-        """The panel must explain WHY a booked room is empty."""
+    def test_room_panel_omits_a_class_that_moved_online(self):
+        """An online class does not use this physical room, so it is absent from
+        the panel entirely and the room reads as free -- not as a booked room
+        that needs explaining."""
         self.client.force_login(self.ifo)
         room = self._room()
         self._live_session(room, status=SessionStatus.SCHEDULED, declared=Modality.ONLINE)
         resp = self.client.get(reverse("ifo_room_panel", args=[room.code]))
-        self.assertContains(resp, "Class is online")
-        self.assertContains(resp, "meeting online")
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, "No sessions in this room today")
+        self.assertNotContains(resp, "In session")
 
 
 class RoomTimetableTests(_BoardBase):

@@ -8,7 +8,7 @@ keeps polling). ASCII-only.
 {% endcomment %}
 <div class="sheet__head">
   <div>
-    <h2 id="sheet-title">{{ room.code }}</h2>
+    <h2 id="sheet-title">{% include "_room_code.html" with room=room %}</h2>
     <p>{{ room.floor.building.name }} &middot; Floor {{ room.floor.number }}{% if room.name %} &middot; {{ room.name }}{% endif %}{% if room.capacity %} &middot; seats {{ room.capacity }}{% endif %}</p>
   </div>
   <button type="button" class="sheet__x" data-sheet-close aria-label="Close room details">
@@ -24,7 +24,6 @@ keeps polling). ASCII-only.
         {% if tile.state == "absent" %}<uk-icon icon="alert-triangle"></uk-icon> Absent
         {% elif tile.state == "starting" %}<uk-icon icon="clock"></uk-icon> Starting
         {% elif tile.state == "in_session" %}<uk-icon icon="circle-check"></uk-icon> In session
-        {% elif tile.state == "online" %}<uk-icon icon="monitor"></uk-icon> Class is online
         {% elif tile.state == "free" %}<uk-icon icon="door-open"></uk-icon> Free
         {% else %}<uk-icon icon="minus"></uk-icon> Idle{% endif %}
       </div>
@@ -42,10 +41,7 @@ keeps polling). ASCII-only.
           <span>within the <b>grace window</b> &mdash; not a no-show yet</span>
         {% elif tile.state == "absent" %}
           <span>nobody checked in past the grace window</span>
-        {% elif tile.state == "online" %}
-          <span>room is <b>free</b> &mdash; this class is meeting online</span>
-          {% if tile.session.modality_changed_at %}<span>shifted {{ tile.session.modality_changed_at|date:"M j, g:i A" }}</span>{% endif %}
-        {% endif %}
+          {% endif %}
       </div>
 
       {% elif tile.next %}

@@ -43,7 +43,7 @@ tags in this header (03-02 parse-error lesson). Franken UI (uk-*). ASCII-only.
       <span class="uk-text-muted">
         {{ item.schedule.get_day_of_week_display }}
         {{ item.schedule.start_time|time:"g:i A" }}-{{ item.schedule.end_time|time:"g:i A" }}
-        &middot; {{ item.schedule.room.code }}</span>
+        &middot; {% include "_room_code.html" with room=item.schedule.room %}</span>
       {% if item.new_start_time and item.new_end_time %}
       <span class="uk-text-muted block">
         New time: {{ item.new_start_time|time:"g:i A" }}-{{ item.new_end_time|time:"g:i A" }}</span>
