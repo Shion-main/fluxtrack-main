@@ -180,6 +180,35 @@
     if (e.target.closest("[data-sheet-close]")) closeSheet();
   });
 
+  // Only .sheet__body scrolls; the head and foot are pinned (flex: none). But in
+  // a drawer the pointer very often sits over the header -- it is where the room
+  // code and the close button are -- and a wheel there does nothing, which reads
+  // as "this panel won't scroll" even though the body underneath scrolls fine.
+  // Forward those wheels to the body so the whole panel behaves as one surface.
+  sheet.addEventListener("wheel", function (e) {
+    var body = sheet.querySelector(".sheet__body");
+    if (!body || body.contains(e.target)) return;   // already over the scroller
+    if (body.scrollHeight <= body.clientHeight) return;
+    body.scrollTop += e.deltaY;
+    e.preventDefault();
+  }, { passive: false });
+
+  // Same reasoning for the keyboard: once the panel is open, Page/Home/End
+  // should move the panel, not the board behind it.
+  document.addEventListener("keydown", function (e) {
+    if (sheet.hidden) return;
+    var body = sheet.querySelector(".sheet__body");
+    if (!body || body.scrollHeight <= body.clientHeight) return;
+    var page = body.clientHeight * 0.9;
+    var moves = {
+      PageDown: page, PageUp: -page,
+      Home: -body.scrollHeight, End: body.scrollHeight,
+    };
+    if (!(e.key in moves)) return;
+    body.scrollTop += moves[e.key];
+    e.preventDefault();
+  });
+
   document.addEventListener("keydown", function (e) {
     if (sheet.hidden) return;
     if (e.key === "Escape") {
