@@ -2,154 +2,155 @@
 Checker scan outcome partial (CHK-01..05). Flat if/elif chain over the
 CheckerResolution outcomes, mirroring templates/faculty/_outcome.html. Every
 action form carries a hidden room_id (and session_id when present) so the
-/checker/action endpoint can re-identify + re-gate server-side — those ids name
-WHICH room/session only; the server never trusts them for gating.
+/checker/action endpoint can re-identify + re-gate server-side -- those ids name
+WHICH room/session only; the server never trusts them for gating. Navy family:
+.ft-outcome semantic cards + .ft-btn-navy / .ft-btn-danger actions.
 {% endcomment %}
 {% if error == "note-required" %}
-<div class="uk-alert uk-alert-destructive" role="alert" data-error="note-required">
-  <div class="uk-alert-title">A note is required to flag</div>
-  <div class="uk-alert-description uk-text-small">
-    Briefly say what you saw (sent to IFO and HR), then send the flag again.
+<div class="ft-outcome ft-outcome--bad" role="alert" data-error="note-required">
+  <div class="ft-outcome__head">
+    <span class="ft-outcome__icon"><uk-icon icon="alert-triangle"></uk-icon></span>
+    <div class="ft-outcome__title">A note is required to flag</div>
   </div>
+  <p class="ft-outcome__body">Briefly say what you saw (sent to IFO and HR), then send the flag again.</p>
 </div>
 {% endif %}
 
 {% if error == "rate-limited" or error == "bad-payload" %}
-<div class="uk-alert uk-alert-destructive" data-outcome="invalid">
-  <div class="uk-alert-title">
-    {% if error == "rate-limited" %}Too many attempts{% else %}Invalid code{% endif %}
+<div class="ft-outcome ft-outcome--bad" data-outcome="invalid">
+  <div class="ft-outcome__head">
+    <span class="ft-outcome__icon"><uk-icon icon="alert-triangle"></uk-icon></span>
+    <div class="ft-outcome__title">{% if error == "rate-limited" %}Too many attempts{% else %}Invalid code{% endif %}</div>
   </div>
-  <div class="uk-alert-description uk-text-small">
+  <p class="ft-outcome__body">
     {% if error == "rate-limited" %}Manual code entry is limited. Wait a minute and try again.
-    {% else %}That is not a valid room QR or six-digit code.{% endif %}
-  </div>
+    {% else %}That is not a valid room QR or six-digit code.{% endif %}</p>
 </div>
 
 {% elif applied %}
 {% if applied_action == "verified" %}
-<div class="uk-alert uk-alert-primary" data-outcome="verified">
-  <div class="uk-alert-title"><uk-icon icon="check-check" class="size-4"></uk-icon> Verified present</div>
-  <div class="uk-alert-description uk-text-small">
-    {{ session.schedule.course_code }}-{{ session.schedule.section }} in {{ room.code }} is checker-verified.
+<div class="ft-outcome ft-outcome--ok" data-outcome="verified">
+  <div class="ft-outcome__head">
+    <span class="ft-outcome__icon"><uk-icon icon="check-check"></uk-icon></span>
+    <div class="ft-outcome__title">Verified present</div>
   </div>
+  <p class="ft-outcome__body">{{ session.schedule.course_code }}-{{ session.schedule.section }} in {{ room.code }} is checker-verified.</p>
 </div>
 {% elif applied_action == "verified_empty" %}
-<div class="uk-alert uk-alert-primary" data-outcome="verified-empty">
-  <div class="uk-alert-title"><uk-icon icon="door-closed" class="size-4"></uk-icon> Empty (checked)</div>
-  <div class="uk-alert-description uk-text-small">
-    {{ room.code }} recorded as legitimately empty.
+<div class="ft-outcome ft-outcome--info" data-outcome="verified-empty">
+  <div class="ft-outcome__head">
+    <span class="ft-outcome__icon"><uk-icon icon="door-closed"></uk-icon></span>
+    <div class="ft-outcome__title">Empty (checked)</div>
   </div>
+  <p class="ft-outcome__body">{{ room.code }} recorded as legitimately empty.</p>
 </div>
 {% else %}
-<div class="uk-alert uk-alert-destructive" data-outcome="flagged">
-  <div class="uk-alert-title"><uk-icon icon="flag" class="size-4"></uk-icon> Flag sent</div>
-  <div class="uk-alert-description uk-text-small">
-    Your flag for {{ room.code }} was sent to IFO and HR.
+<div class="ft-outcome ft-outcome--bad" data-outcome="flagged">
+  <div class="ft-outcome__head">
+    <span class="ft-outcome__icon"><uk-icon icon="flag"></uk-icon></span>
+    <div class="ft-outcome__title">Flag sent</div>
   </div>
+  <p class="ft-outcome__body">Your flag for {{ room.code }} was sent to IFO and HR.</p>
 </div>
 {% endif %}
 
 {% elif resolution.outcome == "off-duty" %}
-<div class="uk-alert uk-alert-secondary" data-outcome="off-duty">
-  <div class="uk-alert-title">You're not on duty</div>
-  <div class="uk-alert-description uk-text-small">
-    You don't have an active duty assignment. Ask IFO to post you before verifying.
+<div class="ft-outcome ft-outcome--neutral" data-outcome="off-duty">
+  <div class="ft-outcome__head">
+    <span class="ft-outcome__icon"><uk-icon icon="user-x"></uk-icon></span>
+    <div class="ft-outcome__title">You're not on duty</div>
   </div>
+  <p class="ft-outcome__body">You don't have an active duty assignment. Ask IFO to post you before verifying.</p>
 </div>
 
 {% elif resolution.outcome == "wrong-floor" %}
-<div class="uk-alert uk-alert-secondary" data-outcome="wrong-floor">
-  <div class="uk-alert-title">Wrong floor</div>
-  <div class="uk-alert-description uk-text-small">
-    You're on duty, but not on {{ room.floor }}. Scan a room on your assigned floor.
+<div class="ft-outcome ft-outcome--neutral" data-outcome="wrong-floor">
+  <div class="ft-outcome__head">
+    <span class="ft-outcome__icon"><uk-icon icon="map-pin-off"></uk-icon></span>
+    <div class="ft-outcome__title">Wrong floor</div>
   </div>
+  <p class="ft-outcome__body">You're on duty, but not on {{ room.floor }}. Scan a room on your assigned floor.</p>
 </div>
 
 {% elif resolution.outcome == "absent-excluded" %}
-<div class="uk-alert uk-alert-secondary" data-outcome="absent-excluded">
-  <div class="uk-alert-title">Session is Absent</div>
-  <div class="uk-alert-description uk-text-small">
-    This session is Absent (final) and can't be verified.
+<div class="ft-outcome ft-outcome--neutral" data-outcome="absent-excluded">
+  <div class="ft-outcome__head">
+    <span class="ft-outcome__icon"><uk-icon icon="x"></uk-icon></span>
+    <div class="ft-outcome__title">Session is Absent</div>
   </div>
+  <p class="ft-outcome__body">This session is Absent (final) and can't be verified.</p>
 </div>
 
 {% elif resolution.outcome == "already-verified" %}
-<div class="uk-alert uk-alert-primary" data-outcome="already-verified">
-  <div class="uk-alert-title"><uk-icon icon="check-check" class="size-4"></uk-icon> Already verified</div>
-  <div class="uk-alert-description uk-text-small">
-    {{ room.code }} is already checker-verified.
+<div class="ft-outcome ft-outcome--ok" data-outcome="already-verified">
+  <div class="ft-outcome__head">
+    <span class="ft-outcome__icon"><uk-icon icon="check-check"></uk-icon></span>
+    <div class="ft-outcome__title">Already verified</div>
   </div>
+  <p class="ft-outcome__body">{{ room.code }} is already checker-verified.</p>
 </div>
 
 {% elif resolution.outcome == "no-session" %}
-<div class="uk-card uk-card-body" data-outcome="no-session">
-  <div class="uk-h3 mb-1">{{ room.code }}</div>
-  <p class="uk-text-small uk-text-muted mb-3">No active session in this room right now.</p>
-  <form hx-post="/checker/action" hx-target="#outcome" hx-swap="innerHTML">
+<div class="ft-outcome ft-outcome--neutral" data-outcome="no-session">
+  <div class="ft-outcome__head">
+    <span class="ft-outcome__icon"><uk-icon icon="door-closed"></uk-icon></span>
+    <div class="ft-outcome__title">{{ room.code }}</div>
+  </div>
+  <p class="ft-outcome__body">No active session in this room right now.</p>
+  <form class="ft-outcome__form" hx-post="/checker/action" hx-target="#outcome" hx-swap="innerHTML">
     {% csrf_token %}
     <input type="hidden" name="action" value="verified_empty">
     <input type="hidden" name="room_id" value="{{ room.id }}">
-    <button class="uk-btn uk-btn-primary w-full h-12" type="submit">
-      <uk-icon icon="door-closed" class="size-5"></uk-icon> Confirm empty
-    </button>
+    <button class="ft-btn-navy" type="submit"><uk-icon icon="door-closed"></uk-icon> Confirm empty</button>
   </form>
 </div>
 
 {% elif resolution.outcome == "active-unverified" %}
-<div class="uk-card uk-card-body" data-outcome="active-unverified">
-  <div class="flex items-center gap-3 mb-3">
+<div class="ft-outcome ft-outcome--warn" data-outcome="active-unverified">
+  <div class="ft-idrow">
     {% if session.faculty.profile_photo %}
-    <img class="size-16 rounded-full object-cover border border-border"
-         src="{{ session.faculty.profile_photo.url }}"
+    <img class="ft-idrow__photo" src="{{ session.faculty.profile_photo.url }}"
          alt="Photo of {{ session.faculty.get_full_name }}">
     {% else %}
-    <div class="size-16 rounded-full bg-muted text-muted-foreground flex items-center justify-center uk-h3"
-         aria-label="No photo for {{ session.faculty.get_full_name }}">
-      {{ session.faculty.first_name.0|default:session.faculty.username.0 }}{{ session.faculty.last_name.0 }}
-    </div>
+    <div class="ft-idrow__ph" aria-label="No photo for {{ session.faculty.get_full_name }}">
+      {{ session.faculty.first_name.0|default:session.faculty.username.0 }}{{ session.faculty.last_name.0 }}</div>
     {% endif %}
     <div>
-      <div class="font-semibold">{{ session.faculty.get_full_name|default:session.faculty.username }}</div>
-      <div class="uk-text-small uk-text-muted">
-        {{ session.schedule.course_code }}-{{ session.schedule.section }} · {{ room.code }}
-      </div>
+      <div class="ft-idrow__name">{{ session.faculty.get_full_name|default:session.faculty.username }}</div>
+      <div class="ft-card__meta">{{ session.schedule.course_code }}-{{ session.schedule.section }} · {{ room.code }}</div>
     </div>
   </div>
 
   {# One-tap Verify #}
-  <form class="mb-2" hx-post="/checker/action" hx-target="#outcome" hx-swap="innerHTML">
+  <form class="ft-outcome__form" hx-post="/checker/action" hx-target="#outcome" hx-swap="innerHTML">
     {% csrf_token %}
     <input type="hidden" name="action" value="verified">
     <input type="hidden" name="room_id" value="{{ room.id }}">
     <input type="hidden" name="session_id" value="{{ session.id }}">
-    <button class="uk-btn uk-btn-primary w-full h-12" type="submit">
-      <uk-icon icon="check" class="size-5"></uk-icon> Verify present
-    </button>
+    <button class="ft-btn-navy" type="submit"><uk-icon icon="check"></uk-icon> Verify present</button>
   </form>
 
   {# Note-required flags #}
-  <form class="mb-2 space-y-2" hx-post="/checker/action" hx-target="#outcome" hx-swap="innerHTML">
+  <form class="ft-outcome__form" hx-post="/checker/action" hx-target="#outcome" hx-swap="innerHTML">
     {% csrf_token %}
     <input type="hidden" name="action" value="flag_identity_mismatch">
     <input type="hidden" name="room_id" value="{{ room.id }}">
     <input type="hidden" name="session_id" value="{{ session.id }}">
-    <label class="uk-text-small font-semibold" for="note-mismatch">Flag: identity mismatch</label>
-    <textarea id="note-mismatch" name="note" class="uk-input" required maxlength="255"
+    <label class="ft-label" for="note-mismatch">Flag: identity mismatch</label>
+    <textarea id="note-mismatch" name="note" class="ft-control" required maxlength="255"
               placeholder="Briefly say what you saw (sent to IFO and HR)"></textarea>
-    <p class="uk-text-small uk-text-muted">Flags reach IFO and HR permanently and can't be appealed.</p>
-    <button class="uk-btn uk-btn-destructive w-full h-11" type="submit">Send flag</button>
+    <button class="ft-btn-danger" type="submit"><uk-icon icon="flag"></uk-icon> Send flag</button>
   </form>
 
-  <form class="space-y-2" hx-post="/checker/action" hx-target="#outcome" hx-swap="innerHTML">
+  <form class="ft-outcome__form" hx-post="/checker/action" hx-target="#outcome" hx-swap="innerHTML">
     {% csrf_token %}
     <input type="hidden" name="action" value="flag_not_present">
     <input type="hidden" name="room_id" value="{{ room.id }}">
     <input type="hidden" name="session_id" value="{{ session.id }}">
-    <label class="uk-text-small font-semibold" for="note-absent">Flag: not present</label>
-    <textarea id="note-absent" name="note" class="uk-input" required maxlength="255"
+    <label class="ft-label" for="note-absent">Flag: not present</label>
+    <textarea id="note-absent" name="note" class="ft-control" required maxlength="255"
               placeholder="Briefly say what you saw (sent to IFO and HR)"></textarea>
-    <p class="uk-text-small uk-text-muted">Flags reach IFO and HR permanently and can't be appealed.</p>
-    <button class="uk-btn uk-btn-destructive w-full h-11" type="submit">Send flag</button>
+    <button class="ft-btn-danger" type="submit"><uk-icon icon="flag"></uk-icon> Send flag</button>
   </form>
 </div>
 {% endif %}

@@ -1,116 +1,153 @@
+{% comment %}
+Check-in outcome, swapped into #outcome (a white sheet over navy in scan.html) by
+the resolver and by /scan/confirm htmx posts. Each branch is a semantic .ft-outcome
+card: green=present/done, amber=needs a confirm, red=blocked, blue=online, grey=info.
+Confirm forms reuse .ft-control + .ft-btn-navy. ASCII-only (no em dash).
+{% endcomment %}
 {% if error %}
-<div class="uk-alert uk-alert-destructive">
-  <div class="uk-alert-title">
-    {% if error == "rate-limited" %}Too many attempts{% else %}Invalid code{% endif %}
+<div class="ft-outcome ft-outcome--bad" data-outcome="error">
+  <div class="ft-outcome__head">
+    <span class="ft-outcome__icon"><uk-icon icon="alert-triangle"></uk-icon></span>
+    <div class="ft-outcome__title">{% if error == "rate-limited" %}Too many attempts{% else %}Invalid code{% endif %}</div>
   </div>
-  <div class="uk-alert-description uk-text-small">
+  <p class="ft-outcome__body">
     {% if error == "rate-limited" %}Manual code entry is limited. Wait a minute and try again.
-    {% else %}That is not a valid room QR or six-digit code.{% endif %}
-  </div>
+    {% else %}That is not a valid room QR or six-digit code.{% endif %}</p>
 </div>
+
 {% elif resolution.outcome == "checked-in" %}
-<div class="uk-alert uk-alert-primary" data-outcome="checked-in">
-  <div class="uk-alert-title"><uk-icon icon="check" class="size-4"></uk-icon>
-    Checked in — Present</div>
-  <div class="uk-alert-description uk-text-small">
+<div class="ft-outcome ft-outcome--ok" data-outcome="checked-in">
+  <div class="ft-outcome__head">
+    <span class="ft-outcome__icon"><uk-icon icon="check"></uk-icon></span>
+    <div class="ft-outcome__title">Checked in - Present</div>
+  </div>
+  <p class="ft-outcome__body">
     {{ session.schedule.course_code }}-{{ session.schedule.section }} in {{ room.code }}.
-    Re-scan this room when your class ends to check out.
-  </div>
+    Re-scan this room when your class ends to check out.</p>
 </div>
+
 {% elif resolution.outcome == "checked-out" %}
-<div class="uk-alert uk-alert-primary" data-outcome="checked-out">
-  <div class="uk-alert-title"><uk-icon icon="log-out" class="size-4"></uk-icon> Checked out</div>
-  <div class="uk-alert-description uk-text-small">
-    {{ session.schedule.course_code }} completed. Actual end time recorded.
+<div class="ft-outcome ft-outcome--ok" data-outcome="checked-out">
+  <div class="ft-outcome__head">
+    <span class="ft-outcome__icon"><uk-icon icon="log-out"></uk-icon></span>
+    <div class="ft-outcome__title">Checked out</div>
   </div>
+  <p class="ft-outcome__body">{{ session.schedule.course_code }} completed. Actual end time recorded.</p>
 </div>
+
 {% elif resolution.outcome == "absent" %}
-<div class="uk-alert uk-alert-destructive" data-outcome="absent">
-  <div class="uk-alert-title">Marked Absent</div>
-  <div class="uk-alert-description uk-text-small">
-    Check-in is past the grace window, so this session is recorded as Absent
-    and cannot be started. A Checker can correct this if you are physically present.
+<div class="ft-outcome ft-outcome--bad" data-outcome="absent">
+  <div class="ft-outcome__head">
+    <span class="ft-outcome__icon"><uk-icon icon="x"></uk-icon></span>
+    <div class="ft-outcome__title">Marked Absent</div>
   </div>
+  <p class="ft-outcome__body">
+    Check-in is past the grace window, so this session is recorded as Absent and
+    cannot be started. A Checker can correct this if you are physically present.</p>
 </div>
+
 {% elif resolution.outcome == "too-early" %}
-<div class="uk-alert uk-alert-secondary" data-outcome="too-early">
-  <div class="uk-alert-title">Too early</div>
-  <div class="uk-alert-description uk-text-small">
-    Check-in opens shortly before your scheduled start. Try again closer to class time.
+<div class="ft-outcome ft-outcome--neutral" data-outcome="too-early">
+  <div class="ft-outcome__head">
+    <span class="ft-outcome__icon"><uk-icon icon="clock"></uk-icon></span>
+    <div class="ft-outcome__title">Too early</div>
   </div>
+  <p class="ft-outcome__body">
+    Check-in opens shortly before your scheduled start. Try again closer to class time.</p>
 </div>
+
 {% elif resolution.outcome == "online-reject" %}
-<div class="uk-alert uk-alert-secondary" data-outcome="online-reject">
-  <div class="uk-alert-title">Online session</div>
-  <div class="uk-alert-description uk-text-small">
-    This session is Online — start it with Verify &amp; Start (Teams link) instead of a room QR.
+<div class="ft-outcome ft-outcome--info" data-outcome="online-reject">
+  <div class="ft-outcome__head">
+    <span class="ft-outcome__icon"><uk-icon icon="monitor"></uk-icon></span>
+    <div class="ft-outcome__title">Online session</div>
   </div>
+  <p class="ft-outcome__body">
+    This session is Online - start it with Verify &amp; Start (Teams link) instead of a room QR.</p>
 </div>
+
 {% elif resolution.outcome == "no-schedule" %}
-<div class="uk-alert uk-alert-secondary" data-outcome="no-schedule">
-  <div class="uk-alert-title">No schedule found</div>
-  <div class="uk-alert-description uk-text-small">
-    You have no session due in {{ room.code }} right now.
+<div class="ft-outcome ft-outcome--neutral" data-outcome="no-schedule">
+  <div class="ft-outcome__head">
+    <span class="ft-outcome__icon"><uk-icon icon="calendar-x"></uk-icon></span>
+    <div class="ft-outcome__title">No schedule found</div>
   </div>
+  <p class="ft-outcome__body">You have no session due in {{ room.code }} right now.</p>
 </div>
+
 {% elif resolution.outcome == "early-end" and not confirmed %}
-<div class="uk-alert uk-alert-secondary" data-outcome="early-end">
-  <div class="uk-alert-title">Ending early?</div>
-  <div class="uk-alert-description uk-text-small">
-    Your class still has time left. A reason is required to end early.
+<div class="ft-outcome ft-outcome--warn" data-outcome="early-end">
+  <div class="ft-outcome__head">
+    <span class="ft-outcome__icon"><uk-icon icon="alert-triangle"></uk-icon></span>
+    <div class="ft-outcome__title">Ending early?</div>
   </div>
-  <form class="mt-3 space-y-2" hx-post="/scan/confirm" hx-target="#outcome" hx-swap="innerHTML">
+  <p class="ft-outcome__body">Your class still has time left. A reason is required to end early.</p>
+  <form class="ft-outcome__form" hx-post="/scan/confirm" hx-target="#outcome" hx-swap="innerHTML">
     {% csrf_token %}
     <input type="hidden" name="token" value="{{ confirm_token }}">
-    <input name="reason" class="uk-input" placeholder="Reason for ending early" required maxlength="255">
-    <button class="uk-btn uk-btn-primary w-full h-11" type="submit">Confirm early end</button>
+    <input name="reason" class="ft-control" placeholder="Reason for ending early" required maxlength="255">
+    <button class="ft-btn-navy" type="submit">Confirm early end</button>
   </form>
 </div>
+
 {% elif resolution.outcome == "early-end" and confirmed %}
-<div class="uk-alert uk-alert-primary" data-outcome="early-end-confirmed">
-  <div class="uk-alert-title"><uk-icon icon="log-out" class="size-4"></uk-icon> Ended early</div>
-  <div class="uk-alert-description uk-text-small">Session completed; your reason was recorded.</div>
+<div class="ft-outcome ft-outcome--ok" data-outcome="early-end-confirmed">
+  <div class="ft-outcome__head">
+    <span class="ft-outcome__icon"><uk-icon icon="log-out"></uk-icon></span>
+    <div class="ft-outcome__title">Ended early</div>
+  </div>
+  <p class="ft-outcome__body">Session completed; your reason was recorded.</p>
 </div>
+
 {% elif resolution.outcome == "wrong-room" and not confirmed %}
-<div class="uk-alert uk-alert-secondary" data-outcome="wrong-room">
-  <div class="uk-alert-title">Different room</div>
-  <div class="uk-alert-description uk-text-small">
+<div class="ft-outcome ft-outcome--warn" data-outcome="wrong-room">
+  <div class="ft-outcome__head">
+    <span class="ft-outcome__icon"><uk-icon icon="map-pin"></uk-icon></span>
+    <div class="ft-outcome__title">Different room</div>
+  </div>
+  <p class="ft-outcome__body">
     Your session is scheduled in {{ session.room.code }}, but you scanned {{ room.code }}.
-    Confirm to hold your class here instead — IFO will be notified.
-  </div>
-  <form class="mt-3" hx-post="/scan/confirm" hx-target="#outcome" hx-swap="innerHTML">
+    Confirm to hold your class here instead - IFO will be notified.</p>
+  <form class="ft-outcome__form" hx-post="/scan/confirm" hx-target="#outcome" hx-swap="innerHTML">
     {% csrf_token %}
     <input type="hidden" name="token" value="{{ confirm_token }}">
-    <button class="uk-btn uk-btn-primary w-full h-11" type="submit">Use {{ room.code }}</button>
+    <button class="ft-btn-navy" type="submit">Use {{ room.code }}</button>
   </form>
 </div>
+
 {% elif resolution.outcome == "wrong-room" and confirmed %}
-<div class="uk-alert uk-alert-primary" data-outcome="wrong-room-confirmed">
-  <div class="uk-alert-title"><uk-icon icon="check" class="size-4"></uk-icon> Room updated</div>
-  <div class="uk-alert-description uk-text-small">
-    Your session now points to {{ room.code }} and IFO has been notified.
-    Scan again to check in.
+<div class="ft-outcome ft-outcome--ok" data-outcome="wrong-room-confirmed">
+  <div class="ft-outcome__head">
+    <span class="ft-outcome__icon"><uk-icon icon="check"></uk-icon></span>
+    <div class="ft-outcome__title">Room updated</div>
   </div>
+  <p class="ft-outcome__body">
+    Your session now points to {{ room.code }} and IFO has been notified. Scan again to check in.</p>
 </div>
+
 {% elif resolution.outcome == "room-occupied" and not confirmed %}
-<div class="uk-alert uk-alert-destructive" data-outcome="room-occupied">
-  <div class="uk-alert-title">Room occupied</div>
-  <div class="uk-alert-description uk-text-small">
-    A prior session is still active in {{ room.code }}. Force Handover will
-    auto-complete it and start yours. This is audit-logged.
+<div class="ft-outcome ft-outcome--bad" data-outcome="room-occupied">
+  <div class="ft-outcome__head">
+    <span class="ft-outcome__icon"><uk-icon icon="alert-triangle"></uk-icon></span>
+    <div class="ft-outcome__title">Room occupied</div>
   </div>
-  <form class="mt-3" hx-post="/scan/confirm" hx-target="#outcome" hx-swap="innerHTML">
+  <p class="ft-outcome__body">
+    A prior session is still active in {{ room.code }}. Force Handover will
+    auto-complete it and start yours. This is audit-logged.</p>
+  <form class="ft-outcome__form" hx-post="/scan/confirm" hx-target="#outcome" hx-swap="innerHTML">
     {% csrf_token %}
     <input type="hidden" name="token" value="{{ confirm_token }}">
-    <button class="uk-btn uk-btn-primary w-full h-11" type="submit">Confirm force handover</button>
+    <button class="ft-btn-navy" type="submit">Confirm force handover</button>
   </form>
 </div>
+
 {% elif resolution.outcome == "room-occupied" and confirmed %}
-<div class="uk-alert uk-alert-primary" data-outcome="handover-confirmed">
-  <div class="uk-alert-title"><uk-icon icon="check" class="size-4"></uk-icon>
-    Checked in via handover</div>
-  <div class="uk-alert-description uk-text-small">
-    The prior session was completed and yours is now active in {{ room.code }}.
+<div class="ft-outcome ft-outcome--ok" data-outcome="handover-confirmed">
+  <div class="ft-outcome__head">
+    <span class="ft-outcome__icon"><uk-icon icon="check"></uk-icon></span>
+    <div class="ft-outcome__title">Checked in via handover</div>
   </div>
+  <p class="ft-outcome__body">
+    The prior session was completed and yours is now active in {{ room.code }}.</p>
 </div>
 {% endif %}

@@ -1,74 +1,91 @@
 {% extends "base.html" %}
+{% load static %}
 {% comment %}
 MOD-05/D-10/D-12 "my requests" list. Scoped to the requester only (the view
 filters requester=request.user). Each ticket shows target modality, window,
-affected classes, and a colored status label; rejected/denied tickets show the
-decision reason. The Withdraw control renders ONLY while status == PENDING -- the
-server (withdraw_modality_shift) re-checks requester + PENDING regardless, so the
-hidden control is UX, not the guard. Franken UI (uk-*). ASCII-only.
+affected classes, and a status pill; rejected/denied tickets show the decision
+reason. The Withdraw control renders ONLY while status == PENDING -- the server
+(withdraw_modality_shift) re-checks requester + PENDING regardless, so the hidden
+control is UX, not the guard. Navy floor shell (.ft-*), a primary faculty tab.
+ASCII-only.
 {% endcomment %}
-{% block title %}My modality requests - FluxTrack{% endblock %}
+{% block title %}Requests · FluxTrack{% endblock %}
 {% block content %}
-<div class="max-w-2xl mx-auto px-4 pt-5 pb-28 sm:pb-16">
-  <header class="flex items-center gap-3 mb-5">
-    <div class="min-w-0">
-      <h1 class="uk-h3 mb-0.5">My modality requests</h1>
-      <p class="uk-text-small uk-text-muted">Track your shift requests and their decisions.</p>
-    </div>
-    <a href="/faculty/modality/new" class="uk-btn uk-btn-primary uk-btn-sm ml-auto shrink-0">
-      <uk-icon icon="plus" class="size-4"></uk-icon> New request</a>
+<div class="ft-app">
+
+  <header class="ft-top">
+    <a href="/faculty/home" class="ft-top__brand">
+      <img class="ft-top__crest" src="{% static 'brand/mmcm-crest.png' %}" alt="">
+      <span class="ft-top__mark">FluxTrack</span>
+    </a>
+    <div class="relative inline-flex" style="margin-left:auto">{% include "notifications/_bell.html" %}</div>
+    <details class="ft-acct" style="margin-left:0">
+      <summary class="ft-top__avatar" aria-label="Account and sign out">{{ user.first_name|default:user.username|slice:":1"|upper }}{{ user.last_name|slice:":1"|upper }}</summary>
+      <div class="ft-acct__menu">
+        <div class="ft-acct__who">
+          <b>{{ user.get_full_name|default:user.username }}</b>
+          <span>{{ user.get_role_display }}{% if user.department %} · {{ user.department.name }}{% endif %}</span>
+        </div>
+        <a class="ft-acct__item" href="/logout"><uk-icon icon="log-out"></uk-icon> Sign out</a>
+      </div>
+    </details>
   </header>
 
-  {% if error %}
-  <div class="uk-alert uk-alert-destructive mb-4" role="alert" data-error="1">
-    <p class="uk-text-small">{{ error }}</p>
-  </div>
-  {% endif %}
-
-  {% for r in requests %}
-  <div class="uk-card uk-card-body mb-3">
-    <div class="flex items-start justify-between gap-3">
-      <div class="min-w-0">
-        <p class="font-semibold">Shift to {{ r.get_target_modality_display }}</p>
-        <p class="uk-text-small uk-text-muted">
-          {{ r.window_start|date:"M j" }}
-          {% if r.window_end != r.window_start %}- {{ r.window_end|date:"M j, Y" }}
-          {% else %}, {{ r.window_start|date:"Y" }}{% endif %}
-          {% if r.is_time_move %}&middot; time-move{% endif %}
-        </p>
-      </div>
-      {% if r.status == "pending" %}
-        <span class="uk-label uk-label-primary">Pending</span>
-      {% elif r.status == "approved" %}
-        <span class="uk-label" style="background:#16a34a;color:#fff">Approved</span>
-      {% elif r.status == "rejected" %}
-        <span class="uk-label uk-label-destructive">Rejected</span>
-      {% elif r.status == "denied" %}
-        <span class="uk-label uk-label-destructive">Denied</span>
-      {% else %}
-        <span class="uk-label uk-label-secondary">Withdrawn</span>
-      {% endif %}
+  <div class="ft-page">
+    <div class="ft-greet">
+      <div class="ft-greet__hi">Requests</div>
+      <div class="ft-greet__date">Your modality-shift requests and their decisions</div>
     </div>
 
-    <p class="uk-text-small mt-2">
-      {% for item in r.items.all %}{{ item.schedule.course_code }}-{{ item.schedule.section }}{% if not forloop.last %}, {% endif %}{% empty %}(no classes){% endfor %}
-    </p>
-
-    {% if r.decision_reason and r.status == "rejected" or r.decision_reason and r.status == "denied" %}
-    <p class="uk-text-small uk-text-muted mt-1">Reason: {{ r.decision_reason }}</p>
+    {% if error %}
+    <div class="ft-alert-error" role="alert" data-error="1">
+      <uk-icon icon="alert-triangle"></uk-icon> {{ error }}</div>
     {% endif %}
 
-    {% if r.status == "pending" %}
-    <form method="post" action="/faculty/modality/{{ r.pk }}/withdraw" class="mt-3">
-      {% csrf_token %}
-      <button type="submit" class="uk-btn uk-btn-secondary uk-btn-sm">
-        <uk-icon icon="x" class="size-4"></uk-icon> Withdraw</button>
-    </form>
-    {% endif %}
+    <div class="ft-sec">
+      <div class="ft-sec__title">Your requests</div>
+      <a class="ft-chip" href="/faculty/modality/new"><uk-icon icon="plus"></uk-icon> New</a>
+    </div>
+
+    <div class="ft-list">
+      {% for r in requests %}
+      <div class="ft-row">
+        <div class="ft-row__top">
+          <span class="ft-row__title">Shift to {{ r.get_target_modality_display }}</span>
+          {% if r.status == "pending" %}<span class="ft-pill ft-pill--pending" style="margin-left:auto">Pending</span>
+          {% elif r.status == "approved" %}<span class="ft-pill ft-pill--approved" style="margin-left:auto"><uk-icon icon="check"></uk-icon> Approved</span>
+          {% elif r.status == "rejected" %}<span class="ft-pill ft-pill--absent" style="margin-left:auto">Rejected</span>
+          {% elif r.status == "denied" %}<span class="ft-pill ft-pill--absent" style="margin-left:auto">Denied</span>
+          {% else %}<span class="ft-pill ft-pill--done" style="margin-left:auto">Withdrawn</span>{% endif %}
+        </div>
+
+        <div class="ft-row__meta">
+          <uk-icon icon="calendar"></uk-icon>
+          {{ r.window_start|date:"M j" }}{% if r.window_end != r.window_start %} - {{ r.window_end|date:"M j, Y" }}{% else %}, {{ r.window_start|date:"Y" }}{% endif %}
+          {% if r.is_time_move %}<span>·</span> time-move{% endif %}
+        </div>
+
+        <div class="ft-row__meta" style="margin-top:2px">
+          <uk-icon icon="book-open"></uk-icon>
+          {% for item in r.items.all %}{{ item.schedule.course_code }}-{{ item.schedule.section }}{% if not forloop.last %}, {% endif %}{% empty %}(no classes){% endfor %}
+        </div>
+
+        {% if r.decision_reason and r.status == "rejected" or r.decision_reason and r.status == "denied" %}
+        <div class="ft-row__meta" style="margin-top:2px"><uk-icon icon="message-square"></uk-icon> {{ r.decision_reason }}</div>
+        {% endif %}
+
+        {% if r.status == "pending" %}
+        <form method="post" action="/faculty/modality/{{ r.pk }}/withdraw" style="margin-top:12px">
+          {% csrf_token %}
+          <button type="submit" class="ft-btn-ghost-sm"><uk-icon icon="x"></uk-icon> Withdraw</button>
+        </form>
+        {% endif %}
+      </div>
+      {% empty %}
+      <div class="ft-row"><div class="ft-row__meta" style="margin:0">
+        <uk-icon icon="inbox"></uk-icon> No requests yet. Tap New to request a modality shift.</div></div>
+      {% endfor %}
+    </div>
   </div>
-  {% empty %}
-  <p class="uk-text-small uk-text-muted">
-    You have not submitted any modality-shift requests yet.</p>
-  {% endfor %}
 </div>
 {% endblock %}

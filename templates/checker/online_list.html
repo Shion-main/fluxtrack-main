@@ -1,22 +1,41 @@
 {% extends "base.html" %}
+{% load static %}
 {% comment %}
 Online-to-verify list (03-05, CHK-02). Only online-duty Checkers reach this; it
 lists today's online sessions owned by the checker (Session.online_checker ==
 request.user) that are not yet verified. Each item links to online_open, where
-the checker opens the Teams link and records Verify / Flag. Sibling of the IFO
-live shell; the swappable rows live in _online_list.html. Franken UI, 03-UI-SPEC.
+the checker opens the Teams link and records Verify / Flag. Navy floor shell; the
+swappable rows live in _online_list.html.
 {% endcomment %}
 {% block title %}Online to verify · FluxTrack{% endblock %}
 {% block content %}
-<div class="uk-container max-w-4xl pt-8 pb-16">
-  <div class="flex items-center gap-2 mb-1">
-    <a href="/" class="uk-btn uk-btn-ghost uk-btn-icon" aria-label="Back">
-      <uk-icon icon="arrow-left" class="size-5"></uk-icon>
-    </a>
-    <h1 class="uk-h2">Online to verify</h1>
-  </div>
-  <p class="uk-text-muted mb-6">Your assigned online sessions. Open each in Teams, then verify.</p>
+<div class="ft-app">
 
-  {% include "checker/_online_list.html" %}
+  <header class="ft-top">
+    <a href="/checker/floor" class="ft-top__brand">
+      <img class="ft-top__crest" src="{% static 'brand/mmcm-crest.png' %}" alt="">
+      <span class="ft-top__mark">FluxTrack</span>
+    </a>
+    <div class="relative inline-flex" style="margin-left:auto">{% include "notifications/_bell.html" %}</div>
+    <details class="ft-acct" style="margin-left:0">
+      <summary class="ft-top__avatar" aria-label="Account and sign out">{{ user.first_name|default:user.username|slice:":1"|upper }}{{ user.last_name|slice:":1"|upper }}</summary>
+      <div class="ft-acct__menu">
+        <div class="ft-acct__who">
+          <b>{{ user.get_full_name|default:user.username }}</b>
+          <span>{{ user.get_role_display }}</span>
+        </div>
+        <a class="ft-acct__item" href="/logout"><uk-icon icon="log-out"></uk-icon> Sign out</a>
+      </div>
+    </details>
+  </header>
+
+  <div class="ft-page">
+    <div class="ft-greet">
+      <div class="ft-greet__hi">Online to verify</div>
+      <div class="ft-greet__date">Open each in Teams, then verify the faculty is conducting the session.</div>
+    </div>
+
+    {% include "checker/_online_list.html" %}
+  </div>
 </div>
 {% endblock %}

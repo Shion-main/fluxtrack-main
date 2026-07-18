@@ -6,73 +6,84 @@
 <script src="{% static 'checker/offline_queue.js' %}" defer></script>
 {% endblock %}
 {% block content %}
-<div class="max-w-md mx-auto px-4 pt-4 pb-24">
-  <div id="offline-banner" class="hidden uk-alert uk-alert-secondary mb-3" role="status" aria-live="polite">
-    <div class="uk-alert-title flex items-center gap-2">
-      <uk-icon icon="wifi-off" class="size-4"></uk-icon>
-      <span id="offline-banner-text">Offline — 0 scan(s) queued.</span>
+<div class="ft-app">
+
+  <header class="ft-top">
+    <a href="/checker/floor" class="ft-top__brand">
+      <img class="ft-top__crest" src="{% static 'brand/mmcm-crest.png' %}" alt="">
+      <span class="ft-top__mark">FluxTrack</span>
+    </a>
+    <div class="relative inline-flex" style="margin-left:auto">{% include "notifications/_bell.html" %}</div>
+    <details class="ft-acct" style="margin-left:0">
+      <summary class="ft-top__avatar" aria-label="Account and sign out">{{ user.first_name|default:user.username|slice:":1"|upper }}{{ user.last_name|slice:":1"|upper }}</summary>
+      <div class="ft-acct__menu">
+        <div class="ft-acct__who">
+          <b>{{ user.get_full_name|default:user.username }}</b>
+          <span>{{ user.get_role_display }}</span>
+        </div>
+        <a class="ft-acct__item" href="/logout"><uk-icon icon="log-out"></uk-icon> Sign out</a>
+      </div>
+    </details>
+  </header>
+
+  <div class="ft-page">
+    <div id="offline-banner" class="hidden ft-banner" role="status" aria-live="polite" style="margin-bottom:14px">
+      <uk-icon icon="wifi-off"></uk-icon>
+      <span id="offline-banner-text">Offline - 0 scan(s) queued.</span>
     </div>
-  </div>
 
-  <div class="flex items-center gap-2 mb-4">
-    <a href="/" class="uk-btn uk-btn-ghost uk-btn-icon" aria-label="Back">
-      <uk-icon icon="arrow-left" class="size-5"></uk-icon></a>
-    <h1 class="uk-h3">Scan a room</h1>
-  </div>
-
-  <div class="uk-card uk-card-body">
-    <button id="cam-btn" class="uk-btn uk-btn-primary w-full h-12 text-base" onclick="startCamera()">
-      <uk-icon icon="camera" class="size-5"></uk-icon> Scan room QR
-    </button>
-    <div id="qr-reader" class="mt-3"></div>
-    <p id="cam-status" class="uk-text-small uk-text-muted mt-2"></p>
-
-    <div class="flex items-center gap-3 my-4">
-      <div class="h-px flex-1 bg-border"></div>
-      <span class="uk-text-small uk-text-muted">or</span>
-      <div class="h-px flex-1 bg-border"></div>
+    <div class="ft-greet">
+      <div class="ft-greet__hi">Scan a room</div>
+      <div class="ft-greet__date">Scan the room QR or enter its six-digit code to verify.</div>
     </div>
 
-    <label class="uk-text-small font-semibold" for="manual-code">Six-digit room code</label>
-    <form class="mt-2 space-y-2"
-          hx-post="/checker/resolve" hx-target="#outcome" hx-swap="innerHTML">
-      {% csrf_token %}
-      <input id="manual-code" name="payload" class="uk-input h-12 text-center text-xl tracking-widest"
-             inputmode="numeric" pattern="\d{6}" placeholder="000000" maxlength="6" required/>
-      <button class="uk-btn uk-btn-secondary w-full h-11" type="submit">Resolve code</button>
-    </form>
-  </div>
+    <div class="ft-row" style="box-shadow:var(--shadow-card)">
+      <button id="cam-btn" class="ft-btn-navy" onclick="startCamera()">
+        <uk-icon icon="camera"></uk-icon> Scan room QR</button>
+      <div id="qr-reader" style="margin-top:12px"></div>
+      <p id="cam-status" class="ft-help" style="margin-top:8px"></p>
 
-  <div id="outcome" class="mt-4"></div>
+      <div class="ft-or-ink">or</div>
 
-  <div id="offline-capture" class="hidden uk-card uk-card-body mt-4">
-    <div class="uk-h3 mb-1">Offline — record this scan</div>
-    <p class="uk-text-small uk-text-muted mb-3">
-      You're offline, so the room's live state can't be checked yet. Record what
-      you saw; it will be re-checked automatically and applied or flagged when
-      you're back online.
-    </p>
-
-    <div id="offline-capture-actions" class="space-y-2">
-      <button type="button" class="uk-btn uk-btn-primary w-full h-12" data-offline-action="verified">
-        <uk-icon icon="check" class="size-5"></uk-icon> Verify present
-      </button>
-      <button type="button" class="uk-btn uk-btn-secondary w-full h-11" data-offline-action="verified_empty">
-        <uk-icon icon="door-closed" class="size-5"></uk-icon> Confirm empty
-      </button>
-      <button type="button" class="uk-btn uk-btn-secondary w-full h-11" data-offline-action="flag_not_present">
-        <uk-icon icon="flag" class="size-5"></uk-icon> Flag: not present
-      </button>
-      <label class="uk-text-small font-semibold block" for="offline-note">
-        Note (optional; required for a flag)
-      </label>
-      <textarea id="offline-note" class="uk-input" maxlength="255"
-                placeholder="Briefly say what you saw (sent to IFO and HR)"></textarea>
+      <form hx-post="/checker/resolve" hx-target="#outcome" hx-swap="innerHTML" class="ft-form">
+        {% csrf_token %}
+        <div class="ft-form__group">
+          <label class="ft-label" for="manual-code">Six-digit room code</label>
+          <input id="manual-code" name="payload" class="ft-control"
+                 style="text-align:center; font-size:1.3rem; letter-spacing:.35em; font-weight:700"
+                 inputmode="numeric" pattern="\d{6}" placeholder="000000" maxlength="6" required/>
+        </div>
+        <button class="ft-btn-soft" type="submit">Resolve code</button>
+      </form>
     </div>
-    <p id="offline-unavailable-msg" class="hidden uk-text-small uk-text-destructive">
-      Offline capture unavailable in this browser — reconnect and try again.
-    </p>
-    <p id="offline-capture-status" class="uk-text-small uk-text-muted mt-2" role="alert"></p>
+
+    <div id="outcome" style="margin-top:14px"></div>
+
+    <div id="offline-capture" class="hidden ft-outcome ft-outcome--warn" style="margin-top:14px">
+      <div class="ft-outcome__head">
+        <span class="ft-outcome__icon"><uk-icon icon="wifi-off"></uk-icon></span>
+        <div class="ft-outcome__title">Offline - record this scan</div>
+      </div>
+      <p class="ft-outcome__body">
+        You're offline, so the room's live state can't be checked yet. Record what
+        you saw; it will be re-checked automatically and applied or flagged when
+        you're back online.</p>
+
+      <div id="offline-capture-actions" class="ft-outcome__form">
+        <button type="button" class="ft-btn-navy" data-offline-action="verified">
+          <uk-icon icon="check"></uk-icon> Verify present</button>
+        <button type="button" class="ft-btn-soft" data-offline-action="verified_empty">
+          <uk-icon icon="door-closed"></uk-icon> Confirm empty</button>
+        <button type="button" class="ft-btn-danger" data-offline-action="flag_not_present">
+          <uk-icon icon="flag"></uk-icon> Flag: not present</button>
+        <label class="ft-label" for="offline-note">Note (optional; required for a flag)</label>
+        <textarea id="offline-note" class="ft-control" maxlength="255"
+                  placeholder="Briefly say what you saw (sent to IFO and HR)"></textarea>
+      </div>
+      <p id="offline-unavailable-msg" class="hidden ft-help" style="color:var(--red)">
+        Offline capture unavailable in this browser - reconnect and try again.</p>
+      <p id="offline-capture-status" class="ft-help" style="margin-top:8px" role="alert"></p>
+    </div>
   </div>
 </div>
 

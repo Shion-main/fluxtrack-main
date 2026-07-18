@@ -630,18 +630,20 @@ def online_open(request, session_id):
 # --- floor board (CHK-07) --------------------------------------------------
 # Server-computed status token per room card. Color is NEVER the only signal
 # (WCAG 1.4.1): each state also carries a Lucide icon + a text label. The exact
-# palette is the approved 03-UI-SPEC functional-state table.
+# palette is the approved 03-UI-SPEC functional-state table, expressed in the
+# navy floor-family vocabulary: `card` = the .ft-card--* accent modifier, `pill`
+# = the .ft-pill--* status chip (see static/faculty/faculty.css).
 _CARD_STYLES = {
-    "idle": {"border": "border-muted", "text": "text-muted-foreground",
-             "icon": "circle", "label": "No session", "pill": "uk-label"},
-    "active-unverified": {"border": "border-amber-500", "text": "text-amber-600",
-                          "icon": "clock", "label": "Needs check", "pill": "uk-label"},
-    "verified": {"border": "border-green-600", "text": "text-green-600",
-                 "icon": "check-check", "label": "Verified", "pill": "uk-label"},
-    "flagged": {"border": "border-destructive", "text": "text-destructive",
-                "icon": "flag", "label": "Flagged", "pill": "uk-label-destructive"},
-    "verified-empty": {"border": "border-blue-600", "text": "text-blue-600",
-                       "icon": "door-closed", "label": "Empty (checked)", "pill": "uk-label"},
+    "idle": {"card": "ft-card--neutral", "pill": "ft-pill ft-pill--upcoming",
+             "icon": "circle", "label": "No session"},
+    "active-unverified": {"card": "ft-card--warn", "pill": "ft-pill ft-pill--late",
+                          "icon": "clock", "label": "Needs check"},
+    "verified": {"card": "ft-card--ok", "pill": "ft-pill ft-pill--active",
+                 "icon": "check-check", "label": "Verified"},
+    "flagged": {"card": "ft-card--bad", "pill": "ft-pill ft-pill--absent",
+                "icon": "flag", "label": "Flagged"},
+    "verified-empty": {"card": "ft-card--info", "pill": "ft-pill ft-pill--online",
+                       "icon": "door-closed", "label": "Empty (checked)"},
 }
 
 

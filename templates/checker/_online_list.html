@@ -5,24 +5,23 @@ Verified sessions have become ACTIVE and dropped from the owning queryset, so
 only still-to-check sessions render here. Empty -> the 03-UI-SPEC empty copy.
 {% endcomment %}
 {% if sessions %}
-<div class="space-y-3">
+<div class="ft-list">
   {% for s in sessions %}
-  <a href="/checker/online/{{ s.id }}"
-     class="uk-card uk-card-body flex items-center gap-3" style="min-height:44px">
-    <div>
-      <div class="font-semibold">{{ s.schedule.course_code }}-{{ s.schedule.section }}</div>
-      <div class="uk-text-small uk-text-muted">
-        {{ s.faculty.get_full_name|default:s.faculty.username }} · {{ s.scheduled_start|time:"g:i A" }}
-      </div>
+  <a href="/checker/online/{{ s.id }}" class="ft-card ft-card--info">
+    <div class="ft-card__head">
+      <uk-icon icon="monitor"></uk-icon>
+      <span class="ft-card__room" style="margin-left:0">{{ s.schedule.course_code }}-{{ s.schedule.section }}</span>
+      <span class="ft-pill ft-pill--online" style="margin-left:auto"><uk-icon icon="video"></uk-icon> Open Teams</span>
     </div>
-    <span class="uk-btn uk-btn-primary h-11 ml-auto">
-      <uk-icon icon="video" class="size-4"></uk-icon> Open Teams to verify
-    </span>
+    <div class="ft-card__meta">
+      {{ s.faculty.get_full_name|default:s.faculty.username }} · {{ s.scheduled_start|time:"g:i A" }}
+    </div>
   </a>
   {% endfor %}
 </div>
 {% else %}
-<div class="uk-card uk-card-body" data-empty="online">
-  <p class="uk-text-muted">No online sessions assigned to you.</p>
+<div class="ft-card ft-card--neutral" data-empty="online">
+  <div class="ft-card__meta" style="display:flex;align-items:center;gap:8px">
+    <uk-icon icon="monitor"></uk-icon> No online sessions assigned to you.</div>
 </div>
 {% endif %}

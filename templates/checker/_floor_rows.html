@@ -4,58 +4,52 @@ CHK-07 polled floor-board partial (sibling of templates/ifo/_live_rows.html).
 Three surfaces off ONE shared queryset (Pitfall 5): the coverage indicator, the
 oldest-first priority queue, and the color-coded room cards. Absent/online/
 off-floor sessions are already filtered out in the view. Every card state is
-color + Lucide icon + text label (WCAG 1.4.1) — never color alone.
+color + Lucide icon + text label (WCAG 1.4.1) -- never color alone. Navy family:
+card.style.card = .ft-card--* accent, card.style.pill = .ft-pill--* chip.
 {% endcomment %}
 
 {# --- Coverage indicator (denominator excludes Absent) --- #}
-<div class="uk-card uk-card-body mb-4">
-  <div class="flex items-center justify-between mb-3">
-    <span class="uk-h3">{{ verified }}/{{ total }} verified</span>
-    <span class="uk-label uk-label-secondary">updated {{ now|time:"g:i:s A" }}</span>
+<div class="ft-cover" style="margin-bottom:14px">
+  <div class="ft-cover__top">
+    <span class="ft-cover__n">{{ verified }}/{{ total }} verified</span>
+    <span class="ft-help">updated {{ now|time:"g:i:s A" }}</span>
   </div>
-  <div class="h-2 w-full rounded-full bg-muted overflow-hidden"
-       role="progressbar" aria-label="Coverage {{ coverage }} percent"
+  <div class="ft-bar" role="progressbar" aria-label="Coverage {{ coverage }} percent"
        aria-valuenow="{{ coverage }}" aria-valuemin="0" aria-valuemax="100">
-    <div class="h-full bg-primary" style="width:{{ coverage }}%"></div>
+    <div class="ft-bar__fill" style="width:{{ coverage }}%"></div>
   </div>
 </div>
 
 {% if total %}
 {# --- Priority queue: active-unverified, longest-waiting on top --- #}
 {% if queue %}
-<div class="uk-card uk-card-body mb-4">
-  <p class="uk-text-small font-semibold mb-2">Check next (oldest first)</p>
-  <ul class="space-y-1">
-    {% for se in queue %}
-    <li>
-      <a href="/checker/scan" class="flex items-center gap-3 min-h-11 py-1">
-        <span class="size-2 rounded-full bg-amber-500 shrink-0" aria-hidden="true"></span>
-        <span class="font-semibold">{{ se.room.code }}</span>
-        <span class="uk-text-small uk-text-muted">{{ se.schedule.course_code }}-{{ se.schedule.section }}</span>
-        <span class="uk-label ml-auto">{{ se.scheduled_start|timesince:now }} waiting</span>
-      </a>
-    </li>
-    {% endfor %}
-  </ul>
+<div class="ft-queue" style="margin-bottom:14px">
+  <p class="ft-queue__title">Check next (oldest first)</p>
+  {% for se in queue %}
+  <a href="/checker/scan" class="ft-queue__row">
+    <span class="ft-dot" style="background:var(--amber)" aria-hidden="true"></span>
+    <span class="ft-queue__room">{{ se.room.code }}</span>
+    <span class="ft-card__meta">{{ se.schedule.course_code }}-{{ se.schedule.section }}</span>
+    <span class="ft-pill ft-pill--late" style="margin-left:auto">{{ se.scheduled_start|timesince:now }} waiting</span>
+  </a>
+  {% endfor %}
 </div>
 {% else %}
-<div class="uk-card uk-card-body mb-4">
-  <p class="uk-text-small uk-text-muted">You're all caught up. Every active session on this floor is verified.</p>
+<div class="ft-queue" style="margin-bottom:14px">
+  <p class="ft-help" style="margin:0">You're all caught up. Every active session on this floor is verified.</p>
 </div>
 {% endif %}
 
 {# --- Room cards, color-coded by verification state --- #}
-<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+<div class="ft-list">
   {% for card in cards %}
-  <a href="/checker/scan"
-     class="uk-card uk-card-body border-l-4 {{ card.style.border }} block min-h-11"
-     data-state="{{ card.state }}">
-    <div class="flex items-center gap-2 mb-1">
-      <uk-icon icon="{{ card.style.icon }}" class="size-4 {{ card.style.text }}"></uk-icon>
+  <a href="/checker/scan" class="ft-card {{ card.style.card }}" data-state="{{ card.state }}">
+    <div class="ft-card__head">
+      <uk-icon icon="{{ card.style.icon }}"></uk-icon>
       <span class="{{ card.style.pill }}">{{ card.style.label }}</span>
-      <span class="font-semibold ml-auto">{{ card.session.room.code }}</span>
+      <span class="ft-card__room">{{ card.session.room.code }}</span>
     </div>
-    <div class="uk-text-small uk-text-muted">
+    <div class="ft-card__meta">
       {{ card.session.schedule.course_code }}-{{ card.session.schedule.section }}
       · {{ card.session.faculty.last_name|default:card.session.faculty.username }}
     </div>
@@ -63,10 +57,9 @@ color + Lucide icon + text label (WCAG 1.4.1) — never color alone.
   {% endfor %}
 </div>
 {% else %}
-<div class="uk-card uk-card-body text-center">
-  <p class="uk-h3 mb-1">Nothing to check right now</p>
-  <p class="uk-text-muted uk-text-small">
-    No active sessions on your floor. This board refreshes on its own — new sessions appear here as they start.
-  </p>
+<div class="ft-card ft-card--neutral" style="text-align:center">
+  <p class="ft-card__room" style="margin:0 0 4px">Nothing to check right now</p>
+  <p class="ft-help" style="margin:0">
+    No active sessions on your floor. This board refreshes on its own -- new sessions appear here as they start.</p>
 </div>
 {% endif %}

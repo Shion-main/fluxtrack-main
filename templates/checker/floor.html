@@ -1,26 +1,56 @@
 {% extends "base.html" %}
+{% load static %}
 {% comment %}
 CHK-07 Checker floor board shell. Direct sibling of templates/ifo/live.html: a
 polled #floor-rows container that htmx-swaps the _floor_rows partial on the
 policy-driven interval. poll_ms comes from the view
-(settings.FLUXTRACK_POLICY[poll_interval_seconds] * 1000) — never hardcoded
-(Convention rule #3). Card colors + coverage bar live in the partial.
+(settings.FLUXTRACK_POLICY[poll_interval_seconds] * 1000) -- never hardcoded
+(Convention rule #3). Navy floor shell (.ft-*); card colors + coverage bar in
+the partial.
 {% endcomment %}
-{% block title %}Floor view · FluxTrack{% endblock %}
+{% block title %}Floor board · FluxTrack{% endblock %}
 {% block content %}
-<div class="uk-container max-w-4xl pt-8 pb-16">
-  <div class="flex items-center gap-2 mb-1">
-    <a href="/" class="uk-btn uk-btn-ghost uk-btn-icon" aria-label="Back">
-      <uk-icon icon="arrow-left" class="size-5"></uk-icon>
-    </a>
-    <h1 class="uk-h2">Floor view</h1>
-    <span class="uk-label uk-label-primary">polling</span>
-  </div>
-  <p class="uk-text-muted mb-6">Your assigned floor, refreshing automatically. Absent sessions are left out.</p>
+<div class="ft-app">
 
-  <div id="floor-rows" aria-live="polite"
-       hx-get="/checker/floor/rows" hx-trigger="load, every {{ poll_ms }}ms" hx-swap="innerHTML">
-    <p class="uk-text-muted uk-text-small">Loading…</p>
+  <header class="ft-top">
+    <a href="/checker/floor" class="ft-top__brand">
+      <img class="ft-top__crest" src="{% static 'brand/mmcm-crest.png' %}" alt="">
+      <span class="ft-top__mark">FluxTrack</span>
+    </a>
+    <div class="relative inline-flex" style="margin-left:auto">{% include "notifications/_bell.html" %}</div>
+    <details class="ft-acct" style="margin-left:0">
+      <summary class="ft-top__avatar" aria-label="Account and sign out">{{ user.first_name|default:user.username|slice:":1"|upper }}{{ user.last_name|slice:":1"|upper }}</summary>
+      <div class="ft-acct__menu">
+        <div class="ft-acct__who">
+          <b>{{ user.get_full_name|default:user.username }}</b>
+          <span>{{ user.get_role_display }}</span>
+        </div>
+        <a class="ft-acct__item" href="/logout"><uk-icon icon="log-out"></uk-icon> Sign out</a>
+      </div>
+    </details>
+  </header>
+
+  <div class="ft-page">
+    <div class="ft-greet">
+      <div class="ft-greet__hi">Floor board</div>
+      <div class="ft-greet__date">Your assigned floor, refreshing live. Absent sessions are left out.</div>
+    </div>
+
+    <div id="floor-rows" class="js-poll" aria-live="polite" aria-busy="true"
+         hx-get="/checker/floor/rows" hx-trigger="load, every {{ poll_ms }}ms" hx-swap="innerHTML">
+      <div aria-hidden="true">
+        <div class="ft-cover" style="margin-bottom:14px">
+          <div class="ft-cover__top"><span class="skel skel-line" style="width:120px"></span></div>
+          <div class="skel skel-bar"></div>
+        </div>
+        <div class="skel-stack">
+          <div class="skel skel-row"></div>
+          <div class="skel skel-row"></div>
+          <div class="skel skel-row"></div>
+        </div>
+      </div>
+      <span class="sr-only">Loading floor status...</span>
+    </div>
   </div>
 </div>
 {% endblock %}

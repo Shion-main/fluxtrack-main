@@ -4,112 +4,106 @@ MOD-01/D-05/D-15 availability-first submit form. htmx swaps this partial into
 successful submit returns HX-Redirect to /faculty/modality/mine (a full-page nav).
 The room pick is only a PREFERENCE -- the server re-resolves rooms at Dean approval
 (D-06) and never trusts the posted room pk. Leaving a room blank = "let the app
-decide" (D-05). Franken UI (uk-*). Use {% comment %} not {# #} so Django does not
-parse the {% %} tags in this header (03-02 parse-error lesson). ASCII-only.
+decide" (D-05). Navy floor form (.ft-*). Use {% comment %} not {# #} so Django does
+not parse the {% %} tags in this header (03-02 parse-error lesson). ASCII-only.
 {% endcomment %}
 {% if error %}
-<div class="uk-alert uk-alert-destructive mb-4" role="alert" data-error="1">
-  <p class="uk-text-small">{{ error }}</p>
-</div>
+<div class="ft-alert-error" role="alert" data-error="1">
+  <uk-icon icon="alert-triangle"></uk-icon> {{ error }}</div>
 {% endif %}
 
 <form hx-post="/faculty/modality/new" hx-target="#modality-panel" hx-swap="innerHTML"
-      method="post" action="/faculty/modality/new" class="flex flex-col gap-4">
+      method="post" action="/faculty/modality/new" class="ft-form" style="margin-top:16px">
   {% csrf_token %}
 
-  <div>
-    <label class="uk-form-label" for="m-target">Shift to</label>
-    <select id="m-target" name="target_modality" class="uk-select h-11" required>
+  <div class="ft-form__group">
+    <label class="ft-label" for="m-target">Shift to</label>
+    <select id="m-target" name="target_modality" class="ft-control" required>
       {% for value, label in modalities %}
       <option value="{{ value }}">{{ label }}</option>
       {% endfor %}
     </select>
-    <p class="uk-text-small uk-text-muted mt-1">
+    <p class="ft-help">
       Online frees the room. Face-to-face / Blended books a room for you -- pick one
       below or let the app decide.</p>
   </div>
 
-  <fieldset class="border border-border rounded-md p-3 flex flex-col gap-2">
-    <legend class="uk-text-small uk-text-muted px-1">When</legend>
-    <label class="flex items-center gap-2 flex-wrap">
-      <input type="radio" name="window_mode" value="weeks" class="uk-radio" checked>
-      <span>For the next</span>
-      <input type="number" name="weeks" min="1" max="16" value="1"
-             class="uk-input h-10 w-20 text-center">
-      <span>week(s)</span>
-    </label>
-    <p class="uk-text-small uk-text-muted pl-6 -mt-1">
-      This class repeats weekly -- shifts the next N times it meets, starting at the
-      first date that clears the lead time. "1" = just the next class.</p>
-    <label class="flex items-center gap-2 flex-wrap">
-      <input type="radio" name="window_mode" value="single" class="uk-radio">
-      <span>Just one session on</span>
-      <input type="date" name="on_date" class="uk-input h-10">
-    </label>
-  </fieldset>
-
-  <fieldset class="border border-border rounded-md p-3 flex flex-col gap-3">
-    <legend class="uk-text-small uk-text-muted px-1">Classes to shift</legend>
-    {% for row in schedule_rows %}
-    <div class="border-b border-border last:border-0 pb-3 last:pb-0">
-      <label class="flex items-start gap-2">
-        <input type="checkbox" name="schedules" value="{{ row.schedule.id }}"
-               class="uk-checkbox mt-1">
-        <span class="min-w-0">
-          <span class="font-semibold">
-            {{ row.schedule.course_code }}-{{ row.schedule.section }}</span>
-          <span class="uk-text-small uk-text-muted block">
-            {{ row.schedule.get_day_of_week_display }}
-            {{ row.schedule.start_time|time:"g:i A" }}-{{ row.schedule.end_time|time:"g:i A" }}
-            &middot; {{ row.schedule.room.code }}
-            &middot; {{ row.schedule.get_modality_display }}</span>
-        </span>
+  <fieldset class="ft-fieldset">
+    <legend class="ft-legend">When</legend>
+    <div class="ft-form__group">
+      <label class="ft-inline">
+        <input type="radio" name="window_mode" value="weeks" checked>
+        <span>For the next</span>
+        <input type="number" name="weeks" min="1" max="16" value="1" class="ft-control ft-num">
+        <span>week(s)</span>
       </label>
-
-      <div class="mt-2 pl-6">
-        <label class="uk-form-label" for="m-room-{{ row.schedule.id }}">
-          Preferred room (Face-to-face / Blended)</label>
-        <select id="m-room-{{ row.schedule.id }}"
-                name="preferred_room_{{ row.schedule.id }}" class="uk-select h-10">
-          <option value="">Let the app decide</option>
-          {% for r in row.rooms %}
-          <option value="{{ r.id }}">{{ r.code }}</option>
-          {% empty %}
-          {% endfor %}
-        </select>
-        {% if row.next_session and not row.rooms %}
-        <p class="uk-text-small uk-text-muted mt-1">
-          No room free at the current time -- the app will look for an alternative.</p>
-        {% endif %}
-        {% if row.times %}
-        <p class="uk-text-small uk-text-muted mt-1">
-          Alternative times available that day:
-          {% for start, end in row.times %}{{ start|time:"g:i A" }}{% if not forloop.last %}, {% endif %}{% endfor %}</p>
-        {% endif %}
-      </div>
+      <p class="ft-help" style="padding-left:28px">
+        This class repeats weekly -- shifts the next N times it meets, starting at the
+        first date that clears the lead time. "1" = just the next class.</p>
+      <label class="ft-inline">
+        <input type="radio" name="window_mode" value="single">
+        <span>Just one session on</span>
+        <input type="date" name="on_date" class="ft-control" style="width:auto">
+      </label>
     </div>
-    {% empty %}
-    <p class="uk-text-small uk-text-muted">You have no active classes to shift.</p>
-    {% endfor %}
   </fieldset>
 
-  <fieldset class="border border-border rounded-md p-3">
-    <legend class="uk-text-small uk-text-muted px-1">
-      Move to a different time (optional, Face-to-face / Blended only)</legend>
+  <fieldset class="ft-fieldset">
+    <legend class="ft-legend">Classes to shift</legend>
+    <div class="ft-form__group">
+      {% for row in schedule_rows %}
+      <div class="ft-form__group" style="gap:10px">
+        <label class="ft-choice">
+          <input type="checkbox" name="schedules" value="{{ row.schedule.id }}">
+          <span>
+            <span class="ft-choice__title">{{ row.schedule.course_code }}-{{ row.schedule.section }}</span>
+            <span class="ft-choice__meta">
+              {{ row.schedule.get_day_of_week_display }}
+              {{ row.schedule.start_time|time:"g:i A" }}-{{ row.schedule.end_time|time:"g:i A" }}
+              · {{ row.schedule.room.code }} · {{ row.schedule.get_modality_display }}</span>
+          </span>
+        </label>
+
+        <div class="ft-form__group" style="padding-left:28px; gap:6px">
+          <label class="ft-label" for="m-room-{{ row.schedule.id }}" style="font-size:.8rem">
+            Preferred room (Face-to-face / Blended)</label>
+          <select id="m-room-{{ row.schedule.id }}"
+                  name="preferred_room_{{ row.schedule.id }}" class="ft-control">
+            <option value="">Let the app decide</option>
+            {% for r in row.rooms %}
+            <option value="{{ r.id }}">{{ r.code }}</option>
+            {% endfor %}
+          </select>
+          {% if row.next_session and not row.rooms %}
+          <p class="ft-help">No room free at the current time -- the app will look for an alternative.</p>
+          {% endif %}
+          {% if row.times %}
+          <p class="ft-help">Alternative times available that day:
+            {% for start, end in row.times %}{{ start|time:"g:i A" }}{% if not forloop.last %}, {% endif %}{% endfor %}</p>
+          {% endif %}
+        </div>
+        {% if not forloop.last %}<hr class="ft-form__divide">{% endif %}
+      </div>
+      {% empty %}
+      <p class="ft-help">You have no active classes to shift.</p>
+      {% endfor %}
+    </div>
+  </fieldset>
+
+  <fieldset class="ft-fieldset">
+    <legend class="ft-legend">Move to a different time (optional, F2F / Blended)</legend>
     <div class="grid grid-cols-2 gap-3">
-      <div>
-        <label class="uk-form-label" for="m-nst">New start</label>
-        <input id="m-nst" type="time" name="new_start_time" class="uk-input h-10">
+      <div class="ft-form__group">
+        <label class="ft-label" for="m-nst" style="font-size:.8rem">New start</label>
+        <input id="m-nst" type="time" name="new_start_time" class="ft-control">
       </div>
-      <div>
-        <label class="uk-form-label" for="m-net">New end</label>
-        <input id="m-net" type="time" name="new_end_time" class="uk-input h-10">
+      <div class="ft-form__group">
+        <label class="ft-label" for="m-net" style="font-size:.8rem">New end</label>
+        <input id="m-net" type="time" name="new_end_time" class="ft-control">
       </div>
     </div>
-    <p class="uk-text-small uk-text-muted mt-2">
-      Leave blank to keep the class at its scheduled time.</p>
+    <p class="ft-help" style="margin-top:10px">Leave blank to keep the class at its scheduled time.</p>
   </fieldset>
 
-  <button type="submit" class="uk-btn uk-btn-primary w-full h-12">
-    <uk-icon icon="send" class="size-4"></uk-icon> Submit request</button>
+  <button type="submit" class="ft-btn-navy"><uk-icon icon="send"></uk-icon> Submit request</button>
 </form>
