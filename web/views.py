@@ -38,8 +38,7 @@ SURFACES = {
         {"title": "Online to verify", "desc": "Your assigned online sessions via Teams.", "icon": "video", "href": "/checker/online"},
     ],
     Role.IFO_ADMIN: [
-        {"title": "Rooms", "desc": "Per-room schedules and QR posters.", "icon": "building", "href": "/ifo/rooms"},
-        {"title": "Live today", "desc": "Room status, polled.", "icon": "radio", "href": "/ifo/live"},
+        {"title": "Rooms", "desc": "Live room board, schedules, and QR posters.", "icon": "building", "href": "/ifo/rooms"},
         {"title": "Assignments", "desc": "Post Checkers/Guards; grant online duty.", "icon": "user-plus", "href": "/ifo/assignments"},
         {"title": "Reports", "desc": "Weekly consolidated attendance.", "icon": "file-text", "href": "/ifo/dashboard"},
     ],
@@ -110,7 +109,7 @@ def home(request):
         Role.FACULTY: "faculty_home",
         Role.CHECKER: "checker_floor",
         Role.HR_ADMIN: "hr_attendance",
-        Role.IFO_ADMIN: "ifo_live",
+        Role.IFO_ADMIN: "ifo_rooms",
         Role.DEAN: "dean_dashboard",
         Role.GUARD: "guard_monitor",
     }

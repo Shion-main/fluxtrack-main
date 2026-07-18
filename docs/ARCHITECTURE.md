@@ -148,7 +148,7 @@ own surface set (`SURFACES` map), and every view module has its own role-guard d
 |---|---|
 | **Faculty** | `/faculty/schedule`, `/faculty/scan`, `/faculty/modality/*` |
 | **Checker** | `/checker/scan`, `/checker/floor`, `/checker/online`, `/checker/replay` |
-| **IFO Admin** | `/ifo/rooms`, `/ifo/live`, `/ifo/assignments` |
+| **IFO Admin** | `/ifo/rooms` (live room board; `/ifo/live` 301s here), `/ifo/assignments` |
 | **Dean** | `/dean/requests` (approve / reject) |
 | **HR Admin** | attendance / flags (Phase 6) |
 | **Guard** | floor monitor / locator (Phase 6) |

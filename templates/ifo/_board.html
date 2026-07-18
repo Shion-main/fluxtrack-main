@@ -1,0 +1,110 @@
+{% comment %}
+Polled room-board body (IFO-07). Swapped whole into #board every poll, so it
+must stay self-contained and must NOT hold filter or panel state -- that lives
+in the shell (ifo/rooms.html) and is re-applied by board.js after each swap.
+
+Every tile carries its state three ways: colour skin, icon, and a text label.
+Nothing here is conveyed by colour alone (WCAG 1.4.1). The data-* attributes
+are the client-side filter index. ASCII-only.
+{% endcomment %}
+
+<div class="flex items-center justify-between gap-3 mb-4">
+  <p class="uk-text-small uk-text-muted">
+    {% if totals.problems %}
+      <strong style="color:var(--red)">{{ totals.problems }}</strong> room{{ totals.problems|pluralize }} need{{ totals.problems|pluralize:"s," }} attention
+      &middot; {{ totals.rooms }} shown
+    {% else %}
+      All {{ totals.rooms }} room{{ totals.rooms|pluralize }} running clean
+    {% endif %}
+    {% if scope == "live" and totals.hidden %}
+      &middot; {{ totals.hidden }} idle room{{ totals.hidden|pluralize }} hidden
+    {% endif %}
+  </p>
+  <span class="bd__stamp" data-stamp><b></b> updated {{ now|time:"g:i:s A" }}</span>
+</div>
+
+{% for g in groups %}
+<section class="bd__group" data-group data-building="{{ g.building }}">
+  <div class="bd__head">
+    <h3>{{ g.label }}</h3>
+    <span data-group-count>{{ g.tiles|length }} room{{ g.tiles|length|pluralize }}</span>
+    {% if g.problems %}<em>{{ g.problems }} need{{ g.problems|pluralize:"s," }} attention</em>{% endif %}
+  </div>
+  <div class="bd__grid">
+    {% for t in g.tiles %}
+    <button type="button"
+            class="tile tile--{{ t.state }}"
+            data-tile
+            data-state="{{ t.state }}"
+            data-building="{{ g.building }}"
+            data-search="{{ t.room.code|lower }} {{ t.room.name|lower }} {% if t.session %}{{ t.session.faculty.last_name|lower }} {{ t.session.faculty.username|lower }} {{ t.session.schedule.course_code|lower }}{% endif %}"
+            hx-get="/ifo/rooms/{{ t.room.code }}/panel"
+            hx-target="#sheet-content"
+            hx-swap="innerHTML"
+            aria-haspopup="dialog">
+      <span class="tile__top">
+        <span class="tile__code">{{ t.room.code }}</span>
+        {% if t.state == "absent" %}<uk-icon icon="alert-triangle"></uk-icon>
+        {% elif t.state == "starting" %}<uk-icon icon="clock"></uk-icon>
+        {% elif t.state == "in_session" %}<uk-icon icon="circle-check"></uk-icon>
+        {% elif t.state == "online" %}<uk-icon icon="monitor"></uk-icon>
+        {% endif %}{% comment %}No icon on free/idle: those are the neutral
+        default, not a colour-coded state, so the word alone already satisfies
+        1.4.1. Leaving them blank means an icon on a tile MEANS something is
+        happening -- on a 200-room board that is ~100 fewer marks competing
+        with the handful that matter.{% endcomment %}
+      </span>
+
+      <span class="tile__state">
+        {% if t.state == "absent" %}Absent
+        {% elif t.state == "starting" %}Starting
+        {% elif t.state == "in_session" %}In session
+        {% elif t.state == "online" %}Online
+        {% elif t.state == "free" %}Free
+        {% else %}Idle{% endif %}
+      </span>
+
+      {% if t.session %}
+      <span class="tile__who">{{ t.session.faculty.last_name|default:t.session.faculty.username }}</span>
+      {% elif t.state == "free" and t.next %}
+      <span class="tile__who" style="color:var(--ft-muted);font-weight:500">
+        next {{ t.next.faculty.last_name|default:t.next.faculty.username }}</span>
+      {% endif %}
+
+      <span class="tile__meta">
+        {% if t.state == "absent" %}
+          no show &middot; {{ t.session.scheduled_start|time:"g:i A" }}
+        {% elif t.state == "starting" %}
+          due {{ t.session.scheduled_start|time:"g:i A" }}
+        {% elif t.state == "in_session" or t.state == "online" %}
+          {{ t.session.schedule.course_code }} &middot; to {{ t.session.scheduled_end|time:"g:i A" }}
+        {% elif t.state == "free" %}
+          {% if t.next %}next {{ t.next.scheduled_start|time:"g:i A" }}
+          {% else %}done for today{% endif %}
+        {% else %}
+          nothing today
+        {% endif %}
+      </span>
+    </button>
+    {% endfor %}
+  </div>
+</section>
+{% empty %}
+
+{% if scope == "live" %}
+<div class="bd__empty">
+  <uk-icon icon="coffee"></uk-icon>
+  <h4>Nothing scheduled on campus today</h4>
+  <p>No room has a class today, so the live board is empty. The full inventory is still there.</p>
+  <a href="/ifo/rooms?scope=all" class="uk-btn uk-btn-secondary uk-btn-sm">View all rooms</a>
+</div>
+{% else %}
+<div class="bd__empty">
+  <uk-icon icon="building"></uk-icon>
+  <h4>No rooms yet</h4>
+  <p>Import an offering sheet to populate buildings, floors, and rooms:<br>
+    <code>py -3.12 manage.py import_offerings --building R --floor 3</code></p>
+</div>
+{% endif %}
+
+{% endfor %}

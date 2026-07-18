@@ -4,13 +4,12 @@ import io
 from datetime import timedelta
 from functools import wraps
 
-from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.contrib.auth.decorators import login_required
 from django.core.exceptions import PermissionDenied
 from django.core.files.storage import default_storage
 from django.http import Http404, HttpResponse
-from django.shortcuts import get_object_or_404, render
+from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 from django.utils.dateparse import parse_date, parse_time
 from django.views.decorators.http import require_http_methods
@@ -40,24 +39,158 @@ def ifo_required(view):
     return wrapped
 
 
-def _today_sessions():
-    return (Session.objects.filter(date=timezone.localdate())
-            .select_related("room", "schedule", "faculty").order_by("scheduled_start"))
+# --- Live room board (IFO-07 + IFO-11, merged) ------------------------------
+# The board replaces the old session-list "Live today" surface. A session list
+# grows unbounded and mixes finished classes with running ones, so it answers
+# "what happened today" instead of "is anything wrong right now". Rooms are the
+# fixed, physically-managed entity, so the room is the tile and the session is
+# what flows through it.
+#
+# Six states, derived per room from TODAY's sessions relative to `now`. Every
+# state carries colour + icon + text label (never colour alone, PRODUCT.md):
+#
+#   absent      no-show: marked ABSENT, or still SCHEDULED past the grace window
+#   starting    class window opened, still inside grace -- watch, not yet a problem
+#   in_session  faculty checked in, class running
+#   online      the current class is running online (declared_modality shift or a
+#               natively-online schedule) -- the room is legitimately empty. This
+#               is the state that stops a shifted class reading as a facilities
+#               mystery, so it is deliberately distinct from `free`.
+#   free        nothing running now, but the room has classes later today
+#   idle        nothing scheduled in this room today
+#
+# Sort order puts problems first so they can never hide below the fold.
+ROOM_STATE_ORDER = {
+    "absent": 0, "starting": 1, "in_session": 2, "online": 3, "free": 4, "idle": 5,
+}
+ROOM_PROBLEM_STATES = ("absent", "starting")
+
+
+def _room_tile(room, sessions, now, grace):
+    """Derive one room's live tile from its sessions for today.
+
+    `sessions` must be today's sessions for THIS room, ordered by start.
+    """
+    current = next(
+        (s for s in sessions if s.scheduled_start <= now < s.scheduled_end), None
+    )
+    upcoming = [s for s in sessions if s.scheduled_start > now]
+    tile = {
+        "room": room,
+        "session": current,
+        "next": upcoming[0] if upcoming else None,
+        "count": len(sessions),
+    }
+
+    if current is None:
+        tile["state"] = "free" if sessions else "idle"
+        return tile
+
+    effective = current.declared_modality or current.schedule.modality
+    if effective == Modality.ONLINE:
+        tile["state"] = "online"
+    elif current.status == SessionStatus.ACTIVE:
+        tile["state"] = "in_session"
+    elif current.status == SessionStatus.ABSENT:
+        tile["state"] = "absent"
+    elif current.status == SessionStatus.COMPLETED:
+        # Ended (possibly early) but the scheduled window is still open: the room
+        # is genuinely available, which is what IFO needs to know.
+        tile["state"] = "free"
+    elif now > current.scheduled_start + grace:
+        # Past grace with nobody checked in. The sweep job will mark this ABSENT;
+        # the board must not wait for the job to tell the truth.
+        tile["state"] = "absent"
+    else:
+        tile["state"] = "starting"
+    return tile
+
+
+def _room_board(scope="live"):
+    """Build the grouped room board. Two queries regardless of room count."""
+    now = timezone.now()
+    grace = timedelta(minutes=int(get_policy("grace_minutes")))
+
+    rooms = list(Room.objects.select_related("floor__building")
+                 .order_by("floor__building__code", "floor__number", "code"))
+    by_room = {}
+    for s in (Session.objects.filter(date=timezone.localdate())
+              .select_related("schedule", "faculty")
+              .order_by("scheduled_start")):
+        by_room.setdefault(s.room_id, []).append(s)
+
+    groups, buildings, totals = [], [], {"rooms": 0, "problems": 0, "hidden": 0}
+    for room in rooms:
+        tile = _room_tile(room, by_room.get(room.id, []), now, grace)
+        # "Live" hides rooms with nothing on today; "All" is the full inventory
+        # (QR posters, capacity) and keeps them.
+        if scope == "live" and tile["state"] == "idle":
+            totals["hidden"] += 1
+            continue
+
+        building = room.floor.building
+        label = f"{building.code} · Floor {room.floor.number}"
+        if not groups or groups[-1]["label"] != label:
+            groups.append({"label": label, "building": building.code,
+                           "floor": room.floor.number, "tiles": [],
+                           "problems": 0})
+        groups[-1]["tiles"].append(tile)
+        totals["rooms"] += 1
+        if tile["state"] in ROOM_PROBLEM_STATES:
+            groups[-1]["problems"] += 1
+            totals["problems"] += 1
+        if building.code not in buildings:
+            buildings.append(building.code)
+
+    for g in groups:
+        g["tiles"].sort(key=lambda t: (ROOM_STATE_ORDER[t["state"]], t["room"].code))
+
+    return {"groups": groups, "buildings": buildings, "totals": totals,
+            "scope": scope, "now": timezone.localtime(now)}
+
+
+def _board_scope(request):
+    return "all" if request.GET.get("scope") == "all" else "live"
 
 
 @ifo_required
 def rooms_list(request):
-    rooms = list(Room.objects.select_related("floor__building")
-                 .order_by("floor__building__code", "floor__number", "code"))
-    today_counts = {}
-    for s in _today_sessions():
-        today_counts[s.room_id] = today_counts.get(s.room_id, 0) + 1
-    # group by "Building N" for display
-    groups = {}
-    for r in rooms:
-        key = f"{r.floor.building.name} · Floor {r.floor.number}"
-        groups.setdefault(key, []).append((r, today_counts.get(r.id, 0)))
-    return render(request, "ifo/rooms.html", {"groups": groups, "total": len(rooms)})
+    """The room board shell: filter bar + Live/All toggle. The tiles themselves
+    live in the polled `_board.html` partial so filters survive a poll swap."""
+    scope = _board_scope(request)
+    ctx = _room_board(scope)
+    ctx["poll_ms"] = int(get_policy("poll_interval_seconds")) * 1000
+    ctx["total_rooms"] = Room.objects.count()
+    return render(request, "ifo/rooms.html", ctx)
+
+
+@ifo_required
+def rooms_board(request):
+    """Polled board body (IFO-07)."""
+    return render(request, "ifo/_board.html", _room_board(_board_scope(request)))
+
+
+@ifo_required
+def room_panel(request, code):
+    """Slide-over detail for one room: what is happening right now, today's
+    timeline, and the recurring weekly schedule. Loaded into the board's panel
+    target so the board keeps polling behind it."""
+    room = get_object_or_404(Room.objects.select_related("floor__building"), code=code)
+    now = timezone.now()
+    grace = timedelta(minutes=int(get_policy("grace_minutes")))
+    today = list(room.sessions.filter(date=timezone.localdate())
+                 .select_related("schedule", "faculty")
+                 .order_by("scheduled_start"))
+    tile = _room_tile(room, today, now, grace)
+
+    term = AcademicTerm.objects.filter(is_active=True).first()
+    schedules = (room.schedules.filter(status=ScheduleStatus.ACTIVE, term=term)
+                 .select_related("faculty").order_by("day_of_week", "start_time")
+                 if term else room.schedules.none())
+    return render(request, "ifo/_room_panel.html", {
+        "room": room, "tile": tile, "today": today, "schedules": schedules,
+        "term": term, "now": timezone.localtime(now),
+    })
 
 
 @ifo_required
@@ -73,16 +206,10 @@ def room_detail(request, code):
                   {"room": room, "schedules": schedules, "upcoming": upcoming, "term": term})
 
 
-@ifo_required
 def live(request):
-    return render(request, "ifo/live.html",
-                  {"poll_ms": settings.FLUXTRACK_POLICY["poll_interval_seconds"] * 1000})
-
-
-@ifo_required
-def live_rows(request):
-    return render(request, "ifo/_live_rows.html",
-                  {"sessions": _today_sessions(), "now": timezone.localtime()})
+    """/ifo/live merged into the room board. Kept as a permanent redirect so
+    bookmarks, the PWA shell cache, and any pinned tab keep working."""
+    return redirect("ifo_rooms", permanent=True)
 
 
 # --- QR poster (IFO-01) ---

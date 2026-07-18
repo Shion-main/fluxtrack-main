@@ -49,11 +49,13 @@ urlpatterns = [
     path("hr/attendance.csv", hr.attendance_csv, name="hr_attendance_csv"),
     # IFO Admin surfaces
     path("ifo/rooms", ifo.rooms_list, name="ifo_rooms"),
+    path("ifo/rooms/board", ifo.rooms_board, name="ifo_rooms_board"),
     path("ifo/rooms/<str:code>", ifo.room_detail, name="ifo_room_detail"),
+    path("ifo/rooms/<str:code>/panel", ifo.room_panel, name="ifo_room_panel"),
     path("ifo/rooms/<str:code>/poster", ifo.room_poster, name="ifo_room_poster"),
     path("ifo/rooms/<str:code>/qr.png", ifo.room_qr, name="ifo_room_qr"),
+    # Merged into the room board; kept so bookmarks and the cached PWA shell work.
     path("ifo/live", ifo.live, name="ifo_live"),
-    path("ifo/live/rows", ifo.live_rows, name="ifo_live_rows"),
     path("ifo/assignments", ifo.assignments_list, name="ifo_assignments"),
     path("ifo/assignments/create", ifo.assignment_create, name="ifo_assignment_create"),
     # IFO-09 reporting dashboard + scorecard drill-down (RPT-04/RPT-05)

@@ -1,0 +1,108 @@
+{% comment %}
+Room slide-over body, loaded into #sheet-content from the board. Three blocks in
+the order the question is actually asked: what is happening RIGHT NOW, then the
+rest of today, then the recurring week.
+
+Rendered fresh on every open, so it is a point-in-time read (the board behind it
+keeps polling). ASCII-only.
+{% endcomment %}
+<div class="sheet__head">
+  <div>
+    <h2 id="sheet-title">{{ room.code }}</h2>
+    <p>{{ room.floor.building.name }} &middot; Floor {{ room.floor.number }}{% if room.name %} &middot; {{ room.name }}{% endif %}{% if room.capacity %} &middot; seats {{ room.capacity }}{% endif %}</p>
+  </div>
+  <button type="button" class="sheet__x" data-sheet-close aria-label="Close room details">
+    <uk-icon icon="x"></uk-icon></button>
+</div>
+
+<div class="sheet__body">
+
+  <div class="sheet__sec">
+    <h3>Right now</h3>
+    <div class="now now--{{ tile.state }}">
+      <div class="now__state">
+        {% if tile.state == "absent" %}<uk-icon icon="alert-triangle"></uk-icon> Absent
+        {% elif tile.state == "starting" %}<uk-icon icon="clock"></uk-icon> Starting
+        {% elif tile.state == "in_session" %}<uk-icon icon="circle-check"></uk-icon> In session
+        {% elif tile.state == "online" %}<uk-icon icon="monitor"></uk-icon> Class is online
+        {% elif tile.state == "free" %}<uk-icon icon="door-open"></uk-icon> Free
+        {% else %}<uk-icon icon="minus"></uk-icon> Idle{% endif %}
+      </div>
+
+      {% if tile.session %}
+      <div class="now__who">{{ tile.session.faculty.get_full_name|default:tile.session.faculty.username }}</div>
+      <div class="now__course">
+        {{ tile.session.schedule.course_code }}-{{ tile.session.schedule.section }}
+        &middot; {{ tile.session.scheduled_start|time:"g:i A" }}&ndash;{{ tile.session.scheduled_end|time:"g:i A" }}</div>
+      <div class="now__meta">
+        {% if tile.state == "in_session" %}
+          <span>checked in <b>{{ tile.session.actual_start|time:"g:i A"|default:"--" }}</b></span>
+          <span>{% if tile.session.verified_by_checker %}<uk-icon icon="shield-check" style="width:13px;height:13px;vertical-align:-2px"></uk-icon> verified by checker{% else %}not yet verified{% endif %}</span>
+        {% elif tile.state == "starting" %}
+          <span>within the <b>grace window</b> &mdash; not a no-show yet</span>
+        {% elif tile.state == "absent" %}
+          <span>nobody checked in past the grace window</span>
+        {% elif tile.state == "online" %}
+          <span>room is <b>free</b> &mdash; this class is meeting online</span>
+          {% if tile.session.modality_changed_at %}<span>shifted {{ tile.session.modality_changed_at|date:"M j, g:i A" }}</span>{% endif %}
+        {% endif %}
+      </div>
+
+      {% elif tile.next %}
+      <div class="now__who" style="color:var(--body);font-weight:550">No class in here right now</div>
+      <div class="now__course">Next: {{ tile.next.schedule.course_code }}-{{ tile.next.schedule.section }}
+        at {{ tile.next.scheduled_start|time:"g:i A" }}
+        ({{ tile.next.faculty.last_name|default:tile.next.faculty.username }})</div>
+
+      {% else %}
+      <div class="now__who" style="color:var(--body);font-weight:550">
+        {% if tile.count %}Done for today{% else %}Nothing scheduled today{% endif %}</div>
+      <div class="now__course">
+        {% if tile.count %}All {{ tile.count }} of today's classes have finished.
+        {% else %}This room has no classes on the calendar for today.{% endif %}</div>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="sheet__sec">
+    <h3>Today</h3>
+    {% if today %}
+    <ul class="tl">
+      {% for s in today %}
+      <li class="{% if s.id == tile.session.id %}{% if tile.state == 'absent' %}is-bad{% else %}is-now{% endif %}{% elif s.scheduled_end < now %}is-past{% endif %}">
+        <span class="tl__time">{{ s.scheduled_start|time:"g:i A" }}</span>
+        <span class="tl__course">{{ s.schedule.course_code }}-{{ s.schedule.section }}</span>
+        <span class="tl__who">{{ s.faculty.last_name|default:s.faculty.username }} &middot; {{ s.get_status_display|lower }}</span>
+      </li>
+      {% endfor %}
+    </ul>
+    {% else %}
+    <p class="uk-text-small uk-text-muted">No sessions in this room today.</p>
+    {% endif %}
+  </div>
+
+  <div class="sheet__sec">
+    <h3>This week{% if term %} &middot; {{ term.name }}{% endif %}</h3>
+    {% if schedules %}
+    <ul class="tl tl--plain">
+      {% for s in schedules %}
+      <li>
+        <span class="tl__time" style="width:44px">{{ s.get_day_of_week_display|slice:":3" }}</span>
+        <span class="tl__time">{{ s.start_time|time:"g:i A" }}</span>
+        <span class="tl__course">{{ s.course_code }}-{{ s.section }}</span>
+        <span class="tl__who">{{ s.faculty.last_name|default:s.faculty.username }}</span>
+      </li>
+      {% endfor %}
+    </ul>
+    {% else %}
+    <p class="uk-text-small uk-text-muted">No recurring classes in this room for the active term.</p>
+    {% endif %}
+  </div>
+</div>
+
+<div class="sheet__foot">
+  <a href="/ifo/rooms/{{ room.code }}" class="uk-btn uk-btn-secondary uk-btn-sm">
+    <uk-icon icon="external-link" class="size-4"></uk-icon> Full room page</a>
+  <a href="/ifo/rooms/{{ room.code }}/poster" target="_blank" class="uk-btn uk-btn-ghost uk-btn-sm">
+    <uk-icon icon="qr-code" class="size-4"></uk-icon> QR poster</a>
+</div>

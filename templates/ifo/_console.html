@@ -2,12 +2,11 @@
 {% comment %}IFO console: the shared console shell with IFO navigation. Leaf IFO
 pages (live/rooms/assignments/dashboard/room_detail/weekly_reports) extend THIS
 and fill console_title / page_actions / console. ASCII-only.{% endcomment %}
-{% block console_home %}/ifo/live{% endblock %}
+{% block console_home %}/ifo/rooms{% endblock %}
 {% block console_navlabel %}IFO{% endblock %}
 {% block console_nav %}
-  <a href="/ifo/live" class="cns__link {% if un == 'ifo_live' %}is-active{% endif %}"
-     {% if un == 'ifo_live' %}aria-current="page"{% endif %}>
-    <uk-icon icon="radio"></uk-icon> Live today</a>
+  {% comment %}"Live today" merged into Rooms: the room board IS the live view,
+  with a Live/All scope toggle on the page itself.{% endcomment %}
   <a href="/ifo/rooms" class="cns__link {% if un == 'ifo_rooms' or un == 'ifo_room_detail' %}is-active{% endif %}"
      {% if un == 'ifo_rooms' or un == 'ifo_room_detail' %}aria-current="page"{% endif %}>
     <uk-icon icon="building"></uk-icon> Rooms</a>
