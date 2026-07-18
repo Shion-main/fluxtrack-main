@@ -1,76 +1,69 @@
-{% extends "base.html" %}
-{% comment %}DEAN-04 department-scoped dashboard (read-only, DEAN-01). Standard
-Franken shell, max-w-2xl (mirrors dean/queue.html). Four KPI cards from ONE
-safe_card(dept_summary) scoped to the Dean's OWN department, guarded by the
-(value, error) pair via the shared reports/_error_card.html, plus a
-latest-weekly-report card with a calm Pattern F empty state when none exists yet.
-NO write controls -- the surface is read-only. ASCII-only.{% endcomment %}
+{% extends "dean/_console.html" %}
+{% comment %}DEAN-04 department-scoped dashboard (read-only, DEAN-01), in the Dean console
+shell. Four KPI cards from ONE safe_card(dept_summary) scoped to the Dean's OWN
+department, guarded by the (value, error) pair via reports/_error_card.html, plus a
+latest-weekly-report card with a calm Pattern-F empty state. NO write controls.
+ASCII-only.{% endcomment %}
 {% block title %}Department oversight - FluxTrack{% endblock %}
-{% block content %}
-<div class="max-w-2xl mx-auto px-4 pt-8 pb-16">
-  <div class="flex items-center gap-2 mb-1">
-    <a href="/" class="uk-btn uk-btn-ghost uk-btn-icon" aria-label="Back">
-      <uk-icon icon="arrow-left" class="size-5"></uk-icon></a>
-    <h1 class="uk-h2">Department oversight</h1>
-    {% if department %}<span class="uk-label uk-label-secondary">{{ department.code }}</span>{% endif %}
+{% block console_title %}Department oversight{% endblock %}
+{% block page_actions %}{% if department %}<span class="uk-label uk-label-secondary">{{ department.code }}</span>{% endif %}{% endblock %}
+{% block console %}
+<p class="uk-text-muted mb-6">Attendance summary for your department this week (DEAN-04). Read-only.</p>
+
+{% if summary.1 %}
+  {% include "reports/_error_card.html" %}
+{% else %}
+  <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+    <div class="uk-card uk-card-body">
+      <div class="uk-text-small uk-text-muted flex items-center gap-1">
+        <uk-icon icon="users" class="size-4"></uk-icon> Faculty</div>
+      <div class="uk-h2 mt-1">{{ summary.0.faculty_count }}</div>
+    </div>
+    <div class="uk-card uk-card-body">
+      <div class="uk-text-small uk-text-muted flex items-center gap-1">
+        <uk-icon icon="layers" class="size-4"></uk-icon> Sessions</div>
+      <div class="uk-h2 mt-1">{{ summary.0.held }}<span class="uk-text-muted uk-text-small"> / {{ summary.0.scheduled }}</span></div>
+      <div class="uk-text-small uk-text-muted">held / scheduled</div>
+    </div>
+    <div class="uk-card uk-card-body">
+      <div class="uk-text-small uk-text-muted flex items-center gap-1">
+        <uk-icon icon="calendar-x" class="size-4"></uk-icon> Absences</div>
+      <div class="uk-h2 mt-1">{{ summary.0.absent }}</div>
+    </div>
+    <div class="uk-card uk-card-body">
+      <div class="uk-text-small uk-text-muted flex items-center gap-1">
+        <uk-icon icon="percent" class="size-4"></uk-icon> Attendance %</div>
+      {% with pct=summary.0.attendance_pct %}
+      <div class="mt-1">
+        <span class="uk-label" style="{% if pct >= 90 %}background:var(--green-tint);color:var(--green){% elif pct >= 75 %}background:var(--amber-tint);color:var(--amber){% else %}background:var(--red-tint);color:var(--red){% endif %};font-size:1.4rem;padding:2px 10px">{{ pct }}%</span>
+      </div>
+      {% endwith %}
+    </div>
   </div>
-  <p class="uk-text-muted mb-6">Attendance summary for your department this week (DEAN-04). Read-only.</p>
+{% endif %}
 
-  {% if summary.1 %}
-    {% include "reports/_error_card.html" %}
-  {% else %}
-    <div class="grid gap-4 sm:grid-cols-2">
-      <div class="uk-card uk-card-body">
-        <div class="uk-text-small uk-text-muted flex items-center gap-1">
-          <uk-icon icon="users" class="size-4"></uk-icon> Faculty</div>
-        <div class="uk-h2 mt-1">{{ summary.0.faculty_count }}</div>
+<h3 class="uk-h4 mt-8 mb-2">Latest weekly report</h3>
+{% if latest_report %}
+  <div class="uk-card uk-card-body">
+    <div class="flex items-center justify-between flex-wrap gap-4">
+      <div>
+        <div class="uk-text-small uk-text-muted">Week of</div>
+        <div class="uk-h4 mb-0">{{ latest_report.week_start|date:'M j, Y' }}</div>
       </div>
-      <div class="uk-card uk-card-body">
-        <div class="uk-text-small uk-text-muted flex items-center gap-1">
-          <uk-icon icon="layers" class="size-4"></uk-icon> Sessions</div>
-        <div class="uk-h2 mt-1">{{ summary.0.held }}<span class="uk-text-muted uk-text-small"> / {{ summary.0.scheduled }}</span></div>
-        <div class="uk-text-small uk-text-muted">held / scheduled</div>
-      </div>
-      <div class="uk-card uk-card-body">
-        <div class="uk-text-small uk-text-muted flex items-center gap-1">
-          <uk-icon icon="calendar-x" class="size-4"></uk-icon> Absences</div>
-        <div class="uk-h2 mt-1">{{ summary.0.absent }}</div>
-      </div>
-      <div class="uk-card uk-card-body">
-        <div class="uk-text-small uk-text-muted flex items-center gap-1">
-          <uk-icon icon="percent" class="size-4"></uk-icon> Attendance %</div>
-        {% with pct=summary.0.attendance_pct %}
-        <div class="mt-1">
-          <span class="uk-label" style="{% if pct >= 90 %}background:var(--green-tint);color:var(--green){% elif pct >= 75 %}background:var(--amber-tint);color:var(--amber){% else %}background:var(--red-tint);color:var(--red){% endif %};font-size:1.4rem;padding:2px 10px">{{ pct }}%</span>
-        </div>
-        {% endwith %}
+      <div class="flex items-center gap-2">
+        <a href="{% url 'dean_weekly_download' latest_report.pk 'csv' %}" class="uk-btn uk-btn-secondary uk-btn-sm" download>
+          <uk-icon icon="download" class="size-4"></uk-icon> Export CSV</a>
+        <a href="{% url 'dean_weekly_download' latest_report.pk 'pdf' %}" class="uk-btn uk-btn-primary uk-btn-sm" download>
+          <uk-icon icon="file-text" class="size-4"></uk-icon> Download PDF</a>
       </div>
     </div>
-  {% endif %}
-
-  <h3 class="uk-h4 mt-8 mb-2">Latest weekly report</h3>
-  {% if latest_report %}
-    <div class="uk-card uk-card-body">
-      <div class="flex items-center justify-between flex-wrap gap-4">
-        <div>
-          <div class="uk-text-small uk-text-muted">Week of</div>
-          <div class="uk-h4 mb-0">{{ latest_report.week_start|date:'M j, Y' }}</div>
-        </div>
-        <div class="flex items-center gap-2">
-          <a href="{% url 'dean_weekly_download' latest_report.pk 'csv' %}" class="uk-btn uk-btn-secondary uk-btn-sm" download>
-            <uk-icon icon="download" class="size-4"></uk-icon> Export CSV</a>
-          <a href="{% url 'dean_weekly_download' latest_report.pk 'pdf' %}" class="uk-btn uk-btn-primary uk-btn-sm" download>
-            <uk-icon icon="file-text" class="size-4"></uk-icon> Download PDF</a>
-        </div>
-      </div>
-      <p class="uk-text-small mt-4 mb-0">
-        <a href="/dean/reports" class="inline-flex items-center gap-1">View full department reporting <uk-icon icon="chevron-right" class="size-4"></uk-icon></a></p>
-    </div>
-  {% else %}
-    <div class="uk-card uk-card-body">
-      <p class="uk-text-muted mb-1">No weekly report yet.</p>
-      <p class="uk-text-small uk-text-muted mb-0">Your department's first consolidated report will appear here once it has been generated. In the meantime, <a href="/dean/reports">view live department reporting</a>.</p>
-    </div>
-  {% endif %}
-</div>
+    <p class="uk-text-small mt-4 mb-0">
+      <a href="/dean/reports" class="inline-flex items-center gap-1">View full department reporting <uk-icon icon="chevron-right" class="size-4"></uk-icon></a></p>
+  </div>
+{% else %}
+  <div class="uk-card uk-card-body">
+    <p class="uk-text-muted mb-1">No weekly report yet.</p>
+    <p class="uk-text-small uk-text-muted mb-0">Your department's first consolidated report will appear here once it has been generated. In the meantime, <a href="/dean/reports">view live department reporting</a>.</p>
+  </div>
+{% endif %}
 {% endblock %}

@@ -1,0 +1,18 @@
+{% extends "_console.html" %}
+{% comment %}Dean console: the shared console shell with the department-scoped Dean
+navigation (Oversight / Approvals / Reports). Leaf Dean pages (dashboard / queue /
+reports) extend THIS and fill console_title / page_actions / console. The Dean is
+department-scoped server-side; no department control is exposed. ASCII-only.{% endcomment %}
+{% block console_home %}/dean/dashboard{% endblock %}
+{% block console_navlabel %}Dean{% endblock %}
+{% block console_nav %}
+  <a href="/dean/dashboard" class="cns__link {% if un == 'dean_dashboard' %}is-active{% endif %}"
+     {% if un == 'dean_dashboard' %}aria-current="page"{% endif %}>
+    <uk-icon icon="gauge"></uk-icon> Oversight</a>
+  <a href="/dean/requests" class="cns__link {% if un == 'dean_queue' %}is-active{% endif %}"
+     {% if un == 'dean_queue' %}aria-current="page"{% endif %}>
+    <uk-icon icon="check-check"></uk-icon> Approvals</a>
+  <a href="/dean/reports" class="cns__link {% if un == 'dean_reports' %}is-active{% endif %}"
+     {% if un == 'dean_reports' %}aria-current="page"{% endif %}>
+    <uk-icon icon="bar-chart-3"></uk-icon> Reports</a>
+{% endblock %}
