@@ -1,0 +1,90 @@
+{% extends "base.html" %}
+{% load static %}
+{% comment %}GRD-02 faculty locator (navy floor family). A GET search resolves a
+professor to their current room/course/end time, "Online -- not on campus", or
+"Not in a class" plus their next class today. Read-only. ASCII-only.{% endcomment %}
+{% block title %}Locate · FluxTrack{% endblock %}
+{% block content %}
+<div class="ft-app">
+
+  <header class="ft-top">
+    <a href="/guard/monitor" class="ft-top__brand">
+      <img class="ft-top__crest" src="{% static 'brand/mmcm-crest.png' %}" alt="">
+      <span class="ft-top__mark">FluxTrack</span>
+    </a>
+    <div class="relative inline-flex" style="margin-left:auto">{% include "notifications/_bell.html" %}</div>
+    <details class="ft-acct" style="margin-left:0">
+      <summary class="ft-top__avatar" aria-label="Account and sign out">{{ user.first_name|default:user.username|slice:":1"|upper }}{{ user.last_name|slice:":1"|upper }}</summary>
+      <div class="ft-acct__menu">
+        <div class="ft-acct__who">
+          <b>{{ user.get_full_name|default:user.username }}</b>
+          <span>{{ user.get_role_display }}</span>
+        </div>
+        <a class="ft-acct__item" href="/logout"><uk-icon icon="log-out"></uk-icon> Sign out</a>
+      </div>
+    </details>
+  </header>
+
+  <div class="ft-page">
+    <div class="ft-greet">
+      <div class="ft-greet__hi">Locate faculty</div>
+      <div class="ft-greet__date">Find a professor on campus right now.</div>
+    </div>
+
+    <form method="get" role="search" style="display:flex; gap:10px; margin-bottom:18px">
+      <input type="search" name="q" value="{{ q }}" class="ft-control"
+             placeholder="Professor name" aria-label="Professor name" autofocus>
+      <button class="ft-btn-navy" type="submit" style="width:auto; padding:0 20px">
+        <uk-icon icon="search"></uk-icon></button>
+    </form>
+
+    {% if q and not matches %}
+    <div class="ft-outcome ft-outcome--neutral">
+      <div class="ft-outcome__head"><span class="ft-outcome__icon"><uk-icon icon="user-x"></uk-icon></span>
+        <div class="ft-outcome__title">No faculty found</div></div>
+      <p class="ft-outcome__body">No professor matches "{{ q }}". Check the spelling or try a last name.</p>
+    </div>
+
+    {% elif matches and not faculty %}
+    <div class="ft-sec"><div class="ft-sec__title">Did you mean</div></div>
+    <div class="ft-list">
+      {% for m in matches %}
+      <a href="?q={{ m.username|urlencode }}" class="ft-card ft-card--neutral">
+        <div class="ft-card__head"><uk-icon icon="user"></uk-icon>
+          <span class="ft-card__room" style="margin-left:0">{{ m.get_full_name|default:m.username }}</span>
+          <uk-icon icon="chevron-right" style="margin-left:auto"></uk-icon></div>
+      </a>
+      {% endfor %}
+    </div>
+
+    {% elif faculty %}
+    {% if online_now %}
+    <div class="ft-outcome ft-outcome--info">
+      <div class="ft-outcome__head"><span class="ft-outcome__icon"><uk-icon icon="monitor"></uk-icon></span>
+        <div class="ft-outcome__title">{{ faculty.get_full_name|default:faculty.username }}</div></div>
+      <p class="ft-outcome__body">Online now &mdash; not on campus. Conducting
+        {{ current.schedule.course_code }}-{{ current.schedule.section }} via Teams
+        until {{ current.scheduled_end|time:"g:i A" }}.</p>
+    </div>
+    {% elif current %}
+    <div class="ft-outcome ft-outcome--ok">
+      <div class="ft-outcome__head"><span class="ft-outcome__icon"><uk-icon icon="map-pin"></uk-icon></span>
+        <div class="ft-outcome__title">{{ faculty.get_full_name|default:faculty.username }}</div></div>
+      <p class="ft-outcome__body">In session now in <b>{{ current.room.code }}</b> &mdash;
+        {{ current.schedule.course_code }}-{{ current.schedule.section }},
+        ends {{ current.scheduled_end|time:"g:i A" }}.</p>
+    </div>
+    {% else %}
+    <div class="ft-outcome ft-outcome--neutral">
+      <div class="ft-outcome__head"><span class="ft-outcome__icon"><uk-icon icon="user"></uk-icon></span>
+        <div class="ft-outcome__title">{{ faculty.get_full_name|default:faculty.username }}</div></div>
+      <p class="ft-outcome__body">Not currently in a class.
+        {% if next %}Next today: {{ next.scheduled_start|time:"g:i A" }} &mdash;
+        {{ next.schedule.course_code }}-{{ next.schedule.section }} in {{ next.room.code }}.
+        {% else %}No more classes scheduled today.{% endif %}</p>
+    </div>
+    {% endif %}
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

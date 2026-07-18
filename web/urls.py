@@ -1,6 +1,7 @@
 from django.urls import path
 
-from . import checker, dean, faculty, hr, ifo, notifications, push, scan, views
+from . import (checker, dean, faculty, guard, hr, ifo, notifications, push, scan,
+               sys, views)
 
 urlpatterns = [
     path("", views.home, name="home"),
@@ -64,6 +65,12 @@ urlpatterns = [
     path("ifo/reports", ifo.weekly_reports, name="ifo_weekly_reports"),
     path("ifo/reports/weekly/<int:pk>/<str:fmt>", ifo.weekly_download,
          name="ifo_weekly_download"),
+    # Guard surfaces (GRD-01/02) -- read-only floor monitor + faculty locator
+    path("guard/monitor", guard.monitor, name="guard_monitor"),
+    path("guard/monitor/rows", guard.monitor_rows, name="guard_monitor_rows"),
+    path("guard/locate", guard.locate, name="guard_locate"),
+    # System Admin operational monitoring (SYS-04) -- read-only
+    path("sys/jobs", sys.jobs, name="sys_jobs"),
     # Notifications read surface (NOTIF-01) + mute settings (NOTIF-03)
     path("notifications/bell", notifications.bell, name="notif_bell"),
     path("notifications/dropdown", notifications.dropdown, name="notif_dropdown"),

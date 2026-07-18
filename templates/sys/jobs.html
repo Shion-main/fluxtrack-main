@@ -1,0 +1,83 @@
+{% extends "base.html" %}
+{% comment %}SYS-04 scheduled-job status monitor (read-only). Standard Franken shell.
+Latest run per job (status pill: ok=green, failed=red, running=amber) + a short run
+history. Reads ops.JobRun; no write controls. ASCII-only.{% endcomment %}
+{% block title %}Job monitor - FluxTrack{% endblock %}
+{% block content %}
+<div class="uk-container max-w-4xl pt-8 pb-16">
+  <div class="flex items-center gap-2 mb-1 flex-wrap">
+    <h1 class="uk-h2">Job monitor</h1>
+    <span class="uk-label uk-label-secondary">Read-only</span>
+    <div class="ml-auto flex items-center gap-2">
+      <a href="/admin/" class="uk-btn uk-btn-secondary uk-btn-sm"><uk-icon icon="settings" class="size-4"></uk-icon> Admin</a>
+      <a href="/admin/ops/auditlog/" class="uk-btn uk-btn-ghost uk-btn-sm"><uk-icon icon="list" class="size-4"></uk-icon> Audit log</a>
+    </div>
+  </div>
+  <p class="uk-text-muted mb-6">Scheduled-job status from the dedicated scheduler: last run, success or failure, and rows affected (SYS-04).</p>
+
+  {% if latest %}
+  <div class="grid gap-3 sm:grid-cols-2 mb-8">
+    {% for item in latest %}
+    <div class="uk-card uk-card-body">
+      <div class="flex items-center gap-2 mb-2">
+        <span class="font-semibold font-mono">{{ item.run.job_name }}</span>
+        {% if item.run.status == "ok" %}
+        <span class="uk-label ml-auto" style="background:var(--green-tint);color:var(--green)"><uk-icon icon="check" class="size-3"></uk-icon> OK</span>
+        {% elif item.run.status == "failed" %}
+        <span class="uk-label ml-auto" style="background:var(--red-tint);color:var(--red)"><uk-icon icon="x" class="size-3"></uk-icon> Failed</span>
+        {% else %}
+        <span class="uk-label ml-auto" style="background:var(--amber-tint);color:var(--amber)"><uk-icon icon="loader" class="size-3"></uk-icon> Running</span>
+        {% endif %}
+      </div>
+      <dl class="grid grid-cols-2 gap-x-3 gap-y-1 uk-text-small">
+        <dt class="uk-text-muted">Last run</dt>
+        <dd class="text-right">{{ item.run.started_at|date:"M j, g:i A" }}</dd>
+        <dt class="uk-text-muted">Duration</dt>
+        <dd class="text-right">{% if item.duration != None %}{{ item.duration|floatformat:1 }}s{% else %}&mdash;{% endif %}</dd>
+        <dt class="uk-text-muted">Rows affected</dt>
+        <dd class="text-right">{{ item.run.rows_affected }}</dd>
+      </dl>
+      {% if item.run.status == "failed" and item.run.detail %}
+      <p class="uk-text-small mt-2" style="color:var(--red)">{{ item.run.detail|truncatechars:160 }}</p>
+      {% endif %}
+    </div>
+    {% endfor %}
+  </div>
+
+  <h3 class="uk-h4 mb-2">Recent runs</h3>
+  <div class="uk-card uk-card-body p-0 data-grid">
+    <table class="uk-table uk-table-divider uk-table-small uk-table-middle mb-0">
+      <thead>
+        <tr>
+          <th scope="col">Job</th>
+          <th scope="col">Started</th>
+          <th scope="col">Status</th>
+          <th scope="col" class="uk-text-right">Duration</th>
+          <th scope="col" class="uk-text-right">Rows</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for item in recent %}
+        <tr>
+          <td class="font-mono">{{ item.run.job_name }}</td>
+          <td class="uk-text-nowrap">{{ item.run.started_at|date:"M j, g:i:s A" }}</td>
+          <td>
+            {% if item.run.status == "ok" %}<span class="uk-label" style="background:var(--green-tint);color:var(--green)">OK</span>
+            {% elif item.run.status == "failed" %}<span class="uk-label" style="background:var(--red-tint);color:var(--red)">Failed</span>
+            {% else %}<span class="uk-label" style="background:var(--amber-tint);color:var(--amber)">Running</span>{% endif %}
+          </td>
+          <td class="uk-text-right">{% if item.duration != None %}{{ item.duration|floatformat:1 }}s{% else %}&mdash;{% endif %}</td>
+          <td class="uk-text-right">{{ item.run.rows_affected }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div class="uk-card uk-card-body text-center">
+    <p class="uk-h4 mb-1">No job runs recorded yet</p>
+    <p class="uk-text-muted uk-text-small">The scheduler records a row each time a job runs. Start it with <code>manage.py runscheduler</code>; status will appear here.</p>
+  </div>
+  {% endif %}
+</div>
+{% endblock %}

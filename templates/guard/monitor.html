@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+{% load static %}
+{% comment %}GRD-01 Guard floor monitor shell (navy floor family). A polled
+#monitor-rows container that htmx-swaps guard/_monitor_rows.html on the
+policy-driven interval; on-duty scope is re-derived server-side each poll.
+Read-only -- the Guard observes, never writes. ASCII-only.{% endcomment %}
+{% block title %}Floor monitor · FluxTrack{% endblock %}
+{% block content %}
+<div class="ft-app">
+
+  <header class="ft-top">
+    <a href="/guard/monitor" class="ft-top__brand">
+      <img class="ft-top__crest" src="{% static 'brand/mmcm-crest.png' %}" alt="">
+      <span class="ft-top__mark">FluxTrack</span>
+    </a>
+    <div class="relative inline-flex" style="margin-left:auto">{% include "notifications/_bell.html" %}</div>
+    <details class="ft-acct" style="margin-left:0">
+      <summary class="ft-top__avatar" aria-label="Account and sign out">{{ user.first_name|default:user.username|slice:":1"|upper }}{{ user.last_name|slice:":1"|upper }}</summary>
+      <div class="ft-acct__menu">
+        <div class="ft-acct__who">
+          <b>{{ user.get_full_name|default:user.username }}</b>
+          <span>{{ user.get_role_display }}</span>
+        </div>
+        <a class="ft-acct__item" href="/logout"><uk-icon icon="log-out"></uk-icon> Sign out</a>
+      </div>
+    </details>
+  </header>
+
+  <div class="ft-page">
+    <div class="ft-greet">
+      <div class="ft-greet__hi">Floor monitor</div>
+      <div class="ft-greet__date">Live room status on your posted floor(s). Read-only.</div>
+    </div>
+
+    <div id="monitor-rows" class="js-poll" aria-live="polite" aria-busy="true"
+         hx-get="/guard/monitor/rows" hx-trigger="load, every {{ poll_ms }}ms" hx-swap="innerHTML">
+      <div class="skel-stack" aria-hidden="true">
+        <div class="skel skel-row"></div>
+        <div class="skel skel-row"></div>
+        <div class="skel skel-row"></div>
+      </div>
+      <span class="sr-only">Loading floor status...</span>
+    </div>
+  </div>
+</div>
+{% endblock %}

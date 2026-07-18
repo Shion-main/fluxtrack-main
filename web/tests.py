@@ -10,6 +10,7 @@ from datetime import date, time, timedelta
 from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.core.cache import cache
+from django.core.management import call_command
 from django.test import TestCase, override_settings
 from django.urls import NoReverseMatch, reverse
 from django.utils import timezone
@@ -150,6 +151,20 @@ class DevLoginCuratedDemoTests(TestCase):
         self.assertIn("cdgaray", usernames)
         self.assertNotIn("cjldellosa", usernames)
         self.assertLessEqual(len(usernames), len(views.DEMO_USERNAMES))
+
+    def test_allowlist_resolves_one_demo_account_per_role(self):
+        """Coupling guard: DEMO_USERNAMES must name accounts seed_demo actually
+        creates. The list is USERNAMES, not surnames — the seed_demo `people`
+        rows are (username, last_name, ...), and reading the wrong column silently
+        yields an allowlist that matches nobody, collapsing the login page to the
+        one role whose demo account is externally imported (faculty/cdgaray)."""
+        call_command("seed_demo")
+        resp = self.client.get("/login")
+        roles = sorted(u.role for u in resp.context["dev_users"])
+        self.assertEqual(roles, sorted([
+            Role.FACULTY, Role.CHECKER, Role.IFO_ADMIN, Role.HR_ADMIN,
+            Role.GUARD, Role.DEAN, Role.SYSTEM_ADMIN,
+        ]), "every role must have exactly one selectable dev-login account")
 
     def test_garay_dev_login_authenticates_and_redirects_home(self):
         """A DEBUG POST of cdgaray logs in via the unchanged passwordless path and
@@ -527,5 +542,114 @@ class HomeSurfaceNavTests(TestCase):
     def test_dean_home_links_approval_queue(self):
         u = get_user_model().objects.create(username="dean_nav", role=Role.DEAN)
         self.client.force_login(u)
-        resp = self.client.get("/")
+        # Dean home redirects into the Dean console (Oversight); its sidebar nav
+        # carries the Approvals link to /dean/requests.
+        resp = self.client.get("/", follow=True)
         self.assertContains(resp, "/dean/requests")
+
+
+class SysJobMonitorTests(TestCase):
+    """SYS-04 scheduled-job status monitor: role-gated, read-only, reads JobRun."""
+
+    def _make_run(self, name="materialize", status="ok", rows=42):
+        from ops.models import JobRun
+        now = timezone.now()
+        return JobRun.objects.create(
+            job_name=name, status=status, started_at=now,
+            finished_at=now + timedelta(seconds=3), rows_affected=rows,
+            detail="" if status == "ok" else "boom")
+
+    def test_sysadmin_sees_job_status(self):
+        User = get_user_model()
+        u = User.objects.create(username="sys_mon", role=Role.SYSTEM_ADMIN)
+        self.client.force_login(u)
+        self._make_run(name="materialize", status="ok", rows=7)
+        self._make_run(name="sweep", status="failed", rows=0)
+        resp = self.client.get(reverse("sys_jobs"))
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, "materialize")
+        self.assertContains(resp, "sweep")
+        self.assertContains(resp, "Failed")
+
+    def test_non_sysadmin_is_forbidden(self):
+        User = get_user_model()
+        u = User.objects.create(username="fac_nojobs", role=Role.FACULTY)
+        self.client.force_login(u)
+        resp = self.client.get(reverse("sys_jobs"))
+        self.assertEqual(resp.status_code, 403)
+
+    def test_empty_state_when_no_runs(self):
+        User = get_user_model()
+        u = User.objects.create(username="sys_empty", role=Role.SYSTEM_ADMIN)
+        self.client.force_login(u)
+        resp = self.client.get(reverse("sys_jobs"))
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, "No job runs recorded yet")
+
+
+class GuardSurfaceTests(TestCase):
+    """GRD-01/02: role-gated, read-only floor monitor scoped to the guard's active
+    floors, and a campus-wide faculty locator."""
+
+    def setUp(self):
+        User = get_user_model()
+        self.term = AcademicTerm.objects.create(
+            name="GT", start_date=date(2026, 1, 1),
+            end_date=date(2026, 12, 31), is_active=True)
+        self.bldg = Building.objects.create(name="G", code="G")
+        self.floor1 = Floor.objects.create(building=self.bldg, number=1)
+        self.floor2 = Floor.objects.create(building=self.bldg, number=2)
+        self.room1 = Room.objects.create(floor=self.floor1, code="G101",
+                                         qr_token="gq1", manual_code="900101")
+        self.room2 = Room.objects.create(floor=self.floor2, code="G201",
+                                         qr_token="gq2", manual_code="900201")
+        self.faculty = User.objects.create(
+            username="g_fac", first_name="Ana", last_name="Reyes", role=Role.FACULTY)
+        self.guard = User.objects.create(username="g_guard", role=Role.GUARD)
+
+    def _session(self, room, status=SessionStatus.SCHEDULED):
+        now = timezone.now()
+        sch = Schedule.objects.create(
+            term=self.term, course_code="GG101", section="A", faculty=self.faculty,
+            room=room, day_of_week=0, start_time=time(8, 0), end_time=time(9, 30))
+        return Session.objects.create(
+            schedule=sch, faculty=self.faculty, room=room, date=timezone.localdate(),
+            scheduled_start=now, scheduled_end=now + timedelta(minutes=90), status=status)
+
+    def _post_guard_to(self, *floors):
+        from verification.models import (Assignment, AssignmentScope,
+                                         AssignmentType, DutyRole)
+        a = Assignment.objects.create(
+            user=self.guard, role=DutyRole.GUARD, type=AssignmentType.STANDING,
+            scope=AssignmentScope.FLOOR, status="active")
+        a.floors.set(floors)
+        return a
+
+    def test_non_guard_is_forbidden(self):
+        self.client.force_login(self.faculty)
+        for name in ("guard_monitor", "guard_monitor_rows", "guard_locate"):
+            self.assertEqual(self.client.get(reverse(name)).status_code, 403)
+
+    def test_off_duty_shows_not_on_duty(self):
+        self.client.force_login(self.guard)
+        resp = self.client.get(reverse("guard_monitor_rows"))
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, "not on duty")
+
+    def test_monitor_scoped_to_assigned_floor_only(self):
+        self._session(self.room1)  # assigned floor
+        self._session(self.room2)  # OTHER floor -- must not leak
+        self._post_guard_to(self.floor1)
+        self.client.force_login(self.guard)
+        resp = self.client.get(reverse("guard_monitor_rows"))
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, "G101")
+        self.assertNotContains(resp, "G201")
+
+    def test_locator_reports_current_session(self):
+        self._session(self.room1, status=SessionStatus.ACTIVE)
+        self.client.force_login(self.guard)
+        resp = self.client.get(reverse("guard_locate"), {"q": "g_fac"})
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, "In session now")
+        self.assertContains(resp, "G101")

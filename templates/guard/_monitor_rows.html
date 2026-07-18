@@ -1,0 +1,43 @@
+{% load tz %}
+{% comment %}GRD-01 polled floor-monitor body. Read-only room-status cards scoped to
+the guard's active floor(s) (server-derived). Each state is color + icon + text
+label (WCAG 1.4.1). Off-duty renders a calm "not on duty" card. ASCII-only.{% endcomment %}
+{% if not on_duty %}
+<div class="ft-outcome ft-outcome--neutral" data-state="off-duty">
+  <div class="ft-outcome__head">
+    <span class="ft-outcome__icon"><uk-icon icon="user-x"></uk-icon></span>
+    <div class="ft-outcome__title">You're not on duty</div>
+  </div>
+  <p class="ft-outcome__body">You don't have an active floor posting right now. Ask IFO to post you to a floor to see live room status.</p>
+</div>
+{% elif sessions %}
+<div class="ft-sec">
+  <div class="ft-sec__title">Rooms today</div>
+  <span class="ft-chip" style="pointer-events:none">{{ sessions|length }} session{{ sessions|length|pluralize }}</span>
+</div>
+<div class="ft-list">
+  {% for se in sessions %}
+  <div class="ft-card
+    {% if se.status == 'active' %}ft-card--ok{% elif se.status == 'absent' %}ft-card--bad{% elif se.status == 'completed' %}ft-card--neutral{% else %}ft-card--info{% endif %}"
+    data-state="{{ se.status }}">
+    <div class="ft-card__head">
+      {% if se.status == 'active' %}<uk-icon icon="check-circle"></uk-icon><span class="ft-pill ft-pill--active">In session</span>
+      {% elif se.status == 'absent' %}<uk-icon icon="x"></uk-icon><span class="ft-pill ft-pill--absent">Absent</span>
+      {% elif se.status == 'completed' %}<uk-icon icon="check"></uk-icon><span class="ft-pill ft-pill--done">Done</span>
+      {% else %}<uk-icon icon="clock"></uk-icon><span class="ft-pill ft-pill--upcoming">Scheduled</span>{% endif %}
+      <span class="ft-card__room">{{ se.room.code }}</span>
+    </div>
+    <div class="ft-card__meta">
+      {{ se.scheduled_start|time:"g:i A" }} &middot; {{ se.schedule.course_code }}-{{ se.schedule.section }}
+      &middot; {{ se.faculty.last_name|default:se.faculty.username }}
+      {% if se.verified_by_checker %}&middot; <uk-icon icon="shield-check" style="vertical-align:-2px;width:13px;height:13px"></uk-icon> verified{% endif %}
+    </div>
+  </div>
+  {% endfor %}
+</div>
+{% else %}
+<div class="ft-card ft-card--neutral">
+  <div class="ft-card__meta" style="display:flex;align-items:center;gap:8px;margin:0">
+    <uk-icon icon="coffee"></uk-icon> No sessions on your floor today.</div>
+</div>
+{% endif %}
