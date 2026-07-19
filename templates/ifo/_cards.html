@@ -1,31 +1,71 @@
-{% comment %}IFO-09 results panel (RPT-05). Two independent sections, each with its
-own safe_card (value, error) pair: the KPI summary cards (dept_summary) and the
-per-faculty attendance table (faculty_attendance). Each section checks its own
-error and includes the shared reports/_error_card.html on failure, so one raising
-aggregate errors in its own card while the sibling section still renders. Attendance
-pills use the A-COLOR thresholds via the --green/--amber/--red tokens. ASCII-only.
+{% comment %}IFO-09 results panel (RPT-05). THREE independent sections, each with
+its own safe_card (value, error) pair: the four attendance KPI cards
+(dept_summary), the Room Occupancy card (room_utilization), and the per-faculty
+attendance table (faculty_attendance). Each section checks its OWN error and
+includes the shared reports/_error_card.html on failure, so one raising aggregate
+errors in its own cell while the siblings still render.
+
+The `grid` container is deliberately OUTSIDE every guard. It used to live inside
+the summary `{% else %}`, which would have made a dept_summary failure delete the
+occupancy card with it -- invisible on a healthy page and the opposite of what
+D-05 requires. Two error owners now share one row and neither can take the other
+down; web.tests_ifo_utilization.DashboardCardIsolationTests holds that line.
+
+Card two is IFO-09's Room Occupancy, restored in phase 06.1. It reads in
+SESSION-HOURS (used over booked, from the actual timestamps) and is NOT a booking
+count -- D-03. Per D-07 the row is five cards and Attendance % is retained rather
+than displaced. Every KPI cell carries data-kpi-card="..." so tests can count and
+order them without depending on whitespace.
+
+Layout degrades 2 -> 3 -> 5 columns, so the worst case is a 3+2 split rather than
+a 4+1 leaving one card stranded alone on a line. Attendance pills use the A-COLOR
+thresholds via the --green/--amber/--red tokens, always paired with the numeric
+value so colour is never the only signal. ASCII-only.
 {% endcomment %}
-{% if summary.1 %}
-  {% include "reports/_error_card.html" %}
-{% else %}
-  <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-    <div class="uk-card uk-card-body">
+<div class="grid gap-4 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5">
+  {% if summary.1 %}
+    <div class="sm:col-span-2 md:col-span-2 lg:col-span-4">
+      {% include "reports/_error_card.html" %}
+    </div>
+  {% else %}
+    <div class="uk-card uk-card-body" data-kpi-card="faculty">
       <div class="uk-text-small uk-text-muted flex items-center gap-1">
         <uk-icon icon="users" class="size-4"></uk-icon> Faculty</div>
       <div class="uk-h2 mt-1">{{ summary.0.faculty_count }}</div>
     </div>
-    <div class="uk-card uk-card-body">
+  {% endif %}
+
+  {% if occupancy.1 %}
+    <div>{% include "reports/_error_card.html" %}</div>
+  {% else %}
+    <div class="uk-card uk-card-body" data-kpi-card="occupancy">
+      <div class="uk-text-small uk-text-muted flex items-center gap-1">
+        <uk-icon icon="door-open" class="size-4"></uk-icon> Room Occupancy</div>
+      <div class="uk-h2 mt-1">{{ occupancy.0.used_hours }}<span class="uk-text-muted uk-text-small"> / {{ occupancy.0.booked_hours }}</span></div>
+      <div class="uk-text-small uk-text-muted">session-hours used / booked</div>
+      <div class="mt-2">
+        <span class="pill {% if occupancy.0.utilization_pct >= 60 %}pill--ok{% elif occupancy.0.utilization_pct >= 30 %}pill--warn{% else %}pill--bad{% endif %}">{{ occupancy.0.utilization_pct }}% of capacity</span>
+      </div>
+      <p class="uk-text-small uk-text-muted mt-2">{{ occupancy.0.wasted_hours }} room-hours were booked and unused &mdash; reclaimable as bookable slots.</p>
+      {% if occupancy.0.in_flight %}
+        <p class="uk-text-small uk-text-muted mt-1">{{ occupancy.0.in_flight }} session{{ occupancy.0.in_flight|pluralize }} still running, so not yet counted.</p>
+      {% endif %}
+    </div>
+  {% endif %}
+
+  {% if not summary.1 %}
+    <div class="uk-card uk-card-body" data-kpi-card="sessions">
       <div class="uk-text-small uk-text-muted flex items-center gap-1">
         <uk-icon icon="layers" class="size-4"></uk-icon> Sessions</div>
       <div class="uk-h2 mt-1">{{ summary.0.held }}<span class="uk-text-muted uk-text-small"> / {{ summary.0.scheduled }}</span></div>
       <div class="uk-text-small uk-text-muted">held / scheduled</div>
     </div>
-    <div class="uk-card uk-card-body">
+    <div class="uk-card uk-card-body" data-kpi-card="absences">
       <div class="uk-text-small uk-text-muted flex items-center gap-1">
         <uk-icon icon="calendar-x" class="size-4"></uk-icon> Absences</div>
       <div class="uk-h2 mt-1">{{ summary.0.absent }}</div>
     </div>
-    <div class="uk-card uk-card-body">
+    <div class="uk-card uk-card-body" data-kpi-card="attendance">
       <div class="uk-text-small uk-text-muted flex items-center gap-1">
         <uk-icon icon="percent" class="size-4"></uk-icon> Attendance %</div>
       {% with pct=summary.0.attendance_pct %}
@@ -34,8 +74,8 @@ pills use the A-COLOR thresholds via the --green/--amber/--red tokens. ASCII-onl
       </div>
       {% endwith %}
     </div>
-  </div>
-{% endif %}
+  {% endif %}
+</div>
 
 <h3 class="uk-h4 mt-8 mb-2">Faculty</h3>
 {% if rows.1 %}
