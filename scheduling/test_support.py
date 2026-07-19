@@ -9,7 +9,8 @@ session, and a competing occupant for availability conflict cases.
 
 ASCII-only by convention (Windows cp1252).
 """
-from datetime import date, datetime, time
+import itertools
+from datetime import date, datetime, time, timedelta
 from types import SimpleNamespace
 from zoneinfo import ZoneInfo
 
@@ -23,6 +24,7 @@ from scheduling.models import (
     CheckinMethod,
     Modality,
     Schedule,
+    ScheduleStatus,
     Session,
     SessionStatus,
 )
@@ -421,5 +423,296 @@ def make_reporting_fixture(prefix="rpt"):
         s_online=s_online,
         s_b_active=s_b_active,
         s_b_absent=s_b_absent,
+        add_session=add_session,
+    )
+
+
+# --- Room-utilization fixture (Phase 06.1, IFO-09 / T1) ---------------------
+
+# The three ladder rungs the room fixture timetables. Two distinct durations, so
+# the per-block duration rule is exercised and a single "block length" constant
+# can never be assumed. They tile exactly (07:00 + 75m = 08:15 + 75m = 09:30),
+# matching the live term's tiling property.
+RUTIL_BLOCK_A = (time(7, 0), time(8, 15))    # 75 minutes
+RUTIL_BLOCK_B = (time(8, 15), time(9, 30))   # 75 minutes
+RUTIL_BLOCK_C = (time(9, 30), time(11, 0))   # 90 minutes
+
+# The known Mon-Sun week every room-fixture session lives inside.
+RUTIL_MON = IN_WINDOW_DATE            # 2026-07-06, a Monday
+RUTIL_WED = date(2026, 7, 8)
+RUTIL_SAT = date(2026, 7, 11)
+RUTIL_WEEK_START = RUTIL_MON
+RUTIL_WEEK_END = date(2026, 7, 12)    # the Sunday; deliberately carries nothing
+
+# ``Room.manual_code`` is 6 chars, unique and CS_AS, so it cannot be namespaced by
+# a caller-supplied prefix the way ``code`` / ``qr_token`` can (two prefixes both
+# starting "r" would produce the same 6-char code). A process-wide sequence keeps
+# every call's codes distinct, which is what lets two fixtures coexist in one test.
+_RUTIL_MANUAL_SEQ = itertools.count(1)
+
+
+def make_room_utilization_fixture(prefix="rutil", activate=True):
+    """Seed and return a ROOM-shaped object graph for the T1 utilization metric.
+
+    A new fixture beside :func:`make_reporting_fixture` rather than an extension of
+    it: that one is faculty-shaped (one building, one floor, no V-room, and no
+    ``actual_start``/``actual_end`` anywhere, so every session in it contributes
+    ZERO used hours) and ``tests_reporting.py`` asserts its documented totals. This
+    one closes that gap without touching them.
+
+    Mirrors the module's ``_aware`` + prefix-namespacing idiom. ASCII-only.
+
+    ``activate`` must be True for the FIRST call in a test and False for every
+    later one. The ladder derivation under test resolves the ACTIVE term, and two
+    active terms is not a state the campus can be in -- it is the
+    ``scheduling.tests.make_session`` trap in a different costume.
+
+    Shape:
+
+    * Two Buildings x two Floors x two physical rooms = **8 physical rooms**, so
+      building and floor rollups have something to separate.
+    * A third building holding ONE V-prefixed virtual room (``vroom``). The V leads
+      the code, ahead of the prefix, so ``exclude(code__startswith="V")`` still
+      matches it (D-08).
+    * A three-rung ladder (07:00 / 08:15 / 09:30) with two distinct durations.
+    * Schedules on Monday, Wednesday and **Saturday** and none on Sunday, so the
+      derived cell set demonstrably picks Saturday up and drops Sunday from the
+      DATA rather than from a constant (D-06).
+
+    Timetabled (day, block) cells: MON x 3, WED x 3, SAT x 1 = **7 cells** (D-10).
+
+    Sessions, each named on the returned namespace, one per used-hours shape:
+
+      - ``s_full``            : MON block A, COMPLETED, actual == scheduled.
+                               booked 75m, used 75m.
+      - ``s_absent``          : MON block A, ABSENT, both actuals NULL.
+                               booked 75m, used 0 -- the zero IS the waste (D-03).
+      - ``s_early``           : MON block B, COMPLETED, ends 30m early, WITH
+                               ``ended_early=True`` and a ``room_released_at``.
+                               booked 75m, used 45m.
+      - ``s_early_unflagged`` : MON block B, COMPLETED, ends **12m** early with
+                               ``ended_early`` left False and ``room_released_at``
+                               NULL. **The point of this fixture.** It reproduces
+                               the shape ``seed_term`` really produces
+                               (``actual_end = scheduled_end - choice([0,0,0,5,12])``,
+                               ``seed_term.py:370-371``, with the flag never set
+                               anywhere in that command). It is the ONLY row here
+                               where the flag DISAGREES with the timestamps, so it
+                               is the only row that fails if the waste metric is
+                               keyed off the boolean instead of derived from the
+                               stamps. booked 75m, used 63m.
+      - ``s_late``            : MON block C, COMPLETED, starts 20m late.
+                               booked 90m, used 70m.
+      - ``s_overrun``         : WED block A, COMPLETED, in 5m early and out 5m late.
+                               booked 75m, used 75m -- the clamp holds.
+      - ``s_inflight``        : WED block B, ACTIVE, ``actual_end`` NULL. The D-09
+                               case: excluded from BOTH sides, counted in
+                               ``in_flight``.
+      - ``s_noshow_stamped``  : WED block C, COMPLETED with ``actual_start`` set and
+                               ``actual_end`` NULL. booked 90m, used 0.
+      - ``s_sat``             : SAT block A, COMPLETED, actual == scheduled.
+                               booked 75m, used 75m.
+      - ``s_virtual``         : SAT block A in the V-room, ACTIVE with full actual
+                               times. Must be invisible to every physical aggregate.
+      - ``s_archived``        : MON block A on an ARCHIVED Schedule, full actual
+                               times. Must never reach a room aggregate.
+
+    DOCUMENTED TOTALS over ``RUTIL_WEEK_START..RUTIL_WEEK_END`` with no ``as_of``,
+    assuming this is the only fixture in the test:
+
+      - physical rooms 8, ladder rungs 3, timetabled cells 7, teaching days 3
+      - available  = 8 rooms x (240 + 240 + 75) minutes = 74.0 h
+      - booked     = 630 minutes = 10.5 h
+      - used       = 403 minutes = 6.7 h
+      - absent     = 75 minutes  = 1.3 h
+      - unused held= 152 minutes = 2.5 h
+      - wasted     = 227 minutes = 3.8 h
+      - in_flight 1, absent_sessions 1, early_end_sessions 1,
+        overrun_sessions 1, early_arrival_sessions 1
+
+    ``add_session(d, block, status, **kwargs)`` seeds one more session on its own
+    fresh schedule for boundary tests, WITHOUT disturbing the totals above.
+
+    Returns a SimpleNamespace.
+    """
+    User = get_user_model()
+    counter = {"n": 0}
+
+    def _next():
+        counter["n"] += 1
+        return counter["n"]
+
+    dept = Department.objects.create(
+        name=f"{prefix} Dept", code=f"{prefix}-RD")
+    faculty = User.objects.create(
+        username=f"{prefix}_rfa", email=f"{prefix}_rfa@mcm.edu.ph",
+        first_name="Rita", last_name="Reyes",
+        role=Role.FACULTY, department=dept, is_active=True,
+    )
+
+    term = AcademicTerm.objects.create(
+        name=f"{prefix} Term", start_date=date(2026, 1, 1),
+        end_date=date(2026, 12, 31), is_active=activate,
+    )
+
+    def _room(floor, code):
+        n = _next()
+        return Room.objects.create(
+            floor=floor, code=f"{code}", capacity=40,
+            qr_token=f"{prefix}-qr-{n}",
+            manual_code=f"{next(_RUTIL_MANUAL_SEQ):06d}",
+        )
+
+    buildings = []
+    floors = []
+    rooms = []
+    for b in (1, 2):
+        building = Building.objects.create(
+            name=f"{prefix} Hall {b}", code=f"{prefix}-B{b}")
+        buildings.append(building)
+        for f in (1, 2):
+            floor = Floor.objects.create(building=building, number=f)
+            floors.append(floor)
+            for r in (1, 2):
+                rooms.append(_room(floor, f"{prefix}-R{b}{f}{r}"))
+
+    # The virtual room lives in its own building. The V LEADS the code, ahead of
+    # the prefix, so the D-08 prefix exclusion still matches it.
+    online_building = Building.objects.create(
+        name=f"{prefix} Online", code=f"{prefix}-BV")
+    online_floor = Floor.objects.create(building=online_building, number=1)
+    vroom = _room(online_floor, f"V{prefix}1")
+
+    def _mk(*, d, block, room, status, day=None, actual_start=None,
+            actual_end=None, ended_early=False, room_released_at=None,
+            modality=Modality.F2F, declared="",
+            schedule_status=ScheduleStatus.ACTIVE):
+        n = _next()
+        start_t, end_t = block
+        sched = Schedule.objects.create(
+            term=term, course_code=f"{prefix}{n:03d}", section="A",
+            faculty=faculty, room=room,
+            day_of_week=d.weekday() if day is None else day,
+            start_time=start_t, end_time=end_t, modality=modality,
+            status=schedule_status,
+        )
+        return Session.objects.create(
+            schedule=sched, faculty=faculty, room=room, date=d,
+            scheduled_start=_aware(d, start_t),
+            scheduled_end=_aware(d, end_t),
+            status=status, declared_modality=declared,
+            actual_start=actual_start, actual_end=actual_end,
+            ended_early=ended_early, room_released_at=room_released_at,
+        )
+
+    a_start, a_end = RUTIL_BLOCK_A
+    b_start, b_end = RUTIL_BLOCK_B
+    c_start, c_end = RUTIL_BLOCK_C
+
+    # --- Monday -----------------------------------------------------------
+    s_full = _mk(
+        d=RUTIL_MON, block=RUTIL_BLOCK_A, room=rooms[0],
+        status=SessionStatus.COMPLETED,
+        actual_start=_aware(RUTIL_MON, a_start),
+        actual_end=_aware(RUTIL_MON, a_end),
+    )
+    s_absent = _mk(
+        d=RUTIL_MON, block=RUTIL_BLOCK_A, room=rooms[1],
+        status=SessionStatus.ABSENT,
+    )
+    s_early = _mk(
+        d=RUTIL_MON, block=RUTIL_BLOCK_B, room=rooms[2],
+        status=SessionStatus.COMPLETED,
+        actual_start=_aware(RUTIL_MON, b_start),
+        actual_end=_aware(RUTIL_MON, b_end) - timedelta(minutes=30),
+        ended_early=True,
+        room_released_at=_aware(RUTIL_MON, b_end) - timedelta(minutes=30),
+    )
+    # The disagreeing row. Flag False, room_released_at NULL, stamps 12m short.
+    s_early_unflagged = _mk(
+        d=RUTIL_MON, block=RUTIL_BLOCK_B, room=rooms[3],
+        status=SessionStatus.COMPLETED,
+        actual_start=_aware(RUTIL_MON, b_start),
+        actual_end=_aware(RUTIL_MON, b_end) - timedelta(minutes=12),
+    )
+    s_late = _mk(
+        d=RUTIL_MON, block=RUTIL_BLOCK_C, room=rooms[4],
+        status=SessionStatus.COMPLETED,
+        actual_start=_aware(RUTIL_MON, c_start) + timedelta(minutes=20),
+        actual_end=_aware(RUTIL_MON, c_end),
+    )
+    s_archived = _mk(
+        d=RUTIL_MON, block=RUTIL_BLOCK_A, room=rooms[5],
+        status=SessionStatus.COMPLETED,
+        actual_start=_aware(RUTIL_MON, a_start),
+        actual_end=_aware(RUTIL_MON, a_end),
+        schedule_status=ScheduleStatus.ARCHIVED,
+    )
+
+    # --- Wednesday --------------------------------------------------------
+    s_overrun = _mk(
+        d=RUTIL_WED, block=RUTIL_BLOCK_A, room=rooms[4],
+        status=SessionStatus.COMPLETED,
+        actual_start=_aware(RUTIL_WED, a_start) - timedelta(minutes=5),
+        actual_end=_aware(RUTIL_WED, a_end) + timedelta(minutes=5),
+    )
+    s_inflight = _mk(
+        d=RUTIL_WED, block=RUTIL_BLOCK_B, room=rooms[5],
+        status=SessionStatus.ACTIVE,
+        actual_start=_aware(RUTIL_WED, b_start),
+    )
+    s_noshow_stamped = _mk(
+        d=RUTIL_WED, block=RUTIL_BLOCK_C, room=rooms[6],
+        status=SessionStatus.COMPLETED,
+        actual_start=_aware(RUTIL_WED, c_start),
+    )
+
+    # --- Saturday (DayOfWeek.SAT = 5; nothing is ever seeded on Sunday) ----
+    s_sat = _mk(
+        d=RUTIL_SAT, block=RUTIL_BLOCK_A, room=rooms[7],
+        status=SessionStatus.COMPLETED,
+        actual_start=_aware(RUTIL_SAT, a_start),
+        actual_end=_aware(RUTIL_SAT, a_end),
+    )
+    s_virtual = _mk(
+        d=RUTIL_SAT, block=RUTIL_BLOCK_A, room=vroom,
+        status=SessionStatus.ACTIVE,
+        modality=Modality.ONLINE, declared=Modality.ONLINE,
+        actual_start=_aware(RUTIL_SAT, a_start),
+        actual_end=_aware(RUTIL_SAT, a_end),
+    )
+
+    def add_session(d, block, status, *, room=None, **kwargs):
+        """Seed one more session on a fresh schedule, for boundary tests."""
+        return _mk(d=d, block=block, room=room or rooms[0], status=status,
+                   **kwargs)
+
+    return SimpleNamespace(
+        term=term,
+        dept=dept,
+        faculty=faculty,
+        buildings=buildings,
+        floors=floors,
+        rooms=rooms,
+        online_building=online_building,
+        vroom=vroom,
+        blocks=[RUTIL_BLOCK_A, RUTIL_BLOCK_B, RUTIL_BLOCK_C],
+        week_start=RUTIL_WEEK_START,
+        week_end=RUTIL_WEEK_END,
+        mon=RUTIL_MON,
+        wed=RUTIL_WED,
+        sat=RUTIL_SAT,
+        sun=RUTIL_WEEK_END,
+        s_full=s_full,
+        s_absent=s_absent,
+        s_early=s_early,
+        s_early_unflagged=s_early_unflagged,
+        s_late=s_late,
+        s_overrun=s_overrun,
+        s_inflight=s_inflight,
+        s_noshow_stamped=s_noshow_stamped,
+        s_sat=s_sat,
+        s_virtual=s_virtual,
+        s_archived=s_archived,
         add_session=add_session,
     )
