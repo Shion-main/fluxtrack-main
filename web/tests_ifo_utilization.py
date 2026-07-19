@@ -1,4 +1,4 @@
-"""IFO-09 closure: the Room Occupancy card on /ifo/dashboard.
+"""IFO-09: the Room Occupancy card on /ifo/dashboard, and the T2 utilization page.
 
 The SRS names Room Occupancy in SESSION-HOURS as a dashboard card. Phase 6 built
 Attendance % into that slot instead and no room-aware aggregate existed at all.
@@ -10,6 +10,12 @@ Classes:
   DashboardCardIsolationTests  -- D-05: three INDEPENDENT error owners, one row.
   DashboardRangeTests          -- one window, shared by every card.
   DashboardAuthTests           -- the new card did not widen access.
+
+  UtilizationPageTests         -- T2: four sections on /ifo/utilization.
+  UtilizationIsolationTests    -- D-05: FOUR independent error owners, one page.
+  UtilizationNavTests          -- reachable from the console nav and the card.
+  UtilizationPagingTests       -- the room table pages and keeps the range.
+  UtilizationAccessTests       -- the new route did not widen access.
 
 Django TestCase, never pytest. ASCII-only.
 """
@@ -207,3 +213,225 @@ class DashboardAuthTests(IfoDashboardTestCase):
         self.client.logout()
         resp = self.client.get(self.url)
         self.assertNotEqual(resp.status_code, 200)
+
+
+# ===========================================================================
+# IFO-09 tier T2 -- /ifo/utilization
+# ===========================================================================
+
+# Stable per-section markers, the same idea as data-kpi-card: the section count
+# and the isolation behaviour are asserted against markup that a whitespace or
+# class-order change cannot break. Each marker sits on the card OUTSIDE that
+# section's error guard, so a failing section still identifies itself.
+SECTIONS = ("grid", "rollup", "rooms", "blocks")
+
+ERROR_TEXT = "Couldn't load this section"
+
+
+class UtilizationPageTestCase(TestCase):
+    """Shared setup: an IFO admin, the room fixture, and the utilization URL."""
+
+    def setUp(self):
+        self.fx = make_room_utilization_fixture("ifoutz")
+        self.ifo = get_user_model().objects.create(
+            username="ifoutz_admin", email="ifoutz_admin@mcm.edu.ph",
+            role=Role.IFO_ADMIN, is_active=True)
+        self.client.force_login(self.ifo)
+        self.url = reverse("ifo_utilization")
+
+    def _get(self, **params):
+        params.setdefault("from", RUTIL_WEEK_START.isoformat())
+        params.setdefault("to", RUTIL_WEEK_END.isoformat())
+        return self.client.get(self.url, params)
+
+
+class UtilizationPageTests(UtilizationPageTestCase):
+    """T2 reached the screen: four sections, a real grid, real numbers."""
+
+    def test_the_page_renders_for_an_ifo_user(self):
+        self.assertEqual(self._get().status_code, 200)
+
+    def test_the_context_carries_four_independent_two_tuples(self):
+        ctx = self._get().context
+        for key in ("grid", "rollup", "breakdown", "saturation"):
+            self.assertEqual(len(ctx[key]), 2, key)
+            self.assertIsNone(ctx[key][1], key)
+            self.assertIsNotNone(ctx[key][0], key)
+
+    def test_all_four_sections_are_present(self):
+        body = self._get().content.decode()
+        for section in SECTIONS:
+            self.assertIn(f'data-util-section="{section}"', body)
+
+    def test_the_grid_row_count_matches_the_derived_ladder(self):
+        grid = self._get().context["grid"][0]
+        self.assertEqual(len(grid), len(self.fx.blocks))
+
+    def test_every_grid_cell_states_a_number_so_colour_is_never_alone(self):
+        """The AA rule: a reader who cannot see the shades still gets the answer."""
+        grid = self._get().context["grid"][0]
+        body = self._get().content.decode()
+        for row in grid:
+            for cell in row.cells:
+                if cell.timetabled:
+                    self.assertIsNotNone(cell.step)
+                else:
+                    # No capacity is not 0% -- it renders as the free-cell idiom.
+                    self.assertIsNone(cell.step)
+        self.assertIn("not timetabled", body)
+        self.assertIn("%</span>", body)
+
+    def test_the_heat_step_is_relative_to_the_busiest_cell_in_the_range(self):
+        """No absolute good/bad band: nothing in this phase sets a target."""
+        grid = self._get().context["grid"][0]
+        cells = [c for row in grid for c in row.cells if c.timetabled]
+        used = [c for c in cells if c.utilization_pct]
+        top = max(c.utilization_pct for c in used)
+        self.assertEqual(
+            max(c.step for c in used), 4,
+            "the busiest cell must reach the top of the ramp whatever its rate")
+        self.assertTrue(all(c.step >= 1 for c in used))
+        self.assertTrue(
+            all(c.step == 0 for c in cells if not c.utilization_pct))
+        # And the top of the ramp really is the busiest cell, not a fixed 100%.
+        self.assertLess(top, 100)
+
+    def test_the_room_table_carries_every_physical_room_including_unused(self):
+        rows = self._get().context["breakdown"][0]
+        self.assertEqual(len(rows), len(self.fx.rooms))
+        self.assertEqual(rows[0].utilization_pct, 0)
+
+    def test_the_rollup_reads_as_buildings_with_their_floors(self):
+        rows = self._get().context["rollup"][0]
+        self.assertEqual(
+            len([r for r in rows if r.level == "building"]),
+            len(self.fx.buildings))
+        self.assertTrue(any(r.level == "floor" for r in rows))
+
+    def test_saturated_blocks_are_ranked_descending_with_a_named_peak_day(self):
+        rows = self._get().context["saturation"][0]
+        pcts = [b.utilization_pct for b in rows]
+        self.assertEqual(pcts, sorted(pcts, reverse=True))
+        self.assertTrue(any(b.peak_day_label for b in rows))
+
+    def test_wasted_hours_read_as_reclaimable_capacity_not_as_a_scolding(self):
+        body = self._get().content.decode()
+        self.assertIn("reclaimable as bookable slots", body)
+        self.assertIn("Reclaimable h", body)
+
+    def test_the_navy_faculty_vocabulary_has_not_leaked_onto_an_ifo_surface(self):
+        """.ft-* is Faculty and Guard only; this page is Franken uk-*."""
+        body = self._get().content.decode()
+        self.assertNotIn('class="ft-', body)
+        self.assertNotIn(" ft-", body)
+
+
+class UtilizationIsolationTests(UtilizationPageTestCase):
+    """D-05: four INDEPENDENT failure domains; none can 500 or blank another."""
+
+    def _assert_isolated(self, target, still_visible):
+        # assertLogs both asserts safe_card really logged server-side AND keeps
+        # the deliberate traceback out of the runner's output.
+        with self.assertLogs("scheduling.reporting", level="ERROR"):
+            with patch(f"web.ifo.{target}", side_effect=BOOM):
+                resp = self._get()
+        self.assertEqual(resp.status_code, 200)
+        body = resp.content.decode()
+        self.assertIn(ERROR_TEXT, body)
+        # The raw exception text never reaches the page (info disclosure).
+        self.assertNotIn("aggregate exploded", body)
+        for section in SECTIONS:
+            self.assertIn(f'data-util-section="{section}"', body)
+        for marker in still_visible:
+            self.assertIn(marker, body)
+        return body
+
+    def test_a_grid_failure_leaves_the_three_tables_standing(self):
+        self._assert_isolated(
+            "room_heat_grid", ["Busiest day", "Reclaimable h", "Seats"])
+
+    def test_a_rollup_failure_leaves_the_grid_standing(self):
+        self._assert_isolated("building_floor_rollup", ["not timetabled", "Seats"])
+
+    def test_a_breakdown_failure_does_not_500_via_paginate(self):
+        """The plan-03 bug, on a new page: Paginator(None) dies on len().
+
+        Removing the `or []` guard in web.ifo.utilization turns this red, which
+        is the point -- an aggregate failure must never defeat safe_card.
+        """
+        self._assert_isolated("room_breakdown", ["not timetabled", "Busiest day"])
+
+    def test_a_saturation_failure_leaves_the_grid_and_rooms_standing(self):
+        self._assert_isolated("block_saturation", ["not timetabled", "Seats"])
+
+
+class UtilizationNavTests(UtilizationPageTestCase):
+    """Reachable two ways, and highlighted on exactly one page."""
+
+    def test_the_console_nav_carries_a_utilization_link(self):
+        self.assertIn('href="/ifo/utilization"', self._get().content.decode())
+
+    def test_the_link_is_active_here_and_not_on_the_dashboard(self):
+        here = self._get().content.decode()
+        self.assertIn(
+            '<a href="/ifo/utilization" class="cns__link is-active"', here)
+        self.assertIn('aria-current="page"', here)
+        dash = self.client.get(reverse("ifo_dashboard")).content.decode()
+        self.assertIn('href="/ifo/utilization"', dash)
+        self.assertNotIn(
+            '<a href="/ifo/utilization" class="cns__link is-active"', dash)
+
+    def test_the_dashboard_occupancy_card_links_here_with_the_range(self):
+        dash = self.client.get(
+            reverse("ifo_dashboard"),
+            {"from": RUTIL_WEEK_START.isoformat(),
+             "to": RUTIL_WEEK_END.isoformat()},
+        ).content.decode()
+        # A literal & in template text, matching the scorecard link two rows
+        # below it -- the local convention, not an accident.
+        self.assertIn(
+            f"/ifo/utilization?from={RUTIL_WEEK_START.isoformat()}"
+            f"&to={RUTIL_WEEK_END.isoformat()}", dash)
+
+    def test_the_range_is_applied_to_every_section_not_only_the_first(self):
+        resp = self._get(**{
+            "from": self.fx.mon.isoformat(), "to": self.fx.mon.isoformat()})
+        wide = self._get()
+        self.assertLess(
+            resp.context["breakdown"][0][0].available_hours,
+            wide.context["breakdown"][0][0].available_hours)
+        self.assertLess(
+            sum(b.available_hours for b in resp.context["saturation"][0]),
+            sum(b.available_hours for b in wide.context["saturation"][0]))
+
+
+class UtilizationPagingTests(UtilizationPageTestCase):
+    """The room table is the largest list on the page, so it is paged."""
+
+    def test_a_page_beyond_the_end_clamps_rather_than_raising(self):
+        resp = self._get(page=9999)
+        self.assertEqual(resp.status_code, 200)
+        self.assertIn("page", resp.context)
+
+    def test_a_page_link_preserves_the_active_range(self):
+        resp = self._get(page=1)
+        querystring = resp.context["querystring"]
+        self.assertIn(f"from={RUTIL_WEEK_START.isoformat()}", querystring)
+        self.assertIn(f"to={RUTIL_WEEK_END.isoformat()}", querystring)
+
+    def test_an_unparseable_range_degrades_to_the_current_week_with_a_note(self):
+        resp = self.client.get(self.url, {"from": "notadate"})
+        self.assertEqual(resp.status_code, 200)
+        self.assertTrue(resp.context["range_note"])
+
+
+class UtilizationAccessTests(UtilizationPageTestCase):
+    """T-06.1-13: the new route added no new auth path."""
+
+    def test_a_faculty_user_cannot_reach_the_page(self):
+        self.client.force_login(self.fx.faculty)
+        self.assertNotEqual(self.client.get(self.url).status_code, 200)
+
+    def test_an_anonymous_user_cannot_reach_the_page(self):
+        self.client.logout()
+        self.assertNotEqual(self.client.get(self.url).status_code, 200)
