@@ -4,7 +4,7 @@ from datetime import time, timedelta
 
 from django.conf import settings
 from django.contrib.auth import get_user_model
-from django.core.management.base import BaseCommand
+from django.core.management.base import BaseCommand, CommandError
 from django.utils import timezone
 
 from accounts.models import Department, Role
@@ -26,7 +26,21 @@ def rand_code():
 class Command(BaseCommand):
     help = "Seed demo data for local development."
 
+    def add_arguments(self, parser):
+        parser.add_argument("--force", action="store_true",
+                            help="Run even when DEBUG is off. Creates "
+                                 "known-password demo accounts.")
+
     def handle(self, *args, **opts):
+        # Same guard as seed_term (audit 2026-07-19 HIGH): every account below
+        # gets the known password 'devpass123' and one of them is a full
+        # superuser -- /admin/ authenticates by password in production, so this
+        # must never run against a non-DEBUG database by accident.
+        if not settings.DEBUG and not opts["force"]:
+            raise CommandError(
+                "seed_demo creates known-password demo users (incl. a "
+                "superuser) and DEBUG is off. Pass --force if you really "
+                "mean it.")
         # Policy settings from FLUXTRACK_POLICY (§8)
         for key, val in settings.FLUXTRACK_POLICY.items():
             SystemSetting.objects.get_or_create(key=key, defaults={"value": str(val)})
