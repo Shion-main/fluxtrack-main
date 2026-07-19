@@ -6,9 +6,9 @@ current_phase: 07
 current_phase_name: Remaining Operational Surfaces
 status: complete
 stopped_at: n/a — phase 07 executed end-to-end 2026-07-19
-last_updated: "2026-07-19"
+last_updated: "2026-07-19T08:46:09.019Z"
 last_activity: 2026-07-19
-last_activity_desc: Phase 07 complete (12/12 plans) — all 11 open requirements closed
+last_activity_desc: Phase 07 executed end-to-end
 progress:
   total_phases: 11
   completed_phases: 9
@@ -107,6 +107,7 @@ Phase 07 and remain out of scope.
 | Phase 06 P05 | 18min | 2 tasks | 4 files |
 | Phase 06 P06 | ~20min | 3 tasks | 6 files |
 | Phase 06 P07 | ~20min | 3 tasks | 6 files |
+| Phase 06.1 P01 | 40m | 3 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -189,6 +190,7 @@ Recent decisions affecting current work:
 - [Phase 06]: 06-05: JOB-03 filled via shared ops.reports.generate_week_reports service reused by on-demand generate_weekly_report command; idempotent per-dept + ALL roll-up stored via default_storage (server-built reports/{week}/{code} paths), notify() fans to IFO + dept-scoped Deans; 4-job scheduler invariant + NoImplicitScheduler intact (RPT-02/ENV-04/NOTIF-00). 14 tests green.
 - [Phase 06]: 06-07: HR session-level attendance surface (web/hr.py hr_required + attendance() list + attendance_csv() streaming export) is the CROSS-DEPARTMENT, READ-ONLY final reporting surface. Unlike the Dean surface, department is a FILTER not a scope boundary (HR sees all departments). Four independent filters (faculty/dept/date-range/term) + search key on FK id + date__range only (never pk__in, the 2100-param trap, T-06-16); invalid date -> friendly inline notice, never a 500. attendance_csv streams (StreamingHttpResponse + queryset.iterator() + _Echo echo-writer) to bound memory (T-06-03) and reuses scheduling.report_render.csv_safe for formula-injection neutralization (T-06-02). KEY: checker-verified is an is_verified=Exists() ANNOTATION resolved in the main query, NOT the Session.verified_by_checker property — the property runs a per-object subquery that is fatal inside a streaming .iterator() generator on MSSQL (HY010/open-cursor, T-06-15). One shared _filtered_sessions parser keeps the list and export in lock-step. Every view GET-only so POST is 405 (T-06-07). 14 tests green. Phase 06 complete (7/7).
 - [Phase 06]: 06-06: Dean reporting surface (web/dean.py dashboard/reports/scorecard/report_export/weekly_download) is the department-scoped, READ-ONLY consumer of the shared aggregate/render layers. Every queryset scopes to request.user.department SERVER-SIDE; scorecard + weekly_download use get_object_or_404(..., department=request.user.department) so a foreign-department id 404s (T-06-01 IDOR/BOLA, refused not hidden). Every view is @require_http_methods(['GET']) so a POST is 405 (DEAN-01 read-only, T-06-07) — a bare Django view otherwise accepts any method. NULL-department Dean gets a zeroed DeptSummary/empty table, NEVER dept_summary(department=None) (edge-case cross-department leak closed). Export reuses build_csv/build_pdf (csv_safe intact, T-06-02); weekly_download streams default_storage bytes. Shared reports/scorecard.html back link parameterized via back_url (default /ifo/dashboard) so a Dean returns to /dean/reports. 12 tests green.
+- [Phase ?]: 06.1-01: room-hours 'used' derived from actual timestamps, clamped to the scheduled window; the ended_early flag is display-only
 
 ### Pending Todos
 
@@ -212,7 +214,7 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-07-18T06:10:59.520Z
+Last session: 2026-07-19T08:46:00.104Z
 Stopped at: context exhaustion at 75% (2026-07-18)
 Resume file: .planning/phases/07-remaining-operational-surfaces/07-CONTEXT.md
 
@@ -226,19 +228,23 @@ Recorded so they are decisions on record rather than gaps someone rediscovers:
    `update_fields` on one session and `web/scan.py` was out of bounds. A faculty
    member teaching two merged online sections must start each. Inconsistent with
    the 04.2 co-scheduled work, which exists so one action covers siblings.
+
 2. **No booking override control (IFO-05).** D-09's "absent an explicit
    override" was read as describing the default refusal, not commissioning an
    override. Building one would let the IFO console manufacture exactly the
    contradictory occupancy JOB-02c detects and IFO-08 now cleans up. Recorded as
    threat T-07-27, disposition `accept`.
+
 3. **Manual/browser UAT not performed for most surfaces.** Executors ran
    automated suites but did not drive a browser (concurrent agents contended for
    the dev server and DB). Every plan has automated equivalents, but the visual
    result of the new IFO console pages, the Guard room page, the faculty photo
    page and the import upload flow is unverified by eye. Run `/gsd-verify-work`.
+
 4. **`campus/codes.py` covers `manual_code` only.** `qr_token` uses
    `token_urlsafe(24)` (192 bits) so collision is negligible and it deliberately
    does not retry.
+
 5. **D-19's original rationale was wrong and is corrected in 07-CONTEXT.md.**
    The PROTECT migration did not create a DB-level constraint — Django encodes
    `on_delete` in the Python Collector, not DDL. It closed the ORM path. The

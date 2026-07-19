@@ -38,7 +38,8 @@ Decimal phases appear between their surrounding integers in numeric order.
   **Requirements:** IFO-09
   **Plans:** 7 plans across 6 waves
   Plans:
-  - [ ] 06.1-01-PLAN.md — Shared block ladder + the T1 room-hours aggregate (booked/used/available/wasted)
+
+  - [x] 06.1-01-PLAN.md — Shared block ladder + the T1 room-hours aggregate (booked/used/available/wasted)
   - [ ] 06.1-02-PLAN.md — Room-shaped test fixture + DB-backed aggregate tests + seed sanity recipe
   - [ ] 06.1-03-PLAN.md — IFO-09 closure: five-card KPI row with Room Occupancy, plus the paginate isolation fix
   - [ ] 06.1-04-PLAN.md — T2 heat grid + block saturation aggregates
