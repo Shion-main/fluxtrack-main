@@ -1,9 +1,11 @@
 """IFO room-board tests (IFO-07 + IFO-11, merged surface).
 
 The board replaced the old session-list "Live today". Its one piece of real
-logic is _room_tile: deriving a room's live state from today's sessions relative
-to `now`. These tests lock that derivation, because every colour on the board and
-every "needs attention" count hangs off it.
+logic is `web.room_state.room_tile` (aliased _room_tile here): deriving a room's
+live state from today's sessions relative to `now`. These tests lock that
+derivation, because every colour on the board and every "needs attention" count
+hangs off it -- and since Phase 07 the Guard surfaces derive their states from
+the same shared function, so these tests guard both roles.
 
   - RoomTileStateTests: each of the six states from the condition that produces
     it, including the two that are easy to get wrong -- ONLINE (the room is free
@@ -27,7 +29,8 @@ from accounts.models import Role
 from campus.models import Building, Floor, Room
 from scheduling.models import (AcademicTerm, Modality, Schedule, ScheduleStatus,
                                Session, SessionStatus)
-from web.ifo import _room_board, _room_tile, _room_timetable
+from web.ifo import _room_board, _room_timetable
+from web.room_state import room_tile as _room_tile
 
 GRACE = timedelta(minutes=15)
 

@@ -19,7 +19,7 @@ from campus.models import Floor, Room
 from ops.models import AuditLog, WeeklyReport
 from ops.policy import get_policy
 from scheduling.models import (AcademicTerm, DayOfWeek, Modality, Schedule,
-                                ScheduleStatus, Session, SessionStatus)
+                                ScheduleStatus, Session)
 from scheduling.report_render import build_csv
 from scheduling.reporting import (dept_summary, faculty_attendance,
                                   faculty_scorecard, safe_card)
@@ -27,6 +27,8 @@ from verification.models import (Assignment, AssignmentScope, AssignmentType,
                                  DutyRole)
 from verification.services import assign_online_sessions
 from web.pagination import paginate
+from web.room_state import (ROOM_PROBLEM_STATES, ROOM_STATE_ORDER, occupies,
+                            room_tile)
 from web.reporting_common import reporting_range as _reporting_range
 
 
@@ -47,80 +49,9 @@ def ifo_required(view):
 # fixed, physically-managed entity, so the room is the tile and the session is
 # what flows through it.
 #
-# Five states, derived per room from the sessions that actually OCCUPY it today
-# (see _occupies), relative to `now`. Every state carries colour + icon + text
-# label (never colour alone, PRODUCT.md):
-#
-#   absent      no-show: marked ABSENT, or still SCHEDULED past the grace window
-#   starting    class window opened, still inside grace -- watch, not yet a problem
-#   in_session  faculty checked in, class running
-#   free        nothing running now, but the room has classes later today
-#   idle        nothing scheduled in this room today
-#
-# Sort order puts problems first so they can never hide below the fold.
-ROOM_STATE_ORDER = {
-    "absent": 0, "starting": 1, "in_session": 2, "free": 3, "idle": 4,
-}
-ROOM_PROBLEM_STATES = ("absent", "starting")
-
-
-def _occupies(session, room):
-    """True when `session` actually uses `room`.
-
-    An ONLINE class does not occupy a physical room -- nobody is in it, so it
-    must not appear in that room's schedule or affect its state; the room is
-    simply free. In a VIRTUAL room the online class is the whole point, so it
-    counts normally and its attendance (in session / absent) still matters to
-    the checker who verifies online duty.
-
-    This is what replaced the old dedicated `online` tile state. That state
-    existed to explain why a booked room looked empty; once an online class no
-    longer books a physical room, there is nothing left to explain.
-    """
-    if room.is_virtual:
-        return True
-    effective = session.declared_modality or session.schedule.modality
-    return effective != Modality.ONLINE
-
-
-def _room_tile(room, sessions, now, grace):
-    """Derive one room's live tile from the sessions that occupy it today.
-
-    `sessions` must be today's sessions for THIS room, ordered by start; online
-    classes in a physical room are dropped here, so they neither show in the
-    room's list nor drive its state.
-    """
-    sessions = [s for s in sessions if _occupies(s, room)]
-    current = next(
-        (s for s in sessions if s.scheduled_start <= now < s.scheduled_end), None
-    )
-    upcoming = [s for s in sessions if s.scheduled_start > now]
-    tile = {
-        "room": room,
-        "session": current,
-        "next": upcoming[0] if upcoming else None,
-        "count": len(sessions),
-    }
-
-    if current is None:
-        tile["state"] = "free" if sessions else "idle"
-        return tile
-
-    if current.status == SessionStatus.ACTIVE:
-        tile["state"] = "in_session"
-    elif current.status == SessionStatus.ABSENT:
-        tile["state"] = "absent"
-    elif current.status == SessionStatus.COMPLETED:
-        # Ended (possibly early) but the scheduled window is still open: the room
-        # is genuinely available, which is what IFO needs to know.
-        tile["state"] = "free"
-    elif now > current.scheduled_start + grace:
-        # Past grace with nobody checked in. The sweep job will mark this ABSENT;
-        # the board must not wait for the job to tell the truth.
-        tile["state"] = "absent"
-    else:
-        tile["state"] = "starting"
-    return tile
+# The five-state derivation itself lives in `web/room_state.py` because the Guard
+# surfaces (GRD-01/GRD-02) derive the same states from the same rules; see that
+# module for the state list, the online-occupancy rule and the grace rule.
 
 
 def _room_board(scope="live"):
@@ -138,7 +69,7 @@ def _room_board(scope="live"):
 
     groups, buildings, totals = [], [], {"rooms": 0, "problems": 0, "hidden": 0}
     for room in rooms:
-        tile = _room_tile(room, by_room.get(room.id, []), now, grace)
+        tile = room_tile(room, by_room.get(room.id, []), now, grace)
         # "Live" hides rooms with nothing on today; "All" is the full inventory
         # (QR posters, capacity) and keeps them.
         if scope == "live" and tile["state"] == "idle":
@@ -198,10 +129,10 @@ def room_panel(request, code):
     today = list(room.sessions.filter(date=timezone.localdate())
                  .select_related("schedule", "faculty")
                  .order_by("scheduled_start"))
-    tile = _room_tile(room, today, now, grace)
+    tile = room_tile(room, today, now, grace)
     # Same rule as the tile: an online class is not in this physical room, so it
     # is not in its day either.
-    today = [s for s in today if _occupies(s, room)]
+    today = [s for s in today if occupies(s, room)]
 
     term = AcademicTerm.objects.filter(is_active=True).first()
     schedules = list(
@@ -274,7 +205,7 @@ def room_detail(request, code):
     upcoming = [s for s in room.sessions.filter(date__gte=timezone.localdate())
                 .select_related("schedule", "faculty")
                 .order_by("date", "scheduled_start")[:40]
-                if _occupies(s, room)][:10]
+                if occupies(s, room)][:10]
     if not room.is_virtual:
         schedules = [s for s in schedules if s.modality != Modality.ONLINE]
     return render(request, "ifo/room_detail.html", {

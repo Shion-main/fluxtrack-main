@@ -267,7 +267,7 @@ and floor, polling `/ifo/rooms/board` at the configured interval. `/ifo/live`
 301s here and the separate nav item is gone.
 
 The tile state is derived per room from today's sessions relative to `now`
-(`web/ifo.py:_room_tile`): **absent** (marked ABSENT, or still SCHEDULED past
+(`web/room_state.py:room_tile`, shared with the Guard surfaces): **absent** (marked ABSENT, or still SCHEDULED past
 the grace window — the board calls a no-show before the sweep job stamps it),
 **starting** (inside grace, watch but not yet a problem), **in session**,
 **online** (the class shifted to Online, so the room is legitimately empty —
