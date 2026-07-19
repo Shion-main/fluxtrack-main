@@ -10,8 +10,8 @@ This module holds NO role gating of its own. Authorization -- which rooms a
 caller may see at all -- stays in the calling role module (IFO sees campus-wide,
 a Guard sees only floors they are posted to right now).
 """
-from scheduling.models import (DayOfWeek, Modality, Schedule, ScheduleStatus,
-                               SessionStatus)
+from scheduling.models import DayOfWeek, Modality, ScheduleStatus, SessionStatus
+from scheduling.reporting import campus_block_ladder
 
 # Five states, derived per room from the sessions that actually OCCUPY it today
 # (see `occupies`), relative to `now`. Every state carries colour + icon + text
@@ -99,7 +99,10 @@ def room_timetable(room, term):
     Rows are the campus-wide block ladder for the term (every distinct start time
     in use), not just this room's own times -- so a free slot shows as an empty
     cell instead of vanishing, every room prints on the same grid, and two
-    printouts can be compared side by side.
+    printouts can be compared side by side. That ladder is derived ONCE, by
+    `scheduling.reporting.campus_block_ladder`, and shared with the room
+    utilization aggregates so the printed grid and the dashboard can never
+    disagree about what a slot is (D-06).
 
     A class occupies EVERY slot its window covers (half-open: start <= slot <
     end), so a double-length class fills two rows exactly as it does on the paper
@@ -107,12 +110,10 @@ def room_timetable(room, term):
     """
     if term is None:
         return None
-    slots = sorted(set(
-        Schedule.objects
-        .filter(term=term, status=ScheduleStatus.ACTIVE)
-        .values_list("start_time", flat=True)))
-    if not slots:
+    blocks = campus_block_ladder(term)
+    if not blocks:
         return None
+    slots = [b.start for b in blocks]
 
     scheds = list(room.schedules
                   .filter(status=ScheduleStatus.ACTIVE, term=term)

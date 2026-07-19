@@ -22,13 +22,16 @@ MSSQL discipline: DB-side conditional aggregation (``Count(filter=Q(...))`` in o
 carry no Asia/Manila drift; never a large primary-key ``IN`` list (the 2100-param
 limit that broke ``reset_term``).
 """
+import datetime
 import logging
+from collections import Counter
 from dataclasses import dataclass, field
 from decimal import ROUND_HALF_UP, Decimal
 
 from django.db.models import Case, CharField, Count, F, Q, When
 
-from scheduling.models import ScheduleStatus, Session, SessionStatus
+from campus.models import Room
+from scheduling.models import Schedule, ScheduleStatus, Session, SessionStatus
 from verification.models import ValidationAction
 
 logger = logging.getLogger(__name__)
@@ -99,6 +102,106 @@ def _pct(held, scheduled):
         return 0
     return int((Decimal(100 * held) / Decimal(scheduled)).quantize(
         Decimal("1"), rounding=ROUND_HALF_UP))
+
+
+@dataclass(frozen=True)
+class CampusBlock:
+    """One rung of the campus-wide block ladder (D-06).
+
+    The ladder is DATA-DERIVED: one block per distinct ACTIVE ``Schedule.start_time``
+    in the term, so its length is whatever the imported timetable contains and
+    changes with the data. Nothing in this module may hardcode a block count.
+
+    ``start`` is a wall-clock ``datetime.time`` (a TimeField, not an instant);
+    ``duration_seconds`` is the block's representative length in seconds.
+    """
+    start: datetime.time
+    duration_seconds: int
+
+
+# An arbitrary fixed date used only to subtract two wall-clock TimeFields. These
+# are not instants, so no timezone is involved and the date choice is irrelevant.
+_SPAN_EPOCH = datetime.date(2000, 1, 1)
+
+
+def _span_seconds(start_time, end_time):
+    """Whole seconds between two wall-clock ``datetime.time`` values.
+
+    Combines both against a fixed arbitrary date so the subtraction is pure
+    wall-clock arithmetic with no timezone semantics. Floored at 0: a campus block
+    never crosses midnight, so a negative span is bad data and must not subtract
+    capacity from the denominator.
+    """
+    delta = (datetime.datetime.combine(_SPAN_EPOCH, end_time)
+             - datetime.datetime.combine(_SPAN_EPOCH, start_time))
+    return max(0, int(delta.total_seconds()))
+
+
+def _block_duration_seconds(spans):
+    """Pick one representative duration for a block from its (start, end) spans.
+
+    The modal span wins, so one mis-imported outlier cannot stretch or shrink a
+    block. A frequency tie resolves to the LONGEST span, so a block is never
+    undercounted -- an understated block would understate available_hours and
+    silently inflate the utilization rate.
+    """
+    durations = [_span_seconds(s, e) for s, e in spans]
+    if not durations:
+        return 0
+    counts = Counter(durations)
+    top = max(counts.values())
+    return max(d for d, n in counts.items() if n == top)
+
+
+def _active_schedules(term):
+    """The term's ACTIVE schedules -- the one population the ladder is derived from."""
+    return Schedule.objects.filter(term=term, status=ScheduleStatus.ACTIVE)
+
+
+def campus_block_ladder(term):
+    """The campus-wide block ladder for ``term``, or None (D-06).
+
+    Returns ``None`` for a None term and ``None`` when the term has no ACTIVE
+    schedules, mirroring ``web.room_state.room_timetable``'s two None-returns --
+    both callers already handle that and a None ladder is a legitimate
+    zero-denominator, not an error.
+
+    Otherwise returns a list of :class:`CampusBlock` ordered by start time, one
+    entry per distinct ACTIVE ``Schedule.start_time`` in the term. This is the
+    SINGLE derivation: the printed room timetable and every room aggregate in this
+    phase read it, so the dashboard and the paper grid cannot disagree about what
+    a slot is.
+    """
+    if term is None:
+        return None
+    spans_by_start = {}
+    for start_time, end_time in _active_schedules(term).values_list(
+            "start_time", "end_time").iterator():
+        spans_by_start.setdefault(start_time, []).append((start_time, end_time))
+    if not spans_by_start:
+        return None
+    return [
+        CampusBlock(start=start, duration_seconds=_block_duration_seconds(spans))
+        for start, spans in sorted(spans_by_start.items())
+    ]
+
+
+def teaching_weekdays(term):
+    """Sorted distinct ``day_of_week`` values of the term's ACTIVE schedules (D-06).
+
+    Returns ``[]`` for a None term. ``DayOfWeek`` is MON=0..SUN=6
+    (``scheduling/models.py:12-19``), byte-identical to ``datetime.date.weekday()``,
+    so these values compare directly with no translation table (asserted in
+    ``WeekdayMappingTests``, not merely assumed here).
+
+    Deriving days from the data is what picks up MMCM's real Saturday classes and
+    drops Sunday without anyone hardcoding a 5 or a 7: a day nobody schedules is
+    not wasted capacity, it is simply not a teaching day.
+    """
+    if term is None:
+        return []
+    return sorted(set(
+        _active_schedules(term).values_list("day_of_week", flat=True)))
 
 
 def _scoped_sessions(*, start, end, department=None, as_of=None, faculty=None):
