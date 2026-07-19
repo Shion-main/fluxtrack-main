@@ -397,7 +397,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8
 | 5. Notifications — Read Surface & Web Push | 5/5 | Complete | 2026-07-15 |
 | 6. Reporting Engine & Reporting Surfaces | 7/7 | Complete | 2026-07-15 |
 | 06.1 Room Utilization & IFO-09 Closure (INSERTED) | 6/7 | Complete (export deferred) | 2026-07-19 |
-| 7. Remaining Operational Surfaces | 12/12 | Complete | 2026-07-19 |
+| 7. Remaining Operational Surfaces | 12/12 | Complete (verified + UAT) | 2026-07-19 |
 | 8. Auth Cutover & AWS Deployment | 0/TBD | Not started | - |
 
 **Totals:** 58/59 plans complete across 11 phases. The one incomplete plan

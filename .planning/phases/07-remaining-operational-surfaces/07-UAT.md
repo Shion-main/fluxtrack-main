@@ -118,21 +118,26 @@ SIDE EFFECT, deliberately left in place: the sweep also marked one REAL session 
 
 ### 14. Cross-cutting: doubled page chrome on newer console pages
 expected: Every console page renders one header — the console bar — as Rooms and Dashboard do.
-result: issue
-reported: "Bookings, Import, Conflicts, Utilization and the room sub-pages render the legacy global header stacked above the console bar: two FluxTrack brand marks and two notification bells showing the same count on one page."
-severity: major
-status: FIXED in this session — see Gaps below. Verified after a server restart
-  (--noreload caches templates): all eight IFO console pages, five faculty pages
-  and two guard pages now render exactly one <header>, while /notifications
-  correctly keeps the global one. Regression test: web.tests.ConsoleChromeTests.
+result: pass
+originally: issue (major) — FIXED and re-verified in this same session, so the
+  result is recorded as the current, verified state rather than the state at
+  discovery. The history is kept below deliberately; it is the only record of
+  why the fix exists.
+reported_at_discovery: "Bookings, Import, Conflicts, Utilization and the room sub-pages render the legacy global header stacked above the console bar: two FluxTrack brand marks and two notification bells showing the same count on one page."
+evidence: After the fix and a server restart (--noreload caches templates, so the
+  change is invisible until the process is recycled): all eight IFO console pages,
+  five faculty pages and two guard pages render exactly one <header>, while
+  /notifications correctly keeps the global one and no console bar. Regression
+  test: web.tests.ConsoleChromeTests (3 tests, including the negative half).
 
 ## Summary
 
 total: 14
-passed: 13
-issues: 1
+passed: 14
+issues: 0
 pending: 0
 skipped: 0
+issues_found_and_fixed: 1
 notes: |
   Every test now has a definitive result. The single issue (test 14, doubled page
   chrome) is FIXED and regression-tested. One earlier "issue" (test 6) was

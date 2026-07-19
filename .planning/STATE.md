@@ -28,11 +28,13 @@ See: .planning/PROJECT.md (updated 2026-07-02)
 
 ## Current Position
 
-Phase: 07 (Remaining Operational Surfaces) — ALL PLANS COMPLETE (12/12)
-Next: Phase 08 (Auth Cutover & AWS Deployment). Two inserted items queued first:
-Phase 06.1 room utilization / IFO-09, and the Phase 07 follow-ups below.
-Status: Phase 07 complete — suite 790 tests, 3 pre-existing failures, 0 errors
-Last activity: 2026-07-19 — Phase 07 executed end-to-end
+Phase: 07 (Remaining Operational Surfaces) — COMPLETE, VERIFIED AND UAT-PASSED
+Next: Phase 08 (Auth Cutover & AWS Deployment) — the last planned phase. Nothing
+is queued ahead of it; 06.1 shipped and the 07 manual-UAT follow-up is closed.
+Status: 07-VERIFICATION.md passed 5/5; 07-UAT.md 14/14 in a real browser.
+Suite 930 tests, the same 3 long-standing dev-login/home-redirect failures
+(confirmed pre-existing against a stashed tree, not caused by this work).
+Last activity: 2026-07-19 — Phase 07 browser UAT, one defect fixed, phase verified
 
 **Suite baseline moved 515 -> 790 tests across this phase; the failure set never
 changed.** The only failures are the 3 long-standing dev-login/home-redirect
@@ -235,11 +237,14 @@ Recorded so they are decisions on record rather than gaps someone rediscovers:
    contradictory occupancy JOB-02c detects and IFO-08 now cleans up. Recorded as
    threat T-07-27, disposition `accept`.
 
-3. **Manual/browser UAT not performed for most surfaces.** Executors ran
-   automated suites but did not drive a browser (concurrent agents contended for
-   the dev server and DB). Every plan has automated equivalents, but the visual
-   result of the new IFO console pages, the Guard room page, the faculty photo
-   page and the import upload flow is unverified by eye. Run `/gsd-verify-work`.
+3. ~~**Manual/browser UAT not performed for most surfaces.**~~ **CLOSED
+   2026-07-19.** A full browser UAT ran (07-UAT.md, 14/14). It found one real
+   defect — every console page added since Phase 06.1 rendered a duplicate
+   global header, two brand marks and two notification bells — now fixed and
+   regression-tested. It also closed 07-08's own open item by proving EXIF is
+   stripped AND the rotation baked in on a real sideways phone photo. Still
+   unexercised: VAPID push delivery to a browser endpoint (Phase 05 transport,
+   needs an HTTPS origin — fold into Phase 8).
 
 4. **`campus/codes.py` covers `manual_code` only.** `qr_token` uses
    `token_urlsafe(24)` (192 bits) so collision is negligible and it deliberately
