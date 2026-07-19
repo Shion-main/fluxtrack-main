@@ -33,7 +33,7 @@ CARD_MARKER = 'data-kpi-card="'
 
 # The occupancy card's unit caption. IFO-09 is not closed unless a stakeholder can
 # read the unit off the screen, so the string is asserted, not the mere 200.
-SESSION_HOURS_CAPTION = "session-hours used / booked"
+SESSION_HOURS_CAPTION = "session-hours used of"
 
 BOOM = RuntimeError("aggregate exploded")
 

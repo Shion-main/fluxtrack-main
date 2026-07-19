@@ -41,10 +41,22 @@ value so colour is never the only signal. ASCII-only.
     <div class="uk-card uk-card-body" data-kpi-card="occupancy">
       <div class="uk-text-small uk-text-muted flex items-center gap-1">
         <uk-icon icon="door-open" class="size-4"></uk-icon> Room Occupancy</div>
-      <div class="uk-h2 mt-1">{{ occupancy.0.used_hours }}<span class="uk-text-muted uk-text-small"> / {{ occupancy.0.booked_hours }}</span></div>
-      <div class="uk-text-small uk-text-muted">session-hours used / booked</div>
+      {% comment %}Used is the headline and the denominator lives in the caption,
+      unlike the Sessions card's "held / booked" pair. At a fifth of the row's
+      width a two-part value with decimals ("2707.9 / 3180.0") wraps mid-figure,
+      which reads as two unrelated numbers. Verified in the browser at 390 / 820 /
+      1440.{% endcomment %}
+      <div class="uk-h2 mt-1">{{ occupancy.0.used_hours }}</div>
+      <div class="uk-text-small uk-text-muted">session-hours used of {{ occupancy.0.booked_hours }} booked</div>
+      {% comment %}Deliberately pill--info (neutral), NOT the ok/warn/bad ladder
+      the attendance pills use. Attendance has an agreed target; room utilization
+      does not, and the seeded campus baseline is ~26% because the 60/20/20
+      modality split leaves physical capacity genuinely idle. Painting the normal
+      state red would be a standing false alarm and would teach a reader to
+      distrust the figure -- the opposite of the point. Colour is still not the
+      only signal: the percentage is printed inside the pill.{% endcomment %}
       <div class="mt-2">
-        <span class="pill {% if occupancy.0.utilization_pct >= 60 %}pill--ok{% elif occupancy.0.utilization_pct >= 30 %}pill--warn{% else %}pill--bad{% endif %}">{{ occupancy.0.utilization_pct }}% of capacity</span>
+        <span class="pill pill--info">{{ occupancy.0.utilization_pct }}% of capacity</span>
       </div>
       <p class="uk-text-small uk-text-muted mt-2">{{ occupancy.0.wasted_hours }} room-hours were booked and unused &mdash; reclaimable as bookable slots.</p>
       {% if occupancy.0.in_flight %}
