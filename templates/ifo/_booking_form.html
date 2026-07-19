@@ -1,0 +1,172 @@
+{% comment %}
+IFO-05 booking create form + bookings table. htmx swaps this partial into
+#booking-panel after a create or cancel POST, so a new row, a cancelled chip or
+a conflict refusal all render inline -- the same arrangement
+templates/ifo/assignments.html uses with #assignment-panel.
+
+Use {% comment %} not {# #} so Django does not parse the {% %} tags inside this
+header (the 03-02 parse-error lesson).
+
+Cancelled bookings STAY in the table with a chip. They are still history, and
+under the 07-02 PROTECT migration they still block a room delete -- hiding them
+would make that refusal unexplainable.
+
+Status chips carry an icon AND a text label, never colour alone (WCAG 1.4.1).
+Console Franken uk-* vocabulary; the navy .ft-* vocabulary belongs to the
+Faculty/Guard shells. No border-left accent stripes. ASCII-only.
+{% endcomment %}
+<div class="grid gap-6 lg:grid-cols-[minmax(0,22rem)_minmax(0,1fr)]">
+
+  <div class="uk-card uk-card-body">
+    <h2 class="uk-h3 mb-3">New booking</h2>
+
+    {% if error %}
+    <div class="uk-alert uk-alert-destructive mb-3" role="alert" data-error="1">
+      <p class="uk-text-small">
+        <span class="inline-flex items-start gap-2">
+          <uk-icon icon="triangle-alert" class="size-4"></uk-icon>
+          <span>{{ error }}</span>
+        </span>
+      </p>
+    </div>
+    {% endif %}
+    {% if created %}
+    <div class="uk-alert uk-alert-success mb-3" role="status" data-created="1">
+      <p class="uk-text-small">
+        <span class="inline-flex items-start gap-2">
+          <uk-icon icon="circle-check" class="size-4"></uk-icon>
+          <span>Booked {{ created.room.code }} for {{ created.occupant_name }}.</span>
+        </span>
+      </p>
+    </div>
+    {% endif %}
+    {% if cancelled %}
+    <div class="uk-alert uk-alert-secondary mb-3" role="status" data-cancelled="1">
+      <p class="uk-text-small">
+        <span class="inline-flex items-start gap-2">
+          <uk-icon icon="circle-slash" class="size-4"></uk-icon>
+          <span>Cancelled the booking on {{ cancelled.room.code }}.
+            That room is free for the window again.</span>
+        </span>
+      </p>
+    </div>
+    {% endif %}
+
+    <form hx-post="/ifo/bookings/create" hx-target="#booking-panel"
+          hx-swap="innerHTML" class="flex flex-col gap-3">
+      {% csrf_token %}
+      <div>
+        <label class="uk-form-label" for="b-occupant">Booked for</label>
+        <input id="b-occupant" type="text" name="occupant_name" required
+               maxlength="120" class="uk-input h-11"
+               placeholder="Org name or person"
+               value="{{ form.occupant_name|default:'' }}">
+      </div>
+
+      <div>
+        <label class="uk-form-label" for="b-purpose">Purpose (optional)</label>
+        <input id="b-purpose" type="text" name="purpose" maxlength="255"
+               class="uk-input h-11" placeholder="Org fair setup"
+               value="{{ form.purpose|default:'' }}">
+      </div>
+
+      <div>
+        <label class="uk-form-label" for="b-room">Room</label>
+        <select id="b-room" name="room" class="uk-select h-11" required>
+          <option value="">Select a room...</option>
+          {% for r in rooms %}
+          <option value="{{ r.id }}"
+            {% if form.room == r.id|stringformat:"s" %}selected{% endif %}>
+            {{ r.code }} - {{ r.floor.building.code }} F{{ r.floor.number }}</option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <div>
+        <label class="uk-form-label" for="b-date">Date</label>
+        <input id="b-date" type="date" name="date" required class="uk-input h-11"
+               value="{{ form.date|default:'' }}">
+      </div>
+
+      <div class="grid grid-cols-2 gap-3">
+        <div>
+          <label class="uk-form-label" for="b-start">Start</label>
+          <input id="b-start" type="time" name="start_time" required
+                 class="uk-input h-11" value="{{ form.start_time|default:'' }}">
+        </div>
+        <div>
+          <label class="uk-form-label" for="b-end">End</label>
+          <input id="b-end" type="time" name="end_time" required
+                 class="uk-input h-11" value="{{ form.end_time|default:'' }}">
+        </div>
+      </div>
+      <p class="uk-text-small uk-text-muted">
+        A booking that overlaps a scheduled class, another active booking or an
+        approved modality-shift reservation is refused. A booking that starts
+        exactly when another ends is fine.</p>
+
+      <button type="submit" class="uk-btn uk-btn-primary w-full h-12">
+        <uk-icon icon="book-marked" class="size-4"></uk-icon> Create booking</button>
+    </form>
+  </div>
+
+  <div class="uk-card uk-card-body">
+    <h2 class="uk-h3 mb-3">Bookings</h2>
+    {% if bookings %}
+    <div class="table-wrap">
+      <table class="tbl">
+        <thead>
+          <tr>
+            <th scope="col">Room</th>
+            <th scope="col">Booked for</th>
+            <th scope="col">Window</th>
+            <th scope="col">Status</th>
+            <th scope="col">Action</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for b in bookings %}
+          <tr data-booking="{{ b.pk }}">
+            <td class="tbl__id">{{ b.room.code }}</td>
+            <td>
+              {{ b.occupant_name }}
+              {% if b.purpose %}<span class="uk-text-small uk-text-muted block">{{ b.purpose }}</span>{% endif %}
+            </td>
+            <td class="tbl__meta">
+              {{ b.start_datetime|date:"M j, Y" }} &middot;
+              {{ b.start_datetime|time:"g:i A" }}&ndash;{{ b.end_datetime|time:"g:i A" }}</td>
+            <td>
+              {% if b.status == "active" %}
+              <span class="pill pill--ok" data-status="active">
+                <uk-icon icon="circle-check" class="size-4"></uk-icon> Active</span>
+              {% else %}
+              <span class="pill pill--neutral" data-status="{{ b.status }}">
+                <uk-icon icon="circle-slash" class="size-4"></uk-icon>
+                {{ b.status|capfirst }}</span>
+              {% endif %}
+            </td>
+            <td>
+              {% if b.status == "active" %}
+              <form hx-post="/ifo/bookings/{{ b.pk }}/cancel"
+                    hx-target="#booking-panel" hx-swap="innerHTML">
+                {% csrf_token %}
+                <button type="submit" class="uk-btn uk-btn-ghost uk-btn-sm">
+                  <uk-icon icon="circle-slash" class="size-4"></uk-icon> Cancel</button>
+              </form>
+              {% else %}
+              <span class="uk-text-small uk-text-muted">&mdash;</span>
+              {% endif %}
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% include "_pager.html" %}
+    {% else %}
+    <p class="uk-text-small uk-text-muted" data-empty="1">
+      No bookings yet. An ad-hoc booking holds a room for something that is not
+      a scheduled class -- an org fair, a make-up exam, a maintenance window.</p>
+    {% endif %}
+  </div>
+</div>

@@ -1,7 +1,7 @@
 """IFO Admin surfaces: rooms list, per-room schedule (IFO-11), QR poster (IFO-01),
 and a live 'today' view (IFO-07, htmx-polled)."""
 import io
-from datetime import timedelta
+from datetime import datetime, timedelta
 from functools import wraps
 
 from django.contrib.auth import get_user_model
@@ -20,7 +20,8 @@ from accounts.models import Role
 from campus.codes import new_room_credentials
 from campus.models import Floor, Room
 from campus.services import room_delete_blockers
-from ops.models import AuditLog, RoomConflictFlag, WeeklyReport
+from ops.availability import room_is_free
+from ops.models import AuditLog, Booking, RoomConflictFlag, WeeklyReport
 from ops.occupancy import release_room
 from ops.policy import get_policy
 from scheduling.models import (AcademicTerm, DayOfWeek, Modality, Schedule,
@@ -745,6 +746,211 @@ def session_release(request, pk):
                   status=400 if error else 200)
 
 
+# --- Ad-hoc bookings (IFO-05) -----------------------------------------------
+# `ops.Booking` has existed since Phase 1 with only a Django-admin surface.
+# These three views are its non-admin UI.
+#
+# ONE RULE HOLDS THIS SECTION TOGETHER: the conflict answer comes from
+# `ops.availability.room_is_free` and from nowhere else (D-08). That function is
+# already the occupancy oracle for the faculty room picker and Dean approval,
+# and it already counts active Bookings, room-holding non-Online Sessions and
+# approved modality-shift reservations on half-open overlap. A second overlap
+# query written here would be a second DEFINITION of "free" -- one that starts
+# out agreeing and silently drifts. `ops/availability.py` is not modified by
+# this plan and must not be.
+
+BOOKING_PAGE_SIZE = 25
+
+
+def _booking_form_ctx(*, error=None, created=None, cancelled=None, form=None):
+    """Choice data + sticky values for the booking panel."""
+    rooms = (Room.objects.select_related("floor__building")
+             .order_by("floor__building__code", "code"))
+    bookings = (Booking.objects
+                .select_related("room__floor__building", "created_by")
+                .order_by("-start_datetime"))
+    return {"rooms": rooms, "bookings": bookings, "error": error,
+            "created": created, "cancelled": cancelled, "form": form or {}}
+
+
+def _booking_panel(request, *, error=None, created=None, cancelled=None,
+                   form=None):
+    """Render the bookings panel partial, paginated."""
+    ctx = _booking_form_ctx(error=error, created=created, cancelled=cancelled,
+                            form=form)
+    pager = paginate(request, ctx.pop("bookings"), per_page=BOOKING_PAGE_SIZE)
+    ctx["bookings"] = pager["page"].object_list
+    return {**ctx, **pager}
+
+
+@ifo_required
+@require_http_methods(["GET"])
+def bookings_list(request):
+    """IFO-05: the booking create form plus a paginated table of bookings.
+
+    CANCELLED BOOKINGS ARE SHOWN, not filtered out. A cancelled booking is
+    still historical data, and since plan 07-02 migrated `Booking.room` to
+    PROTECT it is still a room-delete blocker -- so an operator who cannot find
+    it in this list cannot understand why a room refuses to delete.
+    """
+    return render(request, "ifo/bookings.html", _booking_panel(request))
+
+
+def _safe_parse_date(raw):
+    """`parse_date` that returns None for BOTH kinds of bad input.
+
+    Django's `parse_date`/`parse_time` return None only when the string does
+    not MATCH the expected shape. A string that matches the shape but carries
+    an impossible value -- "25:99", "2026-13-45" -- gets as far as constructing
+    the date/time object and raises ValueError instead. A validation ladder
+    that only tests `is None` therefore lets exactly the inputs an operator is
+    most likely to fat-finger through as a 500 (T-07-25).
+    """
+    try:
+        return parse_date(raw)
+    except ValueError:
+        return None
+
+
+def _safe_parse_time(raw):
+    """See `_safe_parse_date` -- same trap, same reason."""
+    try:
+        return parse_time(raw)
+    except ValueError:
+        return None
+
+
+def _booking_fields(request):
+    return {
+        "occupant_name": (request.POST.get("occupant_name") or "").strip(),
+        "purpose": (request.POST.get("purpose") or "").strip(),
+        "room": (request.POST.get("room") or "").strip(),
+        "date": (request.POST.get("date") or "").strip(),
+        "start_time": (request.POST.get("start_time") or "").strip(),
+        "end_time": (request.POST.get("end_time") or "").strip(),
+    }
+
+
+@ifo_required
+@require_http_methods(["POST"])
+def booking_create(request):
+    """IFO-05: create an ad-hoc booking, conflict-checked by the single oracle.
+
+    THE VALIDATION LADDER IS ORDERED ON PURPOSE (CR-04, the same trap
+    `assignment_create` documents): FORMAT and pk-numericness are settled
+    BEFORE anything reaches the ORM. `parse_date` / `parse_time` returning None
+    and a non-numeric room pk both surface as an unhandled ValidationError --
+    a 500 -- at INSERT time otherwise. Each must be a friendly 400.
+
+    NO OVERRIDE CONTROL EXISTS, AND THIS IS A DELIBERATE READING OF D-09.
+    D-09's parenthetical ("absent an explicit override") describes the default
+    refusal; nothing in IFO-05 asks for a way to double-book over a scheduled
+    class. Building one would let this console manufacture exactly the
+    contradictory occupancy that JOB-02c exists to detect and that IFO-08 now
+    exists to clean up -- three surfaces working against each other. Recorded
+    in the 07-06 summary so the operator can overrule this reading if they
+    disagree.
+    """
+    fields = _booking_fields(request)
+    error, room, start, end = None, None, None, None
+
+    if not fields["occupant_name"]:
+        error = "Enter who the room is for."
+    elif len(fields["occupant_name"]) > 120:
+        error = "The occupant name is at most 120 characters."
+    elif len(fields["purpose"]) > 255:
+        error = "The purpose is at most 255 characters."
+    elif not fields["room"].isdigit():
+        error = "Select a room."
+    elif _safe_parse_date(fields["date"]) is None:
+        error = "Enter a valid date."
+    elif _safe_parse_time(fields["start_time"]) is None:
+        error = "Enter a valid start time."
+    elif _safe_parse_time(fields["end_time"]) is None:
+        error = "Enter a valid end time."
+
+    if error is None:
+        room = (Room.objects.select_related("floor__building")
+                .filter(pk=fields["room"]).first())
+        if room is None:
+            error = "Select a room."
+
+    if error is None:
+        day = _safe_parse_date(fields["date"])
+        # Combined the same way ops/availability.py:106 builds a reservation
+        # window, so a booking and a reservation are compared on one clock.
+        start = timezone.make_aware(
+            datetime.combine(day, _safe_parse_time(fields["start_time"])))
+        end = timezone.make_aware(
+            datetime.combine(day, _safe_parse_time(fields["end_time"])))
+        if end <= start:
+            # Half-open overlap means a zero-length booking occupies nothing at
+            # all, so it would silently "succeed" while reserving no time.
+            error = "The end time must be after the start time."
+
+    if error is None and not room_is_free(room, start, end):
+        error = (f"{room.code} is not free for that window. Open the room's "
+                 f"schedule to see what already occupies it.")
+
+    if error:
+        return render(request, "ifo/_booking_form.html",
+                      _booking_panel(request, error=error, form=fields),
+                      status=400)
+
+    booking = Booking.objects.create(
+        room=room, created_by=request.user,
+        occupant_name=fields["occupant_name"], purpose=fields["purpose"],
+        start_datetime=start, end_datetime=end, status="active")
+    AuditLog.objects.create(
+        actor=request.user, event_type="booking.created",
+        target_type="booking", target_id=str(booking.pk),
+        payload={"room": room.code, "occupant": booking.occupant_name,
+                 "start": start.isoformat(), "end": end.isoformat()})
+
+    return render(request, "ifo/_booking_form.html",
+                  _booking_panel(request, created=booking))
+
+
+@ifo_required
+@require_http_methods(["POST"])
+def booking_cancel(request, pk):
+    """IFO-05 / D-10: cancel a booking by flipping its status away from active.
+
+    THE STATUS FLIP IS THE ENTIRE CANCELLATION MECHANISM. `room_is_free` counts
+    only `status="active"` bookings, so the room frees itself the moment the
+    flip lands and `ops/availability.py` needs no change whatsoever.
+
+    DO NOT REPLACE THIS WITH A DELETE. Deleting the row would destroy the record
+    that a booking ever existed, and since plan 07-02 migrated `Booking.room` to
+    PROTECT it would also silently change what blocks a room delete -- an
+    operator would see a room become deletable for reasons nothing on screen
+    explains.
+    """
+    booking = get_object_or_404(
+        Booking.objects.select_related("room__floor__building"), pk=pk)
+
+    if booking.status != "active":
+        # Re-gated server-side: the row the operator saw may be minutes stale.
+        return render(request, "ifo/_booking_form.html",
+                      _booking_panel(request, error=(
+                          f"That booking for {booking.room.code} is already "
+                          f"{booking.status}.")),
+                      status=400)
+
+    booking.status = "cancelled"
+    booking.save(update_fields=["status"])
+    AuditLog.objects.create(
+        actor=request.user, event_type="booking.cancelled",
+        target_type="booking", target_id=str(booking.pk),
+        payload={"room": booking.room.code,
+                 "occupant": booking.occupant_name,
+                 "start": booking.start_datetime.isoformat(),
+                 "end": booking.end_datetime.isoformat()})
+
+    return render(request, "ifo/_booking_form.html",
+                  _booking_panel(request, cancelled=booking))
+
+
 # --- Duty assignments (IFO-06) ---------------------------------------------
 def _assignment_form_ctx():
     """Choice data for the assignment create form (Checkers/Guards + floors)."""
@@ -807,11 +1013,15 @@ def assignment_create(request):
     # Validate date/time FORMAT and floor-id numericness BEFORE the ORM write —
     # DateField/TimeField.to_python() and a non-numeric pk__in both raise an
     # unhandled ValidationError (500) at INSERT/.set() time otherwise (CR-04).
-    elif date_raw and parse_date(date_raw) is None:
+    # `_safe_parse_*` rather than the raw parsers: a shape-matching but
+    # impossible value ("25:99", "2026-13-45") raises ValueError out of
+    # `parse_time`/`parse_date` instead of returning None, so an `is None` test
+    # alone still lets a fat-fingered time through as a 500.
+    elif date_raw and _safe_parse_date(date_raw) is None:
         error = "Enter a valid date."
-    elif start_raw and parse_time(start_raw) is None:
+    elif start_raw and _safe_parse_time(start_raw) is None:
         error = "Enter a valid start time."
-    elif end_raw and parse_time(end_raw) is None:
+    elif end_raw and _safe_parse_time(end_raw) is None:
         error = "Enter a valid end time."
     elif floor_ids and not all(f.isdigit() for f in floor_ids):
         error = "Invalid floor selection."

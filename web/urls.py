@@ -67,6 +67,11 @@ urlpatterns = [
     path("ifo/rooms/<str:code>/qr.png", ifo.room_qr, name="ifo_room_qr"),
     # Merged into the room board; kept so bookmarks and the cached PWA shell work.
     path("ifo/live", ifo.live, name="ifo_live"),
+    # IFO-05 ad-hoc bookings: list (GET) + POST-only create/cancel.
+    path("ifo/bookings", ifo.bookings_list, name="ifo_bookings"),
+    path("ifo/bookings/create", ifo.booking_create, name="ifo_booking_create"),
+    path("ifo/bookings/<int:pk>/cancel", ifo.booking_cancel,
+         name="ifo_booking_cancel"),
     # IFO-08 manual room release: open conflicts (GET) + the POST-only action.
     path("ifo/conflicts", ifo.conflicts, name="ifo_conflicts"),
     path("ifo/sessions/<int:pk>/release", ifo.session_release,
