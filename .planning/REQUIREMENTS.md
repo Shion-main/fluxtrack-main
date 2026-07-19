@@ -100,7 +100,7 @@ roadmap does NOT create phases for them.
 - [x] **IFO-03b**: IFO can import schedules by CSV upload with validation and conflict reporting (surfacing the existing importer)
 - [x] **IFO-05**: IFO can create/cancel ad-hoc room bookings, conflict-checked
 - [x] **IFO-08**: IFO can manually release a held room and resolve room-conflict notifications
-- [x] **IFO-09**: IFO sees a dashboard of summary cards over a selectable range with faculty-scorecard drill-down (shared RPT aggregates)
+- [ ] **IFO-09**: IFO sees a dashboard of summary cards over a selectable range with faculty-scorecard drill-down (shared RPT aggregates). REOPENED 2026-07-19: the SRS names FOUR cards — Faculty, **Room Occupancy in session-hours**, Sessions, Absences — but the room-occupancy card was built as a second attendance metric (Attendance %), and scheduling/reporting.py has no room-aware aggregate at all. Phase 06.1 closes it.
 
 ### Faculty — remaining (FAC)
 
@@ -176,7 +176,7 @@ phase (see ROADMAP.md). Status values: Pending / In progress / Complete.
 | RPT-03 | Phase 6 | Complete |
 | RPT-04 | Phase 6 | Complete |
 | RPT-05 | Phase 6 | Complete |
-| IFO-09 | Phase 6 | Complete |
+| IFO-09 | Phase 6 -> 06.1 | Reopened (room-occupancy card never built) |
 | DEAN-01 | Phase 6 | Complete |
 | DEAN-02 | Phase 6 | Complete |
 | DEAN-03 | Phase 6 | Complete |

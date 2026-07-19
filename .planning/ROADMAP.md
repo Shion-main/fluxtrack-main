@@ -33,6 +33,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 04.2: Co-Scheduled Session Attendance** (INSERTED) - Attendance handling for one instructor teaching 2+ sections at the same time in different rooms (129 slots, 54/200 profs): a single scan/verification must cover the co-scheduled sibling sessions so the sweep never falsely marks them Absent (completed 2026-07-07; verification passed after same-day gap closure — criterion #3 online coverage now 152/152 via D-01 refinement #2, online merge key = faculty + exact start; see 04.2-VERIFICATION.md)
 - [x] **Phase 5: Notifications — Read Surface & Web Push** - In-app polled list + VAPID web push + per-user mute preferences (completed 2026-07-15)
 - [x] **Phase 6: Reporting Engine & Reporting Surfaces** - One shared aggregate layer powering weekly report, scorecards, IFO/Dean/HR dashboards (completed 2026-07-15)
+- [ ] **Phase 06.1: Room Utilization & IFO-09 Closure** (INSERTED) - The facility-utilization half of the product: room-hours booked vs used, wasted room-hours, and a day x block heat grid. Closes the IFO-09 room-occupancy card that shipped as a second attendance metric.
 - [x] **Phase 7: Remaining Operational Surfaces** - Guard monitor/locator, IFO room & booking ops, Faculty self-service, job monitoring (completed 2026-07-19)
 - [ ] **Phase 8: Auth Cutover & AWS Deployment** - Entra ID SSO, Node-free Tailwind build, single-EC2 + RDS deploy
 
