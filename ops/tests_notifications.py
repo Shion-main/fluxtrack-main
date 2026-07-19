@@ -17,6 +17,7 @@ from django.test import TestCase
 from ops.models import Notification, NotificationMute
 from ops.notifications import (
     CATEGORY_TYPES,
+    GUARD_FLOOR_ALERT,
     PUSH_TYPES,
     TYPE_CATEGORY,
     WEEKLY_REPORT_READY,
@@ -63,9 +64,61 @@ class MapInvariantTests(TestCase):
 
     def test_push_types_are_the_key_events(self):
         # D-08 key push events; wrong-room and force-handover both use room_event.
+        # guard_floor_alert joined the set in 07-12 (GRD-04 / D-21).
         self.assertEqual(
             PUSH_TYPES,
-            {"room_event", "room_conflict", "weekly_report_ready"})
+            {"room_event", "room_conflict", "weekly_report_ready",
+             "guard_floor_alert"})
+
+
+class GuardAlertTypeRegistrationTests(TestCase):
+    """GRD-04 / D-21: the guard floor alert must BOTH push AND be mutable.
+
+    This class exists to fail loudly if a future plan adds a notify() type
+    without registering it in both maps. The two half-registered states are
+    genuinely confusing to debug:
+
+      - in PUSH_TYPES but in no CATEGORY_TYPES group -> `muted_types` does
+        `CATEGORY_TYPES.get(cat, set())`, so the type can never enter the muted
+        set: it is structurally UNMUTABLE and a guard cannot turn it off.
+      - in neither -> `send_push_outbox` filters `type__in=PUSH_TYPES`, so the
+        rows render in the bell, never push, and leave `pushed_at` NULL until
+        they age out of the send window. The symptom reads as a VAPID
+        misconfiguration and is not.
+
+    Any new type added by a later plan should join this assertion set.
+    """
+
+    def test_constant_value(self):
+        self.assertEqual(GUARD_FLOOR_ALERT, "guard_floor_alert")
+
+    def test_registered_in_push_types(self):
+        # Without this the alert writes bell rows that never push (D-21).
+        self.assertIn(GUARD_FLOOR_ALERT, PUSH_TYPES)
+
+    def test_belongs_to_exactly_one_category_group(self):
+        # ROOM: both GRD-04 triggers are room events, and they sit beside the
+        # room_event / room_conflict types a guard already sees.
+        holders = [cat for cat, types in CATEGORY_TYPES.items()
+                   if GUARD_FLOOR_ALERT in types]
+        self.assertEqual(holders, [NotificationCategory.ROOM])
+
+    def test_type_category_resolves_the_new_type(self):
+        # TYPE_CATEGORY is DERIVED from CATEGORY_TYPES -- never hand-edited.
+        self.assertEqual(
+            TYPE_CATEGORY[GUARD_FLOOR_ALERT], NotificationCategory.ROOM)
+
+    def test_muting_room_mutes_the_guard_alert(self):
+        User = get_user_model()
+        guard = User.objects.create(username="grd_mute")
+        NotificationMute.objects.create(
+            user=guard, category=NotificationCategory.ROOM)
+        self.assertIn(GUARD_FLOOR_ALERT, muted_types(guard))
+
+    def test_unmuted_user_does_not_have_it_muted(self):
+        User = get_user_model()
+        guard = User.objects.create(username="grd_unmuted")
+        self.assertNotIn(GUARD_FLOOR_ALERT, muted_types(guard))
 
 
 class MutedTypesTests(TestCase):
@@ -80,11 +133,13 @@ class MutedTypesTests(TestCase):
         self.assertEqual(muted_types(self.user), set())
 
     def test_mute_room_hides_room_types(self):
-        # (d) muting ROOM covers both room_event and room_conflict.
+        # (d) muting ROOM covers room_event, room_conflict and (since 07-12)
+        # the GRD-04 guard floor alert.
         NotificationMute.objects.create(
             user=self.user, category=NotificationCategory.ROOM)
         self.assertEqual(
-            muted_types(self.user), {"room_event", "room_conflict"})
+            muted_types(self.user),
+            {"room_event", "room_conflict", "guard_floor_alert"})
 
     def test_unmapped_type_never_muted(self):
         # (e) owner #1: unmapped types stay always-shown even when every
