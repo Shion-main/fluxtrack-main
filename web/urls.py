@@ -104,10 +104,15 @@ urlpatterns = [
     path("ifo/reports/weekly/<int:pk>/<str:fmt>", ifo.weekly_download,
          name="ifo_weekly_download"),
     # Guard surfaces -- GRD-01 floor monitor + GRD-03 faculty locator.
-    # GET-only by contract (GRD-05); GRD-02 (per-room schedule) lands in 07-09.
+    # GET-only by contract (GRD-05).
     path("guard/monitor", guard.monitor, name="guard_monitor"),
     path("guard/monitor/rows", guard.monitor_rows, name="guard_monitor_rows"),
     path("guard/locate", guard.locate, name="guard_locate"),
+    # --- Guard room detail (GRD-02) ---
+    # Keyed by room code like every other room route. Floor authorization is
+    # re-derived server-side per request; an off-floor code 404s.
+    path("guard/rooms/<str:code>", guard.room_detail, name="guard_room"),
+    # --- end Guard room detail (GRD-02) ---
     # System Admin operational monitoring (SYS-04) -- read-only
     path("sys/jobs", sys.jobs, name="sys_jobs"),
     # Notifications read surface (NOTIF-01) + mute settings (NOTIF-03)

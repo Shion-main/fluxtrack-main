@@ -6,11 +6,11 @@
    this room FREE", which is the question the facilities office actually asks,
    and it is a layout staff already read on paper.
 
-   Rows are the campus block ladder for the term (see web.ifo._room_timetable),
+   Rows are the campus block ladder for the term (see web.room_state.room_timetable),
    so a free slot is a visible empty cell rather than a missing line, and two
    rooms' printouts line up for comparison.
 
-   Loaded by ifo/room_detail.html. ASCII-only.
+   Loaded by ifo/room_detail.html and guard/room.html. ASCII-only.
    ========================================================================== */
 
 .tt {
