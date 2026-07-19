@@ -10,8 +10,8 @@ last_updated: "2026-07-19T08:46:09.019Z"
 last_activity: 2026-07-19
 last_activity_desc: Phase 07 executed end-to-end
 progress:
-  total_phases: 11
-  completed_phases: 9
+  total_phases: 12
+  completed_phases: 10
   total_plans: 59
   completed_plans: 58
   percent: 82
@@ -24,7 +24,7 @@ progress:
 See: .planning/PROJECT.md (updated 2026-07-02)
 
 **Core value:** A faculty member checks in with one action, and the resulting attendance record is trustworthy — presence physically verified, lateness captured, ghost bookings detected.
-**Current focus:** Phase 06 — Reporting Engine & Reporting Surfaces
+**Current focus:** Phase 08 — Auth Cutover & AWS Deployment (last planned phase)
 
 ## Current Position
 

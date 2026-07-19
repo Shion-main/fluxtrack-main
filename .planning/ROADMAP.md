@@ -25,7 +25,7 @@ build, and AWS deploy — lands last so it never blocks feature work.
 
 Decimal phases appear between their surrounding integers in numeric order.
 
-- [ ] **Phase 1: MSSQL Environment & Data Foundation** - Prove SQL Server runtime (timezone + collation round-trips) and run existing import/materialize against it
+- [x] **Phase 1: MSSQL Environment & Data Foundation** - Prove SQL Server runtime (timezone + collation round-trips) and run existing import/materialize against it (completed 2026-07-03; 4/4 criteria verified, see 01-VERIFICATION.md)
 - [x] **Phase 2: Correctness Foundations** - Shared notify() write path, JOB-02 status sweep + occupancy release, single scheduler process (completed 2026-07-02)
 - [x] **Phase 3: Duty Assignments & Checker Verification** - Floor assignments gate an on-duty Checker's online + offline room verification (completed 2026-07-03)
 - [x] **Phase 4: Modality Shift Approval & SRS v1.2** - Lead-time-gated faculty request, Dean approval, auto room-release/assign, SRS revision (completed 2026-07-03)
@@ -40,12 +40,12 @@ Decimal phases appear between their surrounding integers in numeric order.
   Plans:
 
   - [x] 06.1-01-PLAN.md — Shared block ladder + the T1 room-hours aggregate (booked/used/available/wasted)
-  - [ ] 06.1-02-PLAN.md — Room-shaped test fixture + DB-backed aggregate tests + seed sanity recipe
-  - [ ] 06.1-03-PLAN.md — IFO-09 closure: five-card KPI row with Room Occupancy, plus the paginate isolation fix
-  - [ ] 06.1-04-PLAN.md — T2 heat grid + block saturation aggregates
-  - [ ] 06.1-05-PLAN.md — Per-room breakdown + building/floor rollup + least-used ranking
-  - [ ] 06.1-06-PLAN.md — The /ifo/utilization page: heat grid, tables, WCAG-AA heat scale
-  - [ ] 06.1-07-PLAN.md — Per-room utilization CSV export
+  - [x] 06.1-02-PLAN.md — Room-shaped test fixture + DB-backed aggregate tests + seed sanity recipe
+  - [x] 06.1-03-PLAN.md — IFO-09 closure: five-card KPI row with Room Occupancy, plus the paginate isolation fix
+  - [x] 06.1-04-PLAN.md — T2 heat grid + block saturation aggregates
+  - [x] 06.1-05-PLAN.md — Per-room breakdown + building/floor rollup + least-used ranking
+  - [x] 06.1-06-PLAN.md — The /ifo/utilization page: heat grid, tables, WCAG-AA heat scale
+  - [ ] 06.1-07-PLAN.md — Per-room utilization CSV export — ◷ **DEFERRED** (droppable by design; nothing depends on it)
 - [x] **Phase 7: Remaining Operational Surfaces** - Guard monitor/locator, IFO room & booking ops, Faculty self-service, job monitoring (completed 2026-07-19)
 - [ ] **Phase 8: Auth Cutover & AWS Deployment** - Entra ID SSO, Node-free Tailwind build, single-EC2 + RDS deploy
 
@@ -67,9 +67,9 @@ Decimal phases appear between their surrounding integers in numeric order.
 
 Plans:
 
-- [ ] 01-01-PLAN.md — MSSQL settings branch, dependency pins & environment bring-up (migrate + seed on SQL Server) [Wave 1]
-- [ ] 01-02-PLAN.md — Datetime round-trip (no 8h drift) & R3 import/materialize parity tests [Wave 2]
-- [ ] 01-03-PLAN.md — Case-sensitive collation on qr_token/manual_code & collation round-trip tests [Wave 2]
+- [x] 01-01-PLAN.md — MSSQL settings branch, dependency pins & environment bring-up (migrate + seed on SQL Server) [Wave 1]
+- [x] 01-02-PLAN.md — Datetime round-trip (no 8h drift) & R3 import/materialize parity tests [Wave 2]
+- [x] 01-03-PLAN.md — Case-sensitive collation on qr_token/manual_code & collation round-trip tests [Wave 2]
 
 ### Phase 2: Correctness Foundations
 
@@ -321,45 +321,45 @@ Plans:
 
 **Wave 1**
 
-- [ ] 07-01-PLAN.md — Guard read-only enforcement (GRD-05), GRD-02/GRD-03 label correction, shared `web/room_state.py` extraction [Wave 1]
-- [ ] 07-02-PLAN.md — data foundations: `Booking.room` to PROTECT (D-19), four-relation room-delete probe (D-17/D-20), collision-safe `manual_code` minter (live intermittent defect), `ImportStaging` model + staging service (D-12) [Wave 1]
+- [x] 07-01-PLAN.md — Guard read-only enforcement (GRD-05), GRD-02/GRD-03 label correction, shared `web/room_state.py` extraction [Wave 1]
+- [x] 07-02-PLAN.md — data foundations: `Booking.room` to PROTECT (D-19), four-relation room-delete probe (D-17/D-20), collision-safe `manual_code` minter (live intermittent defect), `ImportStaging` model + staging service (D-12) [Wave 1]
 
 **Wave 2**
 
-- [ ] 07-03-PLAN.md — IFO room CRUD with named delete refusal (IFO-01b) [Wave 2]
+- [x] 07-03-PLAN.md — IFO room CRUD with named delete refusal (IFO-01b) [Wave 2]
 
 **Wave 3**
 
-- [ ] 07-04-PLAN.md — QR token + six-digit code rotation, confirm then reprint (IFO-02) [Wave 3]
+- [x] 07-04-PLAN.md — QR token + six-digit code rotation, confirm then reprint (IFO-02) [Wave 3]
 
 **Wave 4**
 
-- [ ] 07-05-PLAN.md — Manual room release + open-conflicts surface + `release_room` invariant update (IFO-08) [Wave 4]
+- [x] 07-05-PLAN.md — Manual room release + open-conflicts surface + `release_room` invariant update (IFO-08) [Wave 4]
 
 **Wave 5**
 
-- [ ] 07-06-PLAN.md — Ad-hoc booking create/cancel, conflict-checked by `room_is_free` (IFO-05) [Wave 5]
+- [x] 07-06-PLAN.md — Ad-hoc booking create/cancel, conflict-checked by `room_is_free` (IFO-05) [Wave 5]
 
 **Wave 6**
 
-- [ ] 07-07-PLAN.md — Schedule import by upload, preview then commit; establishes the multipart house pattern (IFO-03b) [Wave 6]
+- [x] 07-07-PLAN.md — Schedule import by upload, preview then commit; establishes the multipart house pattern (IFO-03b) [Wave 6]
 
 **Wave 7**
 
-- [ ] 07-08-PLAN.md — Profile photo upload: validate, re-encode, EXIF-strip (FAC-12) [Wave 7]
+- [x] 07-08-PLAN.md — Profile photo upload: validate, re-encode, EXIF-strip (FAC-12) [Wave 7]
 
 **Wave 8**
 
-- [ ] 07-09-PLAN.md — Online Verify & Start with a pasted Teams link (FAC-08) [Wave 8]
+- [x] 07-09-PLAN.md — Online Verify & Start with a pasted Teams link (FAC-08) [Wave 8]
 
 **Wave 9**
 
-- [ ] 07-10-PLAN.md — Faculty attendance history, read-only, Checker flags visible (FAC-11) [Wave 9]
+- [x] 07-10-PLAN.md — Faculty attendance history, read-only, Checker flags visible (FAC-11) [Wave 9]
 
 **Wave 10**
 
-- [ ] 07-11-PLAN.md — Guard per-room schedule, floor-authorized (GRD-02) [Wave 10]
-- [ ] 07-12-PLAN.md — Coalesced guard push fan-out from the sweep (GRD-04) [Wave 10]
+- [x] 07-11-PLAN.md — Guard per-room schedule, floor-authorized (GRD-02) [Wave 10]
+- [x] 07-12-PLAN.md — Coalesced guard push fan-out from the sweep (GRD-04) [Wave 10]
 
 ### Phase 8: Auth Cutover & AWS Deployment
 
@@ -387,14 +387,25 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. MSSQL Environment & Data Foundation | 0/TBD | Not started | - |
-| 2. Correctness Foundations | 5/5 | Complete    | 2026-07-02 |
-| 3. Duty Assignments & Checker Verification | 6/6 | Complete    | 2026-07-03 |
-| 4. Modality Shift Approval & SRS v1.2 | 8/8 | Complete    | 2026-07-03 |
-| 5. Notifications — Read Surface & Web Push | 4/5 | In Progress|  |
-| 6. Reporting Engine & Reporting Surfaces | 7/7 | Complete   | 2026-07-15 |
-| 7. Remaining Operational Surfaces | 0/TBD | Not started | - |
+| 1. MSSQL Environment & Data Foundation | 3/3 | Complete | 2026-07-03 |
+| 2. Correctness Foundations | 5/5 | Complete | 2026-07-02 |
+| 3. Duty Assignments & Checker Verification | 6/6 | Complete | 2026-07-03 |
+| 03.1 Authentication — Entra ID SSO (INSERTED) | 4/5 | Live UAT deferred | - |
+| 4. Modality Shift Approval & SRS v1.2 | 8/8 | Complete | 2026-07-03 |
+| 04.1 Real-Data Integration (INSERTED) | 4/4 | Complete | 2026-07-07 |
+| 04.2 Co-Scheduled Session Attendance (INSERTED) | 4/4 | Complete | 2026-07-07 |
+| 5. Notifications — Read Surface & Web Push | 5/5 | Complete | 2026-07-15 |
+| 6. Reporting Engine & Reporting Surfaces | 7/7 | Complete | 2026-07-15 |
+| 06.1 Room Utilization & IFO-09 Closure (INSERTED) | 6/7 | Complete (export deferred) | 2026-07-19 |
+| 7. Remaining Operational Surfaces | 12/12 | Complete | 2026-07-19 |
 | 8. Auth Cutover & AWS Deployment | 0/TBD | Not started | - |
+
+**Totals:** 58/59 plans complete across 11 phases. The one incomplete plan
+(06.1-07 CSV export) is a deliberate deferral, not outstanding work.
+
+**Carried forward into Phase 8:** the 03.1-05 live Entra UAT (blocked on
+redirect-URI registration) folds into the Phase 8 auth cutover rather than
+reopening Phase 03.1.
 
 ---
 *Roadmap created: 2026-07-02*
