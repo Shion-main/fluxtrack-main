@@ -88,6 +88,58 @@ class Scorecard:
     modality_breakdown: dict = field(default_factory=dict)
 
 
+@dataclass
+class RoomUtilization:
+    """Campus-wide room-hours over a range (IFO-09, tier T1).
+
+    The metric FluxTrack's "and Facility Utilization" half was missing. BOOKED is
+    what the timetable promised; USED is what the check-in/out timestamps prove
+    (D-03); the difference is reclaimable capacity a facilities office can act on,
+    not a scolding statistic. Hours are ``Decimal`` quantized to one decimal place
+    so a room-hours figure never renders as a binary-float artifact.
+    """
+    physical_rooms: int
+    blocks_per_day: int
+    teaching_days: int
+    available_hours: Decimal
+    booked_hours: Decimal
+    used_hours: Decimal
+    wasted_hours: Decimal
+    absent_hours: Decimal
+    unused_held_hours: Decimal
+    utilization_pct: int
+    booking_pct: int
+    in_flight: int
+    early_end_sessions: int
+    absent_sessions: int
+    overrun_sessions: int
+    early_arrival_sessions: int
+
+
+def _physical_rooms():
+    """Physical rooms only (D-04/D-08): the utilization denominator's population.
+
+    ``Room.is_virtual`` is a PROPERTY over ``Room.code`` (``campus/models.py:44-54``),
+    not a column, so it cannot appear in ``filter()``/``Q()``/``Count(filter=...)``.
+    The in-production idiom is the code-prefix exclusion (``seed_term.py:253-255``).
+    ``Room.code`` carries the DB-wide case-INSENSITIVE collation (only ``qr_token``
+    and ``manual_code`` are CS_AS), so the uppercase prefix already matches a
+    lowercase ``v``; do NOT reach for ``istartswith``, which would diverge from the
+    two existing call sites for no behavioural gain.
+    """
+    return Room.objects.exclude(code__startswith="V")
+
+
+def _exclude_virtual(qs):
+    """Drop sessions held in a virtual room from a Session queryset (D-04/D-08).
+
+    Same reasoning as :func:`_physical_rooms`, spanning the ``Session.room`` FK: an
+    online class in a V-room occupies no physical capacity, so counting it would
+    dilute the rate with rooms that do not exist.
+    """
+    return qs.exclude(room__code__startswith="V")
+
+
 def _pct(held, scheduled):
     """Attendance percentage, guarded against a zero denominator (pure arithmetic).
 
@@ -102,6 +154,26 @@ def _pct(held, scheduled):
         return 0
     return int((Decimal(100 * held) / Decimal(scheduled)).quantize(
         Decimal("1"), rounding=ROUND_HALF_UP))
+
+
+def _hours_pct(used_seconds, available_seconds):
+    """Utilization percentage over two second-counts, zero-denominator guarded.
+
+    The room-hours sibling of :func:`_pct`; the Decimal / ROUND_HALF_UP reasoning in
+    that docstring applies verbatim and is not restated here. Returns 0 (never
+    raises) for a zero or negative denominator -- a term with no ACTIVE schedules
+    has no capacity, which is a legitimate answer and not an error.
+    """
+    if not available_seconds or available_seconds <= 0:
+        return 0
+    return int((Decimal(100 * used_seconds) / Decimal(available_seconds)).quantize(
+        Decimal("1"), rounding=ROUND_HALF_UP))
+
+
+def _hours(seconds):
+    """Seconds as Decimal hours, quantized to one decimal place (ROUND_HALF_UP)."""
+    return (Decimal(seconds) / Decimal(3600)).quantize(
+        Decimal("0.1"), rounding=ROUND_HALF_UP)
 
 
 @dataclass(frozen=True)
@@ -369,6 +441,155 @@ def faculty_scorecard(*, faculty, start, end, as_of=None):
         early_ends=agg["early_ends"] or 0,
         absences=absences,
         modality_breakdown=modality_breakdown,
+    )
+
+
+def _session_contribution(status, scheduled_start, scheduled_end,
+                          actual_start, actual_end):
+    """One session's ``(booked_seconds, used_seconds, in_flight)`` (D-03/D-09).
+
+    THE single definition of "used" for this phase. Every room aggregate calls it
+    rather than re-deriving the rules, because two implementations of "used" would
+    eventually disagree and the whole point of the phase is one honest number.
+
+    The rules, in evaluation order:
+
+    * ``actual_start`` set, ``actual_end`` NULL, status ACTIVE -- the class is still
+      running. EXCLUDED from booked AND used, reported as ``in_flight`` (D-09).
+      Counting its booked hours against an incomplete numerator would fabricate
+      waste that has not happened yet, and clamping to ``now`` is forbidden by this
+      module's no-baked-in-``timezone.now()`` contract.
+    * ``status = ABSENT`` -- booked, 0 used. This zero IS the waste signal (D-03).
+    * ``actual_start`` NULL -- 0 used. Nobody ever checked in. A NULL is answered
+      explicitly here, never folded into a silent zero.
+    * ``actual_end`` NULL on a non-ACTIVE session -- 0 used. A finished session with
+      no end stamp is not evidence of use.
+    * otherwise -- ``min(actual_end, scheduled_end) - max(actual_start, scheduled_start)``,
+      floored at 0.
+
+    The used interval is CLAMPED to the scheduled window. D-03's early-end case is
+    preserved exactly (``actual_end < scheduled_end`` there, so the clamp is a
+    no-op); the clamp only bites on overrun or early arrival, which D-03 does not
+    address. It is required because check-in can stamp ``actual_start`` before
+    ``scheduled_start`` -- unclamped, a room could report more used hours than it
+    had booked and the rate could exceed 100%, which is meaningless for a capacity
+    metric. Where the clamp bites, ``room_utilization`` counts it
+    (``overrun_sessions`` / ``early_arrival_sessions``) so the discarded time stays
+    visible rather than silently vanishing.
+    """
+    if actual_start is not None and actual_end is None \
+            and status == SessionStatus.ACTIVE:
+        return 0, 0, True
+
+    booked = max(0, int((scheduled_end - scheduled_start).total_seconds()))
+
+    if status == SessionStatus.ABSENT:
+        return booked, 0, False
+    if actual_start is None or actual_end is None:
+        return booked, 0, False
+
+    used_start = max(actual_start, scheduled_start)
+    used_end = min(actual_end, scheduled_end)
+    used = max(0, int((used_end - used_start).total_seconds()))
+    return booked, used, False
+
+
+def room_utilization(*, start, end, term, as_of=None):
+    """IFO-09 / T1: campus room-hours booked vs used vs available over a range.
+
+    ``used`` comes from the ACTUAL check-in/out timestamps, never from the
+    schedule: an ABSENT session contributes booked hours and ZERO used hours and
+    that difference IS the reclaimable-capacity metric (D-03). The denominator is
+    derived at query time from the term's own data -- physical rooms x derived
+    teaching days x the derived campus block ladder -- so no block count or
+    teaching-day count is ever hardcoded (D-06). In-flight sessions (running, no
+    ``actual_end``) are excluded from both sides and surfaced in ``in_flight``
+    rather than being folded into a silent zero (D-09).
+
+    Filters on the LOCAL ``Session.date`` via ``_scoped_sessions`` (inheriting the
+    ACTIVE-schedule restriction and the ``as_of`` clamp) and computes durations on
+    the UTC datetimes. Virtual rooms are excluded from both sides (D-04).
+
+    Never raises on an empty range or a term with no ACTIVE schedules: the
+    denominator is simply zero and the rates read 0.
+    """
+    # --- Denominator: every factor derived, no literal block or day count. ---
+    blocks = campus_block_ladder(term) or []
+    weekdays = set(teaching_weekdays(term))
+    block_seconds_per_day = sum(b.duration_seconds for b in blocks)
+    physical_rooms = _physical_rooms().count()
+
+    last_day = min(end, as_of) if as_of is not None else end
+    teaching_days = 0
+    day = start
+    while day <= last_day:
+        if day.weekday() in weekdays:
+            teaching_days += 1
+        day += datetime.timedelta(days=1)
+
+    available_seconds = physical_rooms * teaching_days * block_seconds_per_day
+
+    # --- Numerator: a streamed Python fold, deliberately, not DB-side. ---
+    # This deviates from the module's DB-side-aggregation rule, so: the per-session
+    # contribution is a conditional clamp over four NULLable datetimes, which
+    # Count(filter=Q) cannot express and which Sum(F("actual_end") - F("actual_start"))
+    # cannot clamp; DurationField subtraction is additionally unverified on
+    # mssql-django and this module has no precedent for it. The hazards the rule
+    # exists to prevent are all absent here -- .values_list() pulls six scalar
+    # columns and instantiates no model, the row set is bounded by the reporting
+    # window, and there is no per-row query and no primary-key IN list.
+    qs = _exclude_virtual(_scoped_sessions(start=start, end=end, as_of=as_of))
+
+    booked_seconds = used_seconds = absent_seconds = unused_held_seconds = 0
+    in_flight = absent_sessions = early_end_sessions = 0
+    overrun_sessions = early_arrival_sessions = 0
+
+    rows = qs.values_list(
+        "status", "scheduled_start", "scheduled_end",
+        "actual_start", "actual_end", "ended_early",
+    ).iterator()
+    for status, sched_start, sched_end, act_start, act_end, ended_early in rows:
+        booked, used, running = _session_contribution(
+            status, sched_start, sched_end, act_start, act_end)
+        if running:
+            in_flight += 1
+            continue
+        booked_seconds += booked
+        used_seconds += used
+        if status == SessionStatus.ABSENT:
+            absent_seconds += booked
+            absent_sessions += 1
+        elif status in HELD_STATUSES:
+            unused_held_seconds += max(0, booked - used)
+        if ended_early:
+            early_end_sessions += 1
+        # Make the clamp visible: a room routinely used past its booking is a
+        # scheduling-conflict signal a facilities office wants, and silently
+        # discarding it is the same class of mistake this phase exists to correct.
+        if act_end is not None and act_end > sched_end:
+            overrun_sessions += 1
+        if act_start is not None and act_start < sched_start:
+            early_arrival_sessions += 1
+
+    wasted_seconds = absent_seconds + unused_held_seconds
+
+    return RoomUtilization(
+        physical_rooms=physical_rooms,
+        blocks_per_day=len(blocks),
+        teaching_days=teaching_days,
+        available_hours=_hours(available_seconds),
+        booked_hours=_hours(booked_seconds),
+        used_hours=_hours(used_seconds),
+        wasted_hours=_hours(wasted_seconds),
+        absent_hours=_hours(absent_seconds),
+        unused_held_hours=_hours(unused_held_seconds),
+        utilization_pct=_hours_pct(used_seconds, available_seconds),
+        booking_pct=_hours_pct(booked_seconds, available_seconds),
+        in_flight=in_flight,
+        early_end_sessions=early_end_sessions,
+        absent_sessions=absent_sessions,
+        overrun_sessions=overrun_sessions,
+        early_arrival_sessions=early_arrival_sessions,
     )
 
 
