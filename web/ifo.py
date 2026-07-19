@@ -8,6 +8,7 @@ from django.contrib.auth import get_user_model
 from django.contrib.auth.decorators import login_required
 from django.core.exceptions import PermissionDenied
 from django.core.files.storage import default_storage
+from django.core.management import call_command
 from django.db import transaction
 from django.db.models.deletion import ProtectedError
 from django.http import Http404, HttpResponse
@@ -21,11 +22,16 @@ from campus.codes import new_room_credentials
 from campus.models import Floor, Room
 from campus.services import room_delete_blockers
 from ops.availability import room_is_free
+from ops.import_staging import (ALLOWED_EXTENSIONS, MAX_UPLOAD_BYTES,
+                                ImportStagingError, consume_staged,
+                                discard_staged, resolve_staged, staged_path,
+                                stage_upload, sweep_abandoned)
 from ops.models import AuditLog, Booking, RoomConflictFlag, WeeklyReport
 from ops.occupancy import release_room
 from ops.policy import get_policy
 from scheduling.models import (AcademicTerm, DayOfWeek, Modality, Schedule,
                                 ScheduleStatus, Session, SessionStatus)
+from scheduling.importing import reconcile
 from scheduling.report_render import build_csv
 from scheduling.reporting import (dept_summary, faculty_attendance,
                                   faculty_scorecard, safe_card)
@@ -949,6 +955,265 @@ def booking_cancel(request, pk):
 
     return render(request, "ifo/_booking_form.html",
                   _booking_panel(request, cancelled=booking))
+
+
+# --- Schedule import by upload (IFO-03b) ------------------------------------
+# THIS SECTION ESTABLISHES THIS PROJECT'S FILE-UPLOAD HOUSE PATTERN. Before it
+# there was no `request.FILES` handling, no multipart form and no upload
+# validation anywhere in the codebase. Plan 07-08's profile-photo upload copies
+# what is here, which is why the harder case (a file that must survive BETWEEN
+# two requests) was built first.
+#
+# Flow is preview-then-commit (D-12): stage the bytes, dry-run and show the
+# reconciliation report, and only apply when the operator says so.
+#
+# THREE STORES, THREE JOBS, and mixing them up is the whole class of bug this
+# design avoids:
+#   the BYTES     live on disk under MEDIA_ROOT at a server-composed path;
+#   the SESSION   carries only the opaque token;
+#   the ROW       (ops.ImportStaging) owns ownership and lifecycle.
+# The client's filename is display text and is NEVER joined into a path
+# (T-07-31), and the token is read from the session and NEVER from the form
+# (T-07-32) -- a form-supplied token would be an IDOR handle letting any IFO
+# user commit any staged file.
+
+IMPORT_SESSION_KEY = "ifo_import_token"
+
+# An .xlsx is a zip archive, so a 10 MB upload can expand into an enormous
+# amount of XML: the byte cap in ops/import_staging.py does not bound the
+# PARSED size (T-07-33). This does. Sized well above a real term load (~2,000
+# offering rows) so it can only ever fire on something pathological.
+MAX_PARSED_ROWS = 20000
+
+
+def _delete_staged_file(staging):
+    """Best-effort removal of a consumed staged file.
+
+    `consume_staged` marks the ROW spent; the BYTES are ours to remove. Guarded
+    because an already-missing or externally-cleaned file must never turn a
+    successful import into a 500 at the last step.
+    """
+    path = staging.stored_path
+    if not path:
+        return
+    try:
+        if default_storage.exists(path):
+            default_storage.delete(path)
+    except OSError:
+        pass
+
+
+def _import_read_rows(path, sheet=None):
+    """Read an offerings file through the COMMAND'S OWN extension dispatch.
+
+    Deliberately `Command()._read_rows` rather than a parser written here:
+    04.1-01 locked a stdlib zipfile/xml reader with no openpyxl and no pandas,
+    and a second parser in the web layer would be a second answer to "what does
+    this file say" that starts out agreeing and drifts.
+    """
+    from scheduling.management.commands.import_offerings import (
+        DEFAULT_SHEET, Command)
+    return Command()._read_rows(path, sheet or DEFAULT_SHEET)
+
+
+def _import_report(path):
+    """Parse + reconcile a staged file. Returns (report_ctx, error_message).
+
+    `reconcile()` is called DIRECTLY for the structured numbers. The management
+    command PRINTS its reconciliation rather than returning it, so
+    screen-scraping its stdout for the primary display would be brittle; the
+    command's narrative is captured separately as a secondary detail pane.
+    """
+    try:
+        rows = _import_read_rows(path)
+    except Exception:
+        # Deliberately broad. Extension proves nothing about content -- the real
+        # validation is that the parser accepts the bytes -- and the failure
+        # modes of a hostile or merely corrupt file are open-ended
+        # (BadZipFile for a renamed non-zip, KeyError for a missing sheet,
+        # UnicodeDecodeError, IndexError on a truncated grid, and so on).
+        # Enumerating them would leave the next unlisted one as a 500, which is
+        # exactly what T-07-34 forbids on an operator-facing upload.
+        return None, ("That file could not be read as an offerings export. "
+                      "Check it is the unmodified .xlsx or .csv from the "
+                      "registrar and try again.")
+
+    if not rows:
+        return None, "That file has no rows in it."
+    if len(rows) > MAX_PARSED_ROWS:
+        return None, (f"That file has {len(rows):,} rows, which is beyond the "
+                      f"{MAX_PARSED_ROWS:,}-row limit for a single import.")
+
+    header, data = rows[0], rows[1:]
+    col = {(c or "").strip(): i for i, c in enumerate(header)}
+    try:
+        report = reconcile(data, col)
+    except Exception:
+        return None, ("That file could not be reconciled. It may be missing "
+                      "the expected Code / Sec / Schedule columns.")
+
+    # The command's own narrative, as a secondary detail pane.
+    buf = io.StringIO()
+    try:
+        call_command("import_offerings", file=path, dry_run=True, stdout=buf)
+        detail = buf.getvalue()
+    except Exception as exc:                       # narrative only, never fatal
+        detail = f"(dry-run detail unavailable: {exc})"
+
+    return {"report": report, "detail": detail, "row_count": len(data)}, None
+
+
+def _staged_for(request):
+    """The live staged row for this request's session token, or None."""
+    token = request.session.get(IMPORT_SESSION_KEY)
+    return resolve_staged(token, request.user) if token else None
+
+
+def _import_ctx(request, *, staging=None, report=None, error=None,
+                committed=None, discarded=False):
+    return {"staging": staging, "report": report, "error": error,
+            "committed": committed, "discarded": discarded,
+            "max_mb": MAX_UPLOAD_BYTES // (1024 * 1024),
+            "allowed": ", ".join(sorted(ALLOWED_EXTENSIONS))}
+
+
+@ifo_required
+@require_http_methods(["GET"])
+def import_page(request):
+    """IFO-03b: the import console page.
+
+    Sweeps abandoned staged uploads opportunistically. Plan 07-02 deliberately
+    did NOT add a fifth scheduler job for this, because the 4-job count is an
+    asserted invariant (`NoImplicitSchedulerTests` / `SchedulerWiringTests`);
+    for a surface used a handful of times per term, sweeping on page load is
+    the cheaper answer and costs a single indexed query.
+
+    A staged-but-uncommitted file for this user is re-previewed, so reloading
+    the page does not lose a review in progress.
+    """
+    sweep_abandoned()
+
+    staging = _staged_for(request)
+    report, error = None, None
+    if staging is not None:
+        report, error = _import_report(staged_path(staging))
+    return render(request, "ifo/import.html",
+                  _import_ctx(request, staging=staging, report=report,
+                              error=error))
+
+
+@ifo_required
+@require_http_methods(["POST"])
+def import_preview(request):
+    """IFO-03b: stage the upload and show the dry-run reconciliation.
+
+    NOTHING IS WRITTEN TO THE DATABASE HERE beyond the staging row itself. That
+    is the entire point of D-12's preview step: a bad file is caught while it
+    is still just bytes on disk.
+    """
+    uploaded = request.FILES.get("file")
+    if uploaded is None:
+        # Almost always the missing `hx-encoding="multipart/form-data"`: htmx
+        # serializes as urlencoded by default, which cannot carry file content,
+        # so the file silently never arrives and request.FILES is empty.
+        return render(request, "ifo/_import_panel.html",
+                      _import_ctx(request, error="Choose a file to upload."),
+                      status=400)
+
+    # An operator who uploads twice without committing would otherwise orphan
+    # the first file until the TTL sweep.
+    previous = _staged_for(request)
+    if previous is not None:
+        discard_staged(previous)
+        request.session.pop(IMPORT_SESSION_KEY, None)
+
+    try:
+        staging = stage_upload(uploaded, request.user)
+    except ImportStagingError as exc:
+        return render(request, "ifo/_import_panel.html",
+                      _import_ctx(request, error=str(exc)), status=400)
+
+    report, error = _import_report(staged_path(staging))
+    if error:
+        # The bytes are unusable, so do not leave a row the operator cannot act
+        # on and the sweeper has to collect later.
+        discard_staged(staging)
+        return render(request, "ifo/_import_panel.html",
+                      _import_ctx(request, error=error), status=400)
+
+    # ONLY the token. Never the path, never the bytes.
+    request.session[IMPORT_SESSION_KEY] = staging.token
+    return render(request, "ifo/_import_panel.html",
+                  _import_ctx(request, staging=staging, report=report))
+
+
+@ifo_required
+@require_http_methods(["POST"])
+def import_commit(request):
+    """IFO-03b: apply the previewed file. Additive only (D-13).
+
+    The token comes from `request.session` and from nowhere else (T-07-32).
+    `resolve_staged` filters on `uploaded_by` AND on `consumed_at IS NULL`, so
+    a cross-user commit and a double-submitted commit both resolve to None --
+    which is a friendly message, not an exception.
+
+    `import_offerings` uses `get_or_create` throughout and deletes nothing, so
+    re-running the same file is idempotent. `reset_term` -- the destructive
+    path that clears 2000+ Schedule/Session rows -- is NOT imported anywhere in
+    `web/` and must not be (D-13, T-07-36).
+    """
+    staging = _staged_for(request)
+    if staging is None:
+        return render(request, "ifo/_import_panel.html", _import_ctx(
+            request, error=("That upload is no longer available. Please upload "
+                            "the file again.")), status=400)
+
+    path = staged_path(staging)
+    before = Schedule.objects.count()
+    buf = io.StringIO()
+    try:
+        # Same options the preview used, so preview and commit can never
+        # describe different work.
+        call_command("import_offerings", file=path, dry_run=False, stdout=buf)
+    except Exception as exc:
+        # The staging row is deliberately NOT consumed: the operator should be
+        # able to retry or discard rather than being stranded.
+        return render(request, "ifo/_import_panel.html", _import_ctx(
+            request, staging=staging,
+            error=f"The import stopped partway through: {exc}"), status=400)
+
+    created = Schedule.objects.count() - before
+    consume_staged(staging)
+    _delete_staged_file(staging)
+    request.session.pop(IMPORT_SESSION_KEY, None)
+
+    AuditLog.objects.create(
+        actor=request.user, event_type="schedule.imported",
+        target_type="import", target_id=str(staging.pk),
+        # `original_name` is display text only -- never a path (T-07-31).
+        payload={"original_name": staging.original_name,
+                 "size_bytes": staging.size_bytes,
+                 "schedules_created": created})
+
+    return render(request, "ifo/_import_panel.html", _import_ctx(
+        request, committed={"created": created, "detail": buf.getvalue(),
+                            "original_name": staging.original_name}))
+
+
+@ifo_required
+@require_http_methods(["POST"])
+def import_discard(request):
+    """IFO-03b: drop a staged upload the operator reviewed and walked away from.
+
+    Without this, a rejected preview sits on disk until the TTL sweeper
+    collects it, and the operator has no way to say "no, not that file".
+    """
+    staging = _staged_for(request)
+    if staging is not None:
+        discard_staged(staging)
+    request.session.pop(IMPORT_SESSION_KEY, None)
+    return render(request, "ifo/_import_panel.html",
+                  _import_ctx(request, discarded=True))
 
 
 # --- Duty assignments (IFO-06) ---------------------------------------------

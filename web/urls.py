@@ -67,6 +67,12 @@ urlpatterns = [
     path("ifo/rooms/<str:code>/qr.png", ifo.room_qr, name="ifo_room_qr"),
     # Merged into the room board; kept so bookmarks and the cached PWA shell work.
     path("ifo/live", ifo.live, name="ifo_live"),
+    # IFO-03b schedule import by upload: page (GET) + POST-only
+    # preview/commit/discard. Multipart entry point is `preview`.
+    path("ifo/import", ifo.import_page, name="ifo_import"),
+    path("ifo/import/preview", ifo.import_preview, name="ifo_import_preview"),
+    path("ifo/import/commit", ifo.import_commit, name="ifo_import_commit"),
+    path("ifo/import/discard", ifo.import_discard, name="ifo_import_discard"),
     # IFO-05 ad-hoc bookings: list (GET) + POST-only create/cancel.
     path("ifo/bookings", ifo.bookings_list, name="ifo_bookings"),
     path("ifo/bookings/create", ifo.booking_create, name="ifo_booking_create"),
