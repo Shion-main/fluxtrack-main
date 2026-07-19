@@ -45,7 +45,7 @@
 <body class="bg-background text-foreground" hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'>
   <a href="#main" class="skip-link">Skip to content</a>
   {% with un=request.resolver_match.url_name %}
-  {% if un == "faculty_home" or un == "faculty_schedule" or un == "faculty_scan" or un == "faculty_modality_new" or un == "faculty_modality_mine" or un == "checker_floor" or un == "checker_scan" or un == "checker_online" or un == "checker_online_open" or un == "ifo_live" or un == "ifo_rooms" or un == "ifo_room_detail" or un == "ifo_assignments" or un == "ifo_dashboard" or un == "ifo_weekly_reports" or un == "dean_dashboard" or un == "dean_queue" or un == "dean_reports" or un == "guard_monitor" or un == "guard_locate" %}
+  {% if un == "faculty_home" or un == "faculty_schedule" or un == "faculty_scan" or un == "faculty_modality_new" or un == "faculty_modality_mine" or un == "faculty_online" or un == "checker_floor" or un == "checker_scan" or un == "checker_online" or un == "checker_online_open" or un == "ifo_live" or un == "ifo_rooms" or un == "ifo_room_detail" or un == "ifo_assignments" or un == "ifo_dashboard" or un == "ifo_weekly_reports" or un == "dean_dashboard" or un == "dean_queue" or un == "dean_reports" or un == "guard_monitor" or un == "guard_locate" %}
   {% elif user.is_authenticated %}
     {% comment %}Standard shell for all other roles (launcher, checker, IFO, dean,
     admin). Faculty pages render their own top chrome, so no global header there.{% endcomment %}
@@ -67,7 +67,7 @@
 
   <main id="main">{% block content %}{% endblock %}</main>
 
-  {% if un == "faculty_home" or un == "faculty_schedule" or un == "faculty_modality_mine" %}
+  {% if un == "faculty_home" or un == "faculty_schedule" or un == "faculty_online" or un == "faculty_modality_mine" %}
   {% comment %}Bottom tab bar shows on the three primary tabs, not on the
   full-screen scan / sub-flow screens. Scan is reached from Home's check-in
   actions, so it is not a tab.{% endcomment %}
@@ -79,6 +79,9 @@
       <a href="/faculty/schedule" class="ft-tab {% if un == 'faculty_schedule' %}is-active{% endif %}"
          aria-label="Schedule"{% if un == 'faculty_schedule' %} aria-current="page"{% endif %}>
         <uk-icon icon="calendar-days"></uk-icon></a>
+      <a href="/faculty/online" class="ft-tab {% if un == 'faculty_online' %}is-active{% endif %}"
+         aria-label="Online classes"{% if un == 'faculty_online' %} aria-current="page"{% endif %}>
+        <uk-icon icon="monitor"></uk-icon></a>
       <a href="/faculty/modality/mine" class="ft-tab {% if un == 'faculty_modality_mine' %}is-active{% endif %}"
          aria-label="Requests"{% if un == 'faculty_modality_mine' %} aria-current="page"{% endif %}>
         <uk-icon icon="arrow-left-right"></uk-icon></a>
