@@ -104,6 +104,8 @@ urlpatterns = [
     path("ifo/assignments/create", ifo.assignment_create, name="ifo_assignment_create"),
     # IFO-09 reporting dashboard + scorecard drill-down (RPT-04/RPT-05)
     path("ifo/dashboard", ifo.dashboard, name="ifo_dashboard"),
+    # IFO-09 tier T2: where and when capacity is idle (heat grid + rollups)
+    path("ifo/utilization", ifo.utilization, name="ifo_utilization"),
     path("ifo/scorecard/<int:faculty_id>", ifo.scorecard, name="ifo_scorecard"),
     path("ifo/scorecard/<int:faculty_id>/export.csv", ifo.scorecard_csv,
          name="ifo_scorecard_csv"),

@@ -27,6 +27,9 @@ and fill console_title / page_actions / console. ASCII-only.{% endcomment %}
   <a href="/ifo/dashboard" class="cns__link {% if un == 'ifo_dashboard' %}is-active{% endif %}"
      {% if un == 'ifo_dashboard' %}aria-current="page"{% endif %}>
     <uk-icon icon="bar-chart-3"></uk-icon> Dashboard</a>
+  <a href="/ifo/utilization" class="cns__link {% if un == 'ifo_utilization' %}is-active{% endif %}"
+     {% if un == 'ifo_utilization' %}aria-current="page"{% endif %}>
+    <uk-icon icon="door-open"></uk-icon> Utilization</a>
   <a href="/ifo/reports" class="cns__link {% if un == 'ifo_weekly_reports' %}is-active{% endif %}"
      {% if un == 'ifo_weekly_reports' %}aria-current="page"{% endif %}>
     <uk-icon icon="file-text"></uk-icon> Weekly reports</a>

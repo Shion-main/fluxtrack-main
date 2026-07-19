@@ -46,7 +46,12 @@ value so colour is never the only signal. ASCII-only.
       width a two-part value with decimals ("2707.9 / 3180.0") wraps mid-figure,
       which reads as two unrelated numbers. Verified in the browser at 390 / 820 /
       1440.{% endcomment %}
-      <div class="uk-h2 mt-1">{{ occupancy.0.used_hours }}</div>
+      {% comment %}The figure is the drill-down link, forwarding the active range
+      exactly the way the faculty row links to the scorecard below: the card says
+      how much capacity is idle, and the only useful next question is WHERE, which
+      is the utilization page's whole job (IFO-09 tier T2).{% endcomment %}
+      <div class="uk-h2 mt-1">
+        <a href="{% url 'ifo_utilization' %}?from={{ date_from|date:'Y-m-d' }}&to={{ date_to|date:'Y-m-d' }}">{{ occupancy.0.used_hours }}</a></div>
       <div class="uk-text-small uk-text-muted">session-hours used of {{ occupancy.0.booked_hours }} booked</div>
       {% comment %}Deliberately pill--info (neutral), NOT the ok/warn/bad ladder
       the attendance pills use. Attendance has an agreed target; room utilization

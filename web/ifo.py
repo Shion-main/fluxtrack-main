@@ -33,9 +33,10 @@ from scheduling.models import (AcademicTerm, DayOfWeek, Modality, Schedule,
                                 ScheduleStatus, Session, SessionStatus)
 from scheduling.importing import reconcile
 from scheduling.report_render import build_csv
-from scheduling.reporting import (dept_summary, faculty_attendance,
-                                  faculty_scorecard, room_utilization,
-                                  safe_card)
+from scheduling.reporting import (block_saturation, building_floor_rollup,
+                                  dept_summary, faculty_attendance,
+                                  faculty_scorecard, room_breakdown,
+                                  room_heat_grid, room_utilization, safe_card)
 from verification.models import (Assignment, AssignmentScope, AssignmentType,
                                  DutyRole)
 from verification.services import assign_online_sessions
@@ -1334,6 +1335,123 @@ def dashboard(request):
     pager = paginate(request, rows[0] or [])
     return render(request, "ifo/dashboard.html", {
         "summary": summary, "occupancy": occupancy, "rows": rows,
+        "date_from": start, "date_to": end, "range_note": note, **pager,
+    })
+
+
+# The heat ramp has five steps (see static/css/timetable.css). Step 0 is "had
+# capacity, used none"; steps 1-4 are quartiles of the RELATIVE range within the
+# grid being rendered.
+HEAT_STEPS = 4
+
+
+def _annotate_heat_steps(grid):
+    """Attach a RELATIVE intensity step to every cell of a heat grid.
+
+    Relative to the busiest cell in THIS grid, deliberately, not to an absolute
+    good/bad band. No decision in this phase sets a utilization target, and the
+    campus baseline is ~26%: an absolute ladder would paint the entire grid red
+    in its normal state and teach a reader to distrust it. This is the same
+    reasoning that made the dashboard's occupancy pill neutral (plan 03), applied
+    to the grid so the two surfaces say the same thing about colour.
+
+    The step is presentation only, which is why it is computed here and not in
+    ``scheduling.reporting`` -- that module has no business knowing about shades.
+    ``cell.step`` is None for a cell the term does not timetable: that cell has NO
+    capacity and must render as an absence, not as the bottom of a ramp.
+    """
+    used = sorted(
+        c.utilization_pct for row in grid for c in row.cells
+        if c.timetabled and c.utilization_pct
+    )
+    # Buckets by RANK, not by fraction-of-maximum. Scaling against the maximum
+    # was tried first and bunched badly on the live term -- 39 of 67 cells landed
+    # on the top step, because campus utilization clusters in a narrow band and
+    # its floor is nowhere near zero. Equal-count buckets spread the ramp across
+    # the distribution that actually exists, which is the whole job of a relative
+    # scale. Ties share a step: two cells reading the same percentage must never
+    # be painted differently.
+    step_by_value = {}
+    total = len(used)
+    for i, value in enumerate(used):
+        if value not in step_by_value:
+            rank = used.index(value) + used.count(value)   # cells at or below
+            step_by_value[value] = max(
+                1, min(HEAT_STEPS, -(-rank * HEAT_STEPS // total)))
+    for row in grid:
+        for cell in row.cells:
+            if not cell.timetabled:
+                cell.step = None
+            else:
+                cell.step = step_by_value.get(cell.utilization_pct, 0)
+    return grid
+
+
+def _heat_grid_card(**kwargs):
+    """``room_heat_grid`` plus its presentation annotation, as ONE safe_card unit.
+
+    Annotating outside the wrapper would put un-isolated code on the page and
+    defeat the point of ``safe_card``.
+    """
+    grid = room_heat_grid(**kwargs)
+    return _annotate_heat_steps(grid) if grid else grid
+
+
+def _saturation_card(**kwargs):
+    """``block_saturation`` with its peak day resolved to a human label.
+
+    ``BlockLoad.peak_day`` is a ``DayOfWeek`` int. Resolving it here keeps the
+    aggregate layer free of display concerns and keeps the template free of a
+    dict lookup Django's language cannot express cleanly. Inside the safe_card
+    unit for the same reason the grid annotation is.
+    """
+    labels = dict(DayOfWeek.choices)
+    rows = block_saturation(**kwargs)
+    for row in rows:
+        row.peak_day_label = labels.get(row.peak_day) if row.peak_day is not None else None
+    return rows
+
+
+@ifo_required
+def utilization(request):
+    """IFO-09 / T2: where and when campus room capacity is idle.
+
+    The dashboard's job is the KPI row, and three tables plus a grid is more than
+    its two sections can carry, so utilization gets its own page and the Room
+    Occupancy card links here. T1 says how much capacity is wasted; this says
+    where and when, which is what a facilities office can act on -- nobody can
+    reclaim "467 room-hours", but they can reclaim "Tuesday 4:00 PM at 18%".
+
+    FOUR independent error owners -- ``grid``, ``rollup``, ``breakdown`` and
+    ``saturation`` -- each wrapped in its own ``safe_card`` and guarded separately
+    in the template, so a rollup failure cannot take the heat grid down with it
+    (D-05).
+
+    Copies ``dashboard``'s five conventions exactly: ``@ifo_required``, the
+    ``_reporting_range`` 4-tuple unpacked first, the aggregates passed to
+    ``safe_card`` rather than called, the raw tuples handed to the context
+    unwrapped, and ``date_from`` / ``date_to`` / ``range_note`` always present so
+    the range control re-renders the applied window and its note.
+    """
+    start, end, as_of, note = _reporting_range(request)
+    term = AcademicTerm.objects.filter(is_active=True).first()
+    scope = {"start": start, "end": end, "term": term, "as_of": as_of}
+
+    grid = safe_card(_heat_grid_card, **scope)
+    rollup = safe_card(building_floor_rollup, **scope)
+    breakdown = safe_card(room_breakdown, **scope)
+    saturation = safe_card(_saturation_card, **scope)
+    occupancy = safe_card(room_utilization, **scope)
+
+    # `or []` is load-bearing, do NOT remove it. safe_card returns (None, message)
+    # when room_breakdown raises, and Paginator(None) dies on len(), so an
+    # unguarded breakdown[0] turns one card failure into a 500 -- the exact bug
+    # fixed on the dashboard in plan 03, which this page must not reintroduce.
+    pager = paginate(request, breakdown[0] or [])
+    return render(request, "ifo/utilization.html", {
+        "grid": grid, "rollup": rollup, "breakdown": breakdown,
+        "saturation": saturation, "occupancy": occupancy,
+        "heat_days": DayOfWeek.choices, "term": term,
         "date_from": start, "date_to": end, "range_note": note, **pager,
     })
 
