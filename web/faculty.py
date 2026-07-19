@@ -31,7 +31,8 @@ from campus.models import Room
 from ops.availability import available_rooms_for, available_times_for
 from ops.models import AuditLog
 from ops.policy import get_policy
-from scheduling.merge import _effective_is_online, merged_sibling_ids
+from scheduling.merge import (_effective_is_online, merged_sibling_ids,
+                              propagate_merged_present)
 from scheduling.models import (
     AcademicTerm,
     CheckinMethod,
@@ -639,7 +640,11 @@ def online_start(request, pk):
     touch `online_checker` either -- online duty is IFO's to assign.
 
     The JOB-02 sweep needs no change: it only moves SCHEDULED sessions to ABSENT,
-    so a self-started ACTIVE session is naturally skipped (D-02).
+    so a self-started ACTIVE session is naturally skipped (D-02). Co-scheduled
+    siblings are filled via `propagate_merged_present` in the same transaction
+    (04.2 D-04) -- the same one-action-covers-the-group rule as a room scan or a
+    checker online Verify, so the sweep cannot falsely absent a sibling of a
+    started merged group.
     """
     now = timezone.localtime()
     grace_min = get_policy("grace_minutes")
@@ -703,6 +708,13 @@ def online_start(request, pk):
             payload={"session": session.pk, "previous_teams_link": previous,
                      "teams_link": raw_link,
                      "checkin_method": CheckinMethod.ONLINE_SELF.value})
+        # One start covers the co-scheduled group (04.2 D-04): the same
+        # propagation the room-scan and checker-Verify seams already run, inside
+        # the same transaction as the anchor write so the group never half-flips.
+        # Without this, the sweep marks the un-started sibling Absent even though
+        # the instructor is holding the one merged meeting that covers both.
+        propagate_merged_present(session, session.actual_start,
+                                 actor=request.user)
 
     row = _online_row(session, now, grace_min)
     return render(request, "faculty/_online_start.html", {"rows": [row]})

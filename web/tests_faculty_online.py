@@ -332,6 +332,63 @@ class OnlineStartAuthzTests(TestCase):
         self.assertEqual(self.client.post("/faculty/online").status_code, 405)
 
 
+class OnlineSelfStartMergePropagationTests(TestCase):
+    """Audit H1 (2026-07-19): ONE self-start covers the co-scheduled online group.
+
+    The room-scan and checker-Verify seams already ran propagate_merged_present;
+    before this fix the self-start seam did not, so the sweep falsely absented
+    the sibling section of a merged online meeting the instructor was actually
+    holding (~27% of instructors have co-scheduled slots)."""
+
+    def setUp(self):
+        self.anchor = make_online_session(username="fac_merge", seq=13)
+        self.faculty = self.anchor.faculty
+        room = _room("F8M14", 14)
+        sch = Schedule.objects.create(
+            term=_term(), course_code="F8M14", section="B", faculty=self.faculty,
+            room=room,
+            day_of_week=timezone.localtime(self.anchor.scheduled_start).weekday(),
+            start_time=time(8, 0), end_time=time(9, 30),
+            modality=Modality.ONLINE, enrolled_count=30)
+        # The sibling copies the anchor's EXACT scheduled_start (the D-01 online
+        # merge key is faculty + exact instant, so a fresh timezone.now() would
+        # never merge).
+        self.sibling = Session.objects.create(
+            schedule=sch, faculty=self.faculty, room=room,
+            date=self.anchor.date,
+            scheduled_start=self.anchor.scheduled_start,
+            scheduled_end=self.anchor.scheduled_end,
+            status=SessionStatus.SCHEDULED)
+
+    def test_start_fills_the_online_sibling(self):
+        self.client.force_login(self.faculty)
+        resp = self.client.post(f"/faculty/online/{self.anchor.pk}/start",
+                                {"teams_link": GOOD_LINK})
+        self.assertEqual(resp.status_code, 200)
+        self.anchor.refresh_from_db()
+        self.sibling.refresh_from_db()
+        # Anchor keeps its real method; only the sibling is stamped MERGED.
+        self.assertEqual(self.anchor.checkin_method, CheckinMethod.ONLINE_SELF)
+        self.assertEqual(self.sibling.status, SessionStatus.ACTIVE)
+        self.assertEqual(self.sibling.checkin_method, CheckinMethod.MERGED)
+        self.assertEqual(self.sibling.actual_start, self.anchor.actual_start)
+        log = AuditLog.objects.filter(event_type="session.merged_present",
+                                      target_id=str(self.sibling.pk)).get()
+        self.assertEqual(log.payload, {"merged_from": self.anchor.pk})
+        # D-09 still holds: a merge-filled sibling gets NO CheckerValidation.
+        self.assertEqual(
+            CheckerValidation.objects.filter(session=self.sibling).count(), 0)
+
+    def test_sweep_no_longer_absents_the_sibling_after_a_start(self):
+        grace = get_policy("grace_minutes")
+        self.client.force_login(self.faculty)
+        self.client.post(f"/faculty/online/{self.anchor.pk}/start",
+                         {"teams_link": GOOD_LINK})
+        sweep_no_shows(now=timezone.now() + timedelta(minutes=grace + 60))
+        self.sibling.refresh_from_db()
+        self.assertEqual(self.sibling.status, SessionStatus.ACTIVE)
+
+
 class OnlineSweepInteractionTests(TestCase):
     """D-02: self-start needs NO change to the JOB-02 sweep."""
 
