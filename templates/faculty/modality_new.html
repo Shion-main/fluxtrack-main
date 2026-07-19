@@ -1,4 +1,6 @@
 {% extends "base.html" %}
+{% comment %}Owns its chrome (see base.html global_header).{% endcomment %}
+{% block global_header %}{% endblock %}
 {% load static %}
 {% comment %}Request-a-shift shell (MOD-01). The three-step form itself is the
 _modality_form.html partial, which htmx re-swaps into #modality-panel on a

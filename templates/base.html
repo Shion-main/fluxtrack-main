@@ -45,10 +45,20 @@
 <body class="bg-background text-foreground" hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'>
   <a href="#main" class="skip-link">Skip to content</a>
   {% with un=request.resolver_match.url_name %}
-  {% if un == "faculty_home" or un == "faculty_schedule" or un == "faculty_scan" or un == "faculty_modality_new" or un == "faculty_modality_mine" or un == "faculty_online" or un == "faculty_history" or un == "faculty_profile" or un == "checker_floor" or un == "checker_scan" or un == "checker_online" or un == "checker_online_open" or un == "ifo_live" or un == "ifo_rooms" or un == "ifo_room_detail" or un == "ifo_assignments" or un == "ifo_dashboard" or un == "ifo_weekly_reports" or un == "dean_dashboard" or un == "dean_queue" or un == "dean_reports" or un == "guard_monitor" or un == "guard_locate" or un == "guard_room" %}
-  {% elif user.is_authenticated %}
-    {% comment %}Standard shell for all other roles (launcher, checker, IFO, dean,
-    admin). Faculty pages render their own top chrome, so no global header there.{% endcomment %}
+  {% comment %}Standard shell for pages that do NOT render their own top chrome
+  (launcher, admin, notifications). A template that draws its own header — the
+  console shell, the faculty/checker/guard screens — suppresses this by
+  overriding {% templatetag openblock %} block global_header {% templatetag closeblock %}
+  with nothing.
+
+  This is deliberately opt-OUT. It used to be an opt-in allowlist of url_names,
+  which failed silently every time a page was added and nobody remembered the
+  list: Phase 06.1 and Phase 07 shipped ~10 console pages that rendered this
+  header stacked on top of the console bar, giving two brand marks and two
+  notification bells on one page. Inheritance can't be forgotten; a list can.
+  {% endcomment %}
+  {% block global_header %}
+  {% if user.is_authenticated %}
     <header class="border-b border-border sticky top-0 z-30 bg-background/95 backdrop-blur">
       <div class="uk-container max-w-5xl h-14 flex items-center gap-3">
         <a href="/" class="font-semibold">FluxTrack</a>
@@ -64,6 +74,7 @@
       </div>
     </header>
   {% endif %}
+  {% endblock %}
 
   <main id="main">{% block content %}{% endblock %}</main>
 

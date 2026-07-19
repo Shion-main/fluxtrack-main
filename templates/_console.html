@@ -5,9 +5,14 @@ Shared admin console shell (IFO, Dean). A persistent left-sidebar app-shell that
 role consoles specialize by filling {% block console_nav %} (and console_home /
 console_navlabel). Leaf pages then extend the role console and fill
 {% block console_title %}, the optional {% block page_actions %}, and
-{% block console %}. base.html suppresses its global header for console url_names.
+{% block console %}. This shell draws its own top bar (cns__bar), so it suppresses
+base.html's global header for EVERY page that extends it — present and future.
 The active nav item is derived from the resolver url_name (`un`). ASCII-only.
 {% endcomment %}
+{% comment %}Owns its chrome: no global header. Inherited by every console page,
+which is the point — the previous url_name allowlist in base.html silently
+missed every page added after it was written.{% endcomment %}
+{% block global_header %}{% endblock %}
 {% block head %}
 <link rel="stylesheet" href="{% static 'css/console.css' %}"/>
 {% endblock %}

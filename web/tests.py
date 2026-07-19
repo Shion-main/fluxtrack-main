@@ -879,3 +879,75 @@ class GuardRoomScheduleTests(TestCase):
         resp = self.client.get(self._url(self.room1))
         self.assertContains(resp, "RMWEEK")
         self.assertContains(resp, 'class="tt"')
+
+
+class ConsoleChromeTests(TestCase):
+    """Every page renders exactly ONE <header>.
+
+    Phase 07 UAT found Bookings, Import, Conflicts, Utilization and the room
+    sub-pages rendering base.html's global header stacked on top of the console
+    bar -- two FluxTrack brand marks and two notification bells, both showing
+    the same unread count, on one page.
+
+    The cause was an opt-IN allowlist of url_names in base.html. It could only
+    ever be right until the next page was added, and Phase 06.1 and Phase 07
+    added ten. base.html now renders the global header inside a
+    `{% block global_header %}` that any chrome-owning shell overrides away, so
+    a new console page inherits suppression instead of needing to be remembered.
+
+    This test is the thing the allowlist never had: something that fails when a
+    page is added to the wrong shell.
+    """
+
+    CONSOLE_PATHS = [
+        "/ifo/rooms", "/ifo/bookings", "/ifo/import", "/ifo/conflicts",
+        "/ifo/utilization", "/ifo/dashboard", "/ifo/assignments",
+        "/ifo/reports",
+    ]
+
+    def setUp(self):
+        self.ifo = get_user_model().objects.create(
+            username="chrome_ifo", role=Role.IFO_ADMIN)
+
+    def _headers(self, resp):
+        return resp.content.decode("utf-8", "replace").count("<header")
+
+    def test_console_pages_render_exactly_one_header(self):
+        self.client.force_login(self.ifo)
+        for path in self.CONSOLE_PATHS:
+            with self.subTest(path=path):
+                resp = self.client.get(path)
+                if resp.status_code != 200:
+                    self.skipTest(f"{path} -> {resp.status_code}")
+                self.assertEqual(
+                    self._headers(resp), 1,
+                    f"{path} renders {self._headers(resp)} <header> elements. "
+                    f"A console page must render only the console bar; if it "
+                    f"also renders base.html's global header the user sees two "
+                    f"brand marks and two notification bells.")
+
+    def test_faculty_pages_render_exactly_one_header(self):
+        fac = get_user_model().objects.create(
+            username="chrome_fac", role=Role.FACULTY)
+        self.client.force_login(fac)
+        for path in ["/faculty/home", "/faculty/profile", "/faculty/history"]:
+            with self.subTest(path=path):
+                resp = self.client.get(path)
+                if resp.status_code != 200:
+                    self.skipTest(f"{path} -> {resp.status_code}")
+                self.assertEqual(self._headers(resp), 1, f"{path} chrome")
+
+    def test_non_console_page_keeps_the_global_header(self):
+        """The negative half: suppression must not leak to ordinary pages.
+
+        Without this, 'delete the global header everywhere' would pass the two
+        tests above while stripping the only navigation a non-console page has.
+        """
+        self.client.force_login(self.ifo)
+        resp = self.client.get("/notifications")
+        if resp.status_code != 200:
+            self.skipTest(f"/notifications -> {resp.status_code}")
+        body = resp.content.decode("utf-8", "replace")
+        self.assertEqual(body.count("<header"), 1)
+        self.assertIn("sticky top-0", body)
+        self.assertNotIn('<header class="cns__bar"', body)

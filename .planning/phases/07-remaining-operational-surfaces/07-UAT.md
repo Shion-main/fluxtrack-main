@@ -51,10 +51,21 @@ reason: The page renders correctly with its explanatory copy and no dismiss cont
 
 ### 6. IFO Ad-hoc Bookings (IFO-05)
 expected: Create a booking for a free room; an overlapping booking is refused with a reason; cancel frees the room.
-result: issue
-reported: "Overlapping booking is refused silently — the form redisplays with the user's input, no error message anywhere, and the booking simply never appears."
-severity: major
-evidence: First booking created (id 2, active, listed with a Cancel action). Second booking overlapping 09:00-11:00 with 10:00-12:00 in the same room was correctly NOT created — but the page showed zero message elements, and the only occurrence of "refus"/"overlap" in the whole page text was the static helper paragraph that renders regardless. The conflict LOGIC is right; the user-facing refusal is missing. Cancel action present but not exercised.
+result: pass
+evidence: Booking created for R102 09:00-11:00 and listed with a Cancel action. An overlapping 10:00-12:00 booking in the same room was refused, and the refusal IS visible: a red `uk-alert-destructive` reading "R102 is not free for that window. Open the room's schedule to see what already occupies it.", with the operator's input preserved. Cancel action present but not exercised.
+
+RETRACTION — this test was first recorded as a major issue ("silent refusal") and
+that was WRONG. Three mistakes compounded:
+  1. I grepped the page for "refused"/"overlap". The real message says "is not
+     free", so my search could not have matched whatever was on screen.
+  2. `wait --networkidle` returns before htmx finishes swapping, so every read
+     ran against the pre-swap DOM. Re-reading the same page one round-trip later
+     showed the alert present.
+  3. My first click selector matched several submit buttons (the create form plus
+     each row's Cancel), so some attempts never submitted at all.
+The app was right and the test was wrong. base.html already documents the htmx
+`responseHandling` contract that makes a 400 swap — the exact bug I thought I had
+found had been fixed deliberately, before this UAT ran.
 
 ### 7. IFO Schedule Import Upload (IFO-03b)
 expected: Upload shows a four-bucket reconciliation preview with nothing written; Commit applies; Discard throws it away.
@@ -94,30 +105,27 @@ expected: Every console page renders one header — the console bar — as Rooms
 result: issue
 reported: "Bookings, Import, Conflicts, Utilization and the room sub-pages render the legacy global header stacked above the console bar: two FluxTrack brand marks and two notification bells showing the same count on one page."
 severity: major
+status: FIXED in this session — see Gaps below. Verified after a server restart
+  (--noreload caches templates): all eight IFO console pages, five faculty pages
+  and two guard pages now render exactly one <header>, while /notifications
+  correctly keeps the global one. Regression test: web.tests.ConsoleChromeTests.
 
 ## Summary
 
 total: 14
-passed: 6
-issues: 2
+passed: 7
+issues: 1
 pending: 3
 skipped: 3
+notes: 1 of the 2 originally-reported issues was retracted as a testing error (test 6). The remaining one is fixed.
 
 ## Gaps
 
 - truth: "An IFO admin who submits a conflicting ad-hoc booking is told why it was refused"
-  status: failed
-  reason: "Refusal is silent — form redisplays with input intact, no message element, booking absent from list. Only 'refus'/'overlap' text on the page is the static helper paragraph shown regardless of outcome."
-  severity: major
+  status: RETRACTED — not a defect
+  reason: "Testing error, not an application fault. See the retraction note on test 6. The refusal renders correctly."
+  severity: none
   test: 6
-  artifacts:
-    - path: "web/ifo.py"
-      issue: "booking_create refusal path appears not to attach a message before re-rendering"
-  missing:
-    - "Surface the refusal reason to the user (Django message or inline form error) when room_is_free rejects the booking"
-    - "Regression test asserting the refusal message is present in the response, not just that the Booking row was not created"
-  root_cause: ""
-  debug_session: ""
 
 - truth: "Every IFO console page renders a single header (the console bar)"
   status: failed
@@ -127,8 +135,13 @@ skipped: 3
   artifacts:
     - path: "templates/base.html"
       issue: "Line 48 allowlist omits ifo_bookings, ifo_conflicts, ifo_import, ifo_utilization, ifo_room_new, ifo_room_edit, ifo_room_delete, ifo_room_rotate_confirm, ifo_room_poster, ifo_scorecard, dean_scorecard"
-  missing:
-    - "Invert the condition: suppress the global header whenever the template extends a console shell, rather than enumerating url_names — an allowlist fails silently every time a page is added"
-    - "Regression test asserting each console page renders exactly one <header>"
+  missing: []
   root_cause: "Allowlist in base.html not updated when Phase 06.1 and Phase 07 added console pages"
+  status_now: FIXED
+  fix:
+    - "base.html wraps the global header in {% block global_header %}, dropping the url_name allowlist entirely"
+    - "_console.html overrides it to nothing — one line covering every current and future console page"
+    - "The 15 faculty/checker/guard templates that draw their own chrome override it too"
+    - "web.tests.ConsoleChromeTests asserts one <header> on console + faculty pages AND that /notifications still keeps the global one (the negative half, so 'delete it everywhere' cannot pass)"
+  verified: "After a server restart: 8 IFO console pages, 5 faculty, 2 guard all at exactly 1 header; /notifications still renders the global sticky header and no cns__bar. Full suite 930 tests, same 3 pre-existing dev-login failures as before the change (confirmed by re-running them against a stashed tree)."
   debug_session: ""
