@@ -1,0 +1,222 @@
+{% comment %}
+IFO-03b preview/commit result panel, swapped into #import-status.
+
+Deliberately small and self-contained: it never contains the upload form, so a
+refusal swapped in here cannot destroy the operator's file selection (browsers
+forbid repopulating a file input -- see the header of ifo/import.html).
+
+The four-bucket summary prints the BALANCE IDENTITY explicitly rather than just
+the numbers. The whole promise of `reconcile()` is that the partition is
+exhaustive and disjoint, so nothing is ever silently dropped; showing
+`intact + TBA + online + no-schedule = total` lets the operator confirm that
+promise held for THEIR file, instead of trusting four unrelated counts.
+
+Every flag chip carries an icon and a text label; colour is never the only
+signal. Tokens only, no hard-coded hex. No border-left accent stripes.
+ASCII-only.
+{% endcomment %}
+
+{% if error %}
+<div class="uk-alert uk-alert-destructive" role="alert" data-error="1">
+  <p class="uk-text-small">
+    <span class="inline-flex items-start gap-2">
+      <uk-icon icon="triangle-alert" class="size-4"></uk-icon>
+      <span><strong>Upload not accepted.</strong> {{ error }}
+        Your file selection above is unchanged -- choose a different file and
+        preview again.</span>
+    </span>
+  </p>
+</div>
+
+{% elif committed %}
+<div class="uk-alert uk-alert-success" role="status" data-committed="1">
+  <p class="uk-text-small">
+    <span class="inline-flex items-start gap-2">
+      <uk-icon icon="circle-check" class="size-4"></uk-icon>
+      <span><strong>Imported {{ committed.original_name }}.</strong>
+        {{ committed.created }} new schedule{{ committed.created|pluralize }}
+        created. Rows that already existed were left as they were.</span>
+    </span>
+  </p>
+</div>
+{% if committed.detail %}
+<details class="uk-card uk-card-body mt-4">
+  <summary class="uk-text-small">Import log</summary>
+  <pre class="uk-text-small mt-3 whitespace-pre-wrap">{{ committed.detail }}</pre>
+</details>
+{% endif %}
+
+{% elif discarded %}
+<div class="uk-alert uk-alert-secondary" role="status" data-discarded="1">
+  <p class="uk-text-small">
+    <span class="inline-flex items-start gap-2">
+      <uk-icon icon="trash-2" class="size-4"></uk-icon>
+      <span>Staged upload discarded. Nothing was imported and the file has been
+        removed.</span>
+    </span>
+  </p>
+</div>
+
+{% elif report %}
+<div class="uk-card uk-card-body mb-4" data-preview="1">
+  <h2 class="uk-h4 mb-1">Preview of {{ staging.original_name }}</h2>
+  <p class="uk-text-small uk-text-muted mb-4">
+    <span class="inline-flex items-center gap-2">
+      <uk-icon icon="database" class="size-4"></uk-icon>
+      Nothing has been written to the database yet.</span>
+  </p>
+
+  <div class="table-wrap">
+    <table class="tbl">
+      <thead>
+        <tr>
+          <th scope="col">Where every row landed</th>
+          <th scope="col" class="tbl__num">Rows</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr data-bucket="intact">
+          <td class="tbl__id">
+            <span class="inline-flex items-center gap-2">
+              <uk-icon icon="circle-check" class="size-4"></uk-icon>
+              Intact (a real room, a valid day and time)</span></td>
+          <td class="tbl__num">{{ report.report.intact_rows }}</td>
+        </tr>
+        <tr data-bucket="roomless_tba">
+          <td class="tbl__id">
+            <span class="inline-flex items-center gap-2">
+              <uk-icon icon="help-circle" class="size-4"></uk-icon>
+              Roomless, routed to the TBA placeholder</span></td>
+          <td class="tbl__num">{{ report.report.roomless_tba_rows }}</td>
+        </tr>
+        <tr data-bucket="online_no_room">
+          <td class="tbl__id">
+            <span class="inline-flex items-center gap-2">
+              <uk-icon icon="wifi" class="size-4"></uk-icon>
+              Online, no physical room needed</span></td>
+          <td class="tbl__num">{{ report.report.online_no_room_rows }}</td>
+        </tr>
+        <tr data-bucket="no_schedule">
+          <td class="tbl__id">
+            <span class="inline-flex items-center gap-2">
+              <uk-icon icon="minus" class="size-4"></uk-icon>
+              No schedule string at all</span></td>
+          <td class="tbl__num">{{ report.report.no_schedule }}</td>
+        </tr>
+      </tbody>
+      <tfoot>
+        <tr data-bucket="total">
+          <td class="tbl__id"><strong>Total rows in the file</strong></td>
+          <td class="tbl__num"><strong>{{ report.report.total_rows }}</strong></td>
+        </tr>
+      </tfoot>
+    </table>
+  </div>
+
+  <p class="uk-text-small uk-text-muted mt-3" data-identity="1">
+    {{ report.report.intact_rows }} + {{ report.report.roomless_tba_rows }}
+    + {{ report.report.online_no_room_rows }} + {{ report.report.no_schedule }}
+    = {{ report.report.total_rows }} &mdash; every row is accounted for, so
+    nothing was silently dropped.</p>
+
+  <div class="grid gap-4 sm:grid-cols-3 mt-4">
+    <div>
+      <p class="uk-text-small uk-text-muted">Meetings</p>
+      <p class="uk-h4">{{ report.report.total_meetings }}</p>
+    </div>
+    <div>
+      <p class="uk-text-small uk-text-muted">Distinct rooms</p>
+      <p class="uk-h4">{{ report.report.distinct_rooms }}</p>
+    </div>
+    <div>
+      <p class="uk-text-small uk-text-muted">Distinct instructors</p>
+      <p class="uk-h4">{{ report.report.distinct_instructors }}</p>
+    </div>
+  </div>
+</div>
+
+{% if report.report.flagged_typo or report.report.flagged_unassigned %}
+<div class="uk-card uk-card-body mb-4" data-flagged="1">
+  <h3 class="uk-h4 mb-1">Rooms worth a look</h3>
+  <p class="uk-text-small uk-text-muted mb-3">
+    These are loaded, never dropped &mdash; but a typo room becomes a real room
+    with a QR poster nobody will ever scan.</p>
+  <div class="table-wrap">
+    <table class="tbl">
+      <thead>
+        <tr>
+          <th scope="col">Room code</th>
+          <th scope="col">Why it is flagged</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for code in report.report.flagged_typo %}
+        <tr>
+          <td class="tbl__id">{{ code }}</td>
+          <td class="tbl__meta">
+            <span class="inline-flex items-center gap-2">
+              <uk-icon icon="triangle-alert" class="size-4"></uk-icon>
+              Looks like a typo &mdash; no building prefix matches it</span></td>
+        </tr>
+        {% endfor %}
+        {% for code in report.report.flagged_unassigned %}
+        <tr>
+          <td class="tbl__id">{{ code }}</td>
+          <td class="tbl__meta">
+            <span class="inline-flex items-center gap-2">
+              <uk-icon icon="help-circle" class="size-4"></uk-icon>
+              Unassigned &mdash; lands in the Unassigned building</span></td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endif %}
+
+{% if report.report.emailless_instructor_keys %}
+<div class="uk-card uk-card-body mb-4" data-emailless="1">
+  <h3 class="uk-h4 mb-1">
+    Instructors with no email
+    ({{ report.report.emailless_instructor_keys|length }})</h3>
+  <p class="uk-text-small uk-text-muted mb-3">
+    These load, but they cannot sign in until an email address is supplied.</p>
+  <div class="table-wrap">
+    <table class="tbl">
+      <tbody>
+        {% for key in report.report.emailless_instructor_keys %}
+        <tr><td class="tbl__id">{{ key }}</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endif %}
+
+{% if report.detail %}
+<details class="uk-card uk-card-body mb-4">
+  <summary class="uk-text-small">Dry-run detail</summary>
+  <pre class="uk-text-small mt-3 whitespace-pre-wrap">{{ report.detail }}</pre>
+</details>
+{% endif %}
+
+<div class="flex items-center gap-3">
+  <form hx-post="/ifo/import/commit" hx-target="#import-status"
+        hx-swap="innerHTML">
+    {% csrf_token %}
+    <button type="submit" class="uk-btn uk-btn-primary h-11">
+      <uk-icon icon="check" class="size-4"></uk-icon> Commit this import</button>
+  </form>
+  <form hx-post="/ifo/import/discard" hx-target="#import-status"
+        hx-swap="innerHTML">
+    {% csrf_token %}
+    <button type="submit" class="uk-btn uk-btn-ghost h-11">
+      <uk-icon icon="trash-2" class="size-4"></uk-icon> Discard</button>
+  </form>
+</div>
+
+{% else %}
+<p class="uk-text-small uk-text-muted" data-empty="1">
+  No file staged. Upload an offerings export above to see its reconciliation
+  report before anything is imported.</p>
+{% endif %}

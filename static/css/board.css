@@ -1,0 +1,304 @@
+/* ============================================================================
+   FluxTrack — Room board (IFO /ifo/rooms)
+   ----------------------------------------------------------------------------
+   The live surface. Reference: an airport departures board — dense, state-first,
+   glanceable, no decoration.
+
+   This is the ONE admin surface that runs Committed rather than Restrained
+   colour: a tile's state IS its primary information, so colour does real work
+   here instead of decorating. Every state still carries icon + text label as
+   well, so nothing is conveyed by colour alone (WCAG 1.4.1).
+
+   Contrast: each state's label ink is the AA-tuned token from tokens.css over
+   its own -tint background (>=4.5:1). Room codes stay --ink (>=12:1) because
+   the code is the thing you actually read.
+
+   Loaded by ifo/rooms.html via {% block head %}{{ block.super }} so it sits
+   after console.css. ASCII-only.
+   ========================================================================== */
+
+/* --- Filter / scope bar ---------------------------------------------------- */
+.bd__bar {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 10px;
+  padding: 12px 14px; margin-bottom: 18px;
+  border: 1px solid hsl(var(--border)); border-radius: 10px;
+  background: hsl(var(--background));
+  position: sticky; top: 58px; z-index: 9;   /* under .cns__bar (z-index 10) */
+}
+.bd__scope { display: flex; padding: 2px; gap: 2px; border-radius: 8px; background: hsl(var(--muted)); }
+.bd__scope a {
+  padding: 5px 12px; border-radius: 6px; font-size: .82rem; font-weight: 600;
+  color: hsl(var(--muted-foreground)); text-decoration: none;
+  transition: background-color .15s ease, color .15s ease;
+}
+.bd__scope a:hover { color: hsl(var(--foreground)); }
+.bd__scope a.is-on {
+  background: hsl(var(--background)); color: hsl(var(--foreground));
+  box-shadow: 0 1px 2px rgba(11,27,58,.10);
+}
+.bd__scope a:focus-visible { outline: none; box-shadow: 0 0 0 2px hsl(var(--ring)); }
+
+.bd__chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.bd__chip {
+  padding: 5px 11px; border-radius: 999px; font-size: .82rem; font-weight: 550;
+  border: 1px solid hsl(var(--border)); background: hsl(var(--background));
+  color: hsl(var(--muted-foreground)); cursor: pointer;
+  transition: background-color .15s ease, color .15s ease, border-color .15s ease;
+}
+.bd__chip:hover { background: hsl(var(--muted)); color: hsl(var(--foreground)); }
+.bd__chip[aria-pressed="true"] {
+  background: hsl(var(--primary)); border-color: hsl(var(--primary));
+  color: hsl(var(--primary-foreground));
+}
+.bd__chip:focus-visible { outline: none; box-shadow: 0 0 0 2px hsl(var(--ring)); }
+
+/* The problem filter is the query IFO actually runs: "show me only trouble". */
+.bd__chip--alert[aria-pressed="true"] { background: var(--red); border-color: var(--red); color: #fff; }
+.bd__chip--alert .bd__n {
+  display: inline-block; min-width: 17px; margin-left: 5px; padding: 0 4px;
+  border-radius: 999px; background: var(--red-tint); color: var(--red);
+  font-size: .72rem; font-weight: 700; font-variant-numeric: tabular-nums;
+}
+.bd__chip--alert[aria-pressed="true"] .bd__n { background: rgba(255,255,255,.24); color: #fff; }
+
+.bd__search { position: relative; margin-left: auto; }
+.bd__search input {
+  width: 210px; height: 34px; padding: 0 11px 0 36px;
+  border: 1px solid hsl(var(--border)); border-radius: 8px;
+  background: hsl(var(--background)); color: hsl(var(--foreground)); font-size: .85rem;
+}
+.bd__search input::placeholder { color: var(--ft-muted); }   /* AA, not a pale gray */
+.bd__search input:focus-visible {
+  outline: none; border-color: hsl(var(--ring)); box-shadow: 0 0 0 2px hsl(var(--ring) / .35);
+}
+.bd__search uk-icon, .bd__search svg {
+  position: absolute; left: 9px; top: 50%; transform: translateY(-50%);
+  width: 16px; height: 16px; color: var(--ft-muted); pointer-events: none;
+}
+
+.bd__stamp {
+  display: inline-flex; align-items: center; gap: 6px;
+  font-size: .78rem; color: var(--ft-muted); font-variant-numeric: tabular-nums;
+}
+.bd__stamp b { width: 6px; height: 6px; border-radius: 50%; background: var(--green); }
+/* Poll failure: a stale-but-labelled board beats a blank one. */
+.bd__stamp.is-stale { color: var(--amber); }
+.bd__stamp.is-stale b { background: var(--amber); }
+
+/* --- Groups ---------------------------------------------------------------- */
+.bd__group { margin-bottom: 26px; }
+.bd__group[hidden] { display: none; }
+.bd__head {
+  display: flex; align-items: baseline; gap: 10px; margin-bottom: 10px;
+  padding-bottom: 7px; border-bottom: 1px solid hsl(var(--border));
+}
+.bd__head h3 { font-size: .95rem; font-weight: 650; color: var(--ink); letter-spacing: -.01em; }
+.bd__head span { font-size: .78rem; color: var(--ft-muted); font-variant-numeric: tabular-nums; }
+.bd__head em { font-style: normal; font-weight: 650; color: var(--red); }
+
+/* --- Tiles ----------------------------------------------------------------- */
+.bd__grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(152px, 1fr)); gap: 8px; }
+
+.tile {
+  display: flex; flex-direction: column; gap: 2px; min-height: 104px;
+  padding: 10px 11px; text-align: left; cursor: pointer;
+  border: 1px solid var(--line); border-radius: 10px;
+  background: var(--surface); color: var(--body); font: inherit;
+  transition: box-shadow .15s ease, border-color .15s ease, transform .15s ease;
+}
+.tile[hidden] { display: none; }
+.tile:hover { border-color: var(--ink); box-shadow: var(--shadow-card); }
+.tile:focus-visible { outline: none; box-shadow: 0 0 0 2px hsl(var(--ring)); }
+.tile:active { transform: translateY(1px); }
+
+.tile__top { display: flex; align-items: center; gap: 6px; }
+.tile__code {
+  font-size: 1.02rem; font-weight: 700; letter-spacing: -.02em; color: var(--ink);
+  font-variant-numeric: tabular-nums;
+}
+.tile__top uk-icon, .tile__top svg { width: 15px; height: 15px; margin-left: auto; flex: none; }
+.tile__state { font-size: .74rem; font-weight: 700; letter-spacing: .03em; text-transform: uppercase; }
+.tile__who {
+  margin-top: 3px; font-size: .84rem; font-weight: 550; color: var(--ink);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.tile__meta {
+  margin-top: auto; font-size: .76rem; color: var(--ft-muted);
+  font-variant-numeric: tabular-nums;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+
+/* State skins. Full-surface washes, never a side-stripe. */
+.tile--absent { background: var(--red-tint); border-color: #f0c4c4; }
+.tile--absent .tile__state,
+.tile--absent .tile__top uk-icon,
+.tile--absent .tile__top svg { color: var(--red); }
+
+.tile--starting { background: var(--amber-tint); border-color: #eed4a8; }
+.tile--starting .tile__state,
+.tile--starting .tile__top uk-icon,
+.tile--starting .tile__top svg { color: var(--amber); }
+
+.tile--in_session { background: var(--green-tint); border-color: #b7e4c9; }
+.tile--in_session .tile__state,
+.tile--in_session .tile__top uk-icon,
+.tile--in_session .tile__top svg { color: var(--green); }
+
+.tile--free { background: var(--surface); }
+.tile--free .tile__state,
+.tile--free .tile__top uk-icon,
+.tile--free .tile__top svg { color: var(--ft-muted); }
+
+/* Idle rooms are inventory, not news: present but visually recessive. */
+.tile--idle { background: var(--neutral-wash); border-style: dashed; }
+.tile--idle .tile__code { color: var(--ft-muted); font-weight: 650; }
+.tile--idle .tile__state,
+.tile--idle .tile__top uk-icon,
+.tile--idle .tile__top svg { color: var(--ft-muted); }
+
+/* --- Empty / skeleton ------------------------------------------------------ */
+.bd__empty {
+  padding: 44px 20px; text-align: center;
+  border: 1px dashed hsl(var(--border)); border-radius: 10px; background: var(--neutral-wash);
+}
+.bd__empty uk-icon, .bd__empty svg { width: 26px; height: 26px; color: var(--ft-muted); }
+.bd__empty h4 { margin-top: 10px; font-size: .95rem; font-weight: 650; color: var(--ink); }
+.bd__empty p { margin-top: 4px; font-size: .85rem; color: var(--body); }
+.bd__empty .uk-btn { margin-top: 14px; }
+.bd__skel { display: grid; grid-template-columns: repeat(auto-fill, minmax(152px, 1fr)); gap: 8px; }
+.bd__skel .skel { height: 104px; border-radius: 10px; }
+
+/* --- Slide-over panel ------------------------------------------------------ */
+.sheet__scrim {
+  position: fixed; inset: 0; z-index: 60; background: rgba(3,10,28,.38);
+  opacity: 0; pointer-events: none; transition: opacity .2s ease;
+}
+.sheet__scrim.is-open { opacity: 1; pointer-events: auto; }
+.sheet {
+  position: fixed; z-index: 61; top: 0; right: 0; bottom: 0; width: min(460px, 100vw);
+  display: flex; flex-direction: column;
+  background: hsl(var(--background)); border-left: 1px solid hsl(var(--border));
+  box-shadow: -24px 0 60px -30px rgba(0,28,67,.55);
+  transform: translateX(100%); transition: transform .24s cubic-bezier(.22,1,.36,1);
+}
+.sheet.is-open { transform: translateX(0); }
+/* htmx swaps into #sheet-content, so that wrapper -- not .sheet -- is the real
+   parent of head/body/foot. It has to carry the column flex or the footer stops
+   pinning to the bottom and floats under the content. */
+.sheet > div { display: flex; flex-direction: column; flex: 1; min-height: 0; }
+.sheet__head {
+  display: flex; align-items: center; gap: 10px; flex: none;
+  padding: 15px 18px; border-bottom: 1px solid hsl(var(--border));
+}
+.sheet__head h2 { font-size: 1.1rem; font-weight: 700; letter-spacing: -.01em; color: var(--ink); }
+.sheet__head p { font-size: .78rem; color: var(--ft-muted); }
+.sheet__x {
+  margin-left: auto; flex: none; display: grid; place-items: center;
+  width: 34px; height: 34px; border-radius: 8px; border: 0; cursor: pointer;
+  background: transparent; color: hsl(var(--muted-foreground));
+}
+.sheet__x:hover { background: hsl(var(--muted)); color: hsl(var(--foreground)); }
+.sheet__x:focus-visible { outline: none; box-shadow: 0 0 0 2px hsl(var(--ring)); }
+/* Scrolls, with the scrollbar hidden.
+   ---------------------------------------------------------------------------
+   Hiding the bar removes the ONLY thing telling you there is more content, which
+   is why a long panel reads as "cut off and stuck" rather than "scrollable". So
+   the bar is replaced, not just deleted: the two radial gradients below are
+   scroll shadows -- background-attachment:scroll pins them to the viewport of
+   the scroller while the two linear "cover" gradients are attached:local and
+   ride the content, so a shadow is visible at an edge ONLY when there is more
+   content past it. Pure CSS, no scroll listener.
+
+   overscroll-behavior:contain stops a flick at the end of the panel from
+   scrolling the board behind it, which in a drawer always feels like a bug. */
+.sheet__body {
+  flex: 1; min-height: 0; overflow-y: auto; padding: 18px;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;              /* Firefox */
+  -ms-overflow-style: none;           /* legacy Edge */
+  background:
+    linear-gradient(hsl(var(--background)) 30%, hsl(var(--background) / 0)) top    / 100% 26px no-repeat local,
+    linear-gradient(hsl(var(--background) / 0), hsl(var(--background)) 70%) bottom / 100% 26px no-repeat local,
+    radial-gradient(farthest-side at 50% 0,    rgba(11,27,58,.16), rgba(11,27,58,0)) top    / 100% 11px no-repeat scroll,
+    radial-gradient(farthest-side at 50% 100%, rgba(11,27,58,.16), rgba(11,27,58,0)) bottom / 100% 11px no-repeat scroll;
+}
+.sheet__body::-webkit-scrollbar { width: 0; height: 0; display: none; }
+.sheet__foot {
+  flex: none; display: flex; gap: 8px; padding: 12px 18px;
+  border-top: 1px solid hsl(var(--border)); background: hsl(var(--background));
+}
+.sheet__sec { margin-top: 22px; }
+.sheet__sec:first-child { margin-top: 0; }
+.sheet__sec > h3 {
+  font-size: .8rem; font-weight: 700; color: var(--ft-muted);
+  letter-spacing: .04em; text-transform: uppercase; margin-bottom: 9px;
+}
+
+/* "Right now" — the answer to the question that opened the panel, stated big. */
+.now { padding: 14px; border-radius: 10px; border: 1px solid var(--line); }
+.now--absent     { background: var(--red-wash);     border-color: #f0c4c4; }
+.now--starting   { background: var(--amber-wash);   border-color: #eed4a8; }
+.now--in_session { background: var(--green-wash);   border-color: #b7e4c9; }
+.now--free, .now--idle { background: var(--neutral-wash); }
+.now__state {
+  display: flex; align-items: center; gap: 7px;
+  font-size: .8rem; font-weight: 700; letter-spacing: .03em; text-transform: uppercase;
+}
+.now__state uk-icon, .now__state svg { width: 16px; height: 16px; }
+.now--absent .now__state { color: var(--red); }
+.now--starting .now__state { color: var(--amber); }
+.now--in_session .now__state { color: var(--green); }
+.now--free .now__state, .now--idle .now__state { color: var(--ft-muted); }
+.now__who { margin-top: 9px; font-size: 1.12rem; font-weight: 650; color: var(--ink); letter-spacing: -.01em; }
+.now__course { margin-top: 2px; font-size: .88rem; color: var(--body); }
+.now__meta {
+  margin-top: 9px; display: flex; flex-wrap: wrap; gap: 6px 14px;
+  font-size: .8rem; color: var(--ft-muted); font-variant-numeric: tabular-nums;
+}
+.now__meta b { color: var(--body); font-weight: 600; }
+
+/* Today's timeline: past dimmed, the running item marked. */
+.tl { list-style: none; position: relative; padding-left: 17px; }
+.tl::before { content: ""; position: absolute; left: 4px; top: 6px; bottom: 6px; width: 1px; background: var(--line); }
+.tl li { position: relative; padding: 7px 0; font-size: .84rem; display: flex; align-items: baseline; gap: 9px; }
+.tl li::before {
+  content: ""; position: absolute; left: -17px; top: 13px;
+  width: 9px; height: 9px; border-radius: 50%;
+  background: var(--surface); border: 2px solid var(--line);
+}
+.tl li.is-now::before { background: var(--green); border-color: var(--green); box-shadow: 0 0 0 3px var(--green-tint); }
+.tl li.is-bad::before { background: var(--red); border-color: var(--red); box-shadow: 0 0 0 3px var(--red-tint); }
+.tl li.is-past { color: var(--ft-muted); }
+.tl li.is-past .tl__course { color: var(--ft-muted); font-weight: 500; }
+/* The weekly list is a plain rhythm list, not a timeline: no rail, no dots. */
+.tl--plain { padding-left: 0; }
+.tl--plain::before { display: none; }
+.tl--plain li { padding: 6px 0; }
+.tl--plain li::before { display: none; }
+
+.tl__time { flex: none; width: 66px; font-variant-numeric: tabular-nums; color: var(--ft-muted); }
+.tl__course { font-weight: 600; color: var(--ink); }
+.tl__who { margin-left: auto; color: var(--ft-muted); font-size: .8rem; white-space: nowrap; }
+
+/* --- Responsive ------------------------------------------------------------ */
+@media (max-width: 640px) {
+  /* Bottom sheet on phones: a right drawer at 100vw hides its own affordance. */
+  .sheet {
+    top: auto; left: 0; width: 100%; max-height: 86dvh;
+    border-left: 0; border-top: 1px solid hsl(var(--border));
+    border-radius: 16px 16px 0 0; transform: translateY(100%);
+  }
+  .sheet.is-open { transform: translateY(0); }
+  .bd__bar { position: static; }
+  .bd__search { margin-left: 0; width: 100%; }
+  .bd__search input { width: 100%; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  /* Crossfade instead of slide; nothing here conveys state through movement. */
+  .sheet { transition: opacity .15s ease; transform: none; opacity: 0; pointer-events: none; }
+  .sheet.is-open { opacity: 1; pointer-events: auto; transform: none; }
+  .tile, .bd__chip, .bd__scope a, .sheet__scrim { transition: none; }
+  .tile:active { transform: none; }
+}

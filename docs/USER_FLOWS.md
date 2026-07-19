@@ -140,16 +140,15 @@ No persistent nav; three live surfaces + one stub.
 
 ```mermaid
 flowchart TD
-    Home(["/ home launcher"]) --> Rooms["Rooms<br/>/ifo/rooms<br/>grouped by building/floor"]
-    Home --> Live["Live today<br/>/ifo/live<br/>room-by-room status, polled"]
+    Home(["/ signs in -> /ifo/rooms"]) --> Rooms["Room board<br/>/ifo/rooms<br/>live state per room, grouped by building/floor<br/>Live | All rooms scope toggle"]
     Home --> Assign["Assignments<br/>/ifo/assignments<br/>post Checkers/Guards, grant online duty"]
     Home -.-> Reports["Reports (stub, Phase 6)"]
 
-    Rooms -->|select room| Detail["Room detail<br/>/ifo/rooms/&lt;code&gt;<br/>that room's schedule today"]
-    Detail --> Poster["Print QR poster<br/>/ifo/rooms/&lt;code&gt;/poster<br/>(also serves raw /qr.png)"]
+    Rooms -->|auto-refresh| Board["_board.html fragment<br/>/ifo/rooms/board<br/>swapped without full reload"]
+    Rooms -->|click a tile| Panel["Room slide-over<br/>/ifo/rooms/&lt;code&gt;/panel<br/>right now | today | this week"]
+    Panel --> Detail["Full room page<br/>/ifo/rooms/&lt;code&gt;"]
+    Panel --> Poster["Print QR poster<br/>/ifo/rooms/&lt;code&gt;/poster<br/>(also serves raw /qr.png)"]
     Detail --> Rooms
-
-    Live -->|auto-refresh| LiveRows["_live_rows.html fragment<br/>updates without full reload"]
 
     Assign -->|new assignment| Form["_assignment_form.html<br/>pick Checker/Guard, floor(s)/room, window"]
     Form -->|submit| AssignPost["POST /ifo/assignments/create"]
@@ -157,10 +156,16 @@ flowchart TD
 ```
 
 **Screens:**
-- **Rooms** (`ifo/rooms.html`) — building → floor → room browse; each room links to its **Room
-  detail** (`room_detail.html`, that room's schedule for today) and from there to its **QR poster**
-  (`poster.html`, printable, plus a raw `qr.png` endpoint used by the poster image itself).
-- **Live today** (`ifo/live.html` + `_live_rows.html`) — campus-wide live occupancy, polled rows.
+- **Room board** (`ifo/rooms.html` + `_board.html`) — the IFO landing surface and the live view in
+  one. A tile per room grouped by building → floor, each carrying its derived state (absent /
+  starting / in session / online / free / idle) as colour + icon + label. Filters by building, by
+  "needs attention", and by room-or-faculty search are client-side over the already-loaded tiles,
+  and are re-applied after every poll swap (`static/js/board.js`). The Live | All rooms toggle is a
+  real link, so the view stays bookmarkable. `/ifo/live` 301s here.
+- **Room slide-over** (`_room_panel.html`) — opens over the board (which keeps polling behind it)
+  with what is happening right now, today's timeline, and the recurring week. Links out to the
+  full **Room detail** page (`room_detail.html`) and the **QR poster** (`poster.html`, printable,
+  plus a raw `qr.png` endpoint used by the poster image itself).
 - **Assignments** (`ifo/assignments.html` + `_assignment_form.html`) — where Checker/Guard floor
   coverage and online-verification duty actually get posted; this is what makes the Checker's
   Floor view and Online list non-empty.

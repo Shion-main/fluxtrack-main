@@ -1,0 +1,13 @@
+{% comment %}Room code + virtual marker. Include with a `room` in context:
+
+    {% include "_room_code.html" with room=se.room %}
+
+MMCM's convention is that a V-prefixed room is virtual (the footnote on the
+paper schedule form). That convention is only obvious to someone who already
+knows it, so the badge says it outright -- and it is the SAME badge everywhere a
+room appears, so "virtual" never has to be inferred from a naming rule.
+
+Purple carries "not a physical space" consistently across the product. ASCII-only.
+{% endcomment %}{% spaceless %}
+<span class="rm">{{ room.code }}{% if room.is_virtual %}<span class="rm__v" title="Virtual room - online sessions only">Virtual</span>{% endif %}</span>
+{% endspaceless %}

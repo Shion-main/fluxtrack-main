@@ -30,6 +30,19 @@
     <p class="uk-text-small uk-text-muted mt-4 no-print">
       Open the FluxTrack app, tap Check in, and scan this code or type the six digits.
     </p>
+    {% if room.code_rotated_at %}
+    {% comment %}IFO-02 / D-14: the operator arrives here straight from a
+    rotation, and the page they just left showed the OLD codes. Without this
+    stamp there is nothing on screen to distinguish "the new poster" from a
+    cached render of the old one -- which is precisely the doubt that leads to
+    a dead poster staying on the door. Screen only; never printed.{% endcomment %}
+    <p class="uk-text-small uk-text-muted mt-2 no-print" data-rotated-stamp="1">
+      <span class="inline-flex items-center gap-2">
+        <uk-icon icon="refresh-cw" class="size-4"></uk-icon>
+        Codes last rotated {{ room.code_rotated_at }}. Print this poster and
+        replace the one on the door.</span>
+    </p>
+    {% endif %}
     <button onclick="window.print()" class="uk-btn uk-btn-secondary uk-btn-sm mt-6 no-print">
       <uk-icon icon="printer" class="size-4"></uk-icon> Print
     </button>

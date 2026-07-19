@@ -1,0 +1,90 @@
+{% comment %}
+FAC-08 online session card + "Verify & Start" form. One <article> per row; the
+element carries its own id so a POST can swap just that card back in place
+(outerHTML), which is why the refusal path can re-render at 400 without losing
+the rest of the page. This form has no file input, so swapping the whole partial
+is safe.
+
+Colour is never the only signal: row.style carries a Lucide icon and a text label
+alongside the .ft-card--*/.ft-pill--* tokens, all computed server-side in
+web/faculty.py `_ONLINE_STYLES` -- this template never branches on colour.
+ASCII-only (no em dash).
+{% endcomment %}
+{% for row in rows %}
+<article id="online-card-{{ row.session.pk }}" class="ft-card {{ row.style.card }}"
+         data-state="{{ row.state }}">
+  <div class="ft-card__head">
+    <uk-icon icon="{{ row.style.icon }}"></uk-icon>
+    <span class="ft-card__room" style="margin-left:0">
+      {{ row.session.schedule.course_code }} · {{ row.session.schedule.section }}</span>
+    <span class="{{ row.style.pill }}" style="margin-left:auto">{{ row.style.label }}</span>
+  </div>
+  <div class="ft-card__meta">
+    {{ row.session.scheduled_start|time:"g:i" }} - {{ row.session.scheduled_end|time:"g:i A" }}
+    <span>·</span> Online <span>·</span> {{ row.session.schedule.enrolled_count }} students
+  </div>
+
+  {% if row.error %}
+  <div class="ft-outcome ft-outcome--bad" data-outcome="start-refused" style="margin-top:12px">
+    <div class="ft-outcome__head">
+      <span class="ft-outcome__icon"><uk-icon icon="alert-triangle"></uk-icon></span>
+      <div class="ft-outcome__title">Cannot start this class</div>
+    </div>
+    <p class="ft-outcome__body">{{ row.error }}</p>
+  </div>
+  {% endif %}
+
+  {% if row.state == "active" %}
+  {% comment %}Started, NOT verified. D-02: a Checker verifies independently, and
+  saying so here is the whole point -- the faculty member must not read "started"
+  as "verified".{% endcomment %}
+  <div class="ft-outcome ft-outcome--ok" data-outcome="started" style="margin-top:12px">
+    <div class="ft-outcome__head">
+      <span class="ft-outcome__icon"><uk-icon icon="check"></uk-icon></span>
+      <div class="ft-outcome__title">Started at {{ row.session.actual_start|time:"g:i A" }}</div>
+    </div>
+    <p class="ft-outcome__body">
+      Recorded as held. A Checker still opens your meeting link separately to
+      verify attendance, so this is not yet checker-verified.</p>
+    {% if row.session.teams_link %}
+    <p class="ft-outcome__body" data-field="teams-link">
+      <uk-icon icon="link"></uk-icon>
+      <a href="{{ row.session.teams_link }}" rel="noopener noreferrer"
+         target="_blank">{{ row.session.teams_link }}</a></p>
+    {% endif %}
+  </div>
+
+  {% elif row.can_start %}
+  <form class="ft-form" style="margin-top:12px"
+        hx-post="{% url 'faculty_online_start' pk=row.session.pk %}"
+        hx-target="#online-card-{{ row.session.pk }}" hx-swap="outerHTML"
+        method="post" action="{% url 'faculty_online_start' pk=row.session.pk %}">
+    {% csrf_token %}
+    <div class="ft-field">
+      <label class="ft-field__label" for="teams-link-{{ row.session.pk }}">
+        Microsoft Teams meeting link</label>
+      <input class="ft-control" type="url" required
+             id="teams-link-{{ row.session.pk }}" name="teams_link"
+             value="{{ row.session.teams_link }}"
+             placeholder="https://teams.microsoft.com/l/meetup-join/..."
+             aria-describedby="teams-hint-{{ row.session.pk }}">
+      <p class="ft-card__meta" id="teams-hint-{{ row.session.pk }}" style="margin-top:6px">
+        Paste the link from Teams ("Copy link"). Your Checker opens this exact
+        link to verify the class.</p>
+    </div>
+    <button class="ft-btn-navy" type="submit">
+      <uk-icon icon="play"></uk-icon> Verify &amp; Start</button>
+  </form>
+
+  {% else %}
+  <p class="ft-card__meta" style="margin-top:10px">
+    {% if row.state == "past-grace" %}
+      Start is past the grace window, so this class can no longer be started here.
+    {% elif row.state == "absent" %}
+      Recorded as Absent. A Checker can correct this if you did hold the class.
+    {% else %}
+      This class is finished.
+    {% endif %}</p>
+  {% endif %}
+</article>
+{% endfor %}

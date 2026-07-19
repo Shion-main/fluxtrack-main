@@ -1,0 +1,59 @@
+{% extends "base.html" %}
+{% load static %}
+{% block title %}Online classes · FluxTrack{% endblock %}
+{% block content %}
+{% comment %}
+FAC-08: the faculty member's Online classes for today, each with "Verify & Start".
+Navy .ft-* shell, matching templates/faculty/schedule.html. Every card is rendered
+by faculty/_online_start.html so the standing page and the post-Start swap can
+never drift apart. ASCII-only (no em dash).
+{% endcomment %}
+<div class="ft-app">
+
+  <header class="ft-top">
+    <a href="/faculty/home" class="ft-top__brand">
+      <img class="ft-top__crest" src="{% static 'brand/mmcm-crest.png' %}" alt="">
+      <span class="ft-top__mark">FluxTrack</span>
+    </a>
+    <div class="relative inline-flex" style="margin-left:auto">{% include "notifications/_bell.html" %}</div>
+    <details class="ft-acct" style="margin-left:0">
+      <summary class="ft-top__avatar" aria-label="Account and sign out">{{ user.first_name|default:user.username|slice:":1"|upper }}{{ user.last_name|slice:":1"|upper }}</summary>
+      <div class="ft-acct__menu">
+        <div class="ft-acct__who">
+          <b>{{ user.get_full_name|default:user.username }}</b>
+          <span>{{ user.get_role_display }}{% if user.department %} · {{ user.department.name }}{% endif %}</span>
+        </div>
+        <a class="ft-acct__item" href="{% url 'faculty_profile' %}"><uk-icon icon="user"></uk-icon> Profile</a>
+        <a class="ft-acct__item" href="/logout"><uk-icon icon="log-out"></uk-icon> Sign out</a>
+      </div>
+    </details>
+  </header>
+
+  <div class="ft-page">
+    <div class="ft-greet">
+      <div class="ft-greet__hi">Online classes</div>
+      <div class="ft-greet__date">{{ today|date:"l, F j" }}</div>
+    </div>
+
+    <div class="ft-sec">
+      <div class="ft-sec__title">Today</div>
+    </div>
+
+    <div class="ft-list">
+      {% if rows %}
+        {% include "faculty/_online_start.html" %}
+      {% else %}
+        <div class="ft-card ft-card--neutral" data-empty="online">
+          <div class="ft-card__head">
+            <uk-icon icon="monitor-off"></uk-icon>
+            <span class="ft-card__room" style="margin-left:0">No Online classes today</span>
+          </div>
+          <p class="ft-card__meta" style="margin:0">
+            Face-to-face and Blended classes check in by scanning the room QR or
+            entering the room code.</p>
+        </div>
+      {% endif %}
+    </div>
+  </div>
+</div>
+{% endblock %}

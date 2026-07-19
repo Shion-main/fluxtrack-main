@@ -63,12 +63,12 @@ by the Dean surface (06-06). Attendance pill uses the A-COLOR tokens. ASCII-only
     </div>
 
     <h3 class="uk-h4 mb-2">Absences</h3>
-    <div class="uk-card uk-card-body p-0">
-      <table class="uk-table uk-table-divider uk-table-small mb-0">
-        <thead><tr><th>Course</th><th>Section</th><th>Date</th></tr></thead>
+    <div class="uk-card uk-card-body p-0 table-wrap">
+      <table class="tbl">
+        <thead><tr><th scope="col">Course</th><th scope="col">Section</th><th scope="col">Date</th></tr></thead>
         <tbody>
           {% for a in card.0.absences %}
-          <tr><td>{{ a.course_code }}</td><td>{{ a.section }}</td><td>{{ a.date|date:'M j, Y' }}</td></tr>
+          <tr><td class="tbl__id">{{ a.course_code }}</td><td>{{ a.section }}</td><td class="tbl__time">{{ a.date|date:'M j, Y' }}</td></tr>
           {% empty %}
           <tr><td colspan="3" class="uk-text-muted">No absences in this range.</td></tr>
           {% endfor %}

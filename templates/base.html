@@ -20,6 +20,20 @@
   <link rel="stylesheet" href="{% static 'faculty/faculty.css' %}"/>
   <script src="https://cdn.jsdelivr.net/npm/franken-ui@2.1.2/dist/js/core.iife.js" defer></script>
   <script src="https://cdn.jsdelivr.net/npm/franken-ui@2.1.2/dist/js/icon.iife.js" defer></script>
+  {% comment %}htmx 2 does NOT swap non-2xx responses by default, so every
+  surface that renders its form partial back at status=400 for inline validation
+  -- faculty modality new/withdraw, dean approve/reject, ifo assignment create --
+  silently did nothing when a submit was refused: the server rendered the error,
+  htmx discarded it, and the user saw no response at all.
+
+  400 is this project's deliberate "here is your form back, with the error in
+  it" contract, so it swaps. Every OTHER 4xx/5xx keeps the default no-swap +
+  error behaviour, because a 403/500 body is not a form partial and must never
+  be pasted into the page. Order matters: first matching rule wins, so the
+  explicit 400 rule has to precede the [45].. catch-all. The meta tag must be
+  parsed before htmx initialises, hence in <head> above the deferred script.
+  {% endcomment %}
+  <meta name="htmx-config" content='{"responseHandling":[{"code":"204","swap":false},{"code":"[23]..","swap":true},{"code":"400","swap":true,"error":false},{"code":"[45]..","swap":false,"error":true}]}'>
   <script src="https://cdn.jsdelivr.net/npm/htmx.org@2.0.6/dist/htmx.min.js" defer></script>
   <script>
     if ('serviceWorker' in navigator) {
@@ -31,7 +45,7 @@
 <body class="bg-background text-foreground" hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'>
   <a href="#main" class="skip-link">Skip to content</a>
   {% with un=request.resolver_match.url_name %}
-  {% if un == "faculty_home" or un == "faculty_schedule" or un == "faculty_scan" or un == "faculty_modality_new" or un == "faculty_modality_mine" or un == "checker_floor" or un == "checker_scan" or un == "checker_online" or un == "checker_online_open" or un == "ifo_live" or un == "ifo_rooms" or un == "ifo_room_detail" or un == "ifo_assignments" or un == "ifo_dashboard" or un == "ifo_weekly_reports" or un == "dean_dashboard" or un == "dean_queue" or un == "dean_reports" or un == "guard_monitor" or un == "guard_locate" %}
+  {% if un == "faculty_home" or un == "faculty_schedule" or un == "faculty_scan" or un == "faculty_modality_new" or un == "faculty_modality_mine" or un == "faculty_online" or un == "faculty_history" or un == "faculty_profile" or un == "checker_floor" or un == "checker_scan" or un == "checker_online" or un == "checker_online_open" or un == "ifo_live" or un == "ifo_rooms" or un == "ifo_room_detail" or un == "ifo_assignments" or un == "ifo_dashboard" or un == "ifo_weekly_reports" or un == "dean_dashboard" or un == "dean_queue" or un == "dean_reports" or un == "guard_monitor" or un == "guard_locate" or un == "guard_room" %}
   {% elif user.is_authenticated %}
     {% comment %}Standard shell for all other roles (launcher, checker, IFO, dean,
     admin). Faculty pages render their own top chrome, so no global header there.{% endcomment %}
@@ -53,7 +67,7 @@
 
   <main id="main">{% block content %}{% endblock %}</main>
 
-  {% if un == "faculty_home" or un == "faculty_schedule" or un == "faculty_modality_mine" %}
+  {% if un == "faculty_home" or un == "faculty_schedule" or un == "faculty_online" or un == "faculty_history" or un == "faculty_modality_mine" %}
   {% comment %}Bottom tab bar shows on the three primary tabs, not on the
   full-screen scan / sub-flow screens. Scan is reached from Home's check-in
   actions, so it is not a tab.{% endcomment %}
@@ -65,6 +79,12 @@
       <a href="/faculty/schedule" class="ft-tab {% if un == 'faculty_schedule' %}is-active{% endif %}"
          aria-label="Schedule"{% if un == 'faculty_schedule' %} aria-current="page"{% endif %}>
         <uk-icon icon="calendar-days"></uk-icon></a>
+      <a href="/faculty/online" class="ft-tab {% if un == 'faculty_online' %}is-active{% endif %}"
+         aria-label="Online classes"{% if un == 'faculty_online' %} aria-current="page"{% endif %}>
+        <uk-icon icon="monitor"></uk-icon></a>
+      <a href="/faculty/history" class="ft-tab {% if un == 'faculty_history' %}is-active{% endif %}"
+         aria-label="My attendance"{% if un == 'faculty_history' %} aria-current="page"{% endif %}>
+        <uk-icon icon="clipboard-list"></uk-icon></a>
       <a href="/faculty/modality/mine" class="ft-tab {% if un == 'faculty_modality_mine' %}is-active{% endif %}"
          aria-label="Requests"{% if un == 'faculty_modality_mine' %} aria-current="page"{% endif %}>
         <uk-icon icon="arrow-left-right"></uk-icon></a>

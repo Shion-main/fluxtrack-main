@@ -1,0 +1,129 @@
+{% extends "ifo/_console.html" %}
+{% comment %}
+IFO-08 open room conflicts.
+
+One group per open RoomConflictFlag, each listing the sessions currently
+holding that room with a Release control per row.
+
+The explanatory note is not decoration. The single most likely operator error
+here is looking for a "dismiss" or "mark resolved" button and, not finding one,
+assuming the page is broken. There is no such button ON PURPOSE (D-11): the
+flag closes because the cause is fixed, and a manual close could mark a flag
+resolved while the conflict was still live. So the page says what release does
+and what happens next, in plain words.
+
+Each release control posts to a SMALL per-session result region rather than
+swapping this page or the polled board -- a refusal has to survive long enough
+to be read.
+
+Console Franken uk-* vocabulary; the navy .ft-* vocabulary belongs to the
+Faculty/Guard shells. Conflict indicators carry an icon and a text label, never
+colour alone. No border-left accent stripes. ASCII-only.
+{% endcomment %}
+{% block title %}Room conflicts - FluxTrack{% endblock %}
+{% block console_title %}Room conflicts{% endblock %}
+
+{% block console %}
+<div class="max-w-5xl">
+
+  <div class="uk-card uk-card-body mb-6">
+    <h2 class="uk-h4 mb-2">What this page is</h2>
+    <p class="uk-text-small uk-text-muted mb-2">
+      The status sweep raises a conflict whenever two or more sessions are
+      recorded as holding the same room at once. That is usually a class that
+      finished without anyone closing it out, still sitting on a room the next
+      class needs.</p>
+    <p class="uk-text-small uk-text-muted">
+      <strong>Release the session that should not be holding the room.</strong>
+      That frees the room immediately. The conflict below then closes by itself
+      on the next sweep run, because the thing that caused it is gone -- there
+      is no dismiss button, and there is not meant to be one.</p>
+  </div>
+
+  {% if rows %}
+  {% for row in rows %}
+  <div class="uk-card uk-card-body mb-6" data-conflict="{{ row.flag.pk }}">
+    <div class="flex items-start justify-between gap-4 mb-1">
+      <div>
+        <h3 class="uk-h4 mb-1">
+          <span class="inline-flex items-center gap-2">
+            <uk-icon icon="triangle-alert" class="size-4"></uk-icon>
+            Conflict &middot; {{ row.room.code }}</span>
+        </h3>
+        <p class="uk-text-small uk-text-muted">
+          {{ row.room.floor.building.name }} &middot; Floor {{ row.room.floor.number }}
+          {% if row.room.name %}&middot; {{ row.room.name }}{% endif %}
+          &middot; detected {{ row.flag.detected_at }}</p>
+      </div>
+      <a href="/ifo/rooms/{{ row.room.code }}" class="uk-btn uk-btn-ghost uk-btn-sm">
+        <uk-icon icon="external-link" class="size-4"></uk-icon> Room page</a>
+    </div>
+
+    {% if row.sessions %}
+    <div class="table-wrap mt-4">
+      <table class="tbl">
+        <thead>
+          <tr>
+            <th scope="col">Class</th>
+            <th scope="col">Faculty</th>
+            <th scope="col">Scheduled</th>
+            <th scope="col">Status</th>
+            <th scope="col">Release</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for s in row.sessions %}
+          <tr data-session="{{ s.pk }}">
+            <td class="tbl__id">{{ s.schedule.course_code }}-{{ s.schedule.section }}</td>
+            <td>{{ s.faculty.get_full_name|default:s.faculty.username }}</td>
+            <td class="tbl__meta">
+              {{ s.date }} &middot;
+              {{ s.scheduled_start|time:"g:i A" }}&ndash;{{ s.scheduled_end|time:"g:i A" }}</td>
+            <td class="tbl__meta">
+              <span class="inline-flex items-center gap-2">
+                <uk-icon icon="circle-dot" class="size-4"></uk-icon>
+                {{ s.get_status_display }}</span></td>
+            <td>
+              <form method="post" action="/ifo/sessions/{{ s.pk }}/release"
+                    hx-post="/ifo/sessions/{{ s.pk }}/release"
+                    hx-target="#release-{{ s.pk }}" hx-swap="innerHTML">
+                {% csrf_token %}
+                <button type="submit" class="uk-btn uk-btn-secondary uk-btn-sm">
+                  <uk-icon icon="door-open" class="size-4"></uk-icon> Release</button>
+              </form>
+              <div id="release-{{ s.pk }}" class="mt-2"></div>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+    {% comment %}The flag is open but nothing is holding the room any more --
+    the cause was already fixed and the next sweep will stamp resolved_at. Say
+    that rather than showing an empty table.{% endcomment %}
+    <p class="uk-text-small uk-text-muted mt-4">
+      Nothing is holding {{ row.room.code }} any more. This flag closes on the
+      next sweep run.</p>
+    {% endif %}
+  </div>
+  {% endfor %}
+
+  {% include "_pager.html" %}
+
+  {% else %}
+  <div class="uk-card uk-card-body" data-empty="1">
+    <div class="flex items-start gap-3">
+      <uk-icon icon="circle-check" class="size-5"></uk-icon>
+      <div>
+        <h3 class="uk-h4 mb-1">No open room conflicts</h3>
+        <p class="uk-text-small uk-text-muted">
+          No room is recorded as being held by two sessions at once. Conflicts
+          appear here automatically when the sweep finds one.</p>
+      </div>
+    </div>
+  </div>
+  {% endif %}
+
+</div>
+{% endblock %}

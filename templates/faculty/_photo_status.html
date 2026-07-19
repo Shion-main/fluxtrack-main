@@ -1,0 +1,56 @@
+{% comment %}
+The SMALL status region for the FAC-12 photo upload (#photo-status).
+
+This partial is deliberately NOT the form. Browsers forbid programmatic
+population of an <input type="file">, so swapping the form back in would leave
+the file control empty -- silently discarding the selection the user just made,
+on exactly the refusal where they most need it kept. The form stays put; only
+this region is replaced.
+
+It carries the current photo as well as the message, so a successful upload
+shows the new photo immediately without a page reload.
+
+Colour is never the only signal (WCAG 1.4.1): each outcome card carries an icon
+and a text label as well as its .ft-outcome--ok / --bad family. No border-left
+accent stripes. ASCII-only.
+{% endcomment %}
+<div class="ft-photo">
+  {% if photo %}
+  <img class="ft-photo__img" src="{{ photo.url }}?v={{ photo_v }}"
+       alt="Your current profile photo">
+  {% else %}
+  <div class="ft-photo__ph" aria-hidden="true"><uk-icon icon="user"></uk-icon></div>
+  {% endif %}
+  <div class="ft-photo__meta">
+    {% if photo %}
+    <div class="ft-label">Current photo</div>
+    <p class="ft-help">This is what a Checker sees when confirming your identity
+      in the room.</p>
+    {% else %}
+    <div class="ft-label">No photo yet</div>
+    <p class="ft-help">Checkers have nothing to compare against until you upload
+      one, so identity checks fall back to asking you in person.</p>
+    {% endif %}
+  </div>
+</div>
+
+{% if error %}
+<div class="ft-outcome ft-outcome--bad" data-outcome="photo-error">
+  <div class="ft-outcome__head">
+    <span class="ft-outcome__icon"><uk-icon icon="alert-triangle"></uk-icon></span>
+    <div class="ft-outcome__title">Photo not accepted</div>
+  </div>
+  <p class="ft-outcome__body">{{ error }}</p>
+  <p class="ft-outcome__body">Your file selection has not been cleared - pick a
+    different photo and try again.</p>
+</div>
+{% elif saved %}
+<div class="ft-outcome ft-outcome--ok" data-outcome="photo-saved">
+  <div class="ft-outcome__head">
+    <span class="ft-outcome__icon"><uk-icon icon="check"></uk-icon></span>
+    <div class="ft-outcome__title">Photo updated</div>
+  </div>
+  <p class="ft-outcome__body">Your new photo is saved and is what Checkers will
+    see from now on.</p>
+</div>
+{% endif %}

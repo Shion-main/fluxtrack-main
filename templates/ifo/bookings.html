@@ -1,0 +1,16 @@
+{% extends "ifo/_console.html" %}
+{% comment %}IFO-05 ad-hoc bookings. The page is a thin shell; the form and the
+table both live in the swapped partial, so a create, a cancel and a conflict
+refusal all land in one place. ASCII-only.{% endcomment %}
+{% block title %}Bookings - FluxTrack{% endblock %}
+{% block console_title %}Room bookings{% endblock %}
+{% block console %}
+<p class="uk-text-muted mb-6">
+  Hold a room for something that is not a scheduled class. Every booking is
+  checked against the same occupancy answer the faculty room picker and Dean
+  approval use, so a booking can never quietly land on top of a class.</p>
+
+<div id="booking-panel">
+  {% include "ifo/_booking_form.html" %}
+</div>
+{% endblock %}

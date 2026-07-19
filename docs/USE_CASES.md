@@ -219,9 +219,9 @@ assignments, live monitoring, reporting (SRS §2.3).
 
 | Scene | Status | Requirement IDs | Files |
 |---|---|---|---|
-| Rooms list + detail (read) | ✅ Built | part of IFO-01, IFO-11 | `templates/ifo/rooms.html`, `room_detail.html` |
+| Rooms list + detail (read) | ✅ Built | part of IFO-01, IFO-11 | `templates/ifo/rooms.html`, `_room_panel.html`, `room_detail.html` |
 | QR poster + code image | ✅ Built | IFO-01 | `templates/ifo/poster.html`, `web/ifo.py:room_qr` |
-| Live today (map/calendar) | 🚧 Partial | IFO-07 | `templates/ifo/live.html`, `_live_rows.html` |
+| Live room board | ✅ Built | IFO-07 | `templates/ifo/rooms.html`, `_board.html`, `web/ifo.py:_room_board` |
 | Room CRUD (create/edit/delete) | 🚧 Partial (Django admin only) | IFO-01 | — |
 | Schedule import + CRUD | 🚧 Partial (CLI import only, no UI) | IFO-03 | `scheduling/management/commands/import_offerings.py` |
 | Course offerings / terms / breaks mgmt | 🚧 Partial (models + admin only) | IFO-04 | — |
@@ -261,14 +261,26 @@ Room detail page shows the room's recurring weekly schedule for the active
 term plus its next 10 upcoming sessions — read-only, matches what GRD-02
 and department-scoped Dean access will need to reuse.
 
-**UC-IFO-5 — Live monitoring.** 🚧 Partial (IFO-07).
-`/ifo/live` polls `/ifo/live/rows` at the configured interval and shows
-today's sessions with status. **Gap vs. spec**: SRS asks for both a "live
-map" (spatial room layout) and a "live calendar" — what's built is a
-polled list, not a map. Decide explicitly whether a spatial map is worth
-building for this scale (a handful of rooms on one floor slice today) or
-whether the list satisfies the intent — don't let "live map" quietly become
-"whatever we already built."
+**UC-IFO-5 — Live monitoring.** ✅ Built (IFO-07), merged into UC-IFO-4.
+`/ifo/rooms` is now a **room board**: one tile per room, grouped by building
+and floor, polling `/ifo/rooms/board` at the configured interval. `/ifo/live`
+301s here and the separate nav item is gone.
+
+The tile state is derived per room from today's sessions relative to `now`
+(`web/room_state.py:room_tile`, shared with the Guard surfaces): **absent** (marked ABSENT, or still SCHEDULED past
+the grace window — the board calls a no-show before the sweep job stamps it),
+**starting** (inside grace, watch but not yet a problem), **in session**,
+**online** (the class shifted to Online, so the room is legitimately empty —
+D-05/MOD-01), **free**, **idle**. Problem states sort to the front of their
+group and drive the "Needs attention" filter. Clicking a tile opens a
+slide-over (`_room_panel.html`) with what is happening right now, today's
+timeline, and the recurring week.
+
+**Gap vs. spec**: SRS asks for a "live map" (spatial room layout). The board is
+a sorted grid, not a floor plan — it needs no room geometry and stays readable
+at 200+ rooms, where a map does not. Building a true spatial map is still an
+open call, but the "live calendar" half of the intent is covered by the
+slide-over's Today timeline.
 
 **UC-IFO-6 — Room CRUD.** 🚧 Partial, Django admin only (IFO-01).
 Creating/editing/deleting rooms currently requires `/admin/`. A dedicated

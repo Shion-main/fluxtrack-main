@@ -41,5 +41,17 @@ class Room(models.Model):
         on_delete=models.SET_NULL, related_name="rotated_room_codes",
     )
 
+    @property
+    def is_virtual(self):
+        """True for a virtual (online-only) room.
+
+        MMCM's own convention, printed as a footnote on the paper schedule form:
+        "Rooms that start with V are virtual rooms and are meant for online
+        sessions." The importer honours it -- every V-prefixed room lands in the
+        ONLINE building and holds only online classes -- so the code IS the flag
+        and no second column has to be kept in sync with it.
+        """
+        return self.code.upper().startswith("V")
+
     def __str__(self):
         return self.code

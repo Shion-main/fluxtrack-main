@@ -575,9 +575,189 @@ a.ft-card:active { transform: translateY(1px); }
 .ft-btn-soft uk-icon, .ft-btn-soft svg { width: 18px; height: 18px; }
 .ft-btn-soft:hover { background: #e9edf7; }
 
+/* ==========================================================================
+   Stepped request flow (Request a shift, MOD-01)
+   --------------------------------------------------------------------------
+   The old form was one long scroll that asked "Shift to what?" BEFORE "which
+   classes?", and rendered a Preferred-room dropdown under every class whether
+   or not the target modality needed one (an Online shift needs no room at all).
+   On a phone, between classes, that is a lot of scrolling past fields that do
+   not apply.
+
+   Three steps, in the order the decision is actually made:
+     1 Which classes    2 What change    3 Review
+
+   All three panels stay in ONE <form> in the DOM, so there is a single POST at
+   the end and no server-side wizard state. Stepping is purely presentational:
+   modality.js adds .is-stepped to the form, and only then do panels hide. With
+   JS off, every panel is visible and the form behaves exactly as it did before
+   -- progressive enhancement, not a JS dependency.
+   ========================================================================== */
+
+/* --- Step indicator --------------------------------------------------------
+   A filled-segment progress bar: segments behind you and the one you are on are
+   navy, the ones ahead are grey, and the current label is the only one in full
+   ink. Three segments is few enough that a bar plus a word beats a "Step 1 of 3"
+   counter -- the label tells you what the step IS, not just where it sits.
+
+   The bar is display:block on purpose. It is a <span>, and height has no effect
+   on an inline box, so without this the segments render at 0px and the whole
+   indicator silently collapses to a row of labels that reads as tabs. */
+.ft-steps { display: flex; gap: 8px; margin: 2px 0 22px; }
+.ft-steps__i { flex: 1 1 0; }
+.ft-steps__bar {
+  display: block; height: 5px; border-radius: 999px;
+  background: var(--panel-2); box-shadow: inset 0 0 0 1px var(--line);
+  transition: background-color .2s ease, box-shadow .2s ease;
+}
+.ft-steps__i.is-done .ft-steps__bar,
+.ft-steps__i.is-on .ft-steps__bar {
+  background: var(--nv-hero); box-shadow: none;
+}
+.ft-steps__n {
+  display: block; margin-top: 8px;
+  font-size: .74rem; font-weight: 600; color: var(--ft-muted);
+  letter-spacing: -.005em;
+}
+.ft-steps__i.is-on .ft-steps__n { color: var(--ink); font-weight: 700; }
+/* Behind you but not current: readable, not shouting. */
+.ft-steps__i.is-done .ft-steps__n { color: var(--body); }
+
+/* --- Panels ---------------------------------------------------------------- */
+.ft-step__h { font-size: 1.12rem; font-weight: 700; color: var(--ink); letter-spacing: -.01em; }
+/* Focused programmatically on step change so the panel is announced; the step
+   indicator and the new heading already show visually where you are, so the
+   ring would be noise. */
+.ft-step__h:focus { outline: none; }
+.ft-step__sub { margin-top: 4px; margin-bottom: 16px; font-size: .85rem; color: var(--ft-muted); line-height: 1.45; }
+/* Only a stepped form hides panels; without JS all three render in sequence. */
+.ft-form.is-stepped .ft-step[hidden] { display: none; }
+
+.ft-navrow { display: flex; gap: 10px; margin-top: 22px; }
+.ft-navrow .ft-btn-navy, .ft-navrow .ft-btn-soft { width: auto; flex: 1 1 0; }
+.ft-navrow .ft-btn-soft { flex: 0 0 auto; min-width: 104px; }
+
+/* --- Selectable class card (step 1) ---------------------------------------
+   A bare checkbox in a list is a small target on a phone. The whole card is the
+   label, so the tap area is the row; the selected state is carried by border +
+   wash + the checkbox itself, never by colour alone. */
+.ft-pick { display: flex; flex-direction: column; gap: 10px; }
+.ft-pick__card {
+  display: flex; align-items: flex-start; gap: 11px; cursor: pointer;
+  padding: 13px 14px; border: 1.5px solid var(--line); border-radius: var(--r-card);
+  background: #fff;
+  transition: border-color .14s ease, background-color .14s ease;
+}
+.ft-pick__card:hover { border-color: #cdd5e6; }
+.ft-pick__card:has(input:checked) { border-color: var(--nv-hero); background: var(--navy-tint); }
+.ft-pick__card:has(input:focus-visible) { box-shadow: 0 0 0 3px rgba(0,28,67,.15); }
+.ft-pick__body { min-width: 0; flex: 1; }
+.ft-pick__title { font-weight: 650; color: var(--ink); font-size: .94rem; }
+.ft-pick__meta { display: block; margin-top: 3px; font-size: .82rem; color: var(--ft-muted); }
+.ft-pick__count { margin-top: 12px; font-size: .82rem; color: var(--ft-muted); }
+
+/* --- Light segmented control (step 2) --------------------------------------
+   .ft-seg is navy-on-navy for the hero; the request form is a white sheet, so
+   it needs the light twin. Three options is a segmented control, not a select:
+   on a phone every option stays visible and is one tap. */
+.ft-seg--light { background: var(--panel-2); border-color: var(--line); }
+.ft-seg--light .ft-seg__label { flex: 1 1 0; display: flex; }
+.ft-seg--light input { position: absolute; opacity: 0; pointer-events: none; }
+.ft-seg--light .ft-seg__opt {
+  flex: 1 1 0; color: var(--ft-muted); cursor: pointer;
+  font-size: .84rem;
+}
+.ft-seg--light .ft-seg__opt:hover { color: var(--ink); }
+.ft-seg--light input:checked + .ft-seg__opt {
+  background: #fff; color: var(--ink);
+  border-color: var(--line); box-shadow: 0 1px 3px rgba(11,27,58,.10);
+}
+.ft-seg--light input:focus-visible + .ft-seg__opt { box-shadow: 0 0 0 3px rgba(0,28,67,.18); }
+
+/* --- Per-class room/time block (step 2, F2F/Blended only) ------------------ */
+.ft-sub { border: 1px solid var(--line); border-radius: var(--r-card); padding: 12px 13px; }
+.ft-sub__h { font-size: .86rem; font-weight: 650; color: var(--ink); margin-bottom: 9px; }
+.ft-sub + .ft-sub { margin-top: 10px; }
+
+/* --- Review (step 3) -------------------------------------------------------
+   The summary is one plain-language sentence, because that is how the request
+   will be read by the Dean and how the faculty member thinks about it. */
+.ft-summary {
+  padding: 15px 16px; border-radius: var(--r-card);
+  background: var(--navy-tint); border: 1px solid #ccd6ea;
+}
+.ft-summary__line { font-size: .98rem; line-height: 1.5; color: var(--ink); }
+.ft-summary__line b { font-weight: 700; }
+.ft-summary__list { margin-top: 12px; display: flex; flex-direction: column; gap: 6px; }
+.ft-summary__row { display: flex; gap: 8px; font-size: .84rem; color: var(--body); }
+.ft-summary__row uk-icon, .ft-summary__row svg { width: 14px; height: 14px; flex: none; margin-top: 2px; color: var(--nv-hero); }
+.ft-note {
+  margin-top: 14px; display: flex; gap: 9px; align-items: flex-start;
+  font-size: .82rem; color: var(--ft-muted); line-height: 1.45;
+}
+.ft-note uk-icon, .ft-note svg { width: 15px; height: 15px; flex: none; margin-top: 1px; }
+
 @media (prefers-reduced-motion: reduce) {
   .ft-cta, .ft-seg__opt, .ft-row, .ft-tab, .ft-chip, .ft-btn-ghost-sm,
   .ft-btn-navy, .ft-key, .ft-otp__box, .ft-control, .ft-card, .ft-btn-danger,
-  .ft-btn-soft { transition: none; }
+  .ft-btn-soft, .ft-pick__card, .ft-steps__bar { transition: none; }
   .ft-otp__box.is-active::after { animation: none; }
 }
+
+/* --- Faculty profile photo (FAC-12) --- */
+/* The profile-page photo preview. Larger than the 56px .ft-idrow__photo used in
+   the Checker's identity row, because here the photo IS the subject rather than
+   a row ornament. Colours come from tokens.css; no hard-coded hex. */
+.ft-photo { display: flex; align-items: center; gap: 14px; margin-bottom: 16px; }
+.ft-photo__img {
+  width: 96px; height: 96px; border-radius: 50%; object-fit: cover;
+  border: 1px solid var(--line); background: var(--panel-2); flex: none;
+}
+.ft-photo__ph {
+  width: 96px; height: 96px; border-radius: 50%;
+  background: var(--panel-2); color: var(--ft-muted);
+  display: grid; place-items: center; flex: none;
+  border: 1px dashed var(--line);
+}
+.ft-photo__ph uk-icon, .ft-photo__ph svg { width: 34px; height: 34px; }
+.ft-photo__meta { min-width: 0; }
+.ft-photo__meta .ft-help { margin-top: 2px; }
+
+/* A file input is not a text input: it needs vertical padding for the browser's
+   own "Choose file" button, which .ft-control's line-height alone does not give. */
+input[type="file"].ft-control { padding: 10px 13px; height: auto; line-height: 1.4; }
+input[type="file"].ft-control::file-selector-button {
+  margin-right: 12px; padding: 6px 12px;
+  border: 1px solid var(--line); border-radius: var(--r-btn);
+  background: var(--panel-2); color: var(--ink);
+  font: inherit; font-size: .86rem; font-weight: 600; cursor: pointer;
+}
+input[type="file"].ft-control::file-selector-button:hover { border-color: var(--nv-hero); }
+/* --- end Faculty profile photo (FAC-12) --- */
+
+=======
+/* --- Guard room detail (GRD-02) --------------------------------------------
+   Appended as one contiguous block; touches no rule above. Two additions only:
+   (1) the monitor's room card becomes a link to that room's schedule, and an
+   anchor needs the block/reset an unstyled <a> does not inherit from .ft-card;
+   (2) the per-room page's weekly grid + its footnote.
+   No border-left accent stripes; colour comes from tokens.css, never a literal.
+   -------------------------------------------------------------------------- */
+.gd-roomlink { display: block; text-decoration: none; color: inherit; }
+/* Affordance is not colour alone: the chevron below is the persistent visual
+   cue, and the row lifts on hover/focus the way .ft-row already does. */
+.gd-roomlink:hover { border-color: var(--nv-hero); }
+.gd-roomlink:focus-visible {
+  outline: none; border-color: var(--nv-hero);
+  box-shadow: 0 0 0 3px rgba(0, 28, 67, .28);
+}
+.gd-roomlink__go { margin-left: auto; display: inline-flex; align-items: center; }
+.gd-roomlink__go uk-icon, .gd-roomlink__go svg {
+  width: 15px; height: 15px; color: var(--ft-muted); vertical-align: -3px;
+}
+/* .ft-card__meta is the flex row the chevron sits at the end of. */
+.gd-roomlink .ft-card__meta { display: flex; align-items: center; gap: 5px; flex-wrap: wrap; }
+
+.gd-room__grid { margin-top: 2px; }
+.gd-room__note { margin-top: 10px; font-size: .8rem; color: var(--ft-muted); }
+/* --- end Guard room detail (GRD-02) --------------------------------------- */

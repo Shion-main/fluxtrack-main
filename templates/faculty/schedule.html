@@ -19,6 +19,7 @@
           <b>{{ user.get_full_name|default:user.username }}</b>
           <span>{{ user.get_role_display }}{% if user.department %} · {{ user.department.name }}{% endif %}</span>
         </div>
+        <a class="ft-acct__item" href="{% url 'faculty_profile' %}"><uk-icon icon="user"></uk-icon> Profile</a>
         <a class="ft-acct__item" href="/logout"><uk-icon icon="log-out"></uk-icon> Sign out</a>
       </div>
     </details>
@@ -52,7 +53,7 @@
           {% for s in c.sessions %}
           <div class="ft-subrow">
             <span class="ft-subrow__sec">{{ s.schedule.course_code }} · {{ s.schedule.section }}</span>
-            <span class="ft-subrow__room"><uk-icon icon="map-pin"></uk-icon> {{ s.room.code }} · {{ s.schedule.enrolled_count }}</span>
+            <span class="ft-subrow__room"><uk-icon icon="map-pin"></uk-icon> {% include "_room_code.html" with room=s.room %} · {{ s.schedule.enrolled_count }}</span>
           </div>
           {% endfor %}
         </div>

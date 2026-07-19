@@ -71,8 +71,12 @@ a scope boundary. NO write controls exist on this surface. ASCII-only.{% endcomm
   </form>
 
   {% if sessions %}
-  <div class="uk-card uk-card-body p-0 data-grid">
-    <table class="uk-table uk-table-divider uk-table-small uk-table-middle mb-0">
+  {% comment %}Eight columns was over the ~6 budget and the two weakest earned
+  their keep least: Method and Checker are both per-row detail nobody scans a
+  column of. They fold into the Status cell's second line, which drops the table
+  to six columns and lets the rest breathe.{% endcomment %}
+  <div class="uk-card uk-card-body p-0 table-wrap">
+    <table class="tbl">
       <thead>
         <tr>
           <th scope="col">Faculty</th>
@@ -81,8 +85,6 @@ a scope boundary. NO write controls exist on this surface. ASCII-only.{% endcomm
           <th scope="col">Scheduled</th>
           <th scope="col">Actual</th>
           <th scope="col">Status</th>
-          <th scope="col">Method</th>
-          <th scope="col">Checker</th>
         </tr>
       </thead>
       <tbody>
@@ -90,7 +92,8 @@ a scope boundary. NO write controls exist on this surface. ASCII-only.{% endcomm
       </tbody>
     </table>
   </div>
-  <p class="uk-text-small uk-text-muted mt-2">Showing up to {{ page_size }} rows. Export CSV for the full filtered set.</p>
+  {% include "_pager.html" %}
+  <p class="uk-text-small uk-text-muted mt-1">Export CSV for the full filtered set, not just this page.</p>
   {% else %}
   <div class="uk-card uk-card-body">
     {% if filters.any_applied %}

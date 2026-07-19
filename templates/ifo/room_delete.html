@@ -1,0 +1,125 @@
+{% extends "ifo/_console.html" %}
+{% comment %}
+IFO-01b / D-17 room delete confirmation.
+
+Two mutually exclusive states, decided server-side:
+  can_delete   the probe found nothing -- offer the button
+  otherwise    NAME every blocking relation with its count and offer NO button
+
+The blocked state offers no Delete control at all rather than a
+delete-anyway-with-a-warning: the refusal is not advisory. Deleting a
+referenced room would destroy attendance history, which is the one thing an
+attendance-integrity system may never do.
+
+Each blocker row carries an icon AND a text label AND a count, so nothing is
+conveyed by colour alone (WCAG 1.4.1). Console Franken uk-* vocabulary; the
+navy .ft-* vocabulary belongs to the Faculty/Guard shells. No border-left
+accent stripes. ASCII-only.
+{% endcomment %}
+{% block title %}Delete {{ room.code }} - FluxTrack{% endblock %}
+{% block console_title %}Delete room{% endblock %}
+{% block page_actions %}
+<a href="/ifo/rooms/{{ room.code }}" class="uk-btn uk-btn-ghost uk-btn-sm">
+  <uk-icon icon="chevron-left" class="size-4"></uk-icon> Back to {{ room.code }}</a>
+{% endblock %}
+
+{% block console %}
+<div class="max-w-3xl">
+
+  <div class="uk-card uk-card-body mb-6">
+    <h2 class="uk-h3 mb-1">{{ room.code }}</h2>
+    <p class="uk-text-small uk-text-muted">
+      {{ room.floor.building.name }} &middot; Floor {{ room.floor.number }}
+      {% if room.name %}&middot; {{ room.name }}{% endif %}
+      {% if room.capacity %}&middot; seats {{ room.capacity }}{% endif %}</p>
+  </div>
+
+  {% if can_delete %}
+  <div class="uk-card uk-card-body">
+    <div class="flex items-start gap-3 mb-4">
+      <uk-icon icon="trash-2" class="size-5"></uk-icon>
+      <div>
+        <h3 class="uk-h4 mb-1">Nothing references this room</h3>
+        <p class="uk-text-small uk-text-muted">
+          No schedules, sessions, bookings, Checker validations or approved
+          modality-shift reservations point at {{ room.code }}, so removing it
+          destroys no history. Its QR token and six-digit code stop working.
+          This cannot be undone.</p>
+      </div>
+    </div>
+    <form method="post" action="/ifo/rooms/{{ room.code }}/delete"
+          class="flex items-center gap-3">
+      {% csrf_token %}
+      <button type="submit" class="uk-btn uk-btn-destructive h-11">
+        <uk-icon icon="trash-2" class="size-4"></uk-icon> Delete {{ room.code }}</button>
+      <a href="/ifo/rooms/{{ room.code }}" class="uk-btn uk-btn-ghost h-11">Cancel</a>
+    </form>
+  </div>
+
+  {% else %}
+  <div class="uk-alert uk-alert-destructive mb-6" role="alert" data-error="1">
+    <p class="uk-text-small">
+      <strong>{{ room.code }} cannot be deleted.</strong>
+      {% if refused %}Nothing was removed.{% endif %}
+      It is still referenced by the records listed below.</p>
+  </div>
+
+  <div class="uk-card uk-card-body mb-6">
+    <h3 class="uk-h4 mb-1">What is blocking this delete</h3>
+    <p class="uk-text-small uk-text-muted mb-4">
+      Deleting this room would take these records with it. Attendance history
+      is the record this system exists to keep, so the delete is refused
+      outright rather than offered with a warning.</p>
+
+    {% if blockers %}
+    <div class="table-wrap">
+      <table class="tbl">
+        <thead>
+          <tr>
+            <th scope="col">Blocking record</th>
+            <th scope="col">Why it matters</th>
+            <th scope="col" class="tbl__num">Count</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for b in blockers %}
+          <tr data-blocker="{{ b.key }}">
+            <td class="tbl__id">
+              <span class="inline-flex items-center gap-2">
+                <uk-icon icon="{{ b.icon }}" class="size-4"></uk-icon>
+                {{ b.label }}</span>
+            </td>
+            <td class="tbl__meta">{{ b.detail }}</td>
+            <td class="tbl__num">{{ b.count }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+    {% comment %}The ProtectedError backstop fired but a re-probe came back
+    clean -- something appeared and went between the two reads. Say so plainly
+    rather than showing an empty table.{% endcomment %}
+    <p class="uk-text-small">
+      The database refused this delete because another record still points at
+      this room. Reload this page to see the current references.</p>
+    {% endif %}
+  </div>
+
+  <div class="uk-card uk-card-body mb-6">
+    <h3 class="uk-h4 mb-2">What you can do instead</h3>
+    <ul class="uk-text-small uk-text-muted list-disc pl-5 flex flex-col gap-1">
+      <li>If this room was created by an import typo, move or remove the
+        schedules that point at it first -- then it becomes deletable.</li>
+      <li>If the room is real but out of service, leave it in place and stop
+        scheduling classes into it. Its history stays intact.</li>
+      <li>To correct a name, capacity or floor,
+        <a href="/ifo/rooms/{{ room.code }}/edit">edit the room</a> instead.</li>
+    </ul>
+  </div>
+
+  <a href="/ifo/rooms/{{ room.code }}" class="uk-btn uk-btn-secondary h-11">
+    <uk-icon icon="chevron-left" class="size-4"></uk-icon> Back to {{ room.code }}</a>
+  {% endif %}
+</div>
+{% endblock %}

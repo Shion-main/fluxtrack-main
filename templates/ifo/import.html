@@ -1,0 +1,83 @@
+{% extends "ifo/_console.html" %}
+{% comment %}
+IFO-03b schedule import: upload, preview, commit.
+
+TWO HTMX TRAPS ARE DESIGNED AROUND HERE, and both are silent failures rather
+than errors, which is why they get comments instead of just code:
+
+1. `hx-encoding="multipart/form-data"` on the <form> is REQUIRED. htmx
+   serializes as urlencoded by default, which cannot carry file content, so
+   without it the file never arrives and the server sees an empty
+   request.FILES -- with no error anywhere to explain why.
+
+2. The form targets a SMALL status region (#import-status), never itself.
+   base.html configures responseHandling so a 400 swaps for inline validation,
+   which is right for text fields and wrong for file fields: browsers forbid
+   programmatic population of a file input, so a swapped-in <input type="file">
+   is ALWAYS empty. Targeting the form would silently destroy the operator's
+   file selection on every validation failure.
+
+A corollary for anyone adding JS here: that same responseHandling rule sets
+`"error": false` for 400, so `htmx:responseError` does NOT fire on a refusal.
+Hang any re-enable handler off `htmx:afterRequest` instead.
+
+Console Franken uk-* vocabulary; the navy .ft-* vocabulary belongs to the
+Faculty/Guard shells. No border-left accent stripes. ASCII-only.
+{% endcomment %}
+{% block title %}Import schedules - FluxTrack{% endblock %}
+{% block console_title %}Import schedules{% endblock %}
+
+{% block console %}
+<div class="max-w-5xl">
+
+  <div class="uk-card uk-card-body mb-6">
+    <h2 class="uk-h4 mb-2">How this works</h2>
+    <ol class="uk-text-small uk-text-muted list-decimal pl-5 flex flex-col gap-1">
+      <li>Upload the registrar's course-offering export ({{ allowed }}, up to
+        {{ max_mb }} MB). Nothing is written to the database at this step.</li>
+      <li>Review the reconciliation report: every row lands in exactly one
+        bucket, so you can see at a glance that nothing was dropped, along with
+        any typo rooms and instructors with no email address.</li>
+      <li>Click Commit to apply it, or Discard to walk away.</li>
+    </ol>
+    <p class="uk-text-small uk-text-muted mt-3">
+      <span class="inline-flex items-start gap-2">
+        <uk-icon icon="info" class="size-4"></uk-icon>
+        <span>Importing only ADDS and updates. Nothing is ever deleted, so
+          re-uploading the same file twice is safe and changes nothing the
+          second time.</span>
+      </span>
+    </p>
+  </div>
+
+  <div class="uk-card uk-card-body mb-6">
+    <h2 class="uk-h4 mb-3">Upload a file</h2>
+    {% comment %}hx-encoding is load-bearing -- see the header comment.{% endcomment %}
+    <form hx-post="/ifo/import/preview" hx-encoding="multipart/form-data"
+          hx-target="#import-status" hx-swap="innerHTML"
+          hx-indicator="#import-spinner"
+          class="flex flex-col gap-3">
+      {% csrf_token %}
+      <div>
+        <label class="uk-form-label" for="i-file">Offerings export</label>
+        <input id="i-file" type="file" name="file" required
+               accept=".xlsx,.csv" class="uk-input h-11">
+      </div>
+      <div class="flex items-center gap-3">
+        <button type="submit" class="uk-btn uk-btn-primary h-11">
+          <uk-icon icon="upload" class="size-4"></uk-icon> Preview import</button>
+        <span id="import-spinner" class="htmx-indicator uk-text-small uk-text-muted">
+          <uk-icon icon="loader" class="size-4"></uk-icon> Reading the file...</span>
+      </div>
+    </form>
+  </div>
+
+  {% comment %}The small status/report region the upload targets. Rendered
+  server-side on first load so a staged review survives a page reload.
+  {% endcomment %}
+  <div id="import-status">
+    {% include "ifo/_import_panel.html" %}
+  </div>
+
+</div>
+{% endblock %}

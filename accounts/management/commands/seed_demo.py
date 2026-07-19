@@ -8,6 +8,7 @@ from django.core.management.base import BaseCommand
 from django.utils import timezone
 
 from accounts.models import Department, Role
+from campus.codes import generate_manual_code
 from campus.models import Building, Floor, Room
 from ops.models import SystemSetting
 from scheduling.models import (AcademicTerm, CheckinMethod, Modality, Schedule,
@@ -17,7 +18,9 @@ User = get_user_model()
 
 
 def rand_code():
-    return f"{secrets.randbelow(1000000):06d}"
+    # Delegates to the single collision-retrying mint (campus.codes) so seeded
+    # rooms cannot collide with each other or with imported ones.
+    return generate_manual_code()
 
 
 class Command(BaseCommand):

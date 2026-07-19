@@ -46,6 +46,7 @@ from django.utils import timezone
 from django.utils.text import slugify
 
 from accounts.models import Role
+from campus.codes import generate_manual_code
 from campus.models import Building, Floor, Room
 from scheduling import xlsx
 from scheduling.importing import (classify_room, modality_for_room,
@@ -252,7 +253,9 @@ class Command(BaseCommand):
         floor, _ = Floor.objects.get_or_create(building=bldg, number=info.floor)
         room, _ = Room.objects.get_or_create(code=info.raw_code, defaults={
             "floor": floor, "qr_token": secrets.token_urlsafe(24),
-            "manual_code": f"{secrets.randbelow(1000000):06d}"})
+            # Collision-retrying mint (campus.codes) — a bare randbelow()
+            # against the unique column intermittently 500s the import.
+            "manual_code": generate_manual_code()})
         return room
 
     def _placeholder_room(self, code):

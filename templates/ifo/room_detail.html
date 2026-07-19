@@ -1,40 +1,116 @@
 {% extends "ifo/_console.html" %}
-{% block title %}{{ room.code }} · FluxTrack{% endblock %}
-{% block console_title %}{{ room.code }}{% endblock %}
+{% load static %}
+{% comment %}Per-room page (IFO-11). The week is a day-by-time GRID rather than a
+flat list of classes: a list answers "what is booked here", the grid answers
+"when is this room free", which is the facilities question -- and it is the
+layout staff already know from MMCM's printed schedule form.
+
+Built to print: the print stylesheet in console.css drops the console chrome and
+reveals .pr-head, so Ctrl+P gives a clean one-page form on the same block ladder
+as every other room. ASCII-only.{% endcomment %}
+{% block head %}{{ block.super }}
+<link rel="stylesheet" href="{% static 'css/timetable.css' %}"/>
+{% endblock %}
+{% block title %}{{ room.code }} - FluxTrack{% endblock %}
+{% block console_title %}{% include "_room_code.html" with room=room %}{% endblock %}
 {% block page_actions %}
-<a href="/ifo/rooms/{{ room.code }}/poster" target="_blank" class="uk-btn uk-btn-secondary uk-btn-sm">
+<button type="button" class="uk-btn uk-btn-secondary uk-btn-sm" onclick="window.print()">
+  <uk-icon icon="printer" class="size-4"></uk-icon> Print</button>
+<a href="/ifo/rooms/{{ room.code }}/poster" target="_blank" class="uk-btn uk-btn-ghost uk-btn-sm">
   <uk-icon icon="qr-code" class="size-4"></uk-icon> QR poster</a>
+<a href="/ifo/rooms/{{ room.code }}/edit" class="uk-btn uk-btn-ghost uk-btn-sm no-print">
+  <uk-icon icon="pencil" class="size-4"></uk-icon> Edit</a>
+{% comment %}IFO-02: the rotation entry point. Placed on the room page rather
+than on the poster, because the poster is the REMEDY for a rotation and the
+decision belongs before it, not on it.{% endcomment %}
+<a href="/ifo/rooms/{{ room.code }}/rotate" class="uk-btn uk-btn-ghost uk-btn-sm no-print">
+  <uk-icon icon="refresh-cw" class="size-4"></uk-icon> Rotate codes</a>
+<a href="/ifo/rooms/{{ room.code }}/delete" class="uk-btn uk-btn-ghost uk-btn-sm no-print">
+  <uk-icon icon="trash-2" class="size-4"></uk-icon> Delete</a>
 {% endblock %}
 {% block console %}
-<p class="uk-text-muted mb-6">
+<p class="uk-text-muted mb-6 no-print">
   <a href="/ifo/rooms" class="inline-flex items-center gap-1"><uk-icon icon="chevron-left" class="size-4"></uk-icon> Rooms</a>
   <span class="mx-2">&middot;</span>
-  {{ room.floor.building.name }} · Floor {{ room.floor.number }}{% if room.name %} · {{ room.name }}{% endif %}{% if room.capacity %} · capacity {{ room.capacity }}{% endif %}</p>
+  {{ room.floor.building.name }} &middot; Floor {{ room.floor.number }}{% if room.name %} &middot; {{ room.name }}{% endif %}{% if room.capacity %} &middot; capacity {{ room.capacity }}{% endif %}</p>
 
-<div class="uk-card uk-card-body mb-6">
-  <h3 class="uk-card-title mb-3">Weekly schedule{% if term %} · {{ term.name }}{% endif %}</h3>
-  {% if schedules %}
-  <div class="overflow-x-auto">
-    <table class="uk-table uk-table-sm">
-      <thead><tr><th scope="col">Day</th><th scope="col">Time</th><th scope="col">Course</th><th scope="col">Sec</th><th scope="col">Faculty</th><th scope="col">Mode</th></tr></thead>
-      <tbody>
-        {% for s in schedules %}
+{% comment %}Print-only masthead. On screen the console bar already says which
+room this is; on paper there is no chrome, so the sheet has to identify itself.
+{% endcomment %}
+<div class="pr-head">
+  <h1>{% if room.is_virtual %}Virtual room schedule{% else %}Room schedule{% endif %} &mdash; {{ room.code }}</h1>
+  <p>{{ room.floor.building.name }} &middot; Floor {{ room.floor.number }}{% if room.name %} &middot; {{ room.name }}{% endif %}{% if room.capacity %} &middot; {{ room.capacity }} seats{% endif %}
+    {% if term %}<br>{{ term.name }}{% endif %}
+    &middot; printed {{ printed_on|date:"M j, Y g:i A" }}</p>
+</div>
+
+<div class="uk-card uk-card-body mb-6 pr-flat">
+  <h3 class="uk-card-title mb-3 no-print">
+    Weekly schedule{% if term %} &middot; {{ term.name }}{% endif %}
+    {% if timetable %}<span class="uk-text-small uk-text-muted" style="font-weight:400">
+      &middot; {{ timetable.used }} of {{ timetable.capacity }} slots used</span>{% endif %}</h3>
+
+  {% if timetable %}
+  <div class="table-wrap">
+    <table class="tt">
+      <thead>
         <tr>
-          <td>{{ s.get_day_of_week_display|slice:":3" }}</td>
-          <td>{{ s.start_time|time:"g:i A" }}&ndash;{{ s.end_time|time:"g:i A" }}</td>
-          <td class="font-medium">{{ s.course_code }}</td>
-          <td>{{ s.section }}</td>
-          <td>{{ s.faculty.last_name|default:s.faculty.username }}</td>
-          <td><span class="uk-label uk-label-secondary">{{ s.get_modality_display }}</span></td>
+          <th scope="col" class="tt__time">Time</th>
+          {% for value, label in timetable.days %}
+          <th scope="col">{{ label|slice:":3" }}</th>
+          {% endfor %}
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in timetable.rows %}
+        <tr>
+          <th scope="row" class="tt__time">{{ row.time|time:"g:i A" }}</th>
+          {% for s in row.cells %}
+          {% if s %}
+          <td class="tt__on">
+            <span class="tt__course">{{ s.course_code }}-{{ s.section }}</span>
+            {% comment %}The importer creates a placeholder user ("fac-") for an
+            offering row with no instructor. Printing that internal username on
+            an institutional form reads as a broken cell; "Unassigned" is both
+            truthful and actionable.{% endcomment %}
+            <span class="tt__who">
+              {% if s.faculty.last_name %}{{ s.faculty.last_name }}
+              {% elif s.faculty.get_full_name %}{{ s.faculty.get_full_name }}
+              {% else %}<em class="tt__tba">Unassigned</em>{% endif %}</span>
+            {% comment %}No per-cell modality badge. An online class no longer
+            appears in a PHYSICAL room's grid at all (it does not use the room),
+            and in a VIRTUAL room every class is online, so a badge on each cell
+            would say the same thing 40 times. Virtual-ness is stated once, on
+            the room itself.{% endcomment %}
+          </td>
+          {% else %}
+          {% comment %}A free slot is information, not absence -- the dash makes it
+          read as "checked and empty" rather than "cell failed to render".{% endcomment %}
+          <td class="tt__off"><span aria-hidden="true">&ndash;</span><span class="sr-only">free</span></td>
+          {% endif %}
+          {% endfor %}
         </tr>
         {% endfor %}
       </tbody>
     </table>
   </div>
-  {% else %}<p class="uk-text-muted uk-text-small">No recurring classes in this room for the active term.</p>{% endif %}
+  <p class="uk-text-small uk-text-muted mt-3">
+    Rows are the campus block ladder for the term, so every room prints on the
+    same grid. A class spanning two blocks fills both rows.
+    {% if room.is_virtual %}
+      This is a <b>virtual room</b> &mdash; every class here meets online.
+    {% else %}
+      Classes that moved online are not listed: they do not use this room, so the
+      slot is free.
+    {% endif %}</p>
+  {% else %}
+  <p class="uk-text-muted uk-text-small">
+    {% if not term %}No active term, so there is no timetable to build.
+    {% else %}No recurring classes in this room for the active term.{% endif %}</p>
+  {% endif %}
 </div>
 
-<div class="uk-card uk-card-body">
+<div class="uk-card uk-card-body no-print">
   <h3 class="uk-card-title mb-3">Upcoming sessions</h3>
   {% if upcoming %}
   <ul class="space-y-2">

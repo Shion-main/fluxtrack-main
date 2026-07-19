@@ -1,0 +1,34 @@
+{% comment %}
+IFO-08 release outcome, swapped into a SMALL result region.
+
+Deliberately tiny, and deliberately not the whole panel or the whole board. The
+room panel is loaded into a polled board's panel target, so anything swapped
+into the board container is destroyed on the next poll tick -- a refusal message
+would flash and vanish before it could be read (the lesson recorded in 07-03).
+Targeting a small region inside the panel keeps the message on screen.
+
+Icon plus text label on both outcomes; colour is never the only signal.
+ASCII-only.
+{% endcomment %}
+{% if error %}
+<div class="uk-alert uk-alert-destructive" role="alert" data-release="error">
+  <p class="uk-text-small">
+    <span class="inline-flex items-start gap-2">
+      <uk-icon icon="triangle-alert" class="size-4"></uk-icon>
+      <span><strong>Not released.</strong> {{ error }}</span>
+    </span>
+  </p>
+</div>
+{% else %}
+<div class="uk-alert uk-alert-success" role="status" data-release="ok">
+  <p class="uk-text-small">
+    <span class="inline-flex items-start gap-2">
+      <uk-icon icon="door-open" class="size-4"></uk-icon>
+      <span><strong>{{ session.room }} released.</strong>
+        {{ session.schedule.course_code }}-{{ session.schedule.section }} is no
+        longer holding it. If a conflict was flagged for this room, it closes
+        automatically on the next sweep run -- nothing else to do.</span>
+    </span>
+  </p>
+</div>
+{% endif %}

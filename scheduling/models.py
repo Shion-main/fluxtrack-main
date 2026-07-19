@@ -78,6 +78,13 @@ class CheckinMethod(models.TextChoices):
     QR_SCAN = "qr_scan", "QR scan"
     MANUAL_CODE = "manual_code", "Manual code"
     ONLINE_MANUAL = "online_manual", "Online (manual)"
+    # FAC-08/D-01: the faculty member started their OWN online session by pasting
+    # the Teams link. Deliberately NOT ONLINE_MANUAL, which means "a Checker
+    # activated this session" (03-05). If both acts wrote one value the data could
+    # no longer answer "who started this class", and D-02 depends on exactly that
+    # distinction when it says a never-verified self-start must report as
+    # held-but-unverified rather than being hidden.
+    ONLINE_SELF = "online_self", "Online (self-start)"
     FORCE_HANDOVER = "force_handover", "Force handover"
     MERGED = "merged", "Merged (sibling fill)"
 

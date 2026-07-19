@@ -1,0 +1,96 @@
+{% extends "ifo/_console.html" %}
+{% comment %}
+IFO-02 / D-14 credential rotation confirmation.
+
+The page exists to make ONE consequence impossible to miss: the poster
+currently taped to this door stops working the moment the button is pressed,
+and nothing on the door will say so. So the warning names the specific room
+code, states that BOTH the QR and the printed six digits die together, and
+tells the operator what to do next -- which is exactly where the success
+redirect lands them.
+
+A real GET page, not a JavaScript confirm() dialog: a dialog cannot carry the
+last-rotated stamp or the next-step instruction, and it is hostile to
+keyboard-only and screen-reader users.
+
+The warning block carries an icon AND a text label alongside its colour, so
+nothing is conveyed by colour alone (WCAG 1.4.1). Console Franken uk-*
+vocabulary; the navy .ft-* vocabulary belongs to the Faculty/Guard shells. No
+border-left accent stripes. ASCII-only.
+{% endcomment %}
+{% block title %}Rotate codes for {{ room.code }} - FluxTrack{% endblock %}
+{% block console_title %}Rotate room codes{% endblock %}
+{% block page_actions %}
+<a href="/ifo/rooms/{{ room.code }}" class="uk-btn uk-btn-ghost uk-btn-sm">
+  <uk-icon icon="chevron-left" class="size-4"></uk-icon> Back to {{ room.code }}</a>
+{% endblock %}
+
+{% block console %}
+<div class="max-w-3xl">
+
+  <div class="uk-card uk-card-body mb-6">
+    <h2 class="uk-h3 mb-1">{{ room.code }}</h2>
+    <p class="uk-text-small uk-text-muted">
+      {{ room.floor.building.name }} &middot; Floor {{ room.floor.number }}
+      {% if room.name %}&middot; {{ room.name }}{% endif %}</p>
+    {% if room.code_rotated_at %}
+    <p class="uk-text-small uk-text-muted mt-2" data-last-rotated="1">
+      <span class="inline-flex items-center gap-2">
+        <uk-icon icon="history" class="size-4"></uk-icon>
+        Last rotated {{ room.code_rotated_at }}{% if room.code_rotated_by %}
+        by {{ room.code_rotated_by.get_full_name|default:room.code_rotated_by.username }}{% endif %}.</span>
+    </p>
+    {% else %}
+    <p class="uk-text-small uk-text-muted mt-2" data-last-rotated="0">
+      <span class="inline-flex items-center gap-2">
+        <uk-icon icon="history" class="size-4"></uk-icon>
+        These codes have never been rotated.</span>
+    </p>
+    {% endif %}
+  </div>
+
+  <div class="uk-alert uk-alert-destructive mb-6" role="alert" data-warning="1">
+    <p class="uk-text-small">
+      <span class="inline-flex items-start gap-2">
+        <uk-icon icon="triangle-alert" class="size-4"></uk-icon>
+        <span><strong>Warning: this invalidates the current poster for room
+          {{ room.code }}.</strong>
+          The QR code printed on it stops scanning, and the six-digit fallback
+          code printed under it stops working, at the same moment. Anyone who
+          tries the old poster will be told the code is invalid.</span>
+      </span>
+    </p>
+  </div>
+
+  <div class="uk-card uk-card-body mb-6">
+    <h3 class="uk-h4 mb-2">What happens when you confirm</h3>
+    <ol class="uk-text-small uk-text-muted list-decimal pl-5 flex flex-col gap-1">
+      <li>{{ room.code }} gets a brand new QR token and a brand new six-digit
+        code. The old pair stops resolving immediately.</li>
+      <li>You land on this room's poster page, showing the new codes.</li>
+      <li>Print that poster and replace the one on the door for {{ room.code }}.
+        Until you do, nobody can check in to this room.</li>
+    </ol>
+  </div>
+
+  <div class="uk-card uk-card-body mb-6">
+    <h3 class="uk-h4 mb-2">When you should NOT rotate</h3>
+    <p class="uk-text-small uk-text-muted">
+      Rotation is for a code that has leaked or a poster that has been tampered
+      with. To correct a room's name, capacity or floor,
+      <a href="/ifo/rooms/{{ room.code }}/edit">edit the room</a> instead --
+      editing never touches the codes, so the poster on the door keeps working.
+    </p>
+  </div>
+
+  <form method="post" action="/ifo/rooms/{{ room.code }}/rotate/apply"
+        class="flex items-center gap-3">
+    {% csrf_token %}
+    <button type="submit" class="uk-btn uk-btn-primary h-11">
+      <uk-icon icon="refresh-cw" class="size-4"></uk-icon>
+      Rotate codes for {{ room.code }}</button>
+    <a href="/ifo/rooms/{{ room.code }}" class="uk-btn uk-btn-ghost h-11">Cancel</a>
+  </form>
+
+</div>
+{% endblock %}

@@ -31,6 +31,13 @@ class NotificationCategory(models.TextChoices):
 # of this type; its push simply won't fire until Phase 6 emits them.
 WEEKLY_REPORT_READY = "weekly_report_ready"
 
+# GRD-04 (07-12): the coalesced floor alert an on-duty Guard receives once per
+# sweep run. Emitted by ops/guard_alerts.notify_floor_guards, which the sweep
+# CALLERS (runscheduler._job_sweep and the run_status_sweep command) invoke after
+# sweep_no_shows + detect_room_conflicts have both run -- never from inside
+# either loop, which would be one push per event (D-06 forbids exactly that).
+GUARD_FLOOR_ALERT = "guard_floor_alert"
+
 
 # The single source of truth (D-06). Each notify() type string below was verified
 # to exist in-repo:
@@ -38,6 +45,7 @@ WEEKLY_REPORT_READY = "weekly_report_ready"
 #   room_conflict                  -> scheduling/jobs.py detect_room_conflicts
 #   job_failed                     -> ops/jobrun.py run_job failure alert
 #   modality_materialize_no_room   -> scheduling/.../materialize_sessions.py
+#   guard_floor_alert              -> ops/guard_alerts.py, called by the two sweep callers
 # WEEKLY_REPORT_READY lands with Phase 6 (contract defined here).
 #
 # Types intentionally NOT in any group (owner default #1: always-shown /
@@ -45,7 +53,12 @@ WEEKLY_REPORT_READY = "weekly_report_ready"
 # online_unassigned, online_assigned, and the five modality_shift_* types. Do not
 # add them to a group -- granular mute is a deferred idea.
 CATEGORY_TYPES = {
-    NotificationCategory.ROOM: {"room_event", "room_conflict"},
+    # GUARD_FLOOR_ALERT joins ROOM (D-21): both of its triggers are room events,
+    # and a Guard must be able to mute guard alerts like any other category
+    # through the existing all-roles preferences surface. A type registered in
+    # PUSH_TYPES but in NO group here is structurally unmutable.
+    NotificationCategory.ROOM: {"room_event", "room_conflict",
+                                GUARD_FLOOR_ALERT},
     NotificationCategory.REPORTS: {WEEKLY_REPORT_READY},
     NotificationCategory.SYSTEM: {"job_failed", "modality_materialize_no_room"},
 }
@@ -56,7 +69,8 @@ TYPE_CATEGORY = {t: c for c, ts in CATEGORY_TYPES.items() for t in ts}
 
 # The events that also fire a web push (D-08 key events). wrong-room and
 # force-handover both notify with type room_event, so a single entry covers them.
-PUSH_TYPES = {"room_event", "room_conflict", WEEKLY_REPORT_READY}
+PUSH_TYPES = {"room_event", "room_conflict", WEEKLY_REPORT_READY,
+              GUARD_FLOOR_ALERT}
 
 
 def muted_types(user):

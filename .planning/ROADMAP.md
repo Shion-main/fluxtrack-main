@@ -33,7 +33,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 04.2: Co-Scheduled Session Attendance** (INSERTED) - Attendance handling for one instructor teaching 2+ sections at the same time in different rooms (129 slots, 54/200 profs): a single scan/verification must cover the co-scheduled sibling sessions so the sweep never falsely marks them Absent (completed 2026-07-07; verification passed after same-day gap closure — criterion #3 online coverage now 152/152 via D-01 refinement #2, online merge key = faculty + exact start; see 04.2-VERIFICATION.md)
 - [x] **Phase 5: Notifications — Read Surface & Web Push** - In-app polled list + VAPID web push + per-user mute preferences (completed 2026-07-15)
 - [x] **Phase 6: Reporting Engine & Reporting Surfaces** - One shared aggregate layer powering weekly report, scorecards, IFO/Dean/HR dashboards (completed 2026-07-15)
-- [ ] **Phase 7: Remaining Operational Surfaces** - Guard monitor/locator, IFO room & booking ops, Faculty self-service, job monitoring
+- [x] **Phase 7: Remaining Operational Surfaces** - Guard monitor/locator, IFO room & booking ops, Faculty self-service, job monitoring (completed 2026-07-19)
 - [ ] **Phase 8: Auth Cutover & AWS Deployment** - Entra ID SSO, Node-free Tailwind build, single-EC2 + RDS deploy
 
 ## Phase Details
@@ -298,11 +298,55 @@ Plans:
   4. A faculty member can start an Online session via "Verify & Start" with a valid MS Teams link (no QR), view their own attendance history including Checker flags, and manage their profile photo and notification preferences.
   5. A System Admin can monitor scheduled-job status (last run, success/failure, rows affected).
 
-**Plans**: TBD
+**Already shipped out-of-band** (audited 2026-07-18, during UI-elevation work): SYS-04, GRD-01, GRD-03 (labelled GRD-02 in code — corrected by 07-01), and the notification-preferences half of FAC-12. The 12 plans below cover only the 11 remaining requirements.
+
+**Out of scope, deferred to an inserted Phase 06.1 after Phase 07 ships**: room utilization / IFO-09 reporting aggregates (unfinished Phase 06 scope).
+
+**Plans**: 12 plans across 10 waves
 
 Plans:
 
-- [ ] 07-01: TBD
+**Wave 1**
+
+- [ ] 07-01-PLAN.md — Guard read-only enforcement (GRD-05), GRD-02/GRD-03 label correction, shared `web/room_state.py` extraction [Wave 1]
+- [ ] 07-02-PLAN.md — data foundations: `Booking.room` to PROTECT (D-19), four-relation room-delete probe (D-17/D-20), collision-safe `manual_code` minter (live intermittent defect), `ImportStaging` model + staging service (D-12) [Wave 1]
+
+**Wave 2**
+
+- [ ] 07-03-PLAN.md — IFO room CRUD with named delete refusal (IFO-01b) [Wave 2]
+
+**Wave 3**
+
+- [ ] 07-04-PLAN.md — QR token + six-digit code rotation, confirm then reprint (IFO-02) [Wave 3]
+
+**Wave 4**
+
+- [ ] 07-05-PLAN.md — Manual room release + open-conflicts surface + `release_room` invariant update (IFO-08) [Wave 4]
+
+**Wave 5**
+
+- [ ] 07-06-PLAN.md — Ad-hoc booking create/cancel, conflict-checked by `room_is_free` (IFO-05) [Wave 5]
+
+**Wave 6**
+
+- [ ] 07-07-PLAN.md — Schedule import by upload, preview then commit; establishes the multipart house pattern (IFO-03b) [Wave 6]
+
+**Wave 7**
+
+- [ ] 07-08-PLAN.md — Profile photo upload: validate, re-encode, EXIF-strip (FAC-12) [Wave 7]
+
+**Wave 8**
+
+- [ ] 07-09-PLAN.md — Online Verify & Start with a pasted Teams link (FAC-08) [Wave 8]
+
+**Wave 9**
+
+- [ ] 07-10-PLAN.md — Faculty attendance history, read-only, Checker flags visible (FAC-11) [Wave 9]
+
+**Wave 10**
+
+- [ ] 07-11-PLAN.md — Guard per-room schedule, floor-authorized (GRD-02) [Wave 10]
+- [ ] 07-12-PLAN.md — Coalesced guard push fan-out from the sweep (GRD-04) [Wave 10]
 
 ### Phase 8: Auth Cutover & AWS Deployment
 

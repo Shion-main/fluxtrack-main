@@ -44,35 +44,39 @@ history. Reads ops.JobRun; no write controls. ASCII-only.{% endcomment %}
     {% endfor %}
   </div>
 
-  <h3 class="uk-h4 mb-2">Recent runs</h3>
-  <div class="uk-card uk-card-body p-0 data-grid">
-    <table class="uk-table uk-table-divider uk-table-small uk-table-middle mb-0">
+  <h3 class="uk-h4 mb-2">Run history</h3>
+  <div class="uk-card uk-card-body p-0 table-wrap">
+    <table class="tbl">
       <thead>
         <tr>
           <th scope="col">Job</th>
           <th scope="col">Started</th>
           <th scope="col">Status</th>
-          <th scope="col" class="uk-text-right">Duration</th>
-          <th scope="col" class="uk-text-right">Rows</th>
+          <th scope="col" class="tbl__num">Duration</th>
+          <th scope="col" class="tbl__num">Rows</th>
         </tr>
       </thead>
       <tbody>
         {% for item in recent %}
         <tr>
-          <td class="font-mono">{{ item.run.job_name }}</td>
-          <td class="uk-text-nowrap">{{ item.run.started_at|date:"M j, g:i:s A" }}</td>
+          <td class="tbl__id tbl__mono">{{ item.run.job_name }}</td>
+          <td class="tbl__time">{{ item.run.started_at|date:"M j, g:i:s A" }}</td>
           <td>
-            {% if item.run.status == "ok" %}<span class="uk-label" style="background:var(--green-tint);color:var(--green)">OK</span>
-            {% elif item.run.status == "failed" %}<span class="uk-label" style="background:var(--red-tint);color:var(--red)">Failed</span>
-            {% else %}<span class="uk-label" style="background:var(--amber-tint);color:var(--amber)">Running</span>{% endif %}
+            {% if item.run.status == "ok" %}<span class="pill pill--ok">OK</span>
+            {% elif item.run.status == "failed" %}<span class="pill pill--bad">Failed</span>
+            {% else %}<span class="pill pill--warn">Running</span>{% endif %}
+            {% if item.run.status == "failed" and item.run.detail %}
+            <div class="tbl__meta" style="margin-top:3px;color:var(--red)">{{ item.run.detail|truncatechars:90 }}</div>
+            {% endif %}
           </td>
-          <td class="uk-text-right">{% if item.duration != None %}{{ item.duration|floatformat:1 }}s{% else %}&mdash;{% endif %}</td>
-          <td class="uk-text-right">{{ item.run.rows_affected }}</td>
+          <td class="tbl__num">{% if item.duration != None %}{{ item.duration|floatformat:1 }}s{% else %}&mdash;{% endif %}</td>
+          <td class="tbl__num">{{ item.run.rows_affected }}</td>
         </tr>
         {% endfor %}
       </tbody>
     </table>
   </div>
+  {% include "_pager.html" %}
   {% else %}
   <div class="uk-card uk-card-body text-center">
     <p class="uk-h4 mb-1">No job runs recorded yet</p>

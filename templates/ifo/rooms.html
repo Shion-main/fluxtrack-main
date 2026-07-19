@@ -1,30 +1,89 @@
 {% extends "ifo/_console.html" %}
-{% block title %}Rooms · FluxTrack{% endblock %}
-{% block console_title %}Rooms{% endblock %}
-{% block page_actions %}<span class="uk-label uk-label-secondary">{{ total }} rooms</span>{% endblock %}
-{% block console %}
-<p class="uk-text-muted mb-6">Per-room schedules, QR posters, and status (IFO-01, IFO-11).</p>
+{% load static %}
+{% comment %}
+IFO room board (IFO-07 + IFO-11, merged). Replaces the old session-list "Live
+today": rooms are the fixed entity IFO manages and sessions are what flows
+through them, so the room is the tile.
 
-{% for group, rooms in groups.items %}
-<h3 class="uk-h4 mt-6 mb-2">{{ group }}</h3>
-<div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-  {% for room, today in rooms %}
-  <a href="/ifo/rooms/{{ room.code }}" class="uk-card uk-card-body block hover:bg-muted transition-colors">
-    <div class="flex items-center justify-between gap-2">
-      <div class="min-w-0">
-        <h4 class="font-semibold">{{ room.code }}</h4>
-        <p class="uk-text-small uk-text-muted">{{ room.name|default:"—" }}</p>
-      </div>
-      {% if today %}<span class="uk-label uk-label-primary shrink-0">{{ today }} today</span>
-      {% else %}<span class="uk-label uk-label-secondary shrink-0">idle</span>{% endif %}
+The filter bar and the slide-over live OUTSIDE #board on purpose -- #board is
+swapped every poll, so anything inside it would lose its state (and close the
+panel) every few seconds. board.js re-applies the active filters after each
+htmx swap. ASCII-only.
+{% endcomment %}
+{% block head %}{{ block.super }}
+<link rel="stylesheet" href="{% static 'css/board.css' %}"/>
+{% endblock %}
+{% block title %}Rooms - FluxTrack{% endblock %}
+{% block console_title %}Rooms{% endblock %}
+{% block page_actions %}
+<span class="uk-text-small uk-text-muted">{{ total_rooms }} room{{ total_rooms|pluralize }}</span>
+{% comment %}IFO-01b entry point. The per-room Edit/Delete actions deliberately
+live on the slide-over panel and the full room page instead of on the tiles:
+#board is replaced wholesale every poll, so a control rendered inside a tile
+would be destroyed mid-click every few seconds.{% endcomment %}
+<a href="/ifo/rooms/new" class="uk-btn uk-btn-primary uk-btn-sm">
+  <uk-icon icon="plus" class="size-4"></uk-icon> New room</a>
+{% endblock %}
+
+{% block console %}
+<div class="bd" id="bd">
+
+  <div class="bd__bar">
+    {% comment %}Scope is a real link, not a JS toggle, so the view stays
+    bookmarkable and the back button behaves.{% endcomment %}
+    <div class="bd__scope" role="group" aria-label="Room scope">
+      <a href="/ifo/rooms" class="{% if scope == 'live' %}is-on{% endif %}"
+         {% if scope == 'live' %}aria-current="true"{% endif %}>Live</a>
+      <a href="/ifo/rooms?scope=all" class="{% if scope == 'all' %}is-on{% endif %}"
+         {% if scope == 'all' %}aria-current="true"{% endif %}>All rooms</a>
     </div>
-  </a>
-  {% endfor %}
+
+    <div class="bd__chips" role="group" aria-label="Filter by building">
+      <button type="button" class="bd__chip" data-filter="building" data-value=""
+              aria-pressed="true">All buildings</button>
+      {% for b in buildings %}
+      <button type="button" class="bd__chip" data-filter="building" data-value="{{ b }}"
+              aria-pressed="false">{{ b }}</button>
+      {% endfor %}
+    </div>
+
+    <button type="button" class="bd__chip bd__chip--alert" data-filter="alert" data-value="1"
+            aria-pressed="false">
+      Needs attention <span class="bd__n" data-alert-count>{{ totals.problems }}</span></button>
+
+    <label class="bd__search">
+      <span class="sr-only">Search rooms</span>
+      <uk-icon icon="search"></uk-icon>
+      <input type="search" placeholder="Room or faculty" data-filter="q" autocomplete="off">
+    </label>
+  </div>
+
+  <div id="board" class="js-poll"
+       hx-get="/ifo/rooms/board?scope={{ scope }}"
+       hx-trigger="every {{ poll_ms }}ms"
+       hx-swap="innerHTML"
+       aria-live="polite" aria-atomic="false">
+    {% include "ifo/_board.html" %}
+  </div>
+
+  {% comment %}Filtered-to-nothing is a different problem from having no rooms,
+  so it gets its own message and a way out. Toggled by board.js.{% endcomment %}
+  <div class="bd__empty" id="bd-nomatch" hidden>
+    <uk-icon icon="search-x"></uk-icon>
+    <h4>No rooms match these filters</h4>
+    <p>Try a different building, or clear the filters to see the whole board.</p>
+    <button type="button" class="uk-btn uk-btn-secondary uk-btn-sm" data-clear-filters>
+      Clear filters</button>
+  </div>
 </div>
-{% empty %}
-<div class="uk-card uk-card-body">
-  <p class="uk-text-muted">No rooms yet. Import some:
-    <code>py -3.12 manage.py import_offerings --building R --floor 3</code></p>
-</div>
-{% endfor %}
+
+{% comment %}Slide-over: htmx loads the panel body here; the board keeps polling
+behind it so you never lose your place scanning a floor.{% endcomment %}
+<div class="sheet__scrim" id="sheet-scrim" data-sheet-close hidden></div>
+<aside class="sheet" id="sheet" role="dialog" aria-modal="true"
+       aria-labelledby="sheet-title" hidden>
+  <div id="sheet-content"></div>
+</aside>
+
+<script src="{% static 'js/board.js' %}" defer></script>
 {% endblock %}

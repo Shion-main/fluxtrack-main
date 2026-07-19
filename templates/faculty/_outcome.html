@@ -64,6 +64,11 @@ Confirm forms reuse .ft-control + .ft-btn-navy. ASCII-only (no em dash).
   </div>
   <p class="ft-outcome__body">
     This session is Online - start it with Verify &amp; Start (Teams link) instead of a room QR.</p>
+  {% comment %}FAC-08 landed the surface this branch has always pointed at, so
+  the instruction is now a working link rather than advice.{% endcomment %}
+  <p class="ft-outcome__body">
+    <a class="ft-btn-navy" href="{% url 'faculty_online' %}">
+      <uk-icon icon="monitor"></uk-icon> Go to Verify &amp; Start</a></p>
 </div>
 
 {% elif resolution.outcome == "no-schedule" %}
