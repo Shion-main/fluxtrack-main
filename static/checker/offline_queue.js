@@ -231,6 +231,13 @@
 
   function initBanner() {
     refreshBanner();
+    // Drain on load, not only on the `online` EVENT: a checker who reopens the
+    // app already connected (browser restart, next morning) would otherwise see
+    // "N scan(s) queued — syncing…" forever while nothing syncs until
+    // connectivity happens to blip (2026-07-19 audit).
+    if (available && navigator.onLine) {
+      drain();
+    }
     window.addEventListener("online", function () {
       refreshBanner();
       drain();
