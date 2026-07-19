@@ -17,11 +17,14 @@ DB-BACKED (TestCase) classes, over make_room_utilization_fixture:
   UsedHoursPolicyTests    -- one test per row of the D-03/D-09 metric contract.
   VirtualRoomExclusionTests -- D-04/D-08: V-rooms are invisible to every aggregate.
   ScopeTests              -- ARCHIVED schedules and the as_of clamp.
+  HeatGridTests           -- T2 day x block grid; reconciliation with the T1 card.
+  BlockSaturationTests    -- the same grid reduced to a deterministic ranking.
 
 Django test runner (not pytest); reference module constants (SessionStatus,
 DayOfWeek, ScheduleStatus, HELD_STATUSES), never a bare status string. ASCII-only.
 """
 import datetime
+from decimal import Decimal
 
 from django.contrib.auth import get_user_model
 from django.test import SimpleTestCase, TestCase
@@ -44,12 +47,14 @@ from scheduling.reporting import (
     _physical_rooms,
     _session_contribution,
     _span_seconds,
+    block_saturation,
     campus_block_ladder,
+    room_heat_grid,
     room_utilization,
     safe_card,
     timetabled_cells,
 )
-from scheduling.test_support import make_room_utilization_fixture
+from scheduling.test_support import _aware, make_room_utilization_fixture
 
 UTC = datetime.timezone.utc
 
@@ -737,6 +742,205 @@ class ScopeTests(RoomFixtureTestCase):
         self.assertEqual(util.utilization_pct, 0)
 
 
+class GridFixtureTestCase(RoomFixtureTestCase):
+    """Shared helpers for the T2 grid classes."""
+
+    # Every Decimal hours value is quantized to 0.1, so a single cell can be off
+    # by at most 0.05 h. The reconciliation bound is that error times the cell
+    # count -- a real tolerance derived from the quantization, not a fudge factor.
+    def _tolerance(self, cells):
+        return Decimal("0.05") * cells
+
+    def _grid(self, **kwargs):
+        kwargs.setdefault("start", self.f.week_start)
+        kwargs.setdefault("end", self.f.week_end)
+        return room_heat_grid(term=self.f.term, **kwargs)
+
+    def _saturation(self, **kwargs):
+        kwargs.setdefault("start", self.f.week_start)
+        kwargs.setdefault("end", self.f.week_end)
+        return block_saturation(term=self.f.term, **kwargs)
+
+    def _row(self, grid, block):
+        """The grid row for a fixture (start, end) block tuple."""
+        start = block[0]
+        return next(r for r in grid if r.block.start == start)
+
+    def _cell(self, grid, block, day):
+        return next(c for c in self._row(grid, block).cells if c.day == day)
+
+    def _add_two_block_session(self):
+        """A MON 07:00-09:30 class: one session straddling rungs A and B.
+
+        Its start time is already a ladder rung and 75 minutes is still the modal
+        span there, so neither the ladder nor the cell set moves -- only the
+        numerator, which is what the distribution rule is being asked about.
+        """
+        span = (self.f.blocks[0][0], self.f.blocks[1][1])   # 07:00 -> 09:30
+        return self.f.add_session(
+            self.f.mon, span, SessionStatus.COMPLETED,
+            room=self.f.rooms[6],
+            actual_start=_aware(self.f.mon, span[0]),
+            actual_end=_aware(self.f.mon, span[1]),
+        )
+
+
+class HeatGridTests(GridFixtureTestCase):
+    """T2: the day x block grid, Session-derived and reconciling with the card.
+
+    Every shape assertion is recomputed from the fixture's own querysets. A
+    literal row count would encode today's import and is what D-06 forbids.
+    """
+
+    def test_row_count_equals_the_ladder_length(self):
+        expected = len(campus_block_ladder(self.f.term))
+        self.assertEqual(len(self._grid()), expected)
+
+    def test_each_row_has_one_cell_per_day_in_choices_order(self):
+        expected_days = [int(v) for v, _ in DayOfWeek.choices]
+        for row in self._grid():
+            self.assertEqual([c.day for c in row.cells], expected_days)
+
+    def test_a_two_block_session_lands_in_both_of_its_blocks(self):
+        self._add_two_block_session()
+        grid = self._grid()
+        cell_a = self._cell(grid, self.f.blocks[0], DayOfWeek.MON)
+        cell_b = self._cell(grid, self.f.blocks[1], DayOfWeek.MON)
+        # 150 used minutes, split proportionally by the two rungs' equal
+        # durations: 75 minutes into each, NOT 150 replicated into both.
+        # Rung A already held s_full (75); rung B held s_early (45) and
+        # s_early_unflagged (63). Absolute totals, not deltas: the Decimal hours
+        # are quantized per cell, so a difference of two quantized figures is not
+        # itself a faithful 75 minutes.
+        self.assertEqual(cell_a.used_hours, self._hours_m(75 + 75))
+        self.assertEqual(cell_b.used_hours, self._hours_m(45 + 63 + 75))
+        self.assertEqual(cell_a.session_count, 3)   # s_full, s_absent, the new one
+        self.assertEqual(cell_b.session_count, 3)
+
+    def test_the_grid_and_the_card_report_the_same_used_hours(self):
+        """The property that stops the dashboard card and the grid disagreeing.
+
+        Plan 06 renders both on one page. If the multi-block distribution were
+        changed to assign the full span to every occupied block, this fails.
+        """
+        self._add_two_block_session()
+        grid = self._grid()
+        total = sum(
+            (c.used_hours for row in grid for c in row.cells), Decimal("0"))
+        cells = sum(len(row.cells) for row in grid)
+        self.assertLessEqual(
+            abs(total - self._util().used_hours), self._tolerance(cells))
+
+    def test_the_grid_and_the_card_report_the_same_available_hours(self):
+        grid = self._grid()
+        total = sum(
+            (c.available_hours for row in grid for c in row.cells), Decimal("0"))
+        cells = sum(len(row.cells) for row in grid)
+        self.assertLessEqual(
+            abs(total - self._util().available_hours), self._tolerance(cells))
+
+    def test_the_virtual_session_reaches_no_cell(self):
+        before = self._grid()
+        Session.objects.filter(pk=self.f.s_virtual.pk).delete()
+        after = self._grid()
+        for row_b, row_a in zip(before, after):
+            for cell_b, cell_a in zip(row_b.cells, row_a.cells):
+                self.assertEqual(cell_a.used_hours, cell_b.used_hours)
+                self.assertEqual(cell_a.session_count, cell_b.session_count)
+                self.assertEqual(cell_a.room_count, cell_b.room_count)
+
+    def test_an_absent_session_is_booked_with_zero_used_at_cell_resolution(self):
+        """The waste signal, visible one cell at a time rather than only campus-wide."""
+        cell = self._cell(self._grid(), self.f.blocks[0], DayOfWeek.MON)
+        # s_full (75/75) + s_absent (75/0) share this cell.
+        self.assertEqual(cell.booked_hours, self._hours_m(150))
+        self.assertEqual(cell.used_hours, self._hours_m(75))
+        self.assertEqual(cell.session_count, 2)
+        self.assertEqual(cell.room_count, 2)
+
+    def test_a_sunday_cell_is_not_timetabled_rather_than_zero_percent(self):
+        """D-10: no capacity and idle capacity are different facts.
+
+        The fixture schedules nothing on Sunday, so every Sunday cell must report
+        itself as untimetabled with a zero denominator -- not as a 0% slot the
+        campus failed to use.
+        """
+        grid = self._grid()
+        for row in grid:
+            cell = next(c for c in row.cells if c.day == DayOfWeek.SUN)
+            self.assertFalse(cell.timetabled)
+            self.assertEqual(cell.available_hours, _hours(0))
+            self.assertEqual(cell.utilization_pct, 0)
+
+    def test_a_day_that_teaches_only_one_block_prices_only_that_block(self):
+        """Saturday carries rung A alone; rungs B and C have no Saturday capacity."""
+        grid = self._grid()
+        self.assertTrue(self._cell(grid, self.f.blocks[0], DayOfWeek.SAT).timetabled)
+        for block in (self.f.blocks[1], self.f.blocks[2]):
+            cell = self._cell(grid, block, DayOfWeek.SAT)
+            self.assertFalse(cell.timetabled)
+            self.assertEqual(cell.available_hours, _hours(0))
+
+    def test_a_timetabled_cell_prices_every_physical_room(self):
+        cell = self._cell(self._grid(), self.f.blocks[2], DayOfWeek.MON)
+        self.assertTrue(cell.timetabled)
+        self.assertEqual(
+            cell.available_hours, self._hours_m(self.PHYSICAL_ROOMS * 90))
+
+    def test_a_none_term_has_no_grid(self):
+        self.assertIsNone(
+            room_heat_grid(start=self.f.week_start, end=self.f.week_end, term=None))
+
+
+class BlockSaturationTests(GridFixtureTestCase):
+    """The ranked reduction of the same grid -- deterministic, and reconciling."""
+
+    def test_one_row_per_ladder_rung(self):
+        self.assertEqual(
+            len(self._saturation()), len(campus_block_ladder(self.f.term)))
+
+    def test_rows_are_ordered_by_utilization_descending(self):
+        pcts = [b.utilization_pct for b in self._saturation()]
+        self.assertEqual(pcts, sorted(pcts, reverse=True))
+
+    def test_an_exact_tie_breaks_on_block_start_ascending(self):
+        """Every block at 0% is a total tie, so only the tiebreak decides order."""
+        Session.objects.filter(schedule__term=self.f.term).delete()
+        rows = self._saturation()
+        self.assertEqual({b.utilization_pct for b in rows}, {0})
+        starts = [b.block.start for b in rows]
+        self.assertEqual(starts, sorted(starts))
+
+    def test_summed_used_hours_match_the_grid(self):
+        grid_total = sum(
+            (c.used_hours for row in self._grid() for c in row.cells),
+            Decimal("0"))
+        block_total = sum(
+            (b.used_hours for b in self._saturation()), Decimal("0"))
+        self.assertEqual(block_total, grid_total)
+
+    def test_a_none_ladder_returns_an_empty_list_not_none(self):
+        rows = block_saturation(
+            start=self.f.week_start, end=self.f.week_end, term=None)
+        self.assertEqual(rows, [])
+
+    def test_peak_day_names_the_blocks_busiest_day(self):
+        # Rung C: MON s_late uses 70 minutes; WED s_noshow_stamped uses none.
+        row = next(
+            b for b in self._saturation()
+            if b.block.start == self.f.blocks[2][0])
+        self.assertEqual(row.peak_day, DayOfWeek.MON)
+
+    def test_peak_day_is_none_for_an_entirely_unused_block(self):
+        Session.objects.filter(
+            pk__in=[self.f.s_early.pk, self.f.s_early_unflagged.pk]).delete()
+        row = next(
+            b for b in self._saturation()
+            if b.block.start == self.f.blocks[1][0])
+        self.assertEqual(row.used_hours, _hours(0))
+        self.assertIsNone(row.peak_day)
+
+
 class RoomCardIsolationTests(SimpleTestCase):
     """D-05: a raising room aggregate degrades to a message, never a 500.
 
@@ -790,6 +994,13 @@ class RoomCardIsolationTests(SimpleTestCase):
 #   print('absent', u.absent_hours, '| unused_held', u.unused_held_hours)
 #   print('utilization_pct', u.utilization_pct, '| booking_pct', u.booking_pct,
 #         '| in_flight', u.in_flight)
+#   g = room_heat_grid(start=start, end=end, term=t, as_of=today)
+#   s = block_saturation(start=start, end=end, term=t, as_of=today)
+#   print('grid rows', len(g), '| cells', sum(len(r.cells) for r in g),
+#         '| timetabled', sum(1 for r in g for c in r.cells if c.timetabled))
+#   print('grid used', sum(c.used_hours for r in g for c in r.cells))
+#   print('most saturated', [(str(b.block.start), b.utilization_pct) for b in s[:3]])
+#   print('least saturated', [(str(b.block.start), b.utilization_pct) for b in s[-3:]])
 #   "
 #
 # The week is derived from `today` rather than hardcoded so the recipe keeps
@@ -822,6 +1033,22 @@ class RoomCardIsolationTests(SimpleTestCase):
 #    (seed_term.py:384-395). A zero at a time of day when classes are in session
 #    means the D-09 branch is not being reached. A zero on a database seeded days
 #    ago is expected and says nothing -- those sessions are outside the window.
+#
+# 5. The grid's summed used hours must equal the card's used hours, give or take
+#    0.05 h per cell (each cell is quantized independently). A larger gap means
+#    the multi-block distribution has been changed to replicate a session's full
+#    span into every rung it crosses, which double-counts a long class.
+#
+# 6. The most-saturated blocks should be mid-morning and mid-afternoon, NOT the
+#    first or last rung of the day. A block at 100% means virtual rooms leaked in
+#    or the denominator collapsed. Observed on the current seed (2026-07-13 week):
+#    top 13:15 at 35%, 14:30 at 33%, 10:45 at 32%; bottom 07:00 at 19%,
+#    18:15 at 16%, 19:30 at 11% -- the expected shape, edges thin and middle full.
+#
+# 7. 'timetabled' should be BELOW 'cells'. They are equal only if the term really
+#    teaches every rung on every weekday, which no real timetable does; equality
+#    means the D-10 cell gate has been bypassed and Sunday has silently bought a
+#    full ladder of capacity. Observed: 67 timetabled of 77 cells.
 #
 # These are OBSERVATIONS to reason about, not assertions to encode. The dataset is
 # regenerated with a different seed and any test pinning a specific seeded figure
