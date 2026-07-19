@@ -4,17 +4,22 @@ A NEW sibling of tests_reporting.py, matching this app's existing split of
 reporting tests by concern (tests_reporting.py, tests_report_render.py,
 tests_room_master.py). Room utilization is a distinct aggregate family.
 
-This pass is deliberately DB-FREE (SimpleTestCase): the zero-denominator and
-ROUND_HALF_UP contract of the hours rate (HoursPctRoundingTests), the
-"DayOfWeek needs no translation table" claim that teaching_weekdays rests on
-(WeekdayMappingTests), the block-duration span rule the ladder is built from
-(BlockDurationTests), and THE definition of used-hours every downstream plan
-consumes (SessionContributionTests). Plan 02 extends this module with the
-DB-backed fixture tests; keeping this pass free of database access keeps that
-split legible.
+DB-FREE (SimpleTestCase) classes, pinning pure arithmetic:
+  HoursPctRoundingTests   -- zero-denominator + ROUND_HALF_UP contract of the rate.
+  WeekdayMappingTests     -- "DayOfWeek needs no translation table" (D-06/D-10).
+  BlockDurationTests      -- the span rule the derived ladder is built from.
+  SessionContributionTests-- THE definition of used-hours every plan consumes.
+  RoomCardIsolationTests  -- safe_card degrades a raising card to a generic message.
+
+DB-BACKED (TestCase) classes, over make_room_utilization_fixture:
+  DenominatorTests        -- D-10 cell sum, recomputed independently (plan 01).
+  LadderDerivationTests   -- the ladder and cell set come from DATA, not literals.
+  UsedHoursPolicyTests    -- one test per row of the D-03/D-09 metric contract.
+  VirtualRoomExclusionTests -- D-04/D-08: V-rooms are invisible to every aggregate.
+  ScopeTests              -- ARCHIVED schedules and the as_of clamp.
 
 Django test runner (not pytest); reference module constants (SessionStatus,
-DayOfWeek), never a bare status string. ASCII-only.
+DayOfWeek, ScheduleStatus, HELD_STATUSES), never a bare status string. ASCII-only.
 """
 import datetime
 
@@ -28,9 +33,11 @@ from scheduling.models import (
     DayOfWeek,
     Schedule,
     ScheduleStatus,
+    Session,
     SessionStatus,
 )
 from scheduling.reporting import (
+    HELD_STATUSES,
     _block_duration_seconds,
     _hours,
     _hours_pct,
@@ -39,8 +46,10 @@ from scheduling.reporting import (
     _span_seconds,
     campus_block_ladder,
     room_utilization,
+    safe_card,
     timetabled_cells,
 )
+from scheduling.test_support import make_room_utilization_fixture
 
 UTC = datetime.timezone.utc
 
@@ -418,3 +427,335 @@ class DenominatorTests(TestCase):
 
     def test_none_term_yields_an_empty_cell_set(self):
         self.assertEqual(timetabled_cells(None), [])
+
+
+class RoomFixtureTestCase(TestCase):
+    """Shared base: one room-shaped fixture and its documented minute totals.
+
+    The totals below are the fixture's OWN documented contract
+    (``make_room_utilization_fixture``'s docstring), written in minutes so a
+    reader can add them up by hand. They are asserted, never derived from the code
+    under test -- a figure produced by the implementation would only prove the
+    implementation equals itself.
+    """
+
+    # Per-session (booked, used) minutes, straight off the fixture docstring.
+    ROWS = {
+        "s_full": (75, 75),
+        "s_absent": (75, 0),
+        "s_early": (75, 45),
+        "s_early_unflagged": (75, 63),
+        "s_late": (90, 70),
+        "s_overrun": (75, 75),
+        "s_noshow_stamped": (90, 0),
+        "s_sat": (75, 75),
+    }
+    BOOKED_M = 630
+    USED_M = 403
+    ABSENT_M = 75
+    UNUSED_HELD_M = 152
+    WASTED_M = 227
+
+    PHYSICAL_ROOMS = 8
+    LADDER_RUNGS = 3
+    CELLS = 7
+    TEACHING_DAYS = 3
+
+    def setUp(self):
+        self.f = make_room_utilization_fixture()
+
+    def _util(self, **kwargs):
+        kwargs.setdefault("start", self.f.week_start)
+        kwargs.setdefault("end", self.f.week_end)
+        return room_utilization(term=self.f.term, **kwargs)
+
+    def _without(self, session):
+        """Delete ONE session (its Schedule stays, so the denominator is fixed)."""
+        Session.objects.filter(pk=session.pk).delete()
+        return self._util()
+
+    def _hours_m(self, minutes):
+        return _hours(minutes * 60)
+
+
+class LadderDerivationTests(RoomFixtureTestCase):
+    """D-06/D-10: the ladder and the cell set are DATA, never literals.
+
+    Every count here is recomputed from the fixture's own querysets. An assertion
+    of "11 blocks" or "5 teaching days" would encode today's import and is exactly
+    what D-06 forbids.
+    """
+
+    def test_ladder_length_equals_the_distinct_active_start_times(self):
+        expected = Schedule.objects.filter(
+            term=self.f.term, status=ScheduleStatus.ACTIVE,
+        ).values_list("start_time", flat=True).distinct().count()
+        self.assertEqual(len(campus_block_ladder(self.f.term)), expected)
+        # And the fixture's own documented rung count, as a cross-check.
+        self.assertEqual(expected, self.LADDER_RUNGS)
+
+    def test_each_rung_carries_the_fixture_blocks_own_duration(self):
+        expected = {
+            start: _span_seconds(start, end) for start, end in self.f.blocks
+        }
+        actual = {
+            b.start: b.duration_seconds for b in campus_block_ladder(self.f.term)
+        }
+        self.assertEqual(actual, expected)
+        # Two distinct durations, so no single "block length" can be assumed.
+        self.assertEqual(len(set(expected.values())), 2)
+
+    def test_saturday_is_picked_up_and_sunday_is_absent_from_the_data(self):
+        # teaching_weekdays was removed by D-10; the day set is recovered from the
+        # cell set, which is now the unit of capacity.
+        days = {c.day for c in timetabled_cells(self.f.term)}
+        self.assertIn(DayOfWeek.SAT, days)
+        self.assertNotIn(DayOfWeek.SUN, days)
+        self.assertEqual(days, {DayOfWeek.MON, DayOfWeek.WED, DayOfWeek.SAT})
+
+    def test_saturday_is_thinner_than_the_grid(self):
+        """SAT carries one rung; MON and WED carry all of them (the D-10 shape)."""
+        by_day = {}
+        for cell in timetabled_cells(self.f.term):
+            by_day.setdefault(cell.day, []).append(cell)
+        self.assertEqual(len(by_day[DayOfWeek.SAT]), 1)
+        self.assertEqual(len(by_day[DayOfWeek.MON]), self.LADDER_RUNGS)
+        self.assertEqual(len(by_day[DayOfWeek.WED]), self.LADDER_RUNGS)
+
+    def test_none_term_has_no_ladder(self):
+        self.assertIsNone(campus_block_ladder(None))
+
+    def test_a_term_of_only_archived_schedules_has_no_ladder(self):
+        Schedule.objects.filter(term=self.f.term).update(
+            status=ScheduleStatus.ARCHIVED)
+        self.assertIsNone(campus_block_ladder(self.f.term))
+        self.assertEqual(timetabled_cells(self.f.term), [])
+
+    def test_the_derived_shape_matches_the_fixtures_documented_totals(self):
+        util = self._util()
+        self.assertEqual(util.physical_rooms, self.PHYSICAL_ROOMS)
+        self.assertEqual(util.blocks_per_day, self.LADDER_RUNGS)
+        self.assertEqual(util.timetabled_cells, self.CELLS)
+        self.assertEqual(util.teaching_days, self.TEACHING_DAYS)
+
+
+class UsedHoursPolicyTests(RoomFixtureTestCase):
+    """D-03/D-09, one test per row of the metric contract, against real rows.
+
+    Each claim is defended by removing exactly one session and asserting the
+    totals move by exactly that row's documented contribution. The Schedule stays
+    behind, so the denominator is held constant and only the numerator moves.
+    """
+
+    def test_the_fixtures_documented_totals_hold(self):
+        util = self._util()
+        self.assertEqual(util.booked_hours, self._hours_m(self.BOOKED_M))
+        self.assertEqual(util.used_hours, self._hours_m(self.USED_M))
+        self.assertEqual(util.absent_hours, self._hours_m(self.ABSENT_M))
+        self.assertEqual(util.unused_held_hours, self._hours_m(self.UNUSED_HELD_M))
+        self.assertEqual(util.wasted_hours, self._hours_m(self.WASTED_M))
+
+    def test_absent_adds_booked_hours_and_zero_used_hours(self):
+        booked_m, used_m = self.ROWS["s_absent"]
+        self.assertEqual(used_m, 0)
+        after = self._without(self.f.s_absent)
+        self.assertEqual(after.booked_hours, self._hours_m(self.BOOKED_M - booked_m))
+        self.assertEqual(after.used_hours, self._hours_m(self.USED_M))
+        self.assertEqual(after.absent_hours, self._hours_m(0))
+        self.assertEqual(after.absent_sessions, 0)
+
+    def test_early_end_contributes_its_actual_span_and_the_rest_is_wasted(self):
+        booked_m, used_m = self.ROWS["s_early"]
+        after = self._without(self.f.s_early)
+        self.assertEqual(after.used_hours, self._hours_m(self.USED_M - used_m))
+        # The 30 minutes it held but did not use leave unused_held with it.
+        self.assertEqual(
+            after.unused_held_hours,
+            self._hours_m(self.UNUSED_HELD_M - (booked_m - used_m)))
+
+    def test_unflagged_early_end_still_counts_as_wasted(self):
+        """The binding guard: waste is derived from TIMESTAMPS, not the flag.
+
+        ``s_early_unflagged`` ends 12 minutes early with ``ended_early`` False and
+        ``room_released_at`` NULL -- the shape ``seed_term`` really produces. It is
+        the ONLY fixture row where the flag DISAGREES with the timestamps, so it is
+        the only row that fails if the waste metric is keyed off the boolean; every
+        other early-end row has the flag set to match and would pass either way.
+
+        Wave 1 confirmed the same disagreement on live data: ``early_end_sessions``
+        read 0 for the week while ``unused_held_hours`` read 195.9. Do not delete
+        this test as redundant with the aggregate assertions below -- they stay
+        non-zero on a flag-keyed implementation because of ``s_early`` and
+        ``s_absent``, and only this row exposes it.
+        """
+        row = Session.objects.get(pk=self.f.s_early_unflagged.pk)
+        self.assertFalse(row.ended_early)
+        self.assertIsNone(row.room_released_at)
+        self.assertEqual(
+            (row.scheduled_end - row.actual_end), datetime.timedelta(minutes=12))
+
+        booked_m, used_m = self.ROWS["s_early_unflagged"]
+        after = self._without(self.f.s_early_unflagged)
+        self.assertEqual(after.used_hours, self._hours_m(self.USED_M - used_m))
+        self.assertEqual(
+            after.unused_held_hours, self._hours_m(self.UNUSED_HELD_M - 12))
+        self.assertEqual(after.wasted_hours, self._hours_m(self.WASTED_M - 12))
+
+    def test_only_one_session_carries_the_ended_early_flag(self):
+        """Pins the disagreement itself, so the test above cannot be argued away."""
+        util = self._util()
+        self.assertEqual(util.early_end_sessions, 1)
+        # Yet TWO sessions genuinely ended early, and both of their remainders are
+        # in the waste figure. A flag-keyed metric would report half of it.
+        self.assertGreaterEqual(util.unused_held_hours, self._hours_m(30 + 12))
+
+    def test_late_start_produces_wasted_hours(self):
+        booked_m, used_m = self.ROWS["s_late"]
+        after = self._without(self.f.s_late)
+        self.assertEqual(after.used_hours, self._hours_m(self.USED_M - used_m))
+        self.assertEqual(
+            after.unused_held_hours,
+            self._hours_m(self.UNUSED_HELD_M - (booked_m - used_m)))
+
+    def test_overrun_used_equals_booked_and_never_more(self):
+        booked_m, used_m = self.ROWS["s_overrun"]
+        self.assertEqual(booked_m, used_m)
+        util = self._util()
+        self.assertEqual(util.overrun_sessions, 1)
+        self.assertEqual(util.early_arrival_sessions, 1)
+        self.assertLessEqual(util.used_hours, util.booked_hours)
+
+    def test_in_flight_is_in_neither_booked_nor_used_and_is_reported(self):
+        util = self._util()
+        self.assertEqual(util.in_flight, 1)
+        after = self._without(self.f.s_inflight)
+        self.assertEqual(after.in_flight, 0)
+        self.assertEqual(after.booked_hours, self._hours_m(self.BOOKED_M))
+        self.assertEqual(after.used_hours, self._hours_m(self.USED_M))
+
+    def test_completed_with_null_end_is_booked_with_zero_used(self):
+        booked_m, used_m = self.ROWS["s_noshow_stamped"]
+        self.assertEqual(used_m, 0)
+        row = Session.objects.get(pk=self.f.s_noshow_stamped.pk)
+        self.assertIsNotNone(row.actual_start)
+        self.assertIsNone(row.actual_end)
+        self.assertIn(row.status, HELD_STATUSES)
+        after = self._without(self.f.s_noshow_stamped)
+        self.assertEqual(after.booked_hours, self._hours_m(self.BOOKED_M - booked_m))
+        self.assertEqual(after.used_hours, self._hours_m(self.USED_M))
+
+    def test_full_session_used_equals_booked(self):
+        booked_m, used_m = self.ROWS["s_full"]
+        self.assertEqual(booked_m, used_m)
+        after = self._without(self.f.s_full)
+        self.assertEqual(after.used_hours, self._hours_m(self.USED_M - used_m))
+        self.assertEqual(after.booked_hours, self._hours_m(self.BOOKED_M - booked_m))
+
+    def test_wasted_is_absent_plus_unused_held_and_is_not_zero(self):
+        util = self._util()
+        self.assertEqual(
+            util.wasted_hours, util.absent_hours + util.unused_held_hours)
+        # A waste metric reading zero on a fixture holding an absence AND two early
+        # releases is broken. NOTE: this assertion alone does NOT catch flag-keying
+        # -- s_early and s_absent keep it non-zero either way. The binding guard is
+        # test_unflagged_early_end_still_counts_as_wasted.
+        self.assertGreater(util.wasted_hours, 0)
+
+    def test_used_never_exceeds_booked_which_never_exceeds_available(self):
+        util = self._util()
+        self.assertLessEqual(util.used_hours, util.booked_hours)
+        self.assertLessEqual(util.booked_hours, util.available_hours)
+
+
+class VirtualRoomExclusionTests(RoomFixtureTestCase):
+    """D-04/D-08: a V-prefixed room is invisible to every physical aggregate."""
+
+    def test_the_virtual_session_changes_nothing(self):
+        before = self._util()
+        after = self._without(self.f.s_virtual)
+        self.assertEqual(after.booked_hours, before.booked_hours)
+        self.assertEqual(after.used_hours, before.used_hours)
+        self.assertEqual(after.physical_rooms, before.physical_rooms)
+        self.assertEqual(after.available_hours, before.available_hours)
+
+    def test_physical_rooms_excludes_the_virtual_room(self):
+        util = self._util()
+        self.assertEqual(util.physical_rooms, len(self.f.rooms))
+        self.assertEqual(util.physical_rooms, self.PHYSICAL_ROOMS)
+        self.assertNotIn(self.f.vroom, list(_physical_rooms()))
+        self.assertTrue(self.f.vroom.is_virtual)
+
+    def test_a_lowercase_v_room_is_excluded_too(self):
+        """Room.code carries the DB-wide CI collation, so "v" matches "V" (D-08).
+
+        Pinned by a test rather than assumed: if that collation ever changes, a
+        lowercase-v room would silently join the physical denominator and dilute
+        the rate with a room that does not exist.
+        """
+        before = _physical_rooms().count()
+        lower = Room.objects.create(
+            floor=self.f.vroom.floor, code="vlowercase1", capacity=0,
+            qr_token="rutil-qr-lower", manual_code="LOWER1",
+        )
+        self.assertTrue(lower.is_virtual)
+        self.assertEqual(_physical_rooms().count(), before)
+        self.assertEqual(self._util().physical_rooms, self.PHYSICAL_ROOMS)
+
+
+class ScopeTests(RoomFixtureTestCase):
+    """What the aggregate is allowed to see: ARCHIVED schedules and as_of."""
+
+    def test_a_session_on_an_archived_schedule_is_invisible(self):
+        before = self._util()
+        after = self._without(self.f.s_archived)
+        self.assertEqual(after.booked_hours, before.booked_hours)
+        self.assertEqual(after.used_hours, before.used_hours)
+        # It really is a full session that would have moved the totals if visible.
+        self.assertEqual(
+            self.f.s_archived.schedule.status, ScheduleStatus.ARCHIVED)
+        self.assertIsNotNone(self.f.s_archived.actual_end)
+
+    def test_as_of_clamps_a_future_booking_out_of_both_sides(self):
+        """A not-yet-happened booking must never be reported as wasted capacity."""
+        util = self._util(as_of=self.f.mon)
+        # Monday only: s_full, s_absent, s_early, s_early_unflagged, s_late.
+        monday_booked = 75 + 75 + 75 + 75 + 90
+        monday_used = 75 + 0 + 45 + 63 + 70
+        self.assertEqual(util.booked_hours, self._hours_m(monday_booked))
+        self.assertEqual(util.used_hours, self._hours_m(monday_used))
+        self.assertEqual(util.teaching_days, 1)
+        self.assertEqual(util.timetabled_cells, self.LADDER_RUNGS)
+        # The denominator is clamped with the numerator, so the rate stays honest.
+        self.assertEqual(
+            util.available_hours,
+            self._hours_m(self.PHYSICAL_ROOMS * (75 + 75 + 90)))
+
+    def test_a_range_carrying_no_timetabled_day_is_zero_not_a_crash(self):
+        util = self._util(start=self.f.sun, end=self.f.sun)
+        self.assertEqual(util.teaching_days, 0)
+        self.assertEqual(util.available_hours, _hours(0))
+        self.assertEqual(util.utilization_pct, 0)
+
+
+class RoomCardIsolationTests(SimpleTestCase):
+    """D-05: a raising room aggregate degrades to a message, never a 500.
+
+    Mirrors the CardIsolationTests in tests_reporting.py. The raw exception text
+    must never reach the template (information disclosure).
+    """
+
+    def test_a_raising_card_returns_none_and_a_generic_message(self):
+        def boom():
+            raise ValueError("connection string secret-token-abc")
+
+        with self.assertLogs("scheduling.reporting", level="ERROR"):
+            value, error = safe_card(boom)
+        self.assertIsNone(value)
+        self.assertEqual(error, "This section could not be loaded.")
+        self.assertNotIn("secret-token-abc", error)
+        self.assertNotIn("ValueError", error)
+
+    def test_a_working_card_returns_its_value_and_no_error(self):
+        value, error = safe_card(lambda a, b=0: a + b, 1, b=2)
+        self.assertEqual(value, 3)
+        self.assertIsNone(error)
