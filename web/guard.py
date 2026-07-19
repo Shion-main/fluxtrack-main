@@ -1,8 +1,12 @@
-"""Guard surfaces (GRD-01/GRD-02): a live floor-status monitor and a faculty
-locator. READ-ONLY throughout -- a Guard observes and locates, never writes
-(no verify/flag/action endpoints exist here). Floor scoping mirrors the checker's
-on-duty derivation exactly: the server is the sole source of the guard's floors
-(GRD/CHK-01 rule), never the client.
+"""Guard surfaces (GRD-01 floor monitor, GRD-03 faculty locator).
+
+READ-ONLY throughout, and read-only BY CONTRACT (GRD-05): every view carries
+`@require_http_methods(["GET"])`, so a POST is refused with 405 rather than
+merely having no write branch to reach. GuardReadOnlyTests asserts this per URL;
+every Guard view added later must carry the decorator and join that list.
+
+Floor scoping mirrors the checker's on-duty derivation exactly: the server is the
+sole source of the guard's floors (GRD/CHK-01 rule), never the client.
 """
 from functools import wraps
 
@@ -13,6 +17,7 @@ from django.core.exceptions import PermissionDenied
 from django.db.models import Q
 from django.shortcuts import render
 from django.utils import timezone
+from django.views.decorators.http import require_http_methods
 
 from accounts.models import Role
 from scheduling.models import Modality, Session, SessionStatus
@@ -55,6 +60,7 @@ def _poll_ms():
 
 
 @guard_required
+@require_http_methods(["GET"])
 def monitor(request):
     """GRD-01 floor monitor shell (navy floor family). The polled body is
     guard/_monitor_rows.html; on-duty state is re-derived server-side per poll."""
@@ -62,6 +68,7 @@ def monitor(request):
 
 
 @guard_required
+@require_http_methods(["GET"])
 def monitor_rows(request):
     now = timezone.now()
     floor_ids = _guard_floor_ids(request.user, now)
@@ -77,8 +84,9 @@ def monitor_rows(request):
 
 
 @guard_required
+@require_http_methods(["GET"])
 def locate(request):
-    """GRD-02 faculty locator: find a professor's current room/course/end time, or
+    """GRD-03 faculty locator: find a professor's current room/course/end time, or
     report Online / not-in-a-class plus their next class today. Read-only search."""
     q = (request.GET.get("q") or "").strip()
     faculty = matches = current = nxt = None

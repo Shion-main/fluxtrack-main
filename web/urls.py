@@ -68,7 +68,8 @@ urlpatterns = [
     path("ifo/reports", ifo.weekly_reports, name="ifo_weekly_reports"),
     path("ifo/reports/weekly/<int:pk>/<str:fmt>", ifo.weekly_download,
          name="ifo_weekly_download"),
-    # Guard surfaces (GRD-01/02) -- read-only floor monitor + faculty locator
+    # Guard surfaces -- GRD-01 floor monitor + GRD-03 faculty locator.
+    # GET-only by contract (GRD-05); GRD-02 (per-room schedule) lands in 07-09.
     path("guard/monitor", guard.monitor, name="guard_monitor"),
     path("guard/monitor/rows", guard.monitor_rows, name="guard_monitor_rows"),
     path("guard/locate", guard.locate, name="guard_locate"),
