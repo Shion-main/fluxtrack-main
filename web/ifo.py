@@ -34,7 +34,8 @@ from scheduling.models import (AcademicTerm, DayOfWeek, Modality, Schedule,
 from scheduling.importing import reconcile
 from scheduling.report_render import build_csv
 from scheduling.reporting import (dept_summary, faculty_attendance,
-                                  faculty_scorecard, safe_card)
+                                  faculty_scorecard, room_utilization,
+                                  safe_card)
 from verification.models import (Assignment, AssignmentScope, AssignmentType,
                                  DutyRole)
 from verification.services import assign_online_sessions
@@ -1300,17 +1301,39 @@ def dashboard(request):
     its own inline error card while the rest of the page renders (RPT-05). The
     dashboard is read-only and point-in-time -- it refreshes on filter Apply, it
     is NOT continuously polled (assumption A-POLL).
+
+    Carries the SRS's **Room Occupancy** card, restored in phase 06.1 (the Phase 6
+    build put a second attendance metric in that slot and shipped no room-aware
+    aggregate at all). ``occupancy`` reads in SESSION-HOURS -- used hours over
+    booked hours, taken from the actual check-in/out timestamps -- and is NOT a
+    booking count: a room booked and stood up contributes booked hours and ZERO
+    used hours, and that difference is the reclaimable-capacity figure (D-03). Per
+    D-07 it is ADDED as the second of five cards; Attendance % is retained.
+
+    Three independent error owners share this view -- ``summary``, ``occupancy``
+    and ``rows`` -- and the template guards each one separately, so no single
+    aggregate can blank the row.
     """
     start, end, as_of, note = _reporting_range(request)
+    # The active term, by the same inline lookup every other IFO view uses. A None
+    # term is legitimate: room_utilization absorbs it as a zero denominator.
+    term = AcademicTerm.objects.filter(is_active=True).first()
     summary = safe_card(
         dept_summary, start=start, end=end, department=None, as_of=as_of)
+    occupancy = safe_card(
+        room_utilization, start=start, end=end, term=term, as_of=as_of)
     rows = safe_card(
         faculty_attendance, start=start, end=end, department=None, as_of=as_of)
     # Unscoped means every faculty member in the institution lands in one table --
     # the largest list in the product. Paged; the exports still cover the full set.
-    pager = paginate(request, rows[0])
+    # `or []` is load-bearing, do NOT remove it: safe_card returns (None, message)
+    # when faculty_attendance raises, and Paginator(None) dies on len(), so an
+    # unguarded rows[0] turns a single card failure into a 500 and defeats the
+    # whole point of safe_card. Regression: web.tests_ifo_utilization
+    # .DashboardCardIsolationTests.test_faculty_attendance_failure_does_not_500_via_paginate.
+    pager = paginate(request, rows[0] or [])
     return render(request, "ifo/dashboard.html", {
-        "summary": summary, "rows": rows,
+        "summary": summary, "occupancy": occupancy, "rows": rows,
         "date_from": start, "date_to": end, "range_note": note, **pager,
     })
 
