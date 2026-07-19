@@ -12,6 +12,8 @@ JOB-02c — the room-release single write path `ops.occupancy.release_room`:
   writes exactly one session.room_released AuditLog; explicit actor/now are
   recorded. The paired "sweep NEVER stamps room_released_at" guard lives in
   Plan 02-03 SweepTests, not here.
+- ReleaseRoomCallerGuardTests: a source guard pinning the caller set to the two
+  legitimate callers, MOD-03 (Phase 4) and IFO-08 (Phase 7).
 """
 from datetime import datetime, timezone as dt_timezone
 from pathlib import Path
@@ -123,7 +125,15 @@ class ReleaseRoomTests(TestCase):
     T-02-10 (every release is audited with actor + released_at).
 
     NOTE: the paired "sweep NEVER stamps room_released_at" guard is enforced in
-    Plan 02-03 SweepTests — release_room has zero Phase-2 callers (T-02-11).
+    Plan 02-03 SweepTests. release_room shipped with zero callers in Phase 2
+    (T-02-11) — that was a statement about Phase 2, not a permanent embargo. It
+    now has exactly two legitimate callers, MOD-03 (Phase 4, approved ->Online
+    shift) and IFO-08 (Phase 7, IFO manual release from the console), pinned by
+    ReleaseRoomCallerGuardTests below.
+
+    The four assertions in this class needed no change for IFO-08. In
+    particular `test_release_records_explicit_actor` already proves the exact
+    behaviour IFO-08 depends on: the acting user lands on the audit row.
 
     Imports are method-local (mirrors NotifyTests) so this class is the only one
     that goes RED before ops/occupancy.py exists — the 02-02 classes stay green.
@@ -183,6 +193,76 @@ class ReleaseRoomTests(TestCase):
         log = AuditLog.objects.filter(
             event_type="session.room_released", target_id=str(s.pk)).get()
         self.assertEqual(log.payload["released_at"], instant.isoformat())
+
+
+class ReleaseRoomCallerGuardTests(SimpleTestCase):
+    """Source guard: `release_room` has exactly two callers, and adding a third
+    is a decision that has to be made on purpose.
+
+    Releasing a room is a claim that a physical space is free. Wrong, it sends
+    a class to an occupied room. So the caller set is pinned rather than left to
+    a docstring: the three sites that USED to say "MOD-03 only" were prose, and
+    prose does not fail a build when someone wires up a fourth caller.
+
+    AMENDED FOR IFO-08 (Phase 7), expected and not a regression. Phase 2 shipped
+    this helper with zero callers; MOD-03 became the first; the IFO console
+    manual release is the second. The guard is STRENGTHENED by the amendment,
+    not weakened -- it went from an unenforced comment to an asserted set.
+
+    What it deliberately does NOT allow: the status sweep. Timer-based
+    auto-release was cut on 2026-07-03, and `scheduling/jobs.py` calling this
+    would fail here as well as failing the behavioural guard in Plan 02-03
+    SweepTests.
+    """
+
+    # The two legitimate callers. A third entry here needs a decision record.
+    ALLOWED_CALLERS = {
+        # MOD-03 (Phase 4): approved ->Online shift frees the room.
+        "scheduling/services.py",
+        "scheduling/management/commands/materialize_sessions.py",
+        # IFO-08 (Phase 7): IFO manual release from the console.
+        "web/ifo.py",
+    }
+
+    # Assembled from parts so the guard can never match its own source.
+    _CALL_TOKEN = "release_" + "room("
+
+    # Trees that hold real application code. Tests, migrations and the
+    # occupancy module itself are excluded: a test naming the function is not a
+    # production call site, and the definition is not a caller.
+    SCAN_DIRS = ["accounts", "campus", "ops", "scheduling", "verification",
+                 "web", "config"]
+    EXCLUDE_PARTS = {"migrations", "__pycache__"}
+
+    def _call_sites(self):
+        base = Path(settings.BASE_DIR)
+        found = set()
+        for directory in self.SCAN_DIRS:
+            root = base / directory
+            if not root.exists():
+                continue
+            for path in root.rglob("*.py"):
+                rel = path.relative_to(base).as_posix()
+                if set(path.parts) & self.EXCLUDE_PARTS:
+                    continue
+                if rel == "ops/occupancy.py" or "tests" in path.stem:
+                    continue
+                if self._CALL_TOKEN in path.read_text(encoding="utf-8"):
+                    found.add(rel)
+        return found
+
+    def test_release_room_has_exactly_the_two_documented_callers(self):
+        self.assertEqual(
+            self._call_sites(), self.ALLOWED_CALLERS,
+            "The release_room caller set changed. Releasing a room asserts a "
+            "physical space is free -- a new caller needs a decision record "
+            "and an update to the ops/occupancy.py docstrings, not just this "
+            "allow-list.")
+
+    def test_the_status_sweep_is_not_a_caller(self):
+        """Explicit because it is the ONE caller that was ruled out by name.
+        Timer-based auto-release was cut on 2026-07-03."""
+        self.assertNotIn("scheduling/jobs.py", self._call_sites())
 
 
 # ---------------------------------------------------------------------------

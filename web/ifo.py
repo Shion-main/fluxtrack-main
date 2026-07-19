@@ -20,10 +20,11 @@ from accounts.models import Role
 from campus.codes import new_room_credentials
 from campus.models import Floor, Room
 from campus.services import room_delete_blockers
-from ops.models import AuditLog, WeeklyReport
+from ops.models import AuditLog, RoomConflictFlag, WeeklyReport
+from ops.occupancy import release_room
 from ops.policy import get_policy
 from scheduling.models import (AcademicTerm, DayOfWeek, Modality, Schedule,
-                                ScheduleStatus, Session)
+                                ScheduleStatus, Session, SessionStatus)
 from scheduling.report_render import build_csv
 from scheduling.reporting import (dept_summary, faculty_attendance,
                                   faculty_scorecard, safe_card)
@@ -631,6 +632,117 @@ def room_delete(request, code):
         target_type="room", target_id=str(deleted_pk),
         payload={"code": room.code, "floor": floor_label})
     return redirect("ifo_rooms")
+
+
+# --- Manual room release + open conflicts (IFO-08) --------------------------
+# `ops.occupancy.release_room` shipped in Phase 2 with zero callers, and MOD-03
+# became its first. `session_release` below is its SECOND and, by the source
+# guard in ops/tests.py ReleaseRoomCallerGuardTests, its last.
+#
+# D-11 is the whole design of this section and it is smaller than it looks: IFO
+# does ONE thing -- release the session that should not be holding the room --
+# and the RoomConflictFlag closes on the next sweep because the cause is gone.
+# There is deliberately NO manual flag-close anywhere in this module. A second
+# resolution path could mark a flag resolved while the conflict was still live,
+# which is strictly worse than no surface at all.
+
+
+# The statuses in which a session is actually occupying its room. SCHEDULED is
+# included on purpose: a class that has not been checked into yet still holds
+# the room -- that is exactly the ghost booking IFO needs to be able to clear.
+# COMPLETED and ABSENT have already finished with it, so releasing them would
+# stamp a release instant for an occupancy that ended on its own.
+_ROOM_HOLDING_STATUSES = {SessionStatus.SCHEDULED, SessionStatus.ACTIVE}
+
+
+def _contending_sessions(room_ids):
+    """ACTIVE sessions still holding each of `room_ids`, grouped by room.
+
+    One query for every flag, not one per flag. The room-holding definition is
+    the same one `detect_room_conflicts` uses to RAISE the flag -- ACTIVE with
+    `room_released_at` NULL -- so the page can never disagree with the job about
+    what is contending.
+    """
+    out = {}
+    for s in (Session.objects
+              .filter(room_id__in=room_ids, status=SessionStatus.ACTIVE,
+                      room_released_at__isnull=True)
+              .select_related("schedule", "faculty", "room")
+              .order_by("scheduled_start")):
+        out.setdefault(s.room_id, []).append(s)
+    return out
+
+
+@ifo_required
+@require_http_methods(["GET"])
+def conflicts(request):
+    """IFO-08: every open RoomConflictFlag with the sessions contending for it.
+
+    Read-only. The only action offered is Release, which posts to
+    `session_release`; this view never writes.
+    """
+    flags_qs = (RoomConflictFlag.objects.filter(resolved_at__isnull=True)
+                .select_related("room__floor__building")
+                .order_by("-detected_at"))
+    pager = paginate(request, flags_qs)
+    # MATERIALIZE BEFORE THE FOLLOW-UP QUERY. pyodbc runs with MARS off, so
+    # issuing the session query while the flag SELECT cursor is still streaming
+    # raises HY010 ("function sequence error"). Same guard both sweeps in
+    # scheduling/jobs.py carry, and web/ifo.py:131.
+    flags = list(pager["page"].object_list)
+    by_room = _contending_sessions([f.room_id for f in flags])
+
+    rows = [{"flag": f, "room": f.room, "sessions": by_room.get(f.room_id, [])}
+            for f in flags]
+    return render(request, "ifo/conflicts.html", {"rows": rows, **pager})
+
+
+@ifo_required
+@require_http_methods(["POST"])
+def session_release(request, pk):
+    """IFO-08 / D-11: manually release the room a session is still holding.
+
+    NO AUDITLOG IS WRITTEN HERE, AND THAT IS DELIBERATE. This is the documented
+    exception to "every state change writes an AuditLog" (Conventions rule 2):
+    `release_room` already writes `session.room_released` with this actor and
+    the release instant. A second row here would double-count every release and
+    make "how many rooms did IFO release last week" unanswerable. Do not "fix"
+    the missing audit -- ManualReleaseTests asserts the count is exactly one.
+
+    NO FLAG IS TOUCHED HERE EITHER (D-11). Releasing the contended session makes
+    the conflict genuinely gone, so the next `detect_room_conflicts` run finds
+    the key absent and stamps `resolved_at` through the existing JOB-02c
+    auto-resolve path. Closing the flag from this view would be a second,
+    competing resolution path that could mark a flag resolved while the conflict
+    persisted.
+
+    THE RE-GATE IS THE CONTROL, not the button. The operator clicked a snapshot
+    that may be minutes stale -- on a polled board, quite likely stale -- so the
+    session's actual state is re-read here and a session that is not currently
+    holding the room is refused with a plain message at 400, never a 500.
+    """
+    session = get_object_or_404(
+        Session.objects.select_related("schedule", "faculty",
+                                       "room__floor__building"), pk=pk)
+
+    error = None
+    if session.room_id is None:
+        error = "That session has no room to release."
+    elif session.room_released_at is not None:
+        # No `%-d`/`%-I` padding-strippers here: those are glibc extensions and
+        # raise ValueError on Windows, where this project is developed.
+        error = (f"{session.room} was already released "
+                 f"{timezone.localtime(session.room_released_at):%b %d, %I:%M %p}.")
+    elif session.status not in _ROOM_HOLDING_STATUSES:
+        error = (f"That session is {session.get_status_display().lower()}, so it "
+                 f"is not holding {session.room}.")
+
+    if error is None:
+        release_room(session, actor=request.user)
+
+    return render(request, "ifo/_release_result.html",
+                  {"session": session, "error": error},
+                  status=400 if error else 200)
 
 
 # --- Duty assignments (IFO-06) ---------------------------------------------

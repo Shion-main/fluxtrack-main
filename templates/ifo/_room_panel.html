@@ -44,6 +44,25 @@ keeps polling). ASCII-only.
           {% endif %}
       </div>
 
+      {% comment %}IFO-08: release the room from the board, without navigating
+      to the conflicts page first. The POST targets the small #release-* region
+      immediately below and NOT the panel or the board container -- the board
+      behind this sheet keeps polling, and a refusal swapped into a polled
+      region is destroyed on the next tick before it can be read.{% endcomment %}
+      {% if tile.session and not tile.session.room_released_at %}
+      <div class="now__act">
+        <form method="post" action="/ifo/sessions/{{ tile.session.pk }}/release"
+              hx-post="/ifo/sessions/{{ tile.session.pk }}/release"
+              hx-target="#release-{{ tile.session.pk }}" hx-swap="innerHTML">
+          {% csrf_token %}
+          <button type="submit" class="uk-btn uk-btn-secondary uk-btn-sm">
+            <uk-icon icon="door-open" class="size-4"></uk-icon>
+            Release {{ room.code }}</button>
+        </form>
+        <div id="release-{{ tile.session.pk }}" class="mt-2"></div>
+      </div>
+      {% endif %}
+
       {% elif tile.next %}
       <div class="now__who" style="color:var(--body);font-weight:550">No class in here right now</div>
       <div class="now__course">Next: {{ tile.next.schedule.course_code }}-{{ tile.next.schedule.section }}

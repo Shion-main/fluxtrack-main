@@ -13,8 +13,20 @@ class Booking(models.Model):
     # D-17's Booking blocker was unenforceable: a room whose only references
     # were bookings deleted cleanly and took its booking history with it, so
     # the refusal was a view-level courtesy that anything bypassing the view
-    # (admin, shell, a future caller) silently destroyed. Under PROTECT the
-    # database itself is the guarantee.
+    # (admin, shell, a future caller) silently destroyed.
+    #
+    # WHAT PROTECT ACTUALLY CLOSES (D-19 CORRECTION, verified empirically):
+    # the ORM path, NOT the schema. Django never encodes on_delete in DDL on
+    # any backend -- `sqlmigrate ops 0005` emits `-- (no-op)` for this
+    # AlterField, and introspecting sys.foreign_keys shows every FK to
+    # campus_room is NO_ACTION, including the ones that were always PROTECT.
+    # The database was already refusing a raw DELETE before this change. What
+    # changed is that `room.delete()` from admin, shell or any Python caller
+    # now raises ProtectedError and deletes nothing, where it previously
+    # CASCADEd. That is a real hole and it is genuinely closed -- but the
+    # guarantee lives in Django's Collector, which is why
+    # `campus.services.room_delete_blockers` carries more of the weight than
+    # D-19 originally credited it with.
     #
     # This deliberately changes behaviour for the existing Django-admin Booking
     # surface too: deleting a room from admin now raises ProtectedError instead

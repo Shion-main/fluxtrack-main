@@ -67,6 +67,10 @@ urlpatterns = [
     path("ifo/rooms/<str:code>/qr.png", ifo.room_qr, name="ifo_room_qr"),
     # Merged into the room board; kept so bookmarks and the cached PWA shell work.
     path("ifo/live", ifo.live, name="ifo_live"),
+    # IFO-08 manual room release: open conflicts (GET) + the POST-only action.
+    path("ifo/conflicts", ifo.conflicts, name="ifo_conflicts"),
+    path("ifo/sessions/<int:pk>/release", ifo.session_release,
+         name="ifo_session_release"),
     path("ifo/assignments", ifo.assignments_list, name="ifo_assignments"),
     path("ifo/assignments/create", ifo.assignment_create, name="ifo_assignment_create"),
     # IFO-09 reporting dashboard + scorecard drill-down (RPT-04/RPT-05)
