@@ -33,10 +33,11 @@ from django.utils.dateparse import parse_date
 from django.views.decorators.http import require_http_methods
 
 from accounts.models import Department, Role
-from scheduling.models import AcademicTerm, Session, SessionStatus
+from scheduling.models import AcademicTerm, Session
 from scheduling.report_render import csv_safe
 from verification.models import CheckerValidation, ValidationAction
 from web.pagination import paginate
+from web.reporting_common import status_label
 
 # The on-screen list is PAGED, not capped. The old behaviour sliced to 200 rows
 # and said "showing up to 200" -- which never told the reader whether they were
@@ -68,19 +69,6 @@ def hr_required(view):
             raise PermissionDenied
         return view(request, *args, **kwargs)
     return wrapped
-
-
-def _status_label(status):
-    """Map a Session status to the HR present/absent payroll label (HR-01).
-
-    ACTIVE/COMPLETED are the two "held" states -> Present; ABSENT -> Absent;
-    anything else (SCHEDULED, future) -> Scheduled (not yet a payroll fact).
-    """
-    if status in (SessionStatus.ACTIVE, SessionStatus.COMPLETED):
-        return "Present"
-    if status == SessionStatus.ABSENT:
-        return "Absent"
-    return "Scheduled"
 
 
 def _filtered_sessions(request):
@@ -190,7 +178,7 @@ def attendance(request):
     pager = paginate(request, qs, per_page=HR_PAGE_SIZE)
     sessions = list(pager["page"].object_list)
     for s in sessions:
-        s.present_label = _status_label(s.status)
+        s.present_label = status_label(s.status)
     ctx = {"sessions": sessions, "filters": filters,
            **pager, **_filter_choices()}
     return render(request, "hr/attendance.html", ctx)
@@ -247,7 +235,7 @@ def attendance_csv(request):
                 s.date.isoformat(),
                 _fmt_dt(s.scheduled_start),
                 _fmt_dt(s.actual_start),
-                _status_label(s.status),
+                status_label(s.status),
                 csv_safe(s.get_checkin_method_display() if s.checkin_method else ""),
                 "yes" if s.is_verified else "no",
             ])

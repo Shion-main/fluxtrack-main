@@ -1,11 +1,16 @@
-"""Shared reporting helpers for the Phase-6 role surfaces (web.ifo / web.dean).
+"""Shared reporting helpers for the role surfaces (web.ifo / web.dean / web.hr /
+web.faculty).
 
 The reporting-range parser was originally duplicated verbatim in ``web/ifo.py`` and
 ``web/dean.py`` (plus a third copy of ``_WEEKDAY_INDEX``). The logic is pure and
 role-agnostic -- it reads only GET params + the ``reporting_week_start`` policy and
 returns dates -- so there is no role-coupling reason to keep two copies in sync by
 hand (code-review LO-03). This module owns the single implementation both role
-views import. ASCII-only by convention (Windows cp1252).
+views import. ``status_label`` was lifted here from ``web/hr.py`` for the same
+reason when FAC-11 needed it: a second copy of the label map would let the faculty
+history page and the HR payroll export describe the SAME session differently,
+which is exactly the failure this module exists to prevent.
+ASCII-only by convention (Windows cp1252).
 """
 from datetime import timedelta
 
@@ -13,10 +18,24 @@ from django.utils import timezone
 from django.utils.dateparse import parse_date
 
 from ops.policy import get_policy
+from scheduling.models import SessionStatus
 
 # reporting_week_start policy value -> Python weekday() index (Mon=0 .. Sun=6).
 _WEEKDAY_INDEX = {"monday": 0, "tuesday": 1, "wednesday": 2, "thursday": 3,
                   "friday": 4, "saturday": 5, "sunday": 6}
+
+
+def status_label(status):
+    """Map a Session status to the present/absent payroll label (HR-01, FAC-11).
+
+    ACTIVE/COMPLETED are the two "held" states -> Present; ABSENT -> Absent;
+    anything else (SCHEDULED, future) -> Scheduled (not yet a payroll fact).
+    """
+    if status in (SessionStatus.ACTIVE, SessionStatus.COMPLETED):
+        return "Present"
+    if status == SessionStatus.ABSENT:
+        return "Absent"
+    return "Scheduled"
 
 
 def reporting_range(request):
