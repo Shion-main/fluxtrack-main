@@ -194,3 +194,36 @@
   .js-poll { transition: none; }
   .tbl tbody tr, .pgr__n, .pgr__step { transition: none; }
 }
+
+/* --- Utilities missing from the precompiled Franken bundle -------------------
+   There is no Tailwind build step: a utility class that is not shipped inside
+   franken-ui/dist/css/utilities.min.css silently does nothing (the failure
+   class behind the 10-day phone-blocking bug; re-confirmed by the 2026-07-19
+   audit -- transparent sticky header, unnumbered rotation steps). The classes
+   below ARE used in templates but are absent from the shipped bundle, so they
+   are defined locally under their canonical Tailwind names. If a new utility
+   in a template appears to do nothing, check the CDN bundle first -- then
+   either use a shipped class or add the missing one here. */
+.z-30 { z-index: 30; }
+.z-40 { z-index: 40; }
+.shadow-lg { box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.10),
+                         0 4px 6px -4px rgb(0 0 0 / 0.10); }
+.opacity-60 { opacity: 0.6; }
+.transition-colors { transition: color .15s ease, background-color .15s ease,
+                                 border-color .15s ease; }
+.font-mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas,
+                          "Liberation Mono", monospace; }
+.whitespace-pre-wrap { white-space: pre-wrap; }
+.whitespace-nowrap { white-space: nowrap; }
+.truncate { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.list-decimal { list-style-type: decimal; }
+.list-disc { list-style-type: disc; }
+.last\:border-0:last-child { border-width: 0; }
+
+/* IFO booking form: two columns on desktop. Replaces the arbitrary-value class
+   lg:grid-cols-[minmax(0,22rem)_minmax(0,1fr)], which can never exist in a
+   precompiled bundle. */
+.booking-grid { display: grid; gap: 1.5rem; }
+@media (min-width: 1024px) {
+  .booking-grid { grid-template-columns: minmax(0, 22rem) minmax(0, 1fr); }
+}

@@ -59,7 +59,11 @@
   {% endcomment %}
   {% block global_header %}
   {% if user.is_authenticated %}
-    <header class="border-b border-border sticky top-0 z-30 bg-background/95 backdrop-blur">
+    {% comment %}Solid bg-background, not bg-background/95 + backdrop-blur:
+    opacity-modifier and backdrop utilities do not exist in the precompiled
+    Franken bundle, which left this header fully transparent (rows scrolled
+    straight through it). z-30 is defined locally in app.css.{% endcomment %}
+    <header class="border-b border-border sticky top-0 z-30 bg-background">
       <div class="uk-container max-w-5xl h-14 flex items-center gap-3">
         <a href="/" class="font-semibold">FluxTrack</a>
         <span class="uk-label uk-label-secondary">{{ user.get_role_display }}</span>
