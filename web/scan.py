@@ -156,7 +156,12 @@ def resolve(request):
     sessions_today = list(
         Session.objects.filter(faculty=request.user, date=timezone.localdate())
         .select_related("schedule", "room").order_by("scheduled_start"))
-    occupying = (Session.objects.filter(room=room, status=SessionStatus.ACTIVE)
+    # room_released_at filter (audit M4): an ACTIVE session whose room was
+    # manually released (IFO-08) no longer holds the room — same rule as
+    # ops/availability.py and the JOB-02c conflict query. Without it, the next
+    # scan force-hands-over a ghost session and stamps a bogus actual_end.
+    occupying = (Session.objects.filter(room=room, status=SessionStatus.ACTIVE,
+                                        room_released_at__isnull=True)
                  .exclude(faculty=request.user).values_list("pk", flat=True).first())
 
     resolution = R.resolve_faculty_scan(

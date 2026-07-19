@@ -88,6 +88,35 @@ class ScanNotifyTests(TestCase):
         self.assertIsNotNone(n)
         self.assertEqual(n.title, "Force handover")
 
+    def test_released_room_does_not_force_handover(self):
+        """Audit M4 (2026-07-19): an ACTIVE session whose room was manually
+        released (IFO-08) no longer holds the room -- same rule as
+        ops/availability.py and the JOB-02c conflict query. The next faculty's
+        scan checks in directly instead of force-completing the ghost session
+        with a bogus hours-late actual_end."""
+        now = timezone.now()
+        room_a = self._room("R304", "tok-d", "300304")
+        other = get_user_model().objects.create(username="fac_rel",
+                                                role=Role.FACULTY)
+        ghost = self._session(room_a, other, SessionStatus.ACTIVE,
+                              now - timedelta(minutes=60),
+                              now + timedelta(minutes=30))
+        ghost.room_released_at = now - timedelta(minutes=10)
+        ghost.save(update_fields=["room_released_at"])
+        mine = self._session(room_a, self.faculty, SessionStatus.SCHEDULED,
+                             now, now + timedelta(minutes=90))
+
+        resp = self.client.post("/scan/resolve", {"payload": "300304"})
+        self.assertEqual(resp.status_code, 200)
+        mine.refresh_from_db()
+        ghost.refresh_from_db()
+        # Checked in directly -- no ROOM_OCCUPIED two-step, ghost untouched.
+        self.assertEqual(mine.status, SessionStatus.ACTIVE)
+        self.assertEqual(ghost.status, SessionStatus.ACTIVE)
+        self.assertIsNone(ghost.actual_end)
+        self.assertFalse(Notification.objects.filter(
+            user=self.ifo, title="Force handover").exists())
+
 
 @override_settings(DEBUG=True)
 class DevLoginCoexistTests(TestCase):
@@ -115,7 +144,9 @@ class DevLoginCoexistTests(TestCase):
         # Two backends are configured; the dev-login must name ModelBackend or login() raises.
         self.assertEqual(len(settings.AUTHENTICATION_BACKENDS), 2)
         resp = self.client.post("/login", {"username": "devfac"})
-        self.assertRedirects(resp, "/")
+        # home() now role-routes: / itself 302s a faculty user on to their
+        # console, so the redirect target is a redirect, not a 200.
+        self.assertRedirects(resp, "/", target_status_code=302)
         self.assertEqual(self.client.session.get("_auth_user_id"), str(self.faculty.pk))
 
     def test_superuser_break_glass_via_modelbackend(self):
@@ -170,7 +201,8 @@ class DevLoginCuratedDemoTests(TestCase):
         """A DEBUG POST of cdgaray logs in via the unchanged passwordless path and
         redirects home (role-routed to the faculty schedule)."""
         resp = self.client.post("/login", {"username": "cdgaray"})
-        self.assertRedirects(resp, "/")
+        # / role-routes faculty onward (302), same as DevLoginCoexistTests.
+        self.assertRedirects(resp, "/", target_status_code=302)
         self.assertEqual(self.client.session.get("_auth_user_id"), str(self.garay.pk))
 
 
@@ -536,8 +568,15 @@ class HomeSurfaceNavTests(TestCase):
     def test_faculty_home_links_modality_request(self):
         u = get_user_model().objects.create(username="fac_nav", role=Role.FACULTY)
         self.client.force_login(u)
-        resp = self.client.get("/")
-        self.assertContains(resp, "/faculty/modality/new")
+        # Faculty home redirects into the faculty console (same follow pattern
+        # as the dean test below). The hero's /faculty/modality/new link only
+        # renders when an upcoming class exists, so the ALWAYS-present guard is
+        # the tab bar's Requests entry -- /faculty/modality/mine, whose page in
+        # turn links /faculty/modality/new. That keeps the UAT-04 property
+        # (modality surfaces reachable by tapping, not by typing a URL) for
+        # every faculty user, including one with no scheduled classes.
+        resp = self.client.get("/", follow=True)
+        self.assertContains(resp, "/faculty/modality/mine")
 
     def test_dean_home_links_approval_queue(self):
         u = get_user_model().objects.create(username="dean_nav", role=Role.DEAN)

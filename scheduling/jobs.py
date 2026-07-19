@@ -83,10 +83,16 @@ def sweep_no_shows(now=None, collect=None):
         if not is_no_show_past_grace(s.scheduled_start, now, grace_min):
             continue
         with transaction.atomic():
-            # Idempotency guard mirrors web/scan.py _apply: only SCHEDULED->ABSENT.
-            # NOTE: room_released_at is deliberately never touched here.
-            s.status = SessionStatus.ABSENT
-            s.save(update_fields=["status"])
+            # Idempotency guard mirrors web/scan.py _apply: only SCHEDULED->ABSENT,
+            # enforced as a status-guarded filtered .update() (audit M7) so a
+            # check-in that committed between the materialize above and this write
+            # is never overwritten with ABSENT — the stale in-memory instance is
+            # not trusted. NOTE: room_released_at is deliberately never touched.
+            flipped = (Session.objects
+                       .filter(pk=s.pk, status=SessionStatus.SCHEDULED)
+                       .update(status=SessionStatus.ABSENT))
+            if not flipped:
+                continue  # raced by a live check-in: it wins, no audit row
             AuditLog.objects.create(
                 actor=None, event_type="session.marked_absent",
                 target_type="session", target_id=str(s.pk),
