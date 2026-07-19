@@ -27,6 +27,7 @@ from django.core.management import call_command
 from django.core.management.base import BaseCommand
 from django.utils import timezone
 
+from ops.guard_alerts import notify_floor_guards
 from ops.jobrun import run_job
 from ops.policy import get_policy
 from ops.push import send_push_outbox
@@ -49,9 +50,28 @@ def _job_sweep():
     """JOB-02: mark F2F/Blended no-shows Absent, then flag room conflicts.
 
     Returns the combined count so JobRun.rows_affected reflects the run's impact.
+
+    This function is also the GRD-04 coalescing boundary (D-06). Both sweep
+    functions already run back to back here in one job, so ONE shared collector
+    across both, followed by ONE fan-out afterwards, gives each on-duty Guard
+    exactly one push per run summarizing their floors -- no timer, no
+    `last_alerted_at` column, no new policy knob. Emitting inside either sweep
+    loop instead would be one push per event, the spam D-06 forbids.
+
+    Deliberately NOT a fifth scheduler job: `SchedulerWiringTests` asserts the
+    four-job count and `NoImplicitSchedulerTests` the build-only-in-build_scheduler
+    rule, and the coalescing belongs inside the sweep it summarizes. Delivery is
+    already handled -- `send_push_outbox` runs in the separate `push_outbox` job,
+    never in a web worker, so the whole GRD-04 path stays out of any request.
+
+    The return stays `marked + flagged`. The guard count is deliberately NOT
+    folded in: JobRun.rows_affected means "rows this sweep changed", and guards
+    notified is a different quantity.
     """
-    marked = sweep_no_shows()
-    flagged = detect_room_conflicts()
+    events = []
+    marked = sweep_no_shows(collect=events)
+    flagged = detect_room_conflicts(collect=events)
+    notify_floor_guards(events)
     return marked + flagged
 
 

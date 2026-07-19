@@ -16,6 +16,16 @@ by an open `RoomConflictFlag`, and auto-resolves when the conflict clears.
 
 Both are thin service functions returning counts; the `run_status_sweep`
 management command (and the Phase-2.5 scheduler) call them.
+
+GRD-04 (07-12) added an OPTIONAL `collect=` keyword to both. The scalar integer
+returns are UNCHANGED and must stay that way: they are asserted at fourteen call
+sites (ten assertions across `scheduling/tests.py` and
+`scheduling/tests_merge_sweep.py` -- the latter documents itself as the guard a
+future edit to `sweep_no_shows` must not break -- plus both command wrappers).
+When `collect` is not None each function appends `(kind, floor_id)` tuples for
+the events it produced, read off rows the loop is ALREADY iterating. The guard
+fan-out itself happens in the CALLER, after both functions have run, so one guard
+gets one push per run rather than one per event (D-06).
 """
 from datetime import timedelta
 
@@ -25,6 +35,7 @@ from django.utils import timezone
 
 from accounts.models import Role
 from campus.models import Room
+from ops.guard_alerts import KIND_ABSENT, KIND_CONFLICT
 from ops.models import AuditLog, RoomConflictFlag
 from ops.notify import notify
 from ops.policy import get_policy
@@ -32,7 +43,7 @@ from scheduling.models import Session, SessionStatus
 from scheduling.resolver import is_no_show_past_grace
 
 
-def sweep_no_shows(now=None):
+def sweep_no_shows(now=None, collect=None):
     """JOB-02b: mark unscanned no-shows ABSENT. Returns count marked.
 
     Idempotent (only SCHEDULED -> ABSENT), backfilled across all past dates, and
@@ -43,6 +54,16 @@ def sweep_no_shows(now=None):
     `is_no_show_past_grace` predicate as F2F/Blended (ROADMAP #6). The exclusion
     guard that previously skipped all online sessions was removed in lockstep with
     that Verify path; removing it alone would mark every online session Absent.
+
+    `collect` (GRD-04, optional) is a list the caller may pass to receive a
+    `(KIND_ABSENT, floor_id)` tuple per session actually flipped. It is purely
+    additive: the return value is the same integer with or without it, which
+    `SweepReturnCompatibilityTests` locks. The floor id is read off `s.room`,
+    which `select_related` already loaded for exactly this reason -- do NOT
+    collect room ids and resolve floors afterwards. This function backfills all
+    past-date no-shows, so after a multi-day scheduler outage on a full term one
+    run can flip hundreds or low thousands of rows; a `pk__in` over that batch is
+    a live MSSQL 2100-parameter exposure, the 04.1-04 failure class.
     """
     now = now or timezone.now()
     grace_min = get_policy("grace_minutes")
@@ -55,7 +76,7 @@ def sweep_no_shows(now=None):
     # Fully materialize the candidate set first (cursor closed) before mutating.
     candidates = list(Session.objects.filter(status=SessionStatus.SCHEDULED,
                                              scheduled_start__lt=cutoff)
-                      .select_related("schedule"))
+                      .select_related("schedule", "room"))
     for s in candidates:
         # Re-affirm via the shared predicate so the ORM cutoff and the
         # authoritative no-show rule are provably ONE rule (coupling guarantee).
@@ -71,16 +92,27 @@ def sweep_no_shows(now=None):
                 target_type="session", target_id=str(s.pk),
                 payload={"by": "sweep"})
         marked += 1
+        if collect is not None:
+            # Read off the already-loaded related row: zero extra queries, and
+            # no room-id batch that a later floor lookup could turn into an IN
+            # list. Session.room is NOT NULL, so floor_id is always present.
+            collect.append((KIND_ABSENT, s.room.floor_id))
     return marked
 
 
-def detect_room_conflicts(now=None):
+def detect_room_conflicts(now=None, collect=None):
     """JOB-02c: flag contradictory room occupancy once, auto-resolve on clear.
 
     A conflict is 2+ ACTIVE sessions holding one room (`room_released_at` NULL).
     Each newly-detected conflict creates an open `RoomConflictFlag` (dedup key
     `room:{room_id}`) and notifies IFO once; open flags whose conflict has
     cleared are stamped `resolved_at`. Returns the count of NEW conflicts flagged.
+
+    `collect` (GRD-04, optional) receives a `(KIND_CONFLICT, floor_id)` tuple per
+    NEWLY-flagged conflict, read off the `Room` this loop already fetches for its
+    label. The IFO `notify()` below is untouched: IFO gets one notification per
+    conflict, which is Phase-2 behaviour with its own tests. The floor-Guard
+    alert is NOT emitted here -- the caller coalesces it once per run (D-06).
     """
     now = now or timezone.now()
     # Current conflict set: rooms with 2+ ACTIVE sessions still holding the room.
@@ -115,4 +147,6 @@ def detect_room_conflicts(now=None):
                    body=f"Two or more active sessions are holding room "
                         f"{room_label}. Please resolve the occupancy conflict.")
         flagged += 1
+        if collect is not None and room is not None:
+            collect.append((KIND_CONFLICT, room.floor_id))
     return flagged
