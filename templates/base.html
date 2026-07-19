@@ -45,7 +45,7 @@
 <body class="bg-background text-foreground" hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'>
   <a href="#main" class="skip-link">Skip to content</a>
   {% with un=request.resolver_match.url_name %}
-  {% if un == "faculty_home" or un == "faculty_schedule" or un == "faculty_scan" or un == "faculty_modality_new" or un == "faculty_modality_mine" or un == "faculty_online" or un == "faculty_history" or un == "checker_floor" or un == "checker_scan" or un == "checker_online" or un == "checker_online_open" or un == "ifo_live" or un == "ifo_rooms" or un == "ifo_room_detail" or un == "ifo_assignments" or un == "ifo_dashboard" or un == "ifo_weekly_reports" or un == "dean_dashboard" or un == "dean_queue" or un == "dean_reports" or un == "guard_monitor" or un == "guard_locate" %}
+  {% if un == "faculty_home" or un == "faculty_schedule" or un == "faculty_scan" or un == "faculty_modality_new" or un == "faculty_modality_mine" or un == "faculty_online" or un == "faculty_history" or un == "faculty_profile" or un == "checker_floor" or un == "checker_scan" or un == "checker_online" or un == "checker_online_open" or un == "ifo_live" or un == "ifo_rooms" or un == "ifo_room_detail" or un == "ifo_assignments" or un == "ifo_dashboard" or un == "ifo_weekly_reports" or un == "dean_dashboard" or un == "dean_queue" or un == "dean_reports" or un == "guard_monitor" or un == "guard_locate" %}
   {% elif user.is_authenticated %}
     {% comment %}Standard shell for all other roles (launcher, checker, IFO, dean,
     admin). Faculty pages render their own top chrome, so no global header there.{% endcomment %}

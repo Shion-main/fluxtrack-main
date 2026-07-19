@@ -30,6 +30,14 @@ urlpatterns = [
     # FAC-11 own attendance history: read-only, hard-scoped to request.user,
     # Checker flags visible with no dispute control (D-15).
     path("faculty/history", faculty.history, name="faculty_history"),
+    # --- Faculty profile photo (FAC-12) ---
+    # GET-only page + POST-only multipart upload. The notification-preferences
+    # half of FAC-12 is NOT re-routed here -- it already ships all-roles at
+    # notif_settings / notif_mute below, and the profile page links to it.
+    path("faculty/profile", faculty.profile, name="faculty_profile"),
+    path("faculty/profile/photo", faculty.profile_photo_upload,
+         name="faculty_profile_photo"),
+    # --- end Faculty profile photo (FAC-12) ---
     # --- end Faculty self-service ---
     # Dean modality-shift approval surface (MOD-02, D-12)
     path("dean/requests", dean.queue, name="dean_queue"),

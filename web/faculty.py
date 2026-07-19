@@ -13,6 +13,8 @@ from urllib.parse import urlparse
 
 from django.contrib.auth.decorators import login_required
 from django.core.exceptions import PermissionDenied
+from django.core.files.base import ContentFile
+from django.core.files.storage import default_storage
 from django.db import transaction
 from django.db.models import Exists, OuterRef
 from django.http import HttpResponse
@@ -23,6 +25,8 @@ from django.utils.dateparse import parse_date, parse_time
 from django.views.decorators.http import require_http_methods
 
 from accounts.models import Role
+from accounts.photos import (MAX_UPLOAD_BYTES, TARGET, PhotoError,
+                             normalize_profile_photo)
 from campus.models import Room
 from ops.availability import available_rooms_for, available_times_for
 from ops.models import AuditLog
@@ -821,3 +825,116 @@ def history(request):
            "greeting": _greeting(timezone.localtime()),
            "today": timezone.localdate(), **pager}
     return render(request, "faculty/history.html", ctx)
+
+
+# --- Profile: identity photo (FAC-12, D-16) ---------------------------------
+# FAC-12 has two halves and only ONE of them is new here. The notification
+# preferences half already ships for every role at web/notifications.py
+# settings_page / mute_toggle (routed notif_settings / notif_mute), so this page
+# LINKS to it rather than growing a second copy of the mute logic. Two mute
+# surfaces would drift, and the one a faculty member happened to find would be
+# the one that lied to them.
+#
+# The photo is identity evidence: a Checker looks at it to confirm the person in
+# the room is the scheduled faculty member. All validation, re-encoding and
+# EXIF-stripping lives in accounts/photos.py, which is pure bytes-in/bytes-out --
+# see that module's docstring for why the re-encode IS the security control.
+
+
+def _photo_version(field):
+    """A cache-buster for the <img> src.
+
+    Re-uploading can land on the SAME stored name: the old file is deleted after
+    the new one is written, so the sequence is 7.jpg -> 7_a8Kd2.jpg -> 7.jpg. On
+    that third upload the URL is unchanged and the browser would happily show the
+    previous photo, which reads as "the upload silently did nothing". One stat
+    call fixes it. A missing file is not an error here -- the template renders the
+    placeholder in that case anyway.
+    """
+    try:
+        return int(default_storage.get_modified_time(field.name).timestamp())
+    except (OSError, NotImplementedError, ValueError):
+        return 0
+
+
+def _profile_ctx(user, *, error=None, saved=False):
+    """Context for the profile page and for its small status region."""
+    return {
+        "photo": user.profile_photo if user.profile_photo else None,
+        "photo_v": _photo_version(user.profile_photo) if user.profile_photo else 0,
+        "error": error,
+        "saved": saved,
+        "max_mb": MAX_UPLOAD_BYTES // (1024 * 1024),
+        "target_px": TARGET[0],
+        "today": timezone.localdate(),
+        "greeting": _greeting(timezone.localtime()),
+    }
+
+
+def _photo_status(request, user, *, error=None, saved=False):
+    """Render ONLY the small status region (never the form -- see the template).
+
+    400 on a refusal is the project's friendly-400 seam (web/faculty.py
+    modality_withdraw is the precedent): a readable message, never a 500.
+    """
+    return render(request, "faculty/_photo_status.html",
+                  _profile_ctx(user, error=error, saved=saved),
+                  status=400 if error else 200)
+
+
+@faculty_required
+@require_http_methods(["GET"])
+def profile(request):
+    """The faculty member's own profile: identity photo + a link to notification
+    preferences (FAC-12). Read-only; the photo write is a separate POST view."""
+    return render(request, "faculty/profile.html", _profile_ctx(request.user))
+
+
+@faculty_required
+@require_http_methods(["POST"])
+def profile_photo_upload(request):
+    """Replace the requesting faculty member's identity photo (FAC-12, D-16).
+
+    The target is ALWAYS request.user. No user id is read from the POST body --
+    the IDOR re-gate this module states at modality_withdraw. A posted id is not
+    rejected with an error, it is simply never consulted, which is the shape that
+    cannot be got wrong later by someone adding a "convenience" lookup.
+    """
+    upload = request.FILES.get("photo")
+    if upload is None:
+        # Also the symptom of a missing hx-encoding on the form: htmx serializes
+        # as urlencoded by default and the file silently never arrives.
+        return _photo_status(request, request.user,
+                             error="Choose a JPEG or PNG photo to upload.")
+
+    try:
+        data = normalize_profile_photo(upload)
+    except PhotoError as exc:
+        return _photo_status(request, request.user, error=str(exc))
+
+    user = request.user
+    # Captured BEFORE the save. FileSystemStorage.get_available_name appends a
+    # random suffix on collision, so without this the same user accumulates
+    # profile_photos/7.jpg, 7_a8Kd2.jpg, 7_pQ91x.jpg... forever.
+    old_name = user.profile_photo.name or ""
+
+    # This one call writes the file AND the field. Do NOT follow it with a
+    # user.save(update_fields=[...]) that omits profile_photo -- that stores the
+    # bytes and then drops the pointer to them.
+    user.profile_photo.save(f"{user.pk}.jpg", ContentFile(data), save=True)
+
+    if old_name and old_name != user.profile_photo.name:
+        try:
+            default_storage.delete(old_name)
+        except (OSError, NotImplementedError):
+            # A missing old file is the goal state, not an error worth failing a
+            # successful upload over.
+            pass
+
+    AuditLog.objects.create(
+        actor=user, event_type="user.photo_updated", target_type="user",
+        target_id=str(user.pk),
+        # Byte size only. An identity photo does not belong in an audit payload.
+        payload={"user": user.pk, "bytes": len(data)})
+
+    return _photo_status(request, user, saved=True)

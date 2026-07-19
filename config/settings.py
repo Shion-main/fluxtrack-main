@@ -221,6 +221,15 @@ STORAGES = {
 MEDIA_URL = "/media/"
 MEDIA_ROOT = BASE_DIR / "media"
 
+# Send X-Content-Type-Options: nosniff (SecurityMiddleware is already installed).
+# Written down rather than inherited: MEDIA_ROOT holds user-uploaded content --
+# FAC-12 profile photos -- and content sniffing is precisely the mechanism that
+# turns "a file the server calls image/jpeg" into "a file the browser decides to
+# execute". Modern Django is believed to default this to True, but nobody in this
+# project has verified that default, and a security control worth having is worth
+# not inheriting silently.
+SECURE_CONTENT_TYPE_NOSNIFF = True
+
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 REST_FRAMEWORK = {

@@ -1,0 +1,117 @@
+{% extends "base.html" %}
+{% load static %}
+{% comment %}
+FAC-12 profile: identity photo + the route to notification preferences.
+
+TWO HTMX TRAPS, both silent failures rather than errors (the same pair
+documented in templates/ifo/import.html, which established this pattern):
+
+1. `hx-encoding="multipart/form-data"` on the <form> is REQUIRED. htmx
+   serializes as urlencoded by default, which cannot carry file content, so
+   without it the file never arrives and the server sees an empty request.FILES
+   with no error anywhere to explain why.
+
+2. The form targets a SMALL status region (#photo-status), never itself.
+   base.html sets responseHandling so a 400 swaps -- right for text fields,
+   wrong for file fields, because a browser cannot repopulate an
+   <input type="file">. Targeting the form would wipe the user's selection on
+   every refusal. For a photo upload, done once and expected to just work, that
+   is a worse failure than on the admin import surface.
+
+Corollary for anyone adding JS here: that same rule sets `"error": false` for
+400, so `htmx:responseError` does NOT fire on a refusal. Hang any re-enable
+handler off `htmx:afterRequest`.
+
+The notification-preferences half of FAC-12 already ships for all roles at
+/notifications/settings. It is LINKED, not rebuilt -- a second copy of the mute
+controls would drift from the real one.
+
+Navy .ft-* shell (Faculty/Guard vocabulary); Franken uk-* belongs to IFO/Dean.
+No border-left accent stripes. ASCII-only.
+{% endcomment %}
+{% block title %}Profile - FluxTrack{% endblock %}
+{% block content %}
+<div class="ft-app">
+
+  <header class="ft-top">
+    <a href="/faculty/home" class="ft-top__brand">
+      <img class="ft-top__crest" src="{% static 'brand/mmcm-crest.png' %}" alt="">
+      <span class="ft-top__mark">FluxTrack</span>
+    </a>
+    <div class="relative inline-flex" style="margin-left:auto">{% include "notifications/_bell.html" %}</div>
+    <details class="ft-acct" style="margin-left:0">
+      <summary class="ft-top__avatar" aria-label="Account and sign out">{{ user.first_name|default:user.username|slice:":1"|upper }}{{ user.last_name|slice:":1"|upper }}</summary>
+      <div class="ft-acct__menu">
+        <div class="ft-acct__who">
+          <b>{{ user.get_full_name|default:user.username }}</b>
+          <span>{{ user.get_role_display }}{% if user.department %} &middot; {{ user.department.name }}{% endif %}</span>
+        </div>
+        <a class="ft-acct__item" href="{% url 'faculty_profile' %}"><uk-icon icon="user"></uk-icon> Profile</a>
+        <a class="ft-acct__item" href="/logout"><uk-icon icon="log-out"></uk-icon> Sign out</a>
+      </div>
+    </details>
+  </header>
+
+  <div class="ft-page">
+    <div class="ft-greet">
+      <div class="ft-greet__hi">Profile</div>
+      <div class="ft-greet__date">{{ user.get_full_name|default:user.username }}</div>
+    </div>
+
+    <div class="ft-sec">
+      <div class="ft-sec__title">Identity photo</div>
+    </div>
+
+    <div class="ft-card ft-card--neutral">
+      <p class="ft-help" style="margin-bottom:14px">
+        Checkers compare this photo to the person teaching in the room. A clear,
+        current head-and-shoulders photo makes that check quick; a missing or
+        unrecognisable one turns it into an interruption of your class.
+      </p>
+
+      {% comment %}The small region the upload targets. Rendered server-side on
+      first load so the page is complete without htmx.{% endcomment %}
+      <div id="photo-status">
+        {% include "faculty/_photo_status.html" %}
+      </div>
+
+      {% comment %}hx-encoding is load-bearing -- see the header comment.{% endcomment %}
+      <form class="ft-form" hx-post="{% url 'faculty_profile_photo' %}"
+            hx-encoding="multipart/form-data"
+            hx-target="#photo-status" hx-swap="innerHTML"
+            hx-indicator="#photo-spinner">
+        {% csrf_token %}
+        <div class="ft-form__group">
+          <label class="ft-label" for="p-photo">Choose a new photo</label>
+          <input id="p-photo" class="ft-control" type="file" name="photo" required
+                 accept="image/jpeg,image/png"
+                 aria-describedby="p-photo-help">
+          <p class="ft-help" id="p-photo-help">
+            JPEG or PNG, up to {{ max_mb }} MB. It is resized to {{ target_px }}px
+            and re-saved on the server, which also removes any location data your
+            camera stored in the file.
+          </p>
+        </div>
+        <div>
+          <button class="ft-btn-navy" type="submit">
+            <uk-icon icon="upload"></uk-icon> Upload photo</button>
+          <span id="photo-spinner" class="htmx-indicator ft-help">
+            <uk-icon icon="loader"></uk-icon> Processing your photo...</span>
+        </div>
+      </form>
+    </div>
+
+    <div class="ft-sec">
+      <div class="ft-sec__title">Notifications</div>
+    </div>
+
+    <div class="ft-card ft-card--neutral">
+      <p class="ft-help" style="margin-bottom:14px">
+        Choose which notification groups to mute, and turn browser push on or off.
+      </p>
+      <a class="ft-btn-navy" href="{% url 'notif_settings' %}">
+        <uk-icon icon="bell"></uk-icon> Notification preferences</a>
+    </div>
+  </div>
+</div>
+{% endblock %}

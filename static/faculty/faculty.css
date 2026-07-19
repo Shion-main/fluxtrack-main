@@ -703,3 +703,34 @@ a.ft-card:active { transform: translateY(1px); }
   .ft-btn-soft, .ft-pick__card, .ft-steps__bar { transition: none; }
   .ft-otp__box.is-active::after { animation: none; }
 }
+
+/* --- Faculty profile photo (FAC-12) --- */
+/* The profile-page photo preview. Larger than the 56px .ft-idrow__photo used in
+   the Checker's identity row, because here the photo IS the subject rather than
+   a row ornament. Colours come from tokens.css; no hard-coded hex. */
+.ft-photo { display: flex; align-items: center; gap: 14px; margin-bottom: 16px; }
+.ft-photo__img {
+  width: 96px; height: 96px; border-radius: 50%; object-fit: cover;
+  border: 1px solid var(--line); background: var(--panel-2); flex: none;
+}
+.ft-photo__ph {
+  width: 96px; height: 96px; border-radius: 50%;
+  background: var(--panel-2); color: var(--ft-muted);
+  display: grid; place-items: center; flex: none;
+  border: 1px dashed var(--line);
+}
+.ft-photo__ph uk-icon, .ft-photo__ph svg { width: 34px; height: 34px; }
+.ft-photo__meta { min-width: 0; }
+.ft-photo__meta .ft-help { margin-top: 2px; }
+
+/* A file input is not a text input: it needs vertical padding for the browser's
+   own "Choose file" button, which .ft-control's line-height alone does not give. */
+input[type="file"].ft-control { padding: 10px 13px; height: auto; line-height: 1.4; }
+input[type="file"].ft-control::file-selector-button {
+  margin-right: 12px; padding: 6px 12px;
+  border: 1px solid var(--line); border-radius: var(--r-btn);
+  background: var(--panel-2); color: var(--ink);
+  font: inherit; font-size: .86rem; font-weight: 600; cursor: pointer;
+}
+input[type="file"].ft-control::file-selector-button:hover { border-color: var(--nv-hero); }
+/* --- end Faculty profile photo (FAC-12) --- */
