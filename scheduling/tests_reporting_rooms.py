@@ -759,3 +759,70 @@ class RoomCardIsolationTests(SimpleTestCase):
         value, error = safe_card(lambda a, b=0: a + b, 1, b=2)
         self.assertEqual(value, 3)
         self.assertIsNone(error)
+
+
+# ===========================================================================
+# SEED SANITY CHECK -- how a human decides the number is believable
+# ===========================================================================
+#
+# NOT a test, and deliberately so. `seed_term` is randomized per run, so any
+# assertion against a seeded figure is flaky by construction. What follows is a
+# recipe plus the four checks that make its output FALSIFIABLE, which is the
+# thing a fixture cannot give you: a utilization number nobody can check against
+# a real dataset is worse than no number at all.
+#
+# Copy-pasteable (Django's runner, MSSQL LocalDB; use the full interpreter path):
+#
+#   manage.py shell -c "
+#   import datetime
+#   from scheduling.models import AcademicTerm
+#   from scheduling.reporting import room_utilization
+#   t = AcademicTerm.objects.filter(is_active=True).first()
+#   today = datetime.date.today()
+#   start = today - datetime.timedelta(days=today.weekday())
+#   end = start + datetime.timedelta(days=6)
+#   u = room_utilization(start=start, end=end, term=t, as_of=today)
+#   print('term', t, '| week', start, '..', end, '| as_of', today)
+#   print('physical_rooms', u.physical_rooms, '| blocks_per_day', u.blocks_per_day,
+#         '| teaching_days', u.teaching_days, '| timetabled_cells', u.timetabled_cells)
+#   print('available', u.available_hours, '| booked', u.booked_hours,
+#         '| used', u.used_hours, '| wasted', u.wasted_hours)
+#   print('absent', u.absent_hours, '| unused_held', u.unused_held_hours)
+#   print('utilization_pct', u.utilization_pct, '| booking_pct', u.booking_pct,
+#         '| in_flight', u.in_flight)
+#   "
+#
+# The week is derived from `today` rather than hardcoded so the recipe keeps
+# working; substitute an explicit Monday/Sunday pair to inspect a past week.
+#
+# --- The four checks -------------------------------------------------------
+#
+# 1. used_hours <= booked_hours <= available_hours.
+#    A violation of the RIGHT-hand inequality means one of: double-booked rooms,
+#    sessions sitting outside the derived ladder, or a denominator that lost its
+#    room-count factor. A violation of the left-hand one means the clamp in
+#    _session_contribution is not being applied.
+#
+# 2. utilization_pct should land WELL BELOW saturation. `seed_term` runs a
+#    60/20/20 modality split and moves every online class into a virtual room, so
+#    a large share of physical capacity is genuinely idle. A figure near 100%
+#    means virtual rooms or virtual sessions have leaked into the calculation
+#    (check `_physical_rooms` / `_exclude_virtual`, D-04/D-08).
+#
+# 3. wasted_hours must be clearly NON-ZERO. `seed_term` marks roughly 8% of past
+#    sessions ABSENT (seed_term.py:358-360) and shaves 5 or 12 minutes off the end
+#    of roughly 40% of held ones (seed_term.py:370-371). A zero here means the
+#    waste metric is keyed off the `ended_early` flag, which that command NEVER
+#    sets. This is the failure mode
+#    test_unflagged_early_end_still_counts_as_wasted exists to catch before it
+#    reaches the dashboard.
+#
+# 4. in_flight should be non-zero when `seed_term` was run RECENTLY, because it
+#    deliberately leaves `actual_end` NULL on the sessions running at seed time
+#    (seed_term.py:384-395). A zero at a time of day when classes are in session
+#    means the D-09 branch is not being reached. A zero on a database seeded days
+#    ago is expected and says nothing -- those sessions are outside the window.
+#
+# These are OBSERVATIONS to reason about, not assertions to encode. The dataset is
+# regenerated with a different seed and any test pinning a specific seeded figure
+# will be flaky.
