@@ -132,9 +132,17 @@
   it, so the REAL browser prompt fires only from the Enable tap -- a stray Block
   can never be triggered by an ignored banner. The VAPID public key comes from the
   global context processor (05-04); the CSRF token is read by the raw fetch.{% endcomment %}
+  {% comment %}Centering and width live in the style attribute, NOT in Tailwind
+  utilities. `-translate-x-1/2` is not generated in this build and resolved to
+  `transform: none`, so `left-1/2` alone put the banner's LEFT edge at the
+  viewport centre and ran it off the right side — 128px past the edge at 390px.
+  Because the banner is position:fixed the page does not scroll to reveal it, so
+  "Not now" / "Enable" were unreachable on a phone, and it overlaid table values
+  on desktop. Plain CSS here cannot silently fail the same way.{% endcomment %}
   <div id="push-banner" hidden
        data-vapid-key="{{ vapid_public_key }}" data-csrftoken="{{ csrf_token }}"
-       class="fixed left-1/2 -translate-x-1/2 z-40 w-[min(92%,26rem)]" style="bottom:5rem">
+       class="fixed z-40"
+       style="bottom:5rem; left:50%; transform:translateX(-50%); width:min(92%,26rem)">
     <div class="uk-card uk-card-body border border-border bg-background shadow-lg flex items-center gap-3">
       <uk-icon icon="bell"></uk-icon>
       <div class="flex-1">
