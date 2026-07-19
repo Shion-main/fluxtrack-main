@@ -29,7 +29,8 @@ from accounts.models import Role
 from campus.models import Building, Floor, Room
 from scheduling.models import (AcademicTerm, Modality, Schedule, ScheduleStatus,
                                Session, SessionStatus)
-from web.ifo import _room_board, _room_timetable
+from web.ifo import _room_board
+from web.room_state import room_timetable as _room_timetable
 from web.room_state import room_tile as _room_tile
 
 GRACE = timedelta(minutes=15)

@@ -10,7 +10,6 @@ sole source of the guard's floors (GRD/CHK-01 rule), never the client.
 """
 from functools import wraps
 
-from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.contrib.auth.decorators import login_required
 from django.core.exceptions import PermissionDenied
@@ -20,6 +19,7 @@ from django.utils import timezone
 from django.views.decorators.http import require_http_methods
 
 from accounts.models import Role
+from ops.policy import get_policy
 from scheduling.models import Modality, Session, SessionStatus
 from verification import resolver as R
 from verification.models import Assignment, AssignmentScope, DutyRole
@@ -51,12 +51,18 @@ def _guard_floor_ids(user, now):
                       scope=AssignmentScope.FLOOR, status="active")
               .prefetch_related("floors")):
         if R.assignment_covers_now(a, today, now_t):
-            floor_ids.update(a.floors.values_list("pk", flat=True))
+            # `.all()` reads the prefetch cache; `.values_list()` on the related
+            # manager would bypass it and re-query once per assignment, making
+            # the prefetch above buy nothing.
+            floor_ids.update(f.pk for f in a.floors.all())
     return floor_ids
 
 
 def _poll_ms():
-    return settings.FLUXTRACK_POLICY["poll_interval_seconds"] * 1000
+    # Through `get_policy`, not `settings.FLUXTRACK_POLICY` directly: only the
+    # former honours a SystemSetting override, so an operator retuning the poll
+    # interval used to silently miss the Guard monitor (Conventions #3).
+    return int(get_policy("poll_interval_seconds")) * 1000
 
 
 @guard_required
