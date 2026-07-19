@@ -14,6 +14,7 @@ from urllib.parse import urlparse
 from django.contrib.auth.decorators import login_required
 from django.core.exceptions import PermissionDenied
 from django.db import transaction
+from django.db.models import Exists, OuterRef
 from django.http import HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
@@ -39,6 +40,9 @@ from scheduling.models import (
     SessionStatus,
 )
 from scheduling.resolver import is_no_show_past_grace
+from verification.models import CheckerValidation, ValidationAction
+from web.pagination import paginate
+from web.reporting_common import status_label
 from scheduling.services import (
     ModalityShiftError,
     submit_modality_shift,
@@ -698,3 +702,122 @@ def online_start(request, pk):
 
     row = _online_row(session, now, grace_min)
     return render(request, "faculty/_online_start.html", {"rows": [row]})
+
+
+# --- Attendance history (FAC-11, D-15) --------------------------------------
+# READ-ONLY, Checker flags visible, and NO contest/dispute control anywhere. The
+# flag is already the system of record feeding the Dean/HR/IFO scorecards; a
+# dispute state machine plus a reviewer surface is real scope of its own and is a
+# recorded deferred idea, not a Phase 7 clarification. Disputes go through HR out
+# of band (D-15).
+
+FACULTY_HISTORY_PAGE_SIZE = 25
+
+# The two actions that are a flag AGAINST the faculty member. VERIFIED_EMPTY is
+# deliberately excluded: "the Checker found the room empty" is not the same claim
+# as "this faculty member was not present", and counting it here would put a mark
+# on a record that nobody actually made.
+_FACULTY_FLAG_ACTIONS = (ValidationAction.FLAG_IDENTITY_MISMATCH,
+                         ValidationAction.FLAG_NOT_PRESENT)
+
+
+def _history_filters(request):
+    """Parse the history filter bar, mirroring `web/hr.py:_filtered_sessions`.
+
+    FK-id filters apply only when the raw value is a clean integer; dates go
+    through `parse_date` and an invalid one drops just that bound behind a
+    friendly note -- a 200 with a notice, never a 500. Filters key on the FK id
+    and `date__range` ONLY: never a `pk__in` list, which is how this project has
+    previously hit the MSSQL 2100-parameter limit (the 04.1-04 `reset_term`
+    incident, and 06-07 avoided it the same way).
+
+    NOTE what is absent: there is no `faculty` parameter. Not a defaulted one,
+    not an ignored one -- this surface does not accept the concept, which is the
+    whole reason it is a separate view rather than HR's with another template.
+    """
+    term_raw = (request.GET.get("term") or "").strip()
+    from_raw = (request.GET.get("from") or "").strip()
+    to_raw = (request.GET.get("to") or "").strip()
+
+    note = None
+    d_from = parse_date(from_raw) if from_raw else None
+    d_to = parse_date(to_raw) if to_raw else None
+    if (from_raw and d_from is None) or (to_raw and d_to is None):
+        note = ("That date wasn't valid, so the date filter was ignored. "
+                "Enter dates as YYYY-MM-DD.")
+    return {
+        "term": term_raw, "date_from": from_raw, "date_to": to_raw,
+        "note": note, "_term_id": int(term_raw) if term_raw.isdigit() else None,
+        "_d_from": d_from, "_d_to": d_to,
+        "any_applied": bool(term_raw or from_raw or to_raw),
+    }
+
+
+@faculty_required
+@require_http_methods(["GET"])
+def history(request):
+    """FAC-11: the requesting faculty member's own attendance history.
+
+    HARD-SCOPED to `faculty=request.user` server-side (T-07-53). `web/hr.py`
+    `attendance` is the model for everything else here, but HR is cross-
+    department and takes a faculty filter from the querystring; this surface must
+    not accept one at all. That is the IDOR re-gate rule stated at
+    `modality_withdraw` above.
+
+    Verification and flags are resolved by `Exists()` ANNOTATIONS in the main
+    query, never by the per-object `Session.verified_by_checker` property: that
+    property issues a subquery per object, which 06-07 found fatal inside a
+    streaming iterator on MSSQL and which is an N+1 even here.
+    """
+    filters = _history_filters(request)
+
+    verified_sq = CheckerValidation.objects.filter(
+        session=OuterRef("pk"), action=ValidationAction.VERIFIED)
+    flagged_sq = CheckerValidation.objects.filter(
+        session=OuterRef("pk"), action__in=_FACULTY_FLAG_ACTIONS)
+
+    qs = (Session.objects
+          .filter(faculty=request.user)
+          .select_related("schedule", "schedule__term", "room")
+          .annotate(is_verified=Exists(verified_sq),
+                    is_flagged=Exists(flagged_sq))
+          # Newest-first, matching HR, so the page shows the most recent sessions
+          # rather than the oldest historical rows.
+          .order_by("-date", "-scheduled_start"))
+
+    if filters["_term_id"] is not None:
+        qs = qs.filter(schedule__term_id=filters["_term_id"])
+    if filters["_d_from"] is not None:
+        qs = qs.filter(date__gte=filters["_d_from"])
+    if filters["_d_to"] is not None:
+        qs = qs.filter(date__lte=filters["_d_to"])
+
+    pager = paginate(request, qs, per_page=FACULTY_HISTORY_PAGE_SIZE)
+    # Materialize BEFORE the flag-detail lookup below. MSSQL runs with MARS off,
+    # so a follow-up query issued while an outer cursor is still open raises
+    # HY010 (the guards in scheduling/jobs.py and web/ifo.py:131 are the
+    # precedent).
+    sessions = list(pager["page"].object_list)
+
+    # ONE additional query for the flag reasons on this page, not one per row.
+    # The id list is bounded by the page size, so it cannot approach the 2100
+    # parameter ceiling.
+    flagged_ids = [s.pk for s in sessions if s.is_flagged]
+    reasons = {}
+    if flagged_ids:
+        for v in (CheckerValidation.objects
+                  .filter(session_id__in=flagged_ids,
+                          action__in=_FACULTY_FLAG_ACTIONS)
+                  .order_by("session_id", "-validated_at")):
+            reasons.setdefault(v.session_id, v.get_action_display())
+
+    for s in sessions:
+        s.present_label = status_label(s.status)
+        s.flag_reason = reasons.get(s.pk, "")
+
+    ctx = {"sessions": sessions, "filters": filters,
+           "term_choices": AcademicTerm.objects.order_by("-is_active",
+                                                         "-start_date"),
+           "greeting": _greeting(timezone.localtime()),
+           "today": timezone.localdate(), **pager}
+    return render(request, "faculty/history.html", ctx)
