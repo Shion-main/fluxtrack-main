@@ -29,6 +29,8 @@ import secrets
 from django.core.management.base import BaseCommand
 from django.db import transaction
 
+from campus.codes import generate_manual_code
+
 from campus.models import Building, Floor, Room
 from scheduling import xlsx
 from scheduling.importing import (PREFIX_BUILDING, UNASSIGNED_BUILDING,
@@ -137,7 +139,9 @@ class Command(BaseCommand):
                         "name": name,
                         "capacity": capacity,
                         "qr_token": secrets.token_urlsafe(24),
-                        "manual_code": f"{secrets.randbelow(1000000):06d}",
+                        # Collision-retrying mint — a bare randbelow() against
+                        # the unique column fails ~2.3% of full-term loads.
+                        "manual_code": generate_manual_code(),
                     })
                 if was_created:
                     created += 1
