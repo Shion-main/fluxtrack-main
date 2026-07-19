@@ -734,3 +734,30 @@ input[type="file"].ft-control::file-selector-button {
 }
 input[type="file"].ft-control::file-selector-button:hover { border-color: var(--nv-hero); }
 /* --- end Faculty profile photo (FAC-12) --- */
+
+=======
+/* --- Guard room detail (GRD-02) --------------------------------------------
+   Appended as one contiguous block; touches no rule above. Two additions only:
+   (1) the monitor's room card becomes a link to that room's schedule, and an
+   anchor needs the block/reset an unstyled <a> does not inherit from .ft-card;
+   (2) the per-room page's weekly grid + its footnote.
+   No border-left accent stripes; colour comes from tokens.css, never a literal.
+   -------------------------------------------------------------------------- */
+.gd-roomlink { display: block; text-decoration: none; color: inherit; }
+/* Affordance is not colour alone: the chevron below is the persistent visual
+   cue, and the row lifts on hover/focus the way .ft-row already does. */
+.gd-roomlink:hover { border-color: var(--nv-hero); }
+.gd-roomlink:focus-visible {
+  outline: none; border-color: var(--nv-hero);
+  box-shadow: 0 0 0 3px rgba(0, 28, 67, .28);
+}
+.gd-roomlink__go { margin-left: auto; display: inline-flex; align-items: center; }
+.gd-roomlink__go uk-icon, .gd-roomlink__go svg {
+  width: 15px; height: 15px; color: var(--ft-muted); vertical-align: -3px;
+}
+/* .ft-card__meta is the flex row the chevron sits at the end of. */
+.gd-roomlink .ft-card__meta { display: flex; align-items: center; gap: 5px; flex-wrap: wrap; }
+
+.gd-room__grid { margin-top: 2px; }
+.gd-room__note { margin-top: 10px; font-size: .8rem; color: var(--ft-muted); }
+/* --- end Guard room detail (GRD-02) --------------------------------------- */

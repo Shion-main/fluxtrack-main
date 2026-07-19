@@ -40,7 +40,7 @@ from verification.models import (Assignment, AssignmentScope, AssignmentType,
 from verification.services import assign_online_sessions
 from web.pagination import paginate
 from web.room_state import (ROOM_PROBLEM_STATES, ROOM_STATE_ORDER, occupies,
-                            room_tile)
+                            room_tile, room_timetable)
 from web.reporting_common import reporting_range as _reporting_range
 
 
@@ -159,51 +159,9 @@ def room_panel(request, code):
     })
 
 
-def _room_timetable(room, term):
-    """The room's week as a day-by-time grid, matching MMCM's printed schedule form.
-
-    A flat list of classes answers "what is booked here"; the grid answers "when
-    is this room FREE", which is the question a facilities office actually asks,
-    and it is the layout staff already recognise from the paper form.
-
-    Rows are the campus-wide block ladder for the term (every distinct start time
-    in use), not just this room's own times -- so a free slot shows as an empty
-    cell instead of vanishing, every room prints on the same grid, and two
-    printouts can be compared side by side.
-
-    A class occupies EVERY slot its window covers (half-open: start <= slot <
-    end), so a double-length class fills two rows exactly as it does on the paper
-    form, with no rowspan bookkeeping.
-    """
-    if term is None:
-        return None
-    slots = sorted(set(
-        Schedule.objects
-        .filter(term=term, status=ScheduleStatus.ACTIVE)
-        .values_list("start_time", flat=True)))
-    if not slots:
-        return None
-
-    scheds = list(room.schedules
-                  .filter(status=ScheduleStatus.ACTIVE, term=term)
-                  .select_related("faculty"))
-    # An online class does not use a physical room, so it is not part of that
-    # room's timetable -- the slot reads free, which is the truth. In a virtual
-    # room the online classes ARE the timetable.
-    if not room.is_virtual:
-        scheds = [s for s in scheds if s.modality != Modality.ONLINE]
-    rows = []
-    for slot in slots:
-        cells = []
-        for day_value, _label in DayOfWeek.choices:
-            cells.append(next(
-                (s for s in scheds
-                 if s.day_of_week == day_value and s.start_time <= slot < s.end_time),
-                None))
-        rows.append({"time": slot, "cells": cells})
-    return {"days": DayOfWeek.choices, "rows": rows,
-            "used": sum(1 for r in rows for c in r["cells"] if c is not None),
-            "capacity": len(rows) * len(DayOfWeek.choices)}
+# `_room_timetable` moved to `web/room_state.py` as public `room_timetable`
+# (07-11): the Guard per-room page (GRD-02) builds the same grid, and a role
+# module must not import a private name from another role module.
 
 
 @ifo_required
@@ -222,7 +180,7 @@ def room_detail(request, code):
         schedules = [s for s in schedules if s.modality != Modality.ONLINE]
     return render(request, "ifo/room_detail.html", {
         "room": room, "schedules": schedules, "upcoming": upcoming, "term": term,
-        "timetable": _room_timetable(room, term),
+        "timetable": room_timetable(room, term),
         "printed_on": timezone.localtime(),
     })
 

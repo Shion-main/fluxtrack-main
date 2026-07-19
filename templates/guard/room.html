@@ -1,0 +1,150 @@
+{% extends "base.html" %}
+{% load static %}
+{% comment %}GRD-02 per-room schedule for a Guard (navy .ft-* shell, NOT the IFO
+console). Three answers, in the order a guard standing at the door needs them:
+what is happening in this room right now, what else is on today, and what
+recurs here through the week.
+
+The state card's colour/icon/label triple is computed SERVER-SIDE in
+web/guard._ROOM_CARD_STYLES -- the template never branches on colour, and every
+state carries an icon and a text label as well (WCAG 1.4.1).
+
+Read-only by contract (GRD-05): no form, no button, no action control anywhere
+on this page. Attendance status and flag history are deliberately absent -- a
+Guard sees room occupancy, not a person's record (D-07 minimum access).
+
+The weekly grid reuses css/timetable.css, the same stylesheet and the same
+markup the IFO room page renders, rather than a second grid. ASCII-only.
+{% endcomment %}
+{% block head %}{{ block.super }}
+<link rel="stylesheet" href="{% static 'css/timetable.css' %}"/>
+{% endblock %}
+{% block title %}{{ room.code }} · FluxTrack{% endblock %}
+{% block content %}
+<div class="ft-app">
+
+  <header class="ft-appbar">
+    <a class="ft-appbar__back" href="/guard/monitor" aria-label="Back to floor monitor">
+      <uk-icon icon="arrow-left"></uk-icon></a>
+    <span class="ft-appbar__title">Room schedule</span>
+  </header>
+
+  <div class="ft-page" style="padding-top:14px">
+    <div class="ft-greet" style="margin-top:0">
+      <div class="ft-greet__hi">{% include "_room_code.html" with room=room %}</div>
+      <div class="ft-greet__date">
+        {{ room.floor.building.name }} &middot; Floor {{ room.floor.number }}{% if room.name %} &middot; {{ room.name }}{% endif %}{% if room.capacity %} &middot; {{ room.capacity }} seats{% endif %}</div>
+    </div>
+
+    {% comment %}Right now. This is the whole reason a guard opens the page, so
+    it is the first thing on it and it is a full card, not a chip.{% endcomment %}
+    <div class="ft-card {{ style.card }}" data-state="{{ tile.state }}">
+      <div class="ft-card__head">
+        <uk-icon icon="{{ style.icon }}"></uk-icon>
+        <span class="{{ style.pill }}">{{ style.label }}</span>
+        <span class="ft-card__room">{{ now|time:"g:i A" }}</span>
+      </div>
+      <div class="ft-card__meta">
+        {% if tile.session %}
+        {{ tile.session.schedule.course_code }}-{{ tile.session.schedule.section }}
+        &middot; {{ tile.session.faculty.get_full_name|default:tile.session.faculty.username }}
+        &middot; {{ tile.session.scheduled_start|time:"g:i A" }}&ndash;{{ tile.session.scheduled_end|time:"g:i A" }}
+        {% elif tile.next %}
+        Next here: {{ tile.next.schedule.course_code }}-{{ tile.next.schedule.section }}
+        at {{ tile.next.scheduled_start|time:"g:i A" }}
+        {% else %}
+        No further classes in this room today.
+        {% endif %}
+      </div>
+    </div>
+
+    <div class="ft-sec">
+      <div class="ft-sec__title">Today</div>
+      <span class="ft-chip" style="pointer-events:none">{{ today|length }} class{{ today|length|pluralize:"es" }}</span>
+    </div>
+
+    {% if today %}
+    <div class="ft-list">
+      {% for se in today %}
+      <div class="ft-row">
+        <div class="ft-row__top">
+          <span class="ft-row__time">{{ se.scheduled_start|time:"g:i A" }}</span>
+          <span class="ft-row__title">{{ se.schedule.course_code }}-{{ se.schedule.section }}</span>
+        </div>
+        <div class="ft-row__meta">
+          <span><uk-icon icon="user"></uk-icon>
+            {{ se.faculty.get_full_name|default:se.faculty.username }}</span>
+          <span><uk-icon icon="clock"></uk-icon>
+            until {{ se.scheduled_end|time:"g:i A" }}</span>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+    {% else %}
+    <div class="ft-card ft-card--neutral">
+      <div class="ft-card__meta" style="display:flex;align-items:center;gap:8px;margin:0">
+        <uk-icon icon="coffee"></uk-icon>
+        {% if room.is_virtual %}No online classes in this virtual room today.
+        {% else %}Nothing scheduled in this room today.{% endif %}</div>
+    </div>
+    {% endif %}
+
+    <div class="ft-sec">
+      <div class="ft-sec__title">This week</div>
+      {% if term %}<span class="ft-chip" style="pointer-events:none">{{ term.name }}</span>{% endif %}
+    </div>
+
+    {% if timetable %}
+    <div class="table-wrap gd-room__grid">
+      <table class="tt">
+        <thead>
+          <tr>
+            <th scope="col" class="tt__time">Time</th>
+            {% for value, label in timetable.days %}
+            <th scope="col">{{ label|slice:":3" }}</th>
+            {% endfor %}
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in timetable.rows %}
+          <tr>
+            <th scope="row" class="tt__time">{{ row.time|time:"g:i A" }}</th>
+            {% for s in row.cells %}
+            {% if s %}
+            <td class="tt__on">
+              <span class="tt__course">{{ s.course_code }}-{{ s.section }}</span>
+              {% comment %}The importer creates a placeholder user for an offering
+              row with no instructor; printing that internal username reads as a
+              broken cell, so it says "Unassigned" instead.{% endcomment %}
+              <span class="tt__who">
+                {% if s.faculty.last_name %}{{ s.faculty.last_name }}
+                {% elif s.faculty.get_full_name %}{{ s.faculty.get_full_name }}
+                {% else %}<em class="tt__tba">Unassigned</em>{% endif %}</span>
+            </td>
+            {% else %}
+            {% comment %}A free slot is information, not absence -- the dash makes
+            it read as "checked and empty", not "cell failed to render".{% endcomment %}
+            <td class="tt__off"><span aria-hidden="true">&ndash;</span><span class="sr-only">free</span></td>
+            {% endif %}
+            {% endfor %}
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <p class="gd-room__note">
+      Rows are the campus block ladder for the term, so every room reads on the
+      same grid.
+      {% if room.is_virtual %}This is a virtual room &mdash; every class here meets online.
+      {% else %}Classes that moved online are not listed: they do not use this room,
+      so the slot is free.{% endif %}</p>
+    {% else %}
+    <div class="ft-card ft-card--neutral">
+      <div class="ft-card__meta" style="margin:0">
+        {% if not term %}No active term, so there is no timetable to build.
+        {% else %}No recurring classes in this room for the active term.{% endif %}</div>
+    </div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

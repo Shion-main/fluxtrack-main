@@ -16,8 +16,13 @@ label (WCAG 1.4.1). Off-duty renders a calm "not on duty" card. ASCII-only.{% en
   <span class="ft-chip" style="pointer-events:none">{{ sessions|length }} session{{ sessions|length|pluralize }}</span>
 </div>
 <div class="ft-list">
+  {% comment %}GRD-02 entry point: the card itself is the link to that room's
+  schedule, so "something looks wrong in that room" is one tap from the answer.
+  A plain navigation link, NOT an htmx swap -- this partial is re-swapped on
+  every poll, and a control that swaps into its own polled region would be
+  destroyed mid-tap.{% endcomment %}
   {% for se in sessions %}
-  <div class="ft-card
+  <a href="/guard/rooms/{{ se.room.code }}" class="gd-roomlink ft-card
     {% if se.status == 'active' %}ft-card--ok{% elif se.status == 'absent' %}ft-card--bad{% elif se.status == 'completed' %}ft-card--neutral{% else %}ft-card--info{% endif %}"
     data-state="{{ se.status }}">
     <div class="ft-card__head">
@@ -31,8 +36,9 @@ label (WCAG 1.4.1). Off-duty renders a calm "not on duty" card. ASCII-only.{% en
       {{ se.scheduled_start|time:"g:i A" }} &middot; {{ se.schedule.course_code }}-{{ se.schedule.section }}
       &middot; {{ se.faculty.last_name|default:se.faculty.username }}
       {% if se.verified_by_checker %}&middot; <uk-icon icon="shield-check" style="vertical-align:-2px;width:13px;height:13px"></uk-icon> verified{% endif %}
+      <span class="gd-roomlink__go"><uk-icon icon="chevron-right"></uk-icon><span class="sr-only">View this room's schedule</span></span>
     </div>
-  </div>
+  </a>
   {% endfor %}
 </div>
 {% else %}
