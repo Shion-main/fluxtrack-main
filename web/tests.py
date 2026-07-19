@@ -653,3 +653,51 @@ class GuardSurfaceTests(TestCase):
         self.assertEqual(resp.status_code, 200)
         self.assertContains(resp, "In session now")
         self.assertContains(resp, "G101")
+
+
+class GuardReadOnlyTests(TestCase):
+    """GRD-05 -- "a Guard has no write access anywhere" -- as an enforced
+    contract, not an observed habit.
+
+    Before Phase 07 every Guard view was read-only only because no write branch
+    existed to reach; a POST still answered 200. Each URL below now carries
+    `@require_http_methods(["GET"])`, so the method is refused at the door.
+    ANY Guard view added by a later plan must be added to GUARD_URLS here.
+
+    The 403 case is the regression this decorator could plausibly introduce:
+    the role gate must stay outermost, so a non-Guard is rejected on role
+    before the method decorator is ever consulted.
+    """
+
+    GUARD_URLS = ("guard_monitor", "guard_monitor_rows", "guard_locate")
+
+    def setUp(self):
+        User = get_user_model()
+        self.bldg = Building.objects.create(name="RO", code="RO")
+        self.floor = Floor.objects.create(building=self.bldg, number=1)
+        self.room = Room.objects.create(floor=self.floor, code="RO101",
+                                        qr_token="roq1", manual_code="910101")
+        self.guard = User.objects.create(username="ro_guard", role=Role.GUARD)
+        self.faculty = User.objects.create(username="ro_fac", role=Role.FACULTY)
+
+    def test_post_is_refused_on_every_guard_url(self):
+        self.client.force_login(self.guard)
+        for name in self.GUARD_URLS:
+            with self.subTest(url=name):
+                self.assertEqual(
+                    self.client.post(reverse(name)).status_code, 405)
+
+    def test_get_still_works_on_every_guard_url(self):
+        # The decorator refuses the method; it must not break the surface.
+        self.client.force_login(self.guard)
+        for name in self.GUARD_URLS:
+            with self.subTest(url=name):
+                self.assertEqual(
+                    self.client.get(reverse(name)).status_code, 200)
+
+    def test_role_gate_still_outermost_for_non_guard(self):
+        self.client.force_login(self.faculty)
+        for name in self.GUARD_URLS:
+            with self.subTest(url=name):
+                self.assertEqual(
+                    self.client.get(reverse(name)).status_code, 403)
