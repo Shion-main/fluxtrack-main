@@ -97,10 +97,24 @@ class RoomUtilization:
     (D-03); the difference is reclaimable capacity a facilities office can act on,
     not a scolding statistic. Hours are ``Decimal`` quantized to one decimal place
     so a room-hours figure never renders as a binary-float artifact.
+
+    Three shape fields describe the derived denominator (D-10):
+
+    * ``physical_rooms`` -- the non-virtual room count.
+    * ``blocks_per_day`` -- the CAMPUS ladder height (``len(campus_block_ladder)``),
+      i.e. how many distinct start times the whole term uses. It is the grid's
+      height, NOT a per-day block count: under D-10 the number of blocks actually
+      timetabled varies by day, which is the entire point of the cell sum.
+    * ``teaching_days`` -- calendar days in the range carrying at least one
+      timetabled cell (the honest "days with teaching on them").
+    * ``timetabled_cells`` -- (day, block) cells summed across the range, the true
+      unit of the denominator. Under the old cross-product this was always
+      ``teaching_days * blocks_per_day``; under D-10 it is <= that.
     """
     physical_rooms: int
     blocks_per_day: int
     teaching_days: int
+    timetabled_cells: int
     available_hours: Decimal
     booked_hours: Decimal
     used_hours: Decimal
@@ -191,6 +205,23 @@ class CampusBlock:
     duration_seconds: int
 
 
+@dataclass(frozen=True)
+class TimetabledCell:
+    """One (day, block) cell the term actually timetables (D-10).
+
+    The unit of the available-capacity denominator: each cell contributes
+    ``physical_rooms x duration_seconds`` once per calendar occurrence of its day.
+
+    ``day`` is a ``DayOfWeek`` value (MON=0..SUN=6, byte-identical to
+    ``datetime.date.weekday()``); ``start`` is the ladder rung's wall-clock start;
+    ``duration_seconds`` is that rung's ladder duration, so a cell can never
+    disagree with the block ladder about how long a slot is.
+    """
+    day: int
+    start: datetime.time
+    duration_seconds: int
+
+
 # An arbitrary fixed date used only to subtract two wall-clock TimeFields. These
 # are not instants, so no timezone is involved and the date choice is irrelevant.
 _SPAN_EPOCH = datetime.date(2000, 1, 1)
@@ -258,22 +289,46 @@ def campus_block_ladder(term):
     ]
 
 
-def teaching_weekdays(term):
-    """Sorted distinct ``day_of_week`` values of the term's ACTIVE schedules (D-06).
+def timetabled_cells(term):
+    """The (day, block) cells the term actually timetables, campus-wide (D-10).
 
-    Returns ``[]`` for a None term. ``DayOfWeek`` is MON=0..SUN=6
-    (``scheduling/models.py:12-19``), byte-identical to ``datetime.date.weekday()``,
-    so these values compare directly with no translation table (asserted in
-    ``WeekdayMappingTests``, not merely assumed here).
+    Returns ``[]`` for a None term or a term with no ACTIVE schedules. Otherwise a
+    list of :class:`TimetabledCell` ordered by (day, start): one entry per distinct
+    ``(day_of_week, start_time)`` pair among the term's ACTIVE schedules, campus-wide,
+    carrying that block's ladder duration.
 
-    Deriving days from the data is what picks up MMCM's real Saturday classes and
-    drops Sunday without anyone hardcoding a 5 or a 7: a day nobody schedules is
-    not wasted capacity, it is simply not a teaching day.
+    This REPLACES the former ``teaching_weekdays`` day-list, and with it the
+    ``days x blocks`` cross-product denominator. The cross-product let a single
+    outlier row buy a full day of capacity across every block: the seeded term's
+    lone Sunday class promoted Sunday to a whole teaching day and moved campus
+    utilization by four points. Summing the cells that are really timetabled is
+    D-01's own rationale one level finer -- a block nobody schedules is not waste,
+    and neither is a (day, block) cell nobody schedules -- and stays entirely
+    derived, with no threshold and no hardcoded day list to decide the question.
+
+    A cell is claimed by the block a schedule STARTS in, matching how the ladder
+    itself is derived (one rung per distinct start time). A long class therefore
+    claims one cell, not every rung its window crosses; the campus-wide union
+    across all rooms is what makes the cell a real teaching slot.
+
+    ``DayOfWeek`` is MON=0..SUN=6 (``scheduling/models.py:12-19``), byte-identical
+    to ``datetime.date.weekday()``, so ``cell.day`` compares directly against a
+    date's weekday with no translation table (asserted in ``WeekdayMappingTests``,
+    not merely assumed here).
+
+    Shaped as a cell SET rather than a day list because the plan-04 heat grid wants
+    exactly this: which (day, block) cells exist, and how long each one is.
     """
-    if term is None:
+    blocks = campus_block_ladder(term)
+    if not blocks:
         return []
-    return sorted(set(
-        _active_schedules(term).values_list("day_of_week", flat=True)))
+    duration_by_start = {b.start: b.duration_seconds for b in blocks}
+    pairs = set(_active_schedules(term).values_list("day_of_week", "start_time"))
+    return [
+        TimetabledCell(day=day, start=start,
+                       duration_seconds=duration_by_start.get(start, 0))
+        for day, start in sorted(pairs)
+    ]
 
 
 def _scoped_sessions(*, start, end, department=None, as_of=None, faculty=None):
@@ -500,9 +555,16 @@ def room_utilization(*, start, end, term, as_of=None):
     ``used`` comes from the ACTUAL check-in/out timestamps, never from the
     schedule: an ABSENT session contributes booked hours and ZERO used hours and
     that difference IS the reclaimable-capacity metric (D-03). The denominator is
-    derived at query time from the term's own data -- physical rooms x derived
-    teaching days x the derived campus block ladder -- so no block count or
-    teaching-day count is ever hardcoded (D-06). In-flight sessions (running, no
+    derived at query time from the term's own data as a SUM over the (day, block)
+    cells the term actually timetables (D-10)::
+
+        available = SUM over timetabled (day, block) cells in range of
+                    (physical_rooms x block_duration)
+
+    so no block count, day count or day list is ever hardcoded (D-06). The earlier
+    ``days x blocks`` cross-product is deliberately gone: it let one outlier
+    schedule row buy a whole day's worth of capacity across every block, which moved
+    the headline rate by four points on the seeded term (D-10). In-flight sessions (running, no
     ``actual_end``) are excluded from both sides and surfaced in ``in_flight``
     rather than being folded into a silent zero (D-09).
 
@@ -514,20 +576,35 @@ def room_utilization(*, start, end, term, as_of=None):
     denominator is simply zero and the rates read 0.
     """
     # --- Denominator: every factor derived, no literal block or day count. ---
+    # D-10: a SUM over the (day, block) cells the term really timetables, NOT a
+    # days x blocks cross-product. Seconds are accumulated per weekday first, then
+    # multiplied out over the calendar days in range, so the arithmetic stays
+    # integral and a weekday appearing twice in a long range counts twice.
     blocks = campus_block_ladder(term) or []
-    weekdays = set(teaching_weekdays(term))
-    block_seconds_per_day = sum(b.duration_seconds for b in blocks)
+    cells = timetabled_cells(term)
     physical_rooms = _physical_rooms().count()
+
+    seconds_by_weekday = {}
+    cells_by_weekday = {}
+    for cell in cells:
+        seconds_by_weekday[cell.day] = (
+            seconds_by_weekday.get(cell.day, 0) + cell.duration_seconds)
+        cells_by_weekday[cell.day] = cells_by_weekday.get(cell.day, 0) + 1
 
     last_day = min(end, as_of) if as_of is not None else end
     teaching_days = 0
+    cell_count = 0
+    cell_seconds = 0
     day = start
     while day <= last_day:
-        if day.weekday() in weekdays:
+        weekday = day.weekday()
+        if weekday in cells_by_weekday:
             teaching_days += 1
+            cell_count += cells_by_weekday[weekday]
+            cell_seconds += seconds_by_weekday[weekday]
         day += datetime.timedelta(days=1)
 
-    available_seconds = physical_rooms * teaching_days * block_seconds_per_day
+    available_seconds = physical_rooms * cell_seconds
 
     # --- Numerator: a streamed Python fold, deliberately, not DB-side. ---
     # This deviates from the module's DB-side-aggregation rule, so: the per-session
@@ -577,6 +654,7 @@ def room_utilization(*, start, end, term, as_of=None):
         physical_rooms=physical_rooms,
         blocks_per_day=len(blocks),
         teaching_days=teaching_days,
+        timetabled_cells=cell_count,
         available_hours=_hours(available_seconds),
         booked_hours=_hours(booked_seconds),
         used_hours=_hours(used_seconds),
