@@ -1,0 +1,61 @@
+{% comment %}IFO-09 tier T2: the campus day-by-block utilization heat grid.
+
+Deliberately built on the SAME `.tt` skeleton as the printed room timetable
+(ifo/room_detail.html), driven by the SAME derived block ladder. An IFO admin
+reading this grid and a room's printed timetable in two tabs must never have to
+reconcile two different grids -- if the rows ever stop matching, the shared
+derivation has been bypassed somewhere.
+
+Colour is an ACCELERANT, never the message. Every cell prints its percentage as
+visible text, so a reader in greyscale, on a mono printer, or with any colour
+vision deficiency gets the complete answer from the number alone.
+
+The shading is RELATIVE to the busiest cell in this grid, not an absolute
+good/bad ladder. No decision in this phase sets a utilization target and the
+campus baseline is ~26%, so an absolute ramp would render permanently red in its
+normal state. The legend says so in words, because a scale whose meaning is not
+stated is a scale a reader will misread.
+
+A cell the term does not timetable carries NO capacity, which is a different fact
+from a cell that had capacity and went unused. It uses the established free-cell
+idiom from room_detail.html:89 -- a dash marked aria-hidden paired with an sr-only
+word -- rather than a misleading 0%. ASCII-only.{% endcomment %}
+<div class="table-wrap">
+  <table class="tt">
+    <caption class="tt__cap">
+      Room utilization by day and block, as a percentage of that slot's physical
+      room capacity. Shading is relative: the darkest cells are the busiest in
+      this range, the palest the least busy. It is not a pass/fail scale &mdash;
+      there is no campus utilization target. A blank cell is a slot the term does
+      not timetable at all, which is not the same as an unused one.
+    </caption>
+    <thead>
+      <tr>
+        <th scope="col" class="tt__time">Time</th>
+        {% for value, label in heat_days %}
+        <th scope="col">{{ label|slice:":3" }}</th>
+        {% endfor %}
+      </tr>
+    </thead>
+    <tbody>
+      {% for row in grid.0 %}
+      <tr>
+        <th scope="row" class="tt__time">{{ row.block.start|time:"g:i A" }}</th>
+        {% for cell in row.cells %}
+          {% if cell.timetabled %}
+          <td class="tt__h tt__h{{ cell.step }}">
+            <span class="tt__pct">{{ cell.utilization_pct }}%</span>
+            <span class="tt__hrs">{{ cell.used_hours }} h</span>
+          </td>
+          {% else %}
+          <td class="tt__off">
+            <span aria-hidden="true">&ndash;</span>
+            <span class="sr-only">not timetabled</span>
+          </td>
+          {% endif %}
+        {% endfor %}
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>

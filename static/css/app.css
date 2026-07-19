@@ -118,6 +118,11 @@
 /* Column roles. */
 .tbl__id { color: var(--ink); font-weight: 600; }
 .tbl__meta { color: var(--ft-muted); font-size: .8rem; }
+/* A child row inside a flat parent/child table (the IFO utilization rollup:
+   building rows followed by their own floor rows). One indent plus a lighter
+   weight, rather than a nested table -- nesting fights this whole stack, and the
+   indent alone already reads as "belongs to the row above". */
+.tbl__sub { padding-left: 30px; font-weight: 500; color: var(--body); }
 .tbl__num, .tbl th.tbl__num { text-align: right; font-variant-numeric: tabular-nums; }
 .tbl__time { white-space: nowrap; font-variant-numeric: tabular-nums; color: var(--ft-muted); }
 .tbl__mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .82rem; }

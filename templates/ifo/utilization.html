@@ -1,0 +1,233 @@
+{% extends "ifo/_console.html" %}
+{% load static %}
+{% comment %}IFO-09 tier T2. The dashboard card says HOW MUCH capacity is idle;
+this page says WHERE and WHEN, which is the half a facilities office can act on.
+
+FOUR independent sections, each with its OWN safe_card (value, error) pair and
+its own guard: heat grid, building/floor rollup, least-used rooms, saturated
+blocks. Never a shared guard -- a rollup failure must not take the grid down with
+it (D-05).
+
+timetable.css is loaded per-page, the way room_detail.html does it; it is not a
+global stylesheet.
+
+Wasted hours are framed as RECLAIMABLE CAPACITY throughout. "N room-hours were
+booked and unused" converts into freed bookable slots, which is an action; the
+same number phrased as a failure rate is just a scolding statistic nobody can do
+anything with. ASCII-only.{% endcomment %}
+{% block head %}{{ block.super }}
+<link rel="stylesheet" href="{% static 'css/timetable.css' %}"/>
+{% endblock %}
+{% block title %}Room utilization - FluxTrack{% endblock %}
+{% block console_title %}Room utilization{% endblock %}
+{% block page_actions %}
+<button type="button" class="uk-btn uk-btn-secondary uk-btn-sm no-print" onclick="window.print()">
+  <uk-icon icon="printer" class="size-4"></uk-icon> Print</button>
+<a href="/ifo/dashboard" class="uk-btn uk-btn-ghost uk-btn-sm no-print">
+  <uk-icon icon="chevron-left" class="size-4"></uk-icon> Dashboard</a>
+{% endblock %}
+{% block console %}
+<p class="uk-text-muted mb-6">
+  Where and when physical room capacity sits idle (IFO-09). Virtual rooms are
+  excluded &mdash; an online class occupies no room. Point-in-time; refresh with Apply.</p>
+
+<form method="get" class="uk-card uk-card-body mb-6 no-print">
+  <div class="flex flex-wrap items-end gap-4">
+    <label class="flex flex-col gap-1">
+      <span class="uk-text-small uk-text-muted">From</span>
+      <input type="date" name="from" class="uk-input" value="{{ date_from|date:'Y-m-d' }}">
+    </label>
+    <label class="flex flex-col gap-1">
+      <span class="uk-text-small uk-text-muted">To</span>
+      <input type="date" name="to" class="uk-input" value="{{ date_to|date:'Y-m-d' }}">
+    </label>
+    <button type="submit" class="uk-btn uk-btn-primary uk-btn-sm">Apply</button>
+    <a href="/ifo/utilization" class="uk-btn uk-btn-ghost uk-btn-sm">Reset</a>
+  </div>
+  {% if range_note %}
+  <p class="uk-text-small mt-2" style="color:var(--amber)">{{ range_note }}</p>
+  {% endif %}
+</form>
+
+{% comment %}Print-only masthead: on paper there is no console bar to say what
+this sheet is or what window it covers.{% endcomment %}
+<div class="pr-head">
+  <h1>Room utilization &mdash; campus</h1>
+  <p>{{ date_from|date:"M j, Y" }} to {{ date_to|date:"M j, Y" }}{% if term %} &middot; {{ term.name }}{% endif %}</p>
+</div>
+
+<p class="uk-text-small uk-text-muted mb-6">
+  Applied window: <b>{{ date_from|date:"M j, Y" }}</b> to <b>{{ date_to|date:"M j, Y" }}</b>{% if term %} &middot; {{ term.name }}{% endif %}.
+  {% if not occupancy.1 and occupancy.0 %}
+  <b>{{ occupancy.0.wasted_hours }}</b> room-hours were booked and left unused in
+  this window &mdash; reclaimable as bookable slots. Campus ran at
+  {{ occupancy.0.utilization_pct }}% of {{ occupancy.0.available_hours }} available
+  room-hours across {{ occupancy.0.physical_rooms }} physical rooms.
+  {% endif %}
+</p>
+
+{% comment%}--- 1. HEAT GRID -------------------------------------------------{% endcomment %}
+<div class="uk-card uk-card-body mb-6 pr-flat" data-util-section="grid">
+  <h3 class="uk-card-title mb-3">When capacity is idle</h3>
+  {% if grid.1 %}
+    {% include "reports/_error_card.html" %}
+  {% elif grid.0 %}
+    {% include "ifo/_heatgrid.html" %}
+    <div class="tt__legend no-print">
+      <span>Least used</span>
+      <span class="tt__key tt__h0"></span>
+      <span class="tt__key tt__h1"></span>
+      <span class="tt__key tt__h2"></span>
+      <span class="tt__key tt__h3"></span>
+      <span class="tt__key tt__h4"></span>
+      <span>Most used, within this range</span>
+    </div>
+    <p class="uk-text-small uk-text-muted mt-3">
+      Rows are the campus block ladder derived from this term's own schedules, the
+      same ladder every room's printed timetable uses, so the two grids always
+      line up. A class spanning two blocks contributes to both rows, split by
+      length, so the grid's hours add up to the same total as the dashboard card.</p>
+  {% else %}
+    <p class="uk-text-muted">
+      No block ladder for this term, so there is no grid to draw. That means the
+      term has no active schedules imported yet &mdash; import a timetable on
+      <a href="/ifo/import">Import schedules</a> and this fills in.</p>
+  {% endif %}
+</div>
+
+{% comment%}--- 2. BUILDING AND FLOOR ROLLUP ---------------------------------{% endcomment %}
+<div class="uk-card uk-card-body p-0 mb-6 pr-flat" data-util-section="rollup">
+  <h3 class="uk-card-title mb-3 px-4 pt-4">By building and floor</h3>
+  {% if rollup.1 %}
+    <div class="px-4 pb-4">{% include "reports/_error_card.html" %}</div>
+  {% else %}
+  <div class="table-wrap">
+    <table class="tbl">
+      <thead>
+        <tr>
+          <th scope="col">Scope</th>
+          <th scope="col" class="tbl__num">Rooms</th>
+          <th scope="col" class="tbl__num">Used h</th>
+          <th scope="col" class="tbl__num">Booked h</th>
+          <th scope="col" class="tbl__num">Available h</th>
+          <th scope="col" class="tbl__num">Reclaimable h</th>
+          <th scope="col" class="tbl__num">Utilization</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for r in rollup.0 %}
+        <tr>
+          {% comment %}One indent class expresses the parent/child relation. A
+          nested table would fight the .tbl stack for no gain.{% endcomment %}
+          <th scope="row" class="tbl__id{% if r.level == 'floor' %} tbl__sub{% endif %}">{{ r.label }}</th>
+          <td class="tbl__num">{{ r.room_count }}</td>
+          <td class="tbl__num">{{ r.used_hours }}</td>
+          <td class="tbl__num">{{ r.booked_hours }}</td>
+          <td class="tbl__num">{{ r.available_hours }}</td>
+          <td class="tbl__num">{{ r.wasted_hours }}</td>
+          <td class="tbl__num"><span class="pill pill--info">{{ r.utilization_pct }}%</span></td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="7" class="uk-text-muted">
+          No physical rooms are recorded, so there is nothing to roll up. Add rooms
+          under <a href="/ifo/rooms">Rooms</a>.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% endif %}
+</div>
+
+{% comment%}--- 3. LEAST-USED ROOMS ------------------------------------------{% endcomment %}
+<div class="uk-card uk-card-body p-0 mb-6 pr-flat" data-util-section="rooms">
+  <h3 class="uk-card-title mb-1 px-4 pt-4">Rooms, least used first</h3>
+  <p class="uk-text-small uk-text-muted px-4 mb-3">
+    Every physical room in the campus, sorted by utilization ascending &mdash; so
+    this table IS the least-used ranking, read from the top. Nothing is truncated;
+    a room that hosted nothing at all still has a row, because that is the row
+    worth acting on. A room above 100% is double-booked in the imported timetable,
+    not an arithmetic error.</p>
+  {% if breakdown.1 %}
+    <div class="px-4 pb-4">{% include "reports/_error_card.html" %}</div>
+  {% else %}
+  <div class="table-wrap">
+    <table class="tbl">
+      <thead>
+        <tr>
+          <th scope="col">Room</th>
+          <th scope="col">Building</th>
+          <th scope="col" class="tbl__num">Floor</th>
+          <th scope="col" class="tbl__num">Seats</th>
+          <th scope="col" class="tbl__num">Sessions</th>
+          <th scope="col" class="tbl__num">Used h</th>
+          <th scope="col" class="tbl__num">Reclaimable h</th>
+          <th scope="col" class="tbl__num">Utilization</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for r in page %}
+        <tr>
+          <th scope="row" class="tbl__id">
+            <a href="/ifo/rooms/{{ r.code }}">{{ r.code }}</a></th>
+          <td>{{ r.building_name|default:r.building_code }}</td>
+          <td class="tbl__num">{{ r.floor_number }}</td>
+          <td class="tbl__num">{{ r.capacity }}</td>
+          <td class="tbl__num">{{ r.session_count }}</td>
+          <td class="tbl__num">{{ r.used_hours }}</td>
+          <td class="tbl__num">{{ r.wasted_hours }}</td>
+          <td class="tbl__num"><span class="pill pill--info">{{ r.utilization_pct }}%</span></td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="8" class="uk-text-muted">
+          No physical rooms in range. If this is unexpected, the window may have no
+          sessions rather than the campus being idle &mdash; widen the dates above.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  <div class="px-4 pb-4">{% include "_pager.html" %}</div>
+  {% endif %}
+</div>
+
+{% comment%}--- 4. SATURATED BLOCKS ------------------------------------------{% endcomment %}
+<div class="uk-card uk-card-body p-0 mb-6 pr-flat" data-util-section="blocks">
+  <h3 class="uk-card-title mb-1 px-4 pt-4">Blocks, most saturated first</h3>
+  <p class="uk-text-small uk-text-muted px-4 mb-3">
+    The same data as the grid above, collapsed along the day axis. The blocks at
+    the bottom are the ones with capacity to give away.</p>
+  {% if saturation.1 %}
+    <div class="px-4 pb-4">{% include "reports/_error_card.html" %}</div>
+  {% else %}
+  <div class="table-wrap">
+    <table class="tbl">
+      <thead>
+        <tr>
+          <th scope="col">Block</th>
+          <th scope="col" class="tbl__num">Sessions</th>
+          <th scope="col" class="tbl__num">Used h</th>
+          <th scope="col" class="tbl__num">Available h</th>
+          <th scope="col">Busiest day</th>
+          <th scope="col" class="tbl__num">Utilization</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for b in saturation.0 %}
+        <tr>
+          <th scope="row" class="tbl__id">{{ b.block.start|time:"g:i A" }}</th>
+          <td class="tbl__num">{{ b.session_count }}</td>
+          <td class="tbl__num">{{ b.used_hours }}</td>
+          <td class="tbl__num">{{ b.available_hours }}</td>
+          <td>{% if b.peak_day_label %}{{ b.peak_day_label }}{% else %}<span class="uk-text-muted">unused</span>{% endif %}</td>
+          <td class="tbl__num"><span class="pill pill--info">{{ b.utilization_pct }}%</span></td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="6" class="uk-text-muted">
+          No block ladder for this term, so there are no blocks to rank. Import a
+          timetable on <a href="/ifo/import">Import schedules</a>.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% endif %}
+</div>
+{% endblock %}

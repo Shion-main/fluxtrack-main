@@ -55,6 +55,65 @@
 }
 .tt__off { text-align: center; color: var(--line); }
 
+/* ----------------------------------------------------------------------------
+   HEAT RAMP (ifo/_heatgrid.html)
+   ----------------------------------------------------------------------------
+   Lives in THIS file rather than a second stylesheet on purpose: one file has to
+   govern both grids or they diverge the first time either is touched.
+
+   The ramp is built over the existing --navy-tint family, so the heat grid stays
+   inside the product's palette instead of importing a heatmap palette that would
+   look borrowed. Five steps, added as modifiers alongside the binary .tt__on.
+
+   Shading is RELATIVE to the busiest cell in the rendered grid, not an absolute
+   good/bad band. Room utilization has no agreed target and the campus baseline
+   is ~26%, so an absolute ladder would paint every normal grid red -- the same
+   reason the dashboard occupancy pill is neutral rather than ok/warn/bad.
+
+   MEASURED CONTRAST against the cell's foreground (WCAG AA needs 4.5:1 for
+   normal text; every step clears it with room to spare):
+
+     step  background  foreground        ratio
+     h0    #f7f9fd     --ink #0b1b3a     16.17:1
+     h1    #e7ecf7     --ink #0b1b3a     14.40:1
+     h2    #cfdaf0     --ink #0b1b3a     12.13:1
+     h3    #a7bce4     --ink #0b1b3a      8.89:1
+     h4    #2f4b86     #ffffff            8.50:1
+
+   h4 takes a LIGHT foreground rather than a lightened background: the top of the
+   ramp has to stay visibly the top, or the grid loses its ordering. If you change
+   a colour here, recompute the ratio and update this table.
+   -------------------------------------------------------------------------- */
+.tt__h { text-align: center; vertical-align: middle; color: var(--ink); }
+.tt__pct {
+  display: block; font-weight: 700; font-size: .78rem;
+  font-variant-numeric: tabular-nums;
+}
+/* The hours figure is the check on the percentage: a high rate over a thin slot
+   is a different fact from a high rate over a full one, and the pair says which. */
+.tt__hrs {
+  display: block; margin-top: 1px; font-size: .66rem; opacity: .8;
+  font-variant-numeric: tabular-nums;
+}
+.tt__h0 { background: #f7f9fd; }
+.tt__h1 { background: #e7ecf7; }
+.tt__h2 { background: #cfdaf0; }
+.tt__h3 { background: #a7bce4; }
+.tt__h4 { background: #2f4b86; color: #fff; }
+
+.tt__cap {
+  caption-side: top; text-align: left; padding: 0 0 8px;
+  font-size: .76rem; line-height: 1.5; color: var(--ft-muted);
+}
+.tt__legend {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 8px;
+  margin-top: 10px; font-size: .72rem; color: var(--ft-muted);
+}
+.tt__key {
+  display: inline-block; width: 22px; height: 14px;
+  border: 1px solid var(--line); border-radius: 2px;
+}
+
 .no-print { }
 .pr-head { display: none; }
 
@@ -101,6 +160,22 @@
     border: 1px solid #666; color: #000; background: #fff !important; font-size: 6.5pt;
   }
   .tt__off { color: #999; }
+
+  /* The heat ramp prints WORSE than .tt__on does: five tints of the same hue
+     come off a mono office printer as two indistinguishable greys, so the
+     ordering the colour carried on screen is simply gone. Flatten the ramp to
+     white with true-black borders and keep the numbers, which were always the
+     information -- a printed grid that reads by its figures is strictly better
+     than one that reads by five shades nobody can tell apart. The top step's
+     light foreground has to come back to black with it, or step 4 prints white
+     on white and vanishes entirely. */
+  .tt__h, .tt__h0, .tt__h1, .tt__h2, .tt__h3, .tt__h4 {
+    background: #fff !important; color: #000 !important;
+  }
+  .tt__pct { font-size: 8.5pt; color: #000; }
+  .tt__hrs { font-size: 7pt; color: #333; opacity: 1; }
+  .tt__cap { color: #333; font-size: 8pt; padding-bottom: 3mm; }
+  .tt__legend { display: none; }
 
   /* A timetable split across a page break is unusable. */
   .tt { page-break-inside: avoid; }
