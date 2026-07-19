@@ -555,6 +555,54 @@ def _session_contribution(status, scheduled_start, scheduled_end,
     return booked, used, False
 
 
+@dataclass(frozen=True)
+class RangeCellShape:
+    """The D-10 denominator shape of one reporting window, per PHYSICAL ROOM.
+
+    ``cell_seconds`` is the capacity ONE physical room has over the range -- the
+    campus figure is this times the physical room count, and a floor's is this
+    times that floor's room count. Every level of the phase's arithmetic is that
+    one number scaled by a room count, which is what makes room, floor, building
+    and campus reconcile by construction rather than by luck.
+    """
+    teaching_days: int
+    cell_count: int
+    cell_seconds: int
+
+
+def _range_cell_shape(term, start, end, as_of=None):
+    """Walk the calendar range and sum the (day, block) cells it really contains.
+
+    D-10: a SUM over the cells the term actually timetables, NOT a days x blocks
+    cross-product. Seconds are accumulated per weekday first and then multiplied
+    out over the calendar days in range, so the arithmetic stays integral and a
+    weekday appearing twice in a long range counts twice.
+
+    THE single derivation of the denominator. ``room_utilization``,
+    ``room_breakdown`` and ``building_floor_rollup`` all read it; two walks over
+    the same calendar would eventually disagree about a range boundary.
+    """
+    seconds_by_weekday = {}
+    cells_by_weekday = {}
+    for cell in timetabled_cells(term):
+        seconds_by_weekday[cell.day] = (
+            seconds_by_weekday.get(cell.day, 0) + cell.duration_seconds)
+        cells_by_weekday[cell.day] = cells_by_weekday.get(cell.day, 0) + 1
+
+    last_day = min(end, as_of) if as_of is not None else end
+    teaching_days = cell_count = cell_seconds = 0
+    day = start
+    while day <= last_day:
+        weekday = day.weekday()
+        if weekday in cells_by_weekday:
+            teaching_days += 1
+            cell_count += cells_by_weekday[weekday]
+            cell_seconds += seconds_by_weekday[weekday]
+        day += datetime.timedelta(days=1)
+    return RangeCellShape(teaching_days=teaching_days, cell_count=cell_count,
+                          cell_seconds=cell_seconds)
+
+
 def room_utilization(*, start, end, term, as_of=None):
     """IFO-09 / T1: campus room-hours booked vs used vs available over a range.
 
@@ -582,35 +630,12 @@ def room_utilization(*, start, end, term, as_of=None):
     denominator is simply zero and the rates read 0.
     """
     # --- Denominator: every factor derived, no literal block or day count. ---
-    # D-10: a SUM over the (day, block) cells the term really timetables, NOT a
-    # days x blocks cross-product. Seconds are accumulated per weekday first, then
-    # multiplied out over the calendar days in range, so the arithmetic stays
-    # integral and a weekday appearing twice in a long range counts twice.
     blocks = campus_block_ladder(term) or []
-    cells = timetabled_cells(term)
     physical_rooms = _physical_rooms().count()
-
-    seconds_by_weekday = {}
-    cells_by_weekday = {}
-    for cell in cells:
-        seconds_by_weekday[cell.day] = (
-            seconds_by_weekday.get(cell.day, 0) + cell.duration_seconds)
-        cells_by_weekday[cell.day] = cells_by_weekday.get(cell.day, 0) + 1
-
-    last_day = min(end, as_of) if as_of is not None else end
-    teaching_days = 0
-    cell_count = 0
-    cell_seconds = 0
-    day = start
-    while day <= last_day:
-        weekday = day.weekday()
-        if weekday in cells_by_weekday:
-            teaching_days += 1
-            cell_count += cells_by_weekday[weekday]
-            cell_seconds += seconds_by_weekday[weekday]
-        day += datetime.timedelta(days=1)
-
-    available_seconds = physical_rooms * cell_seconds
+    shape = _range_cell_shape(term, start, end, as_of=as_of)
+    teaching_days = shape.teaching_days
+    cell_count = shape.cell_count
+    available_seconds = physical_rooms * shape.cell_seconds
 
     # --- Numerator: a streamed Python fold, deliberately, not DB-side. ---
     # This deviates from the module's DB-side-aggregation rule, so: the per-session
@@ -899,6 +924,219 @@ def block_saturation(*, start, end, term, as_of=None):
         ))
     loads.sort(key=lambda l: (-l.utilization_pct, l.block.start))
     return loads
+
+
+@dataclass
+class RoomLoad:
+    """One physical room's utilization over the range (IFO-09, tier T2).
+
+    ``capacity`` is carried because it is already on the model and costs nothing
+    to render. NOTHING is computed from it: seat utilization (enrolled/capacity)
+    is T3 and explicitly deferred, because ``Schedule.enrolled_count``
+    trustworthiness across the imported term is unproven and a seat figure nobody
+    can check is worse than no figure. Do not add a seat or enrolment field here
+    without reopening that deferral.
+
+    ``utilization_pct`` is deliberately NOT clamped at 100. A single room CAN
+    exceed its own denominator, and when it does that is real information, not an
+    arithmetic fault: it means the room is genuinely double-booked. The live term
+    contains such rows -- ``R116`` hosts ``ECE121L 07:00-10:45`` straddling two
+    lecture slots the same morning -- and clamping would silently hide exactly the
+    scheduling conflict a facilities office most wants to see. Same reasoning as
+    ``room_utilization``'s ``overrun_sessions``. The campus and scope levels stay
+    below 100% because the conflicts are local; a SCOPE above 100% would be a bug.
+
+    The three ``*_seconds`` fields are the unrounded truth the rollup reduces.
+    Summing the ``Decimal`` hours across 125 rooms would accumulate up to 0.05 h
+    of quantization error per room, and the building/floor/campus levels are
+    supposed to reconcile EXACTLY.
+    """
+    room_id: int
+    code: str
+    name: str
+    building_code: str
+    building_name: str
+    floor_number: int
+    capacity: int
+    used_hours: Decimal
+    booked_hours: Decimal
+    available_hours: Decimal
+    wasted_hours: Decimal
+    utilization_pct: int
+    session_count: int
+    absent_sessions: int
+    used_seconds: int = 0
+    booked_seconds: int = 0
+    wasted_seconds: int = 0
+
+
+@dataclass
+class ScopeLoad:
+    """One building or floor row of the rollup.
+
+    A FLAT list with a ``level`` marker rather than a nested structure: the IFO
+    table stack is a plain ``.tbl`` and nesting fights it, so the template walks
+    one list and applies a single indent class where ``level == "floor"``.
+    """
+    level: str                 # "building" or "floor"
+    label: str
+    building_code: str
+    floor_number: object       # None on a building row
+    room_count: int
+    used_hours: Decimal
+    booked_hours: Decimal
+    available_hours: Decimal
+    wasted_hours: Decimal
+    utilization_pct: int
+
+
+def room_breakdown(*, start, end, term, as_of=None):
+    """IFO-09 / T2: per-room utilization over the WHOLE physical room universe.
+
+    Where the heat grid answers when capacity is idle, this answers where.
+
+    Built from the ROOM side, not the session side (``_physical_rooms()`` first,
+    session totals looked up onto it). Grouping the sessions would drop every room
+    that hosted nothing -- and a never-used room is precisely the most useful row
+    in a least-used ranking. Virtual rooms appear nowhere (D-04/D-08).
+
+    Every physical room shares one denominator under D-01/D-10: the per-room cell
+    seconds of the range, from :func:`_range_cell_shape`. It is one figure reused,
+    never a per-room query.
+
+    Used-hours come from :func:`_session_contribution`, the phase's single
+    definition, so this cannot drift from the campus card or the heat grid.
+
+    Ordered by ``utilization_pct`` ASCENDING then room code ascending, so the head
+    of the list IS the least-used-rooms answer and two identical requests always
+    produce the same order. The FULL set is returned; a caller wanting a top-N view
+    takes a slice. An aggregate that truncated could not also serve a page that
+    wants every row.
+    """
+    rooms = list(
+        _physical_rooms()
+        .select_related("floor__building")
+        .order_by("floor__building__code", "floor__number", "code")
+    )
+    available_seconds = _range_cell_shape(
+        term, start, end, as_of=as_of).cell_seconds
+
+    used = {}
+    booked = {}
+    wasted = {}
+    sessions = {}
+    absents = {}
+
+    qs = _exclude_virtual(_scoped_sessions(start=start, end=end, as_of=as_of))
+    rows = qs.values_list(
+        "room_id", "status", "scheduled_start", "scheduled_end",
+        "actual_start", "actual_end",
+    ).iterator()
+    for room_id, status, sched_start, sched_end, act_start, act_end in rows:
+        booked_s, used_s, running = _session_contribution(
+            status, sched_start, sched_end, act_start, act_end)
+        if running:
+            continue
+        booked[room_id] = booked.get(room_id, 0) + booked_s
+        used[room_id] = used.get(room_id, 0) + used_s
+        sessions[room_id] = sessions.get(room_id, 0) + 1
+        if status == SessionStatus.ABSENT:
+            absents[room_id] = absents.get(room_id, 0) + 1
+            wasted[room_id] = wasted.get(room_id, 0) + booked_s
+        elif status in HELD_STATUSES:
+            wasted[room_id] = wasted.get(room_id, 0) + max(0, booked_s - used_s)
+
+    loads = []
+    for room in rooms:
+        used_s = used.get(room.id, 0)
+        booked_s = booked.get(room.id, 0)
+        wasted_s = wasted.get(room.id, 0)
+        loads.append(RoomLoad(
+            room_id=room.id,
+            code=room.code,
+            name=room.name,
+            building_code=room.floor.building.code,
+            building_name=room.floor.building.name,
+            floor_number=room.floor.number,
+            capacity=room.capacity,
+            used_hours=_hours(used_s),
+            booked_hours=_hours(booked_s),
+            available_hours=_hours(available_seconds),
+            wasted_hours=_hours(wasted_s),
+            utilization_pct=_hours_pct(used_s, available_seconds),
+            session_count=sessions.get(room.id, 0),
+            absent_sessions=absents.get(room.id, 0),
+            used_seconds=used_s,
+            booked_seconds=booked_s,
+            wasted_seconds=wasted_s,
+        ))
+    loads.sort(key=lambda r: (r.utilization_pct, r.code))
+    return loads
+
+
+def building_floor_rollup(*, start, end, term, as_of=None):
+    """IFO-09 / T2: the same rooms rolled up to floor and building level.
+
+    Derived ENTIRELY by reducing :func:`room_breakdown`'s output. It is not
+    re-queried, for two reasons: the module's separate-query rule exists because a
+    multi-level reverse join multiplies rows, and reducing one derivation makes
+    room, floor, building and campus reconcile by construction instead of by luck.
+
+    Floor rows are keyed on the ``(building_code, floor_number)`` PAIR, matching
+    ``Floor``'s own ``unique_together``. Keying on the number alone would merge
+    every building's third floor into one row. Each floor row's label names its
+    building, so a flat table reads correctly with no grouping header.
+
+    A scope's available hours are its OWN room count times the shared per-room
+    denominator -- not the campus denominator -- so a two-room floor is not judged
+    against campus-wide capacity.
+
+    Returns a FLAT list with a ``level`` marker: buildings by code ascending, each
+    immediately followed by its floors by number ascending.
+    """
+    rooms = room_breakdown(start=start, end=end, term=term, as_of=as_of)
+    per_room_seconds = (
+        _range_cell_shape(term, start, end, as_of=as_of).cell_seconds)
+
+    buildings = {}
+    for room in rooms:
+        b = buildings.setdefault(room.building_code, {
+            "name": room.building_name, "rooms": 0,
+            "used": 0, "booked": 0, "wasted": 0, "floors": {},
+        })
+        f = b["floors"].setdefault(room.floor_number, {
+            "rooms": 0, "used": 0, "booked": 0, "wasted": 0,
+        })
+        for scope in (b, f):
+            scope["rooms"] += 1
+            scope["used"] += room.used_seconds
+            scope["booked"] += room.booked_seconds
+            scope["wasted"] += room.wasted_seconds
+
+    def _row(level, label, code, floor_number, scope):
+        available = scope["rooms"] * per_room_seconds
+        return ScopeLoad(
+            level=level,
+            label=label,
+            building_code=code,
+            floor_number=floor_number,
+            room_count=scope["rooms"],
+            used_hours=_hours(scope["used"]),
+            booked_hours=_hours(scope["booked"]),
+            available_hours=_hours(available),
+            wasted_hours=_hours(scope["wasted"]),
+            utilization_pct=_hours_pct(scope["used"], available),
+        )
+
+    out = []
+    for code in sorted(buildings):
+        b = buildings[code]
+        out.append(_row("building", b["name"] or code, code, None, b))
+        for number in sorted(b["floors"]):
+            out.append(_row(
+                "floor", f"{code} floor {number}", code, number,
+                b["floors"][number]))
+    return out
 
 
 def safe_card(fn, *args, **kwargs):
