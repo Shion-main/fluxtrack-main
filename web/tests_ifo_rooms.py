@@ -520,3 +520,184 @@ class RoomCrudAuthzTests(_RoomCrudBase):
                 resp = self.client.get(url)
                 self.assertEqual(resp.status_code, 302)
                 self.assertIn("/login", resp["Location"])
+
+
+class RoomRotateTests(_RoomCrudBase):
+    """IFO-02: rotating a room's scan credentials (plan 07-04).
+
+    The load-bearing assertions here are the DEATH ones, not the difference
+    ones. IFO-02 promises that rotating invalidates the poster on the door, and
+    "the value changed" is a strictly weaker claim than "the old value no
+    longer resolves to any room" -- an implementation that rotated only the QR
+    token and left the six-digit code alone would pass an inequality check on
+    one column and still leave a live credential printed on a poster the
+    operator believes is dead.
+    """
+
+    def setUp(self):
+        super().setUp()
+        self.client.force_login(self.ifo)
+        self.room = self._room(code="R701")
+
+    def _rotate(self, room=None):
+        room = room or self.room
+        return self.client.post(reverse("ifo_room_rotate", args=[room.code]))
+
+    # --- the credentials actually change ---------------------------------
+
+    def test_rotation_changes_both_credentials(self):
+        before_token, before_code = self.room.qr_token, self.room.manual_code
+        self._rotate()
+        self.room.refresh_from_db()
+        self.assertNotEqual(self.room.qr_token, before_token)
+        self.assertNotEqual(self.room.manual_code, before_code)
+
+    def test_the_old_credentials_no_longer_resolve_to_any_room(self):
+        """The property IFO-02 actually promises. Asserted against the whole
+        Room table, not against this row, because "invalidated" means the old
+        poster resolves to NOTHING -- not merely to something else."""
+        before_token, before_code = self.room.qr_token, self.room.manual_code
+        self._rotate()
+        self.assertFalse(Room.objects.filter(qr_token=before_token).exists())
+        self.assertFalse(Room.objects.filter(manual_code=before_code).exists())
+
+    def test_the_new_credentials_are_well_formed(self):
+        self._rotate()
+        self.room.refresh_from_db()
+        self.assertTrue(self.room.qr_token)
+        self.assertEqual(len(self.room.manual_code), 6)
+        self.assertTrue(self.room.manual_code.isdigit())
+
+    # --- the stamps and the audit trail ----------------------------------
+
+    def test_rotation_stamps_who_and_when(self):
+        self.assertIsNone(self.room.code_rotated_at)
+        before = timezone.now()
+        self._rotate()
+        self.room.refresh_from_db()
+        self.assertIsNotNone(self.room.code_rotated_at)
+        self.assertGreaterEqual(self.room.code_rotated_at, before)
+        self.assertEqual(self.room.code_rotated_by_id, self.ifo.pk)
+
+    def test_rotation_writes_exactly_one_audit_row(self):
+        self._rotate()
+        logs = AuditLog.objects.filter(event_type="room.code_rotated",
+                                       target_id=str(self.room.pk))
+        self.assertEqual(logs.count(), 1)
+        self.assertEqual(logs.first().actor, self.ifo)
+        self.assertEqual(logs.first().payload["code"], "R701")
+
+    def test_the_audit_payload_leaks_no_credential_value(self):
+        """qr_token and manual_code are resolver-only secrets (SCAN-07). The
+        AuditLog table is read far more widely than the two columns it would be
+        describing, so neither the dead nor the live pair may appear in it."""
+        old_token, old_code = self.room.qr_token, self.room.manual_code
+        self._rotate()
+        self.room.refresh_from_db()
+
+        payload = str(AuditLog.objects.get(
+            event_type="room.code_rotated",
+            target_id=str(self.room.pk)).payload)
+        for secret in (old_token, old_code,
+                       self.room.qr_token, self.room.manual_code):
+            with self.subTest(secret=secret):
+                self.assertNotIn(secret, payload)
+
+    # --- D-14: the destructive act lands on its remedy -------------------
+
+    def test_rotation_redirects_to_that_rooms_poster(self):
+        resp = self._rotate()
+        self.assertEqual(resp.status_code, 302)
+        self.assertEqual(resp["Location"],
+                         reverse("ifo_room_poster", args=[self.room.code]))
+
+    def test_the_poster_shows_the_rotation_stamp_after_a_rotation(self):
+        self._rotate()
+        resp = self.client.get(
+            reverse("ifo_room_poster", args=[self.room.code]))
+        self.assertContains(resp, "data-rotated-stamp")
+
+    # --- method contract --------------------------------------------------
+
+    def test_the_confirm_page_names_the_room_and_the_consequence(self):
+        resp = self.client.get(
+            reverse("ifo_room_rotate_confirm", args=[self.room.code]))
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, "R701")
+        self.assertContains(resp, "invalidates the current poster")
+
+    def test_a_get_on_the_rotate_action_is_405(self):
+        """A GET-reachable rotation would fire on a link prefetch or an
+        accidental reload, silently killing a poster nobody asked about."""
+        resp = self.client.get(
+            reverse("ifo_room_rotate", args=[self.room.code]))
+        self.assertEqual(resp.status_code, 405)
+        self.room.refresh_from_db()
+        self.assertIsNone(self.room.code_rotated_at)
+
+    def test_a_post_on_the_confirm_page_is_405(self):
+        resp = self.client.post(
+            reverse("ifo_room_rotate_confirm", args=[self.room.code]))
+        self.assertEqual(resp.status_code, 405)
+
+    def test_rotating_an_unknown_room_is_a_404(self):
+        resp = self.client.get(
+            reverse("ifo_room_rotate_confirm", args=["NOPE999"]))
+        self.assertEqual(resp.status_code, 404)
+
+    # --- the collision the shared minter exists to absorb -----------------
+
+    def test_a_colliding_first_draw_still_rotates_cleanly(self):
+        """Deterministic, not probabilistic. The defect this guards was
+        observed in the importer at roughly 2.3% per full room load; a random
+        test would reproduce the bug's worst property (intermittence) rather
+        than catch it. So the code source is forced to hand back a value
+        another Room already holds, and the rotation must still succeed by
+        drawing again -- which only happens if this view goes through
+        campus.codes.generate_manual_code instead of minting inline.
+        """
+        taken = self._room(code="R702")
+        collide = int(taken.manual_code)
+
+        with mock.patch("campus.codes.secrets.randbelow",
+                        side_effect=[collide, 424242]):
+            resp = self._rotate()
+
+        self.assertEqual(resp.status_code, 302)
+        self.room.refresh_from_db()
+        self.assertEqual(self.room.manual_code, "424242")
+        taken.refresh_from_db()
+        self.assertEqual(int(taken.manual_code), collide)
+
+
+class RoomRotateAuthzTests(_RoomCrudBase):
+    """Three-way authz on both rotation URLs."""
+
+    def setUp(self):
+        super().setUp()
+        self.room = self._room(code="R703")
+
+    def test_ifo_reaches_the_confirm_page(self):
+        self.client.force_login(self.ifo)
+        resp = self.client.get(
+            reverse("ifo_room_rotate_confirm", args=[self.room.code]))
+        self.assertEqual(resp.status_code, 200)
+
+    def test_a_non_ifo_authenticated_user_gets_403_on_both(self):
+        self.client.force_login(self.faculty)
+        self.assertEqual(self.client.get(
+            reverse("ifo_room_rotate_confirm", args=[self.room.code])
+        ).status_code, 403)
+        self.assertEqual(self.client.post(
+            reverse("ifo_room_rotate", args=[self.room.code])
+        ).status_code, 403)
+        self.room.refresh_from_db()
+        self.assertIsNone(self.room.code_rotated_at)
+
+    def test_an_anonymous_user_is_redirected_to_login_on_both(self):
+        for url in (reverse("ifo_room_rotate_confirm", args=[self.room.code]),
+                    reverse("ifo_room_rotate", args=[self.room.code])):
+            with self.subTest(url=url):
+                resp = self.client.get(url)
+                self.assertEqual(resp.status_code, 302)
+                self.assertIn("/login", resp["Location"])

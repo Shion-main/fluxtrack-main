@@ -59,6 +59,11 @@ urlpatterns = [
     path("ifo/rooms/<str:code>/delete", ifo.room_delete, name="ifo_room_delete"),
     path("ifo/rooms/<str:code>/panel", ifo.room_panel, name="ifo_room_panel"),
     path("ifo/rooms/<str:code>/poster", ifo.room_poster, name="ifo_room_poster"),
+    # IFO-02 credential rotation: a GET confirm page, a POST-only action.
+    path("ifo/rooms/<str:code>/rotate", ifo.room_rotate_confirm,
+         name="ifo_room_rotate_confirm"),
+    path("ifo/rooms/<str:code>/rotate/apply", ifo.room_rotate,
+         name="ifo_room_rotate"),
     path("ifo/rooms/<str:code>/qr.png", ifo.room_qr, name="ifo_room_qr"),
     # Merged into the room board; kept so bookmarks and the cached PWA shell work.
     path("ifo/live", ifo.live, name="ifo_live"),

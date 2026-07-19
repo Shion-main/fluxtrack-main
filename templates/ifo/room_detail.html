@@ -20,6 +20,11 @@ as every other room. ASCII-only.{% endcomment %}
   <uk-icon icon="qr-code" class="size-4"></uk-icon> QR poster</a>
 <a href="/ifo/rooms/{{ room.code }}/edit" class="uk-btn uk-btn-ghost uk-btn-sm no-print">
   <uk-icon icon="pencil" class="size-4"></uk-icon> Edit</a>
+{% comment %}IFO-02: the rotation entry point. Placed on the room page rather
+than on the poster, because the poster is the REMEDY for a rotation and the
+decision belongs before it, not on it.{% endcomment %}
+<a href="/ifo/rooms/{{ room.code }}/rotate" class="uk-btn uk-btn-ghost uk-btn-sm no-print">
+  <uk-icon icon="refresh-cw" class="size-4"></uk-icon> Rotate codes</a>
 <a href="/ifo/rooms/{{ room.code }}/delete" class="uk-btn uk-btn-ghost uk-btn-sm no-print">
   <uk-icon icon="trash-2" class="size-4"></uk-icon> Delete</a>
 {% endblock %}

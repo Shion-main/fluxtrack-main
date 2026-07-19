@@ -244,8 +244,89 @@ def room_qr(request, code):
 
 @ifo_required
 def room_poster(request, code):
-    room = get_object_or_404(Room.objects.select_related("floor__building"), code=code)
+    room = get_object_or_404(
+        Room.objects.select_related("floor__building", "code_rotated_by"),
+        code=code)
     return render(request, "ifo/poster.html", {"room": room})
+
+
+# --- Credential rotation (IFO-02) -------------------------------------------
+# `Room.code_rotated_at` / `code_rotated_by` shipped in Phase 1 with no writer.
+# These two views are that writer.
+#
+# Rotation is the one room action that BREAKS something in the physical world:
+# the poster taped to the door stops working the instant it lands, and nothing
+# on the door announces that. D-14 answers this by binding the destructive act
+# to its remedy -- a confirm page that names the consequence for that specific
+# room, and a success path that lands on the reprint page so the operator is
+# already holding the new poster.
+
+
+@ifo_required
+@require_http_methods(["GET"])
+def room_rotate_confirm(request, code):
+    """IFO-02 / D-14: the confirmation page for a credential rotation.
+
+    A real GET page rather than a JavaScript confirm() dialog, for the same
+    reasons `room_delete` gives: a dialog cannot carry the last-rotated stamp
+    or the "what to do next" instruction, and it is hostile to keyboard-only
+    and screen-reader users.
+
+    Read-only by contract -- nothing here changes the room.
+    """
+    room = get_object_or_404(
+        Room.objects.select_related("floor__building", "code_rotated_by"),
+        code=code)
+    return render(request, "ifo/room_rotate.html", {"room": room})
+
+
+@ifo_required
+@require_http_methods(["POST"])
+def room_rotate(request, code):
+    """IFO-02: mint a fresh QR token + six-digit code for one room.
+
+    POST-ONLY, and that is a control rather than a convention (T-07-16). A
+    GET-reachable rotation would fire on a link prefetch, a crawler, or an
+    accidental reload -- silently killing a poster nobody was asked about.
+
+    THE CREDENTIALS COME FROM `campus.codes.new_room_credentials()` AND
+    NOWHERE ELSE. Minting inline here would reintroduce the UNIQUE-column
+    collision that module exists to prevent (~2.3% per full room load,
+    observed). Rotation is the worst possible place for that intermittent 500:
+    it fires immediately before D-14 sends the operator away to reprint, so a
+    failure leaves them unable to tell whether the poster on the door is dead
+    or alive.
+
+    Nothing is cached. `room_qr` regenerates the image on demand from
+    `room.qr_token`, so changing the stored values IS the rotation.
+
+    THE AUDIT PAYLOAD CARRIES NO CREDENTIAL VALUE, old or new (T-07-15). These
+    are resolver-only secrets that are never rendered client-side (SCAN-07,
+    6.2), and the AuditLog table is read far more widely than the two columns
+    it would be describing. The room, the actor and the instant are enough to
+    answer every question the audit trail is for.
+    """
+    room = get_object_or_404(
+        Room.objects.select_related("floor__building"), code=code)
+
+    with transaction.atomic():
+        qr_token, manual_code = new_room_credentials()
+        room.qr_token = qr_token
+        room.manual_code = manual_code
+        room.code_rotated_at = timezone.now()
+        room.code_rotated_by = request.user
+        room.save(update_fields=["qr_token", "manual_code",
+                                 "code_rotated_at", "code_rotated_by"])
+        AuditLog.objects.create(
+            actor=request.user, event_type="room.code_rotated",
+            target_type="room", target_id=str(room.pk),
+            payload={"code": room.code,
+                     "floor": str(room.floor),
+                     "rotated_at": room.code_rotated_at.isoformat()})
+
+    # D-14: land on the reprint surface, not back on the room. The remedy for
+    # the dead poster is the next thing the operator has to do.
+    return redirect("ifo_room_poster", code=room.code)
 
 
 # --- Room CRUD (IFO-01b) ----------------------------------------------------
