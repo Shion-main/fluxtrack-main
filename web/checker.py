@@ -298,9 +298,11 @@ def _apply_action(request, session, room, action, *, note="", identity_match=Non
                 propagate_merged_present(session, session.actual_start,
                                          actor=request.user)
         elif action == ValidationAction.FLAG_NOT_PRESENT:
-            # Online not-present fails the whole online merged group ABSENT
-            # immediately (D-07 online), in ONE transaction. The helper's
-            # SCHEDULED status-guard leaves an already-ACTIVE sibling untouched.
+            # Online not-present fails the online merged group ABSENT (D-07
+            # online), in ONE transaction. The helper's SCHEDULED status-guard
+            # leaves an already-ACTIVE sibling untouched, and its grace gate
+            # (audit H2) defers within-grace siblings to the sweep -- only the
+            # anchor is the checker's immediate, authoritative call.
             with transaction.atomic():
                 session.status = SessionStatus.ABSENT  # authoritative (Open Q2)
                 session.save(update_fields=["status"])

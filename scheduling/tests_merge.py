@@ -258,3 +258,30 @@ class MergePropagationTests(TestCase):
         self.assertNotIn(self.fx.online_sibling.pk, absented)
         self.fx.online_sibling.refresh_from_db()
         self.assertEqual(self.fx.online_sibling.status, SessionStatus.ACTIVE)
+
+    def test_absent_within_grace_defers_siblings_to_the_sweep(self):
+        """Audit H2 (2026-07-19): ABSENT is terminal, so a flag placed while the
+        group is still inside the shared grace window must NOT absent SCHEDULED
+        siblings -- a within-grace faculty start (or the sibling's own checker
+        Verify) must stay possible. The siblings are left for the JOB-02 sweep,
+        which applies the same is_no_show_past_grace predicate."""
+        from ops.policy import get_policy
+        grace = get_policy("grace_minutes")
+        within = (self.fx.online_anchor.scheduled_start
+                  + timedelta(minutes=grace - 1))
+        absented = self._absent(self.fx.online_anchor, self.actor, now=within)
+        self.assertEqual(absented, [])
+        self.fx.online_sibling.refresh_from_db()
+        self.assertEqual(self.fx.online_sibling.status, SessionStatus.SCHEDULED)
+        self.assertEqual(self._audit("session.merged_absent").count(), 0)
+
+    def test_absent_past_grace_fills_siblings(self):
+        """The gate's other side: past grace the fill applies (D-07 unchanged)."""
+        from ops.policy import get_policy
+        grace = get_policy("grace_minutes")
+        past = (self.fx.online_anchor.scheduled_start
+                + timedelta(minutes=grace + 1))
+        absented = self._absent(self.fx.online_anchor, self.actor, now=past)
+        self.assertIn(self.fx.online_sibling.pk, absented)
+        self.fx.online_sibling.refresh_from_db()
+        self.assertEqual(self.fx.online_sibling.status, SessionStatus.ABSENT)

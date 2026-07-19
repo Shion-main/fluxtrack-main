@@ -23,9 +23,12 @@ time -- no merge-group model, no grouping migration, no roster/data merge.
 ASCII-only by convention (Windows cp1252).
 """
 from django.db import transaction
+from django.utils import timezone
 
 from ops.models import AuditLog
+from ops.policy import get_policy
 from scheduling.models import CheckinMethod, Modality, Session, SessionStatus
+from scheduling.resolver import is_no_show_past_grace
 
 
 def merged_sibling_ids(anchor, candidates):
@@ -150,7 +153,7 @@ def propagate_merged_present(anchor, now, actor):
         return fill_ids
 
 
-def propagate_merged_absent(anchor, actor):
+def propagate_merged_absent(anchor, actor, now=None):
     """Atomic SCHEDULED->ABSENT fill for the anchor's merged siblings (online D-07).
 
     The online counterpart of ``propagate_merged_present``: when the anchor is
@@ -159,7 +162,21 @@ def propagate_merged_absent(anchor, actor):
     AuditLog per row with payload ``{"merged_from": anchor.pk}``. Same
     faculty-scoping, status-guard, atomicity, and HY010 safety as the present
     path. Returns the list of absented pks (``[]`` when nothing qualifies).
+
+    Grace gate (2026-07-19 audit H2): siblings are absented ONLY when the group
+    is already past the shared no-show grace window. ABSENT is terminal -- a
+    flag placed minutes after start would otherwise permanently block a
+    within-grace faculty start (or the sibling's own checker Verify) on every
+    sibling. The anchor is the CALLER's authoritative decision and is not
+    touched here; within grace the siblings are simply left SCHEDULED for the
+    JOB-02 sweep, which applies the same ``is_no_show_past_grace`` predicate.
+    Merge candidates share ``scheduled_start`` exactly (the D-01 key), so the
+    anchor's start speaks for the whole group.
     """
+    now = now or timezone.now()
+    grace_min = get_policy("grace_minutes")
+    if not is_no_show_past_grace(anchor.scheduled_start, now, grace_min):
+        return []
     with transaction.atomic():
         candidates = _materialize_candidates(anchor)
         sib_ids = merged_sibling_ids(anchor, candidates)
