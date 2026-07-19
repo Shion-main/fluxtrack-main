@@ -250,3 +250,27 @@ Recorded so they are decisions on record rather than gaps someone rediscovers:
    `on_delete` in the Python Collector, not DDL. It closed the ORM path. The
    `room_delete_blockers` probe therefore carries more of the guarantee than
    D-19 credited, which is why D-20's fifth relation matters.
+
+## Phase 06.1 Follow-ups (2026-07-19)
+
+1. **Is the denominator "physical rooms" or "physical TEACHING rooms"?** Live data:
+   MMCM timetables only in ACAD. Of 125 physical rooms, 78 hosted nothing — the
+   other 54 are offices, a gym and server rooms. They sit in the campus
+   denominator under D-01, which is why campus reads 26% while the teaching
+   building reads 46%. Both numbers are honest; they answer different questions.
+   Deliberately NOT narrowed, because narrowing a denominator to make a number
+   look better is how utilization metrics stop being trusted. A D-01 decision.
+2. **R116 reads 131% — a real double-booking**, not a bug: `ECE121L 07:00-10:45`
+   overlaps two lecture slots in the same room the same morning. Left unclamped
+   on purpose; clamping would hide exactly the conflict a facilities office
+   wants to see. Worth investigating as DATA.
+3. **CSV export (plan 07) deferred** — droppable by design, nothing depends on it.
+4. **Two human-eye checks outstanding** from the 06.1-06 checkpoint: the
+   greyscale/squint test on the heat grid, and the print preview. Every cell
+   carries its number and untimetabled cells render a dash plus sr-only text, so
+   the information should survive without colour — but no human has confirmed it.
+5. **No utilization target band exists.** The occupancy pill and the heat ramp are
+   deliberately neutral/relative rather than good/bad: 26% is the campus's real
+   baseline and an absolute ladder would render it permanently red, which teaches
+   readers to distrust the number. If a target is wanted, that is a decision to
+   lock and wire.
