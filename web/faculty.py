@@ -9,9 +9,12 @@ formal path and fall back to existing scan-time behavior (D-13).
 """
 from datetime import timedelta
 from functools import wraps
+from urllib.parse import urlparse
 
 from django.contrib.auth.decorators import login_required
 from django.core.exceptions import PermissionDenied
+from django.db import transaction
+from django.db.models import Exists, OuterRef
 from django.http import HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
@@ -22,9 +25,12 @@ from django.views.decorators.http import require_http_methods
 from accounts.models import Role
 from campus.models import Room
 from ops.availability import available_rooms_for, available_times_for
+from ops.models import AuditLog
+from ops.policy import get_policy
 from scheduling.merge import _effective_is_online, merged_sibling_ids
 from scheduling.models import (
     AcademicTerm,
+    CheckinMethod,
     Modality,
     ModalityShiftRequest,
     ModalityShiftStatus,
@@ -33,6 +39,10 @@ from scheduling.models import (
     Session,
     SessionStatus,
 )
+from scheduling.resolver import is_no_show_past_grace
+from verification.models import CheckerValidation, ValidationAction
+from web.pagination import paginate
+from web.reporting_common import status_label
 from scheduling.services import (
     ModalityShiftError,
     submit_modality_shift,
@@ -458,3 +468,356 @@ def modality_withdraw(request, pk):
     ctx = _modality_mine_ctx(request.user, error=error)
     return render(request, "faculty/modality_mine.html", ctx,
                   status=400 if error else 200)
+
+
+# --- Online "Verify & Start" (FAC-08, D-01/D-02/D-03) -----------------------
+# Starting and verifying are two distinct acts by two people, not two competing
+# claims about one fact (D-01). This surface owns the START half only: the
+# faculty member pastes the meeting link and the session becomes ACTIVE. The
+# Checker's independent VERIFY half lives in web/checker.py and is untouched
+# here -- `verified_by_checker` is never written by this module, so a self-start
+# that nobody ever verifies stays ACTIVE (it was genuinely held) while reporting
+# as unverified on the Dean/IFO/HR scorecards (D-02).
+
+# Hosts that serve a real MS Teams meeting join page. Matched on the host ONLY,
+# with an exact-or-dot-boundary test -- never a substring search over the whole
+# URL, which `https://example.com/teams.microsoft.com/meet` satisfies while
+# pointing at an attacker's site (T-07-48). A Checker clicks whatever lands
+# here, so this list is a trust decision, not a formatting nicety.
+_TEAMS_HOSTS = (
+    "teams.microsoft.com",      # commercial cloud
+    "teams.live.com",           # Teams for personal/consumer meetings
+    "teams.cloud.microsoft",    # the newer Microsoft 365 domain
+    "teams.microsoft.us",       # GCC / GCC-High
+    "gov.teams.microsoft.us",
+    "dod.teams.microsoft.us",
+)
+
+# Server-computed display state per online session card. Colour is NEVER the only
+# signal (WCAG 1.4.1): every state also carries a Lucide icon and a text label.
+# Mirrors web/checker.py `_CARD_STYLES` -- the template never branches on colour.
+_ONLINE_STYLES = {
+    "upcoming": {"card": "ft-card--neutral", "pill": "ft-pill ft-pill--upcoming",
+                 "icon": "clock", "label": "Not started"},
+    "startable": {"card": "ft-card--info", "pill": "ft-pill ft-pill--online",
+                  "icon": "monitor", "label": "Ready to start"},
+    "active": {"card": "ft-card--ok", "pill": "ft-pill ft-pill--active",
+               "icon": "play", "label": "In session"},
+    # SCHEDULED but already past grace: the sweep has not run yet, but a start is
+    # refused, so the card must not offer one. Same predicate, same answer.
+    "past-grace": {"card": "ft-card--warn", "pill": "ft-pill ft-pill--late",
+                   "icon": "alert-triangle", "label": "Past grace window"},
+    "absent": {"card": "ft-card--bad", "pill": "ft-pill ft-pill--absent",
+               "icon": "x", "label": "Absent"},
+    "completed": {"card": "ft-card--neutral", "pill": "ft-pill ft-pill--done",
+                  "icon": "check", "label": "Done"},
+}
+
+# The two states from which `online_start` will accept a write. Display and the
+# write ladder read the SAME tokens, so the page can never offer a Start that the
+# POST would then refuse.
+_STARTABLE_STATES = ("upcoming", "startable")
+
+
+def _is_effective_online(session):
+    """Effective modality is Online: a declared override beats the schedule.
+
+    The same override rule used at ops/availability.py:54 and web/guard.py:98.
+    """
+    return (session.declared_modality or session.schedule.modality) == Modality.ONLINE
+
+
+def _online_state(session, now, grace_min):
+    """Map an online session to a display-state token (see `_ONLINE_STYLES`).
+
+    The past-grace branch calls the SHARED `is_no_show_past_grace` predicate
+    rather than re-deriving a cutoff, so this surface, the scan resolver and the
+    JOB-02 sweep can never disagree about whether a class is still startable.
+    """
+    if session.status == SessionStatus.ACTIVE:
+        return "active"
+    if session.status == SessionStatus.COMPLETED:
+        return "completed"
+    if session.status == SessionStatus.ABSENT:
+        return "absent"
+    if is_no_show_past_grace(session.scheduled_start, now, grace_min):
+        return "past-grace"
+    if now < session.scheduled_start:
+        return "upcoming"
+    return "startable"
+
+
+def _online_row(session, now, grace_min, *, error=None):
+    """One rendered card: the session, its state token, its style, its actions."""
+    state = _online_state(session, now, grace_min)
+    return {
+        "session": session,
+        "state": state,
+        "style": _ONLINE_STYLES[state],
+        "can_start": state in _STARTABLE_STATES,
+        "error": error,
+    }
+
+
+def _online_rows(user, now):
+    """The requesting faculty's EFFECTIVE-online sessions for today.
+
+    Scoped server-side to `faculty=user` and today's date before anything else --
+    the rendered list is a snapshot, never the authorization (see `online_start`).
+    `select_related` covers everything the card reads, so the list is one query.
+    """
+    grace_min = get_policy("grace_minutes")
+    sessions = (Session.objects
+                .filter(faculty=user, date=now.date())
+                .select_related("schedule", "room")
+                .order_by("scheduled_start"))
+    return [_online_row(s, now, grace_min)
+            for s in sessions if _is_effective_online(s)]
+
+
+def _teams_link_error(raw):
+    """Validate a pasted MS Teams meeting URL. Returns an error string or None.
+
+    Requires https (a Checker is asked to click this, so a downgradeable link is
+    not acceptable) and requires the HOST to be a Teams host by an exact or
+    dot-boundary match. `evilteams.microsoft.com` and
+    `https://example.com/teams.microsoft.com/meet` both fail, which a substring
+    check over the URL would not (T-07-48).
+    """
+    if not raw:
+        return ("Paste the Microsoft Teams meeting link for this class.")
+    try:
+        parsed = urlparse(raw)
+    except ValueError:
+        return "That does not look like a link. Paste the full meeting URL."
+    if parsed.scheme != "https":
+        return ("The meeting link must start with https:// -- "
+                "copy it from Teams with 'Copy link'.")
+    host = (parsed.hostname or "").lower()
+    if not any(host == d or host.endswith("." + d) for d in _TEAMS_HOSTS):
+        return ("That is not a Microsoft Teams meeting link. It should look "
+                "like https://teams.microsoft.com/l/meetup-join/...")
+    return None
+
+
+@faculty_required
+@require_http_methods(["GET"])
+def online_list(request):
+    """FAC-08: the requesting faculty's Online classes for today, with Start.
+
+    Read-only. Scoped to `faculty=request.user` and today; only sessions whose
+    EFFECTIVE modality is Online appear -- Blended still checks in by QR, and a
+    Blended class showing a Start box here would be a lie about how it is held.
+    """
+    now = timezone.localtime()
+    rows = _online_rows(request.user, now)
+    return render(request, "faculty/online.html", {
+        "rows": rows, "today": now.date(), "greeting": _greeting(now),
+    })
+
+
+@faculty_required
+@require_http_methods(["POST"])
+def online_start(request, pk):
+    """FAC-08/D-01: start an own Online session from a pasted Teams link.
+
+    The full validation ladder runs BEFORE any write, and every rung is re-derived
+    server-side from the re-fetched row -- the list the faculty member saw is a
+    snapshot, never the authorization (the IDOR re-gate rule, see
+    `modality_withdraw` above). A forged pk must not start someone else's class.
+
+    On success this writes exactly four columns: `teams_link` (D-03 -- the SAME
+    field web/checker.py `online_open` reads, which is what stops its `no_link`
+    branch from firing, so the two roles can never verify against different
+    meetings), `status`, `actual_start` and `checkin_method`. It does NOT touch
+    `verified_by_checker` (a derived property over CheckerValidation rows) and
+    writes no CheckerValidation: starting is not verifying (D-02). It does not
+    touch `online_checker` either -- online duty is IFO's to assign.
+
+    The JOB-02 sweep needs no change: it only moves SCHEDULED sessions to ABSENT,
+    so a self-started ACTIVE session is naturally skipped (D-02).
+    """
+    now = timezone.localtime()
+    grace_min = get_policy("grace_minutes")
+    raw_link = (request.POST.get("teams_link") or "").strip()
+
+    # 1. Ownership, re-gated on the re-fetched row. A foreign pk is a 404, not a
+    #    403: this surface must not confirm that another faculty's session exists.
+    session = get_object_or_404(
+        Session.objects.select_related("schedule", "room"),
+        pk=pk, faculty=request.user)
+
+    error = None
+    # 2. Effective modality, re-derived server-side.
+    if not _is_effective_online(session):
+        error = ("This class is not Online, so it checks in by scanning the "
+                 "room QR or entering the room code.")
+    # 3. Status. ABSENT is final -- CHK-06 was removed and Absent is the sweep's
+    #    decision, not something a late start may quietly undo. ACTIVE is already
+    #    started; COMPLETED is over.
+    elif session.status != SessionStatus.SCHEDULED:
+        if session.status == SessionStatus.ACTIVE:
+            error = "This class is already started."
+        elif session.status == SessionStatus.ABSENT:
+            error = ("This class is recorded as Absent and cannot be started. "
+                     "A Checker can correct it if you did hold it.")
+        else:
+            error = "This class is already finished."
+    # 4. Grace. The SHARED predicate is called, never copied -- it is the single
+    #    atom the scan resolver and the sweep agree on, and this surface must
+    #    agree with both. Discretion call: reusing the F2F/Blended grace rule for
+    #    an online start is a consistency choice, revisitable as a policy.
+    elif is_no_show_past_grace(session.scheduled_start, now, grace_min):
+        error = (f"Start is past the {grace_min}-minute grace window for this "
+                 f"class, so it can no longer be started here.")
+    # 5. The pasted link.
+    else:
+        error = _teams_link_error(raw_link)
+
+    if error is not None:
+        # Render the row straight from the re-fetched session rather than from
+        # `_online_rows`: a refused NON-online session is not in that list at all,
+        # and the refusal must still be shown rather than swapping in an empty box.
+        row = _online_row(session, now, grace_min, error=error)
+        return render(request, "faculty/_online_start.html",
+                      {"rows": [row]}, status=400)
+
+    with transaction.atomic():
+        previous = session.teams_link
+        session.teams_link = raw_link
+        session.status = SessionStatus.ACTIVE
+        session.actual_start = timezone.now()
+        session.checkin_method = CheckinMethod.ONLINE_SELF
+        session.save(update_fields=["teams_link", "status", "actual_start",
+                                    "checkin_method"])
+        # Overwrites are the interesting case: a link changed mid-class is
+        # exactly what a Checker who could not join would need explained, so the
+        # PREVIOUS value is carried in the payload (T-07-51).
+        AuditLog.objects.create(
+            actor=request.user, event_type="session.teams_link_set",
+            target_type="session", target_id=str(session.pk),
+            payload={"session": session.pk, "previous_teams_link": previous,
+                     "teams_link": raw_link,
+                     "checkin_method": CheckinMethod.ONLINE_SELF.value})
+
+    row = _online_row(session, now, grace_min)
+    return render(request, "faculty/_online_start.html", {"rows": [row]})
+
+
+# --- Attendance history (FAC-11, D-15) --------------------------------------
+# READ-ONLY, Checker flags visible, and NO contest/dispute control anywhere. The
+# flag is already the system of record feeding the Dean/HR/IFO scorecards; a
+# dispute state machine plus a reviewer surface is real scope of its own and is a
+# recorded deferred idea, not a Phase 7 clarification. Disputes go through HR out
+# of band (D-15).
+
+FACULTY_HISTORY_PAGE_SIZE = 25
+
+# The two actions that are a flag AGAINST the faculty member. VERIFIED_EMPTY is
+# deliberately excluded: "the Checker found the room empty" is not the same claim
+# as "this faculty member was not present", and counting it here would put a mark
+# on a record that nobody actually made.
+_FACULTY_FLAG_ACTIONS = (ValidationAction.FLAG_IDENTITY_MISMATCH,
+                         ValidationAction.FLAG_NOT_PRESENT)
+
+
+def _history_filters(request):
+    """Parse the history filter bar, mirroring `web/hr.py:_filtered_sessions`.
+
+    FK-id filters apply only when the raw value is a clean integer; dates go
+    through `parse_date` and an invalid one drops just that bound behind a
+    friendly note -- a 200 with a notice, never a 500. Filters key on the FK id
+    and `date__range` ONLY: never a `pk__in` list, which is how this project has
+    previously hit the MSSQL 2100-parameter limit (the 04.1-04 `reset_term`
+    incident, and 06-07 avoided it the same way).
+
+    NOTE what is absent: there is no `faculty` parameter. Not a defaulted one,
+    not an ignored one -- this surface does not accept the concept, which is the
+    whole reason it is a separate view rather than HR's with another template.
+    """
+    term_raw = (request.GET.get("term") or "").strip()
+    from_raw = (request.GET.get("from") or "").strip()
+    to_raw = (request.GET.get("to") or "").strip()
+
+    note = None
+    d_from = parse_date(from_raw) if from_raw else None
+    d_to = parse_date(to_raw) if to_raw else None
+    if (from_raw and d_from is None) or (to_raw and d_to is None):
+        note = ("That date wasn't valid, so the date filter was ignored. "
+                "Enter dates as YYYY-MM-DD.")
+    return {
+        "term": term_raw, "date_from": from_raw, "date_to": to_raw,
+        "note": note, "_term_id": int(term_raw) if term_raw.isdigit() else None,
+        "_d_from": d_from, "_d_to": d_to,
+        "any_applied": bool(term_raw or from_raw or to_raw),
+    }
+
+
+@faculty_required
+@require_http_methods(["GET"])
+def history(request):
+    """FAC-11: the requesting faculty member's own attendance history.
+
+    HARD-SCOPED to `faculty=request.user` server-side (T-07-53). `web/hr.py`
+    `attendance` is the model for everything else here, but HR is cross-
+    department and takes a faculty filter from the querystring; this surface must
+    not accept one at all. That is the IDOR re-gate rule stated at
+    `modality_withdraw` above.
+
+    Verification and flags are resolved by `Exists()` ANNOTATIONS in the main
+    query, never by the per-object `Session.verified_by_checker` property: that
+    property issues a subquery per object, which 06-07 found fatal inside a
+    streaming iterator on MSSQL and which is an N+1 even here.
+    """
+    filters = _history_filters(request)
+
+    verified_sq = CheckerValidation.objects.filter(
+        session=OuterRef("pk"), action=ValidationAction.VERIFIED)
+    flagged_sq = CheckerValidation.objects.filter(
+        session=OuterRef("pk"), action__in=_FACULTY_FLAG_ACTIONS)
+
+    qs = (Session.objects
+          .filter(faculty=request.user)
+          .select_related("schedule", "schedule__term", "room")
+          .annotate(is_verified=Exists(verified_sq),
+                    is_flagged=Exists(flagged_sq))
+          # Newest-first, matching HR, so the page shows the most recent sessions
+          # rather than the oldest historical rows.
+          .order_by("-date", "-scheduled_start"))
+
+    if filters["_term_id"] is not None:
+        qs = qs.filter(schedule__term_id=filters["_term_id"])
+    if filters["_d_from"] is not None:
+        qs = qs.filter(date__gte=filters["_d_from"])
+    if filters["_d_to"] is not None:
+        qs = qs.filter(date__lte=filters["_d_to"])
+
+    pager = paginate(request, qs, per_page=FACULTY_HISTORY_PAGE_SIZE)
+    # Materialize BEFORE the flag-detail lookup below. MSSQL runs with MARS off,
+    # so a follow-up query issued while an outer cursor is still open raises
+    # HY010 (the guards in scheduling/jobs.py and web/ifo.py:131 are the
+    # precedent).
+    sessions = list(pager["page"].object_list)
+
+    # ONE additional query for the flag reasons on this page, not one per row.
+    # The id list is bounded by the page size, so it cannot approach the 2100
+    # parameter ceiling.
+    flagged_ids = [s.pk for s in sessions if s.is_flagged]
+    reasons = {}
+    if flagged_ids:
+        for v in (CheckerValidation.objects
+                  .filter(session_id__in=flagged_ids,
+                          action__in=_FACULTY_FLAG_ACTIONS)
+                  .order_by("session_id", "-validated_at")):
+            reasons.setdefault(v.session_id, v.get_action_display())
+
+    for s in sessions:
+        s.present_label = status_label(s.status)
+        s.flag_reason = reasons.get(s.pk, "")
+
+    ctx = {"sessions": sessions, "filters": filters,
+           "term_choices": AcademicTerm.objects.order_by("-is_active",
+                                                         "-start_date"),
+           "greeting": _greeting(timezone.localtime()),
+           "today": timezone.localdate(), **pager}
+    return render(request, "faculty/history.html", ctx)

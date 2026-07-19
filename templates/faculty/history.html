@@ -1,0 +1,147 @@
+{% extends "base.html" %}
+{% load static %}
+{% block title %}My attendance · FluxTrack{% endblock %}
+{% block content %}
+{% comment %}
+FAC-11: the faculty member's OWN attendance history. Navy .ft-* shell matching
+templates/faculty/schedule.html; the table is .tbl inside .table-wrap from
+static/css/app.css; paging via web/pagination.py + _pager.html.
+
+READ-ONLY BY CONTRACT (D-15). There is deliberately NO contest, dispute, appeal
+or "request review" control anywhere on this page -- no form, no button, no link
+that implies a flag can be challenged in the app. The flag is already the system
+of record feeding the Dean/HR/IFO scorecards; disagreements go to HR out of band,
+and the note at the foot of the page says exactly that. The only <form> here is
+the GET filter bar, which posts nothing.
+
+Colour is never the only signal: every status and flag chip carries an icon and a
+text label. ASCII-only (no em dash).
+{% endcomment %}
+<div class="ft-app">
+
+  <header class="ft-top">
+    <a href="/faculty/home" class="ft-top__brand">
+      <img class="ft-top__crest" src="{% static 'brand/mmcm-crest.png' %}" alt="">
+      <span class="ft-top__mark">FluxTrack</span>
+    </a>
+    <div class="relative inline-flex" style="margin-left:auto">{% include "notifications/_bell.html" %}</div>
+    <details class="ft-acct" style="margin-left:0">
+      <summary class="ft-top__avatar" aria-label="Account and sign out">{{ user.first_name|default:user.username|slice:":1"|upper }}{{ user.last_name|slice:":1"|upper }}</summary>
+      <div class="ft-acct__menu">
+        <div class="ft-acct__who">
+          <b>{{ user.get_full_name|default:user.username }}</b>
+          <span>{{ user.get_role_display }}{% if user.department %} · {{ user.department.name }}{% endif %}</span>
+        </div>
+        <a class="ft-acct__item" href="/logout"><uk-icon icon="log-out"></uk-icon> Sign out</a>
+      </div>
+    </details>
+  </header>
+
+  <div class="ft-page">
+    <div class="ft-greet">
+      <div class="ft-greet__hi">My attendance</div>
+      <div class="ft-greet__date">Your own session records. Read-only.</div>
+    </div>
+
+    <form class="ft-form" method="get" action="{% url 'faculty_history' %}"
+          style="margin-bottom:16px">
+      <div class="ft-fieldset">
+        <div class="ft-field">
+          <label class="ft-field__label" for="hist-term">Term</label>
+          <select class="ft-control" id="hist-term" name="term">
+            <option value="">All terms</option>
+            {% for t in term_choices %}
+            <option value="{{ t.id }}" {% if filters.term == t.id|stringformat:'s' %}selected{% endif %}>{{ t.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="ft-field">
+          <label class="ft-field__label" for="hist-from">From</label>
+          <input class="ft-control" type="date" id="hist-from" name="from"
+                 value="{{ filters.date_from }}">
+        </div>
+        <div class="ft-field">
+          <label class="ft-field__label" for="hist-to">To</label>
+          <input class="ft-control" type="date" id="hist-to" name="to"
+                 value="{{ filters.date_to }}">
+        </div>
+      </div>
+      <button class="ft-btn-navy" type="submit">
+        <uk-icon icon="filter"></uk-icon> Apply</button>
+      <a class="ft-btn-soft" href="{% url 'faculty_history' %}">Reset</a>
+      {% if filters.note %}
+      <p class="ft-help" role="status" data-note="filter">
+        <uk-icon icon="alert-triangle"></uk-icon> {{ filters.note }}</p>
+      {% endif %}
+    </form>
+
+    {% if sessions %}
+    <div class="table-wrap">
+      <table class="tbl">
+        <thead>
+          <tr>
+            <th scope="col">Date</th>
+            <th scope="col">Course</th>
+            <th scope="col">Scheduled</th>
+            <th scope="col">Actual</th>
+            <th scope="col">Status</th>
+            <th scope="col">Checker</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for s in sessions %}
+          <tr data-session="{{ s.pk }}">
+            <td>{{ s.date|date:"M j, Y" }}</td>
+            <td>{{ s.schedule.course_code }} · {{ s.schedule.section }}</td>
+            <td>{{ s.scheduled_start|time:"g:i A" }}</td>
+            <td>{% if s.actual_start %}{{ s.actual_start|time:"g:i A" }}{% else %}<span aria-label="No actual start recorded">-</span>{% endif %}</td>
+            <td>
+              {% if s.present_label == "Present" %}
+              <span class="ft-pill ft-pill--active"><uk-icon icon="check"></uk-icon> Present</span>
+              {% elif s.present_label == "Absent" %}
+              <span class="ft-pill ft-pill--absent"><uk-icon icon="x"></uk-icon> Absent</span>
+              {% else %}
+              <span class="ft-pill ft-pill--upcoming"><uk-icon icon="clock"></uk-icon> Scheduled</span>
+              {% endif %}
+            </td>
+            <td>
+              {% if s.is_flagged %}
+              {% comment %}A chip, never a control: no href, no button, no form.{% endcomment %}
+              <span class="ft-pill ft-pill--absent" data-flag="1">
+                <uk-icon icon="flag"></uk-icon> {{ s.flag_reason|default:"Flagged" }}</span>
+              {% elif s.is_verified %}
+              <span class="ft-pill ft-pill--done"><uk-icon icon="check-check"></uk-icon> Verified</span>
+              {% else %}
+              <span class="ft-pill ft-pill--upcoming"><uk-icon icon="circle"></uk-icon> Not checked</span>
+              {% endif %}
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% include "_pager.html" %}
+
+    <p class="ft-help" style="margin-top:12px">
+      <uk-icon icon="info"></uk-icon>
+      Checker flags are permanent records shared with IFO and HR. If you believe
+      one is mistaken, raise it with HR directly.</p>
+
+    {% else %}
+    <div class="ft-card ft-card--neutral" data-empty="history">
+      <div class="ft-card__head">
+        <uk-icon icon="calendar-x"></uk-icon>
+        <span class="ft-card__room" style="margin-left:0">
+          {% if filters.any_applied %}No sessions match these filters{% else %}No attendance yet{% endif %}</span>
+      </div>
+      <p class="ft-card__meta" style="margin:0">
+        {% if filters.any_applied %}
+        Clear a filter or widen the date range.
+        {% else %}
+        Your sessions will appear here as they are held.
+        {% endif %}</p>
+    </div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

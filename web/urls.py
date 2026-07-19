@@ -21,6 +21,16 @@ urlpatterns = [
     path("faculty/modality/mine", faculty.modality_mine, name="faculty_modality_mine"),
     path("faculty/modality/<int:pk>/withdraw", faculty.modality_withdraw,
          name="faculty_modality_withdraw"),
+    # --- Faculty self-service (FAC-08, FAC-11) ---
+    # FAC-08 online "Verify & Start": GET lists today's Online classes, POST
+    # starts one from a pasted Teams link (D-01/D-03).
+    path("faculty/online", faculty.online_list, name="faculty_online"),
+    path("faculty/online/<int:pk>/start", faculty.online_start,
+         name="faculty_online_start"),
+    # FAC-11 own attendance history: read-only, hard-scoped to request.user,
+    # Checker flags visible with no dispute control (D-15).
+    path("faculty/history", faculty.history, name="faculty_history"),
+    # --- end Faculty self-service ---
     # Dean modality-shift approval surface (MOD-02, D-12)
     path("dean/requests", dean.queue, name="dean_queue"),
     path("dean/requests/<int:pk>/approve", dean.approve, name="dean_approve"),
