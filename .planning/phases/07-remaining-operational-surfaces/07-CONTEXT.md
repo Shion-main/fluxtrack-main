@@ -97,10 +97,28 @@ polled regions, WCAG-AA, no border-left accent stripes.
   `Schedule.room`, `Session.room` and `CheckerValidation.room` are `PROTECT`.
   As written, D-17 was not enforceable — a room whose only references are
   bookings would delete cleanly and destroy them. **Migrate `Booking.room` to
-  `on_delete=PROTECT`** so the refusal is a database guarantee, not a
-  view-level courtesy, and count **all** bookings (including cancelled) as
+  `on_delete=PROTECT`** and count **all** bookings (including cancelled) as
   blockers. The existing admin Booking surface is touched by this migration —
   expected.
+
+  **CORRECTION (2026-07-19, after execution).** D-19 originally justified this
+  as making the refusal "a database guarantee, not a view-level courtesy."
+  **That rationale was factually wrong.** Django never encodes `on_delete` in
+  DDL on any backend — it is a Python-level `Collector` concept, so deletion
+  signals can fire. `sqlmigrate ops 0005` correctly emits `-- (no-op)` for the
+  AlterField, and this is NOT the Phase-1 mssql-django `db_collation` defect;
+  introspecting `sys.foreign_keys` shows EVERY FK to `campus_room` is
+  `NO_ACTION`, including `scheduling_schedule`/`scheduling_session` which have
+  always been PROTECT. The database was already refusing raw
+  `DELETE FROM campus_room` before this change and still is.
+  What the migration actually closed — verified empirically, created and rolled
+  back against the real DB — is the **ORM path**: `room.delete()` from admin,
+  shell or any Python caller previously CASCADEd and destroyed bookings, and
+  now raises `ProtectedError` and deletes nothing. That is a real hole and it
+  is genuinely closed. The net protective effect stands; the mechanism is the
+  ORM layer, not the schema. Consequence: `room_delete_blockers` carries more
+  of the guarantee than D-19 credited it with, which makes D-20's fifth
+  relation more load-bearing, not less.
 - **D-20 (amends D-17):** `CheckerValidation` is a **FOURTH blocker** D-17 never
   named. Unnamed, it surfaces as a `ProtectedError` 500 instead of a named
   refusal. The delete-blocker probe must cover Schedule, Session, Booking AND
