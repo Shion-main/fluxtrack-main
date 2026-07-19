@@ -34,6 +34,17 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 5: Notifications — Read Surface & Web Push** - In-app polled list + VAPID web push + per-user mute preferences (completed 2026-07-15)
 - [x] **Phase 6: Reporting Engine & Reporting Surfaces** - One shared aggregate layer powering weekly report, scorecards, IFO/Dean/HR dashboards (completed 2026-07-15)
 - [ ] **Phase 06.1: Room Utilization & IFO-09 Closure** (INSERTED) - The facility-utilization half of the product: room-hours booked vs used, wasted room-hours, and a day x block heat grid. Closes the IFO-09 room-occupancy card that shipped as a second attendance metric.
+  **Goal:** IFO can read how much physical room capacity the campus actually used versus booked, see where and when it went unused, and act on the reclaimable hours — with the SRS's room-occupancy card restored to the dashboard.
+  **Requirements:** IFO-09
+  **Plans:** 7 plans across 6 waves
+  Plans:
+  - [ ] 06.1-01-PLAN.md — Shared block ladder + the T1 room-hours aggregate (booked/used/available/wasted)
+  - [ ] 06.1-02-PLAN.md — Room-shaped test fixture + DB-backed aggregate tests + seed sanity recipe
+  - [ ] 06.1-03-PLAN.md — IFO-09 closure: five-card KPI row with Room Occupancy, plus the paginate isolation fix
+  - [ ] 06.1-04-PLAN.md — T2 heat grid + block saturation aggregates
+  - [ ] 06.1-05-PLAN.md — Per-room breakdown + building/floor rollup + least-used ranking
+  - [ ] 06.1-06-PLAN.md — The /ifo/utilization page: heat grid, tables, WCAG-AA heat scale
+  - [ ] 06.1-07-PLAN.md — Per-room utilization CSV export
 - [x] **Phase 7: Remaining Operational Surfaces** - Guard monitor/locator, IFO room & booking ops, Faculty self-service, job monitoring (completed 2026-07-19)
 - [ ] **Phase 8: Auth Cutover & AWS Deployment** - Entra ID SSO, Node-free Tailwind build, single-EC2 + RDS deploy
 
