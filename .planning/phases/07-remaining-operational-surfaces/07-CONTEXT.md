@@ -16,6 +16,44 @@ Complete the remaining role surfaces so the app is feature-complete before the P
 This phase SURFACES machinery that already exists (JobRun, release_room, Booking, availability, CheckerAssignment, push outbox) far more than it builds new domain logic. The scan resolver and the shared no-show predicate are OUT of scope — left untouched.
 </domain>
 
+<already_shipped>
+## Already Shipped Before Planning (audited 2026-07-18)
+
+Part of Phase 07 landed out-of-band during the UI-elevation work (see the
+ui-elevation-plan step 6). Verified against code, not against docs:
+
+- **SYS-04 — DONE.** `web/sys.py` `jobs` (`sysadmin_required`) + `templates/sys/jobs.html`;
+  latest `JobRun` per `job_name` + paginated history. 3 tests green.
+- **GRD-01 — DONE.** `web/guard.py` `monitor`/`monitor_rows` + navy templates;
+  floor scoping server-derived from FLOOR-scoped GUARD assignments (D-04 honored).
+- **GRD-03 locator — DONE**, but it is labeled **GRD-02** in `web/guard.py` and
+  `web/urls.py`. Fix the labels; do not build it twice.
+- **FAC-12 notification prefs — DONE** via `web/notifications.py` `settings_page`/
+  `mute_toggle` (all-roles, not faculty-specific). Only the photo half remains.
+
+**Still open:** GRD-02 (real per-room schedule for Guard), GRD-04, GRD-05
+enforcement, IFO-01b, IFO-02, IFO-03b, IFO-05, IFO-08, FAC-08 write path,
+FAC-11, FAC-12 photo upload.
+
+**Planner note — the shape of the remaining work.** IFO-02, IFO-03b, IFO-05 and
+IFO-08 each already have a complete, tested domain layer with ZERO web callers
+(`campus.Room.code_rotated_at/by` never written; `import_offerings` CLI-only;
+`ops.availability.room_is_free` called only by the modality service;
+`ops.occupancy.release_room` called only by dean-approval + materialize). These
+four are surface-and-URL work against existing services — plan them that way, not
+as new domain logic. GRD-02, GRD-04, FAC-11 need new queries as well as surfaces.
+
+**GRD-05 is currently unenforced.** `web/guard.py` is the only role module in
+`web/` with zero `require_http_methods` decorators, so all three guard views
+answer POST with a 200. Read-only in practice, not by contract — close it.
+
+**UI/UX contract for every new surface here:** build it already-styled on the
+existing system — navy `.ft-*` shell for Guard/Faculty, the shared
+`templates/_console.html` for IFO, `.ft-form*` controls, `.ft-outcome*` result
+cards, `.tbl`/`.data-grid` + `web/pagination.py` for any table, skeletons on
+polled regions, WCAG-AA, no border-left accent stripes.
+</already_shipped>
+
 <decisions>
 ## Implementation Decisions
 
@@ -52,6 +90,33 @@ This phase SURFACES machinery that already exists (JobRun, release_room, Booking
 
 ### SYS-04 — Job monitoring
 - **D-18:** Straight read of the `ops.JobRun` table (built in Phase 2 for exactly this, indexed `(job_name, -started_at)`): latest row per job_name with last run, status (running/ok/failed), started/finished, rows_affected, detail. Read-only, System-Admin-gated.
+
+### Amendments after research (2026-07-19) — LOCKED
+
+- **D-19 (amends D-17):** `ops.Booking.room` is `on_delete=CASCADE` while
+  `Schedule.room`, `Session.room` and `CheckerValidation.room` are `PROTECT`.
+  As written, D-17 was not enforceable — a room whose only references are
+  bookings would delete cleanly and destroy them. **Migrate `Booking.room` to
+  `on_delete=PROTECT`** so the refusal is a database guarantee, not a
+  view-level courtesy, and count **all** bookings (including cancelled) as
+  blockers. The existing admin Booking surface is touched by this migration —
+  expected.
+- **D-20 (amends D-17):** `CheckerValidation` is a **FOURTH blocker** D-17 never
+  named. Unnamed, it surfaces as a `ProtectedError` 500 instead of a named
+  refusal. The delete-blocker probe must cover Schedule, Session, Booking AND
+  CheckerValidation, and the UI must name each one.
+- **D-21 (GRD-04 alert type):** the new guard alert type is **pushable and
+  mutable** — added to BOTH `PUSH_TYPES` and a `CATEGORY_TYPES` category in
+  `ops/notifications.py`. A type in `PUSH_TYPES` but absent from
+  `CATEGORY_TYPES` is structurally unmutable; a type in neither writes bell rows
+  that never push with `pushed_at` stuck NULL (a symptom that misreads as a VAPID
+  failure). Guards can mute guard alerts like any other category.
+
+### Out of Scope — confirmed 2026-07-19
+
+- **Room utilization / IFO-09** (SRS Room-Occupancy card, room-aware reporting
+  aggregates) is unfinished **Phase 06** scope, deferred to a **06.1** insertion
+  AFTER Phase 07 ships. Do not fold it into any Phase 07 plan.
 
 ### Claude's Discretion
 - Audit-log wording/payloads for the new domain actions (link overwrite, QR rotation, manual release, room delete-refusal) follow the existing AuditLog convention.

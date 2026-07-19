@@ -81,9 +81,9 @@ roadmap does NOT create phases for them.
 
 ### Guard (GRD)
 
-- [ ] **GRD-01**: A Guard sees a live read-only room-status monitor for assigned floor(s), polled
+- [x] **GRD-01**: A Guard sees a live read-only room-status monitor for assigned floor(s), polled
 - [ ] **GRD-02**: A Guard can view each room's schedule (reusing the IFO-11 per-room view, guard-gated)
-- [ ] **GRD-03**: A Guard can locate a faculty member by name — current room/building/floor, course, end time, or "Online — not on campus" / "Not in a class" + next class
+- [x] **GRD-03**: A Guard can locate a faculty member by name — current room/building/floor, course, end time, or "Online — not on campus" / "Not in a class" + next class
 - [ ] **GRD-04**: A Guard receives debounced web-push alerts for floor activity
 - [ ] **GRD-05**: A Guard has no write access anywhere
 
@@ -110,7 +110,7 @@ roadmap does NOT create phases for them.
 
 ### System Admin (SYS)
 
-- [ ] **SYS-04**: A System Admin can monitor scheduled-job status (last run, success/failure, rows affected)
+- [x] **SYS-04**: A System Admin can monitor scheduled-job status (last run, success/failure, rows affected)
 
 ### Authentication (AUTH)
 
@@ -184,9 +184,9 @@ phase (see ROADMAP.md). Status values: Pending / In progress / Complete.
 | HR-01 | Phase 6 | Complete |
 | HR-02 | Phase 6 | Complete |
 | HR-03 | Phase 6 | Complete |
-| GRD-01 | Phase 7 | Pending |
+| GRD-01 | Phase 7 | Done (shipped out-of-band 2026-07-18) |
 | GRD-02 | Phase 7 | Pending |
-| GRD-03 | Phase 7 | Pending |
+| GRD-03 | Phase 7 | Done (shipped out-of-band 2026-07-18) |
 | GRD-04 | Phase 7 | Pending |
 | GRD-05 | Phase 7 | Pending |
 | IFO-01b | Phase 7 | Pending |
@@ -197,7 +197,7 @@ phase (see ROADMAP.md). Status values: Pending / In progress / Complete.
 | FAC-08 | Phase 7 | Pending |
 | FAC-11 | Phase 7 | Pending |
 | FAC-12 | Phase 7 | Pending |
-| SYS-04 | Phase 7 | Pending |
+| SYS-04 | Phase 7 | Done (shipped out-of-band 2026-07-18) |
 | AUTH-01 | Phase 8 | Pending |
 | AUTH-03 | Phase 8 | Pending |
 | AUTH-05 | Phase 8 | Pending |
