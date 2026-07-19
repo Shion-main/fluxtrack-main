@@ -18,6 +18,8 @@ as every other room. ASCII-only.{% endcomment %}
   <uk-icon icon="printer" class="size-4"></uk-icon> Print</button>
 <a href="/ifo/rooms/{{ room.code }}/poster" target="_blank" class="uk-btn uk-btn-ghost uk-btn-sm">
   <uk-icon icon="qr-code" class="size-4"></uk-icon> QR poster</a>
+<a href="/ifo/rooms/{{ room.code }}/edit" class="uk-btn uk-btn-ghost uk-btn-sm no-print">
+  <uk-icon icon="pencil" class="size-4"></uk-icon> Edit</a>
 {% endblock %}
 {% block console %}
 <p class="uk-text-muted mb-6 no-print">

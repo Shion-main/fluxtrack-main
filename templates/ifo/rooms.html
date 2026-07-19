@@ -17,6 +17,12 @@ htmx swap. ASCII-only.
 {% block console_title %}Rooms{% endblock %}
 {% block page_actions %}
 <span class="uk-text-small uk-text-muted">{{ total_rooms }} room{{ total_rooms|pluralize }}</span>
+{% comment %}IFO-01b entry point. The per-room Edit/Delete actions deliberately
+live on the slide-over panel and the full room page instead of on the tiles:
+#board is replaced wholesale every poll, so a control rendered inside a tile
+would be destroyed mid-click every few seconds.{% endcomment %}
+<a href="/ifo/rooms/new" class="uk-btn uk-btn-primary uk-btn-sm">
+  <uk-icon icon="plus" class="size-4"></uk-icon> New room</a>
 {% endblock %}
 
 {% block console %}

@@ -1,0 +1,121 @@
+{% extends "ifo/_console.html" %}
+{% comment %}
+IFO-01b room create/edit form. One template serves both: `is_edit` picks the
+verbs, the action URL and which fields are writable.
+
+The room CODE is create-only. On edit it renders as read-only text, not a
+disabled input, because it is the identifier printed on the door and referenced
+by every schedule -- there is no in-place rename.
+
+Console vocabulary (Franken uk-* + Tailwind utilities), matching
+ifo/_assignment_form.html. The .ft-* navy vocabulary belongs to the
+Faculty/Guard shells and is deliberately absent here. No border-left accent
+stripes. Every control has a real <label for>. ASCII-only.
+{% endcomment %}
+{% block title %}{% if is_edit %}Edit {{ room.code }}{% else %}New room{% endif %} - FluxTrack{% endblock %}
+{% block console_title %}{% if is_edit %}Edit room{% else %}New room{% endif %}{% endblock %}
+{% block page_actions %}
+<a href="/ifo/rooms" class="uk-btn uk-btn-ghost uk-btn-sm">
+  <uk-icon icon="chevron-left" class="size-4"></uk-icon> Rooms</a>
+{% endblock %}
+
+{% block console %}
+<div class="max-w-2xl">
+  <p class="uk-text-muted mb-6">
+    {% if is_edit %}
+      Change what this room is called, how many it seats, or which floor it is
+      on. Its QR poster and six-digit code are not affected.
+    {% else %}
+      Add a room that the offering import did not create. It becomes scannable
+      immediately -- a QR token and a six-digit manual code are generated for it.
+    {% endif %}
+  </p>
+
+  <div class="uk-card uk-card-body">
+    {% if error %}
+    <div class="uk-alert uk-alert-destructive mb-4" role="alert" data-error="1">
+      <p class="uk-text-small">{{ error }}</p>
+    </div>
+    {% endif %}
+
+    <form method="post"
+          action="{% if is_edit %}/ifo/rooms/{{ room.code }}/edit{% else %}/ifo/rooms/new{% endif %}"
+          class="flex flex-col gap-4">
+      {% csrf_token %}
+
+      <div>
+        <label class="uk-form-label" for="r-code">Room code</label>
+        {% if is_edit %}
+        <p id="r-code" class="uk-text-lead" style="font-weight:600">{{ room.code }}</p>
+        <p class="uk-text-small uk-text-muted">
+          The code is printed on the door and referenced by every schedule, so
+          it cannot be changed here.</p>
+        {% else %}
+        <input id="r-code" type="text" name="code" class="uk-input h-11"
+               value="{{ form.code|default:'' }}" maxlength="30" required
+               autocomplete="off" placeholder="R301">
+        <p class="uk-text-small uk-text-muted">
+          Stored in upper case. A code starting with V marks a virtual
+          (online-only) room.</p>
+        {% endif %}
+      </div>
+
+      <div>
+        <label class="uk-form-label" for="r-floor">Floor</label>
+        <select id="r-floor" name="floor" class="uk-select h-11" required>
+          <option value="">Select a floor...</option>
+          {% for f in floors %}
+          <option value="{{ f.id }}"
+            {% if form.floor %}{% if form.floor|add:"0" == f.id %}selected{% endif %}
+            {% elif is_edit and room.floor_id == f.id %}selected{% endif %}>
+            {{ f.building.code }} - {{ f.building.name }} - Floor {{ f.number }}</option>
+          {% empty %}
+          {% endfor %}
+        </select>
+        {% if not floors %}
+        <p class="uk-text-small uk-text-muted">
+          No floors exist yet. Import an offering sheet or add a building and
+          floor first.</p>
+        {% endif %}
+      </div>
+
+      <div class="grid gap-4 sm:grid-cols-2">
+        <div>
+          <label class="uk-form-label" for="r-name">Name <span class="uk-text-muted">(optional)</span></label>
+          <input id="r-name" type="text" name="name" class="uk-input h-11"
+                 maxlength="120" autocomplete="off"
+                 value="{% if form %}{{ form.name|default:'' }}{% else %}{{ room.name }}{% endif %}"
+                 placeholder="Lecture Hall">
+        </div>
+        <div>
+          <label class="uk-form-label" for="r-capacity">Capacity</label>
+          <input id="r-capacity" type="number" name="capacity" class="uk-input h-11"
+                 min="0" step="1" inputmode="numeric"
+                 value="{% if form %}{{ form.capacity|default:'' }}{% else %}{{ room.capacity|default:0 }}{% endif %}">
+          <p class="uk-text-small uk-text-muted">Seats. Leave 0 if unknown.</p>
+        </div>
+      </div>
+
+      <div class="flex items-center gap-3 pt-2">
+        <button type="submit" class="uk-btn uk-btn-primary h-11">
+          <uk-icon icon="{% if is_edit %}save{% else %}plus{% endif %}" class="size-4"></uk-icon>
+          {% if is_edit %}Save changes{% else %}Create room{% endif %}</button>
+        <a href="{% if is_edit %}/ifo/rooms/{{ room.code }}{% else %}/ifo/rooms{% endif %}"
+           class="uk-btn uk-btn-ghost h-11">Cancel</a>
+      </div>
+    </form>
+  </div>
+
+  {% if is_edit %}
+  <div class="uk-card uk-card-body mt-6">
+    <h2 class="uk-h4 mb-2">Scan credentials</h2>
+    <p class="uk-text-small uk-text-muted mb-3">
+      Saving this form leaves the QR token and the six-digit manual code
+      untouched, so the poster already taped to the door keeps working.</p>
+    <a href="/ifo/rooms/{{ room.code }}/poster" target="_blank"
+       class="uk-btn uk-btn-secondary uk-btn-sm">
+      <uk-icon icon="qr-code" class="size-4"></uk-icon> View QR poster</a>
+  </div>
+  {% endif %}
+</div>
+{% endblock %}

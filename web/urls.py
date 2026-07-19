@@ -51,7 +51,11 @@ urlpatterns = [
     # IFO Admin surfaces
     path("ifo/rooms", ifo.rooms_list, name="ifo_rooms"),
     path("ifo/rooms/board", ifo.rooms_board, name="ifo_rooms_board"),
+    # IFO-01b room CRUD. `new` MUST precede the <str:code> pattern below or the
+    # code converter swallows the literal and "new" resolves as a room code.
+    path("ifo/rooms/new", ifo.room_new, name="ifo_room_new"),
     path("ifo/rooms/<str:code>", ifo.room_detail, name="ifo_room_detail"),
+    path("ifo/rooms/<str:code>/edit", ifo.room_edit, name="ifo_room_edit"),
     path("ifo/rooms/<str:code>/panel", ifo.room_panel, name="ifo_room_panel"),
     path("ifo/rooms/<str:code>/poster", ifo.room_poster, name="ifo_room_poster"),
     path("ifo/rooms/<str:code>/qr.png", ifo.room_qr, name="ifo_room_qr"),

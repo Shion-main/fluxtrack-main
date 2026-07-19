@@ -8,6 +8,8 @@ from django.contrib.auth import get_user_model
 from django.contrib.auth.decorators import login_required
 from django.core.exceptions import PermissionDenied
 from django.core.files.storage import default_storage
+from django.db import transaction
+from django.db.models.deletion import ProtectedError
 from django.http import Http404, HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
@@ -15,7 +17,9 @@ from django.utils.dateparse import parse_date, parse_time
 from django.views.decorators.http import require_http_methods
 
 from accounts.models import Role
+from campus.codes import new_room_credentials
 from campus.models import Floor, Room
+from campus.services import room_delete_blockers
 from ops.models import AuditLog, WeeklyReport
 from ops.policy import get_policy
 from scheduling.models import (AcademicTerm, DayOfWeek, Modality, Schedule,
@@ -242,6 +246,188 @@ def room_qr(request, code):
 def room_poster(request, code):
     room = get_object_or_404(Room.objects.select_related("floor__building"), code=code)
     return render(request, "ifo/poster.html", {"room": room})
+
+
+# --- Room CRUD (IFO-01b) ----------------------------------------------------
+# Rooms used to be creatable only through the Django admin or the offering
+# importer, which meant a facilities officer needed a superuser account to add
+# the one room a typo left out. These three views are the non-admin surface.
+#
+# Two rules hold this section together and neither is negotiable:
+#
+#   1. Scan credentials are MINTED IN EXACTLY ONE PLACE — campus.codes
+#      (`new_room_credentials`). `Room.manual_code` is a six-digit value in a
+#      UNIQUE column, and minting it inline has already been observed producing
+#      a real `IntegrityError` in the importer. A second minter here would
+#      reintroduce that on a routine IFO action.
+#   2. A delete is REFUSED and NAMED, never cascaded and never soft-flagged
+#      (D-17). See `room_delete`.
+
+
+def _room_form_ctx(*, room=None, error=None, form=None):
+    """Choice data + sticky values for the room create/edit form.
+
+    Mirrors `_assignment_form_ctx`: the floor list is the identical
+    `select_related("building")` query, so the two forms present floors the
+    same way. `form` carries the operator's own submitted values back into a
+    400 re-render so a rejected form is corrected, not retyped.
+    """
+    floors = (Floor.objects.select_related("building")
+              .order_by("building__code", "number"))
+    return {"room": room, "floors": floors, "error": error,
+            "form": form or {}, "is_edit": room is not None}
+
+
+def _room_form_fields(request):
+    """Read the four posted room fields.
+
+    The code is uppercased here and nowhere else. `Room.code` sits in the
+    database's ordinary case-INSENSITIVE collation, so `r301` and `R301` are
+    already the same key to a UNIQUE index -- normalising on the way in means
+    the stored value matches the printed convention instead of whichever case
+    the operator happened to type first.
+    """
+    return {
+        "code": (request.POST.get("code") or "").strip().upper(),
+        "name": (request.POST.get("name") or "").strip(),
+        "floor": (request.POST.get("floor") or "").strip(),
+        "capacity": (request.POST.get("capacity") or "").strip(),
+    }
+
+
+def _room_field_errors(fields, *, editing=None):
+    """Validate the posted room fields; return an error string or None.
+
+    ORDERING IS DELIBERATE (CR-04, the same trap `assignment_create` documents
+    at its own ladder): FORMAT and pk-numericness are checked BEFORE anything
+    touches the ORM. A non-numeric floor pk reaches `Floor.objects.filter(pk=...)`
+    as an unhandled `ValidationError` (a 500), and a non-numeric capacity does
+    the same at INSERT time against a PositiveIntegerField. Both must be a
+    friendly 400 instead.
+
+    `editing` is the Room being edited, or None on create. Code identity is
+    only validated on create -- `room_edit` never rewrites the code, because
+    the code is what is printed on the door.
+    """
+    if editing is None:
+        if not fields["code"]:
+            return "Enter a room code."
+        if len(fields["code"]) > 30:
+            return "A room code is at most 30 characters."
+        # Case-insensitive: the column collation already treats R301/r301 as one
+        # key, so a near-duplicate is an operator error worth naming up front
+        # rather than surfacing as a UNIQUE violation.
+        if Room.objects.filter(code__iexact=fields["code"]).exists():
+            return f"Room {fields['code']} already exists."
+    if not fields["floor"].isdigit():
+        return "Select a floor."
+    # `.isdigit()` rejects "", "abc" and "-5" in one test, so it covers both the
+    # numeric and the non-negative half of the capacity rule.
+    if fields["capacity"] and not fields["capacity"].isdigit():
+        return "Capacity must be a whole number of seats (0 or more)."
+    if len(fields["name"]) > 120:
+        return "A room name is at most 120 characters."
+    return None
+
+
+@ifo_required
+@require_http_methods(["GET", "POST"])
+def room_new(request):
+    """IFO-01b: create a room from the console (GET form, POST create).
+
+    The new room is born SCANNABLE. `qr_token` and `manual_code` come from
+    `campus.codes.new_room_credentials()` -- the single minter -- so the room
+    can be postered and scanned the moment it exists, and so the six-digit
+    collision retry that module owns applies here too. Nothing is minted
+    inline in this view; see the section header above.
+
+    Invalid input re-renders the form at 400 with the submitted values intact,
+    never a 500 (T-07-11).
+    """
+    if request.method == "GET":
+        return render(request, "ifo/room_form.html", _room_form_ctx())
+
+    fields = _room_form_fields(request)
+    error = _room_field_errors(fields)
+    floor = None
+    if error is None:
+        floor = (Floor.objects.select_related("building")
+                 .filter(pk=fields["floor"]).first())
+        if floor is None:
+            error = "Select a floor."
+    if error:
+        return render(request, "ifo/room_form.html",
+                      _room_form_ctx(error=error, form=fields), status=400)
+
+    qr_token, manual_code = new_room_credentials()
+    room = Room.objects.create(
+        code=fields["code"], name=fields["name"], floor=floor,
+        capacity=int(fields["capacity"] or 0),
+        qr_token=qr_token, manual_code=manual_code)
+
+    AuditLog.objects.create(
+        actor=request.user, event_type="room.created",
+        target_type="room", target_id=str(room.pk),
+        payload={"code": room.code, "name": room.name, "floor": floor.pk,
+                 "floor_label": str(floor), "capacity": room.capacity})
+    return redirect("ifo_room_detail", code=room.code)
+
+
+@ifo_required
+@require_http_methods(["GET", "POST"])
+def room_edit(request, code):
+    """IFO-01b: edit a room's name, capacity and floor (GET form, POST update).
+
+    EDITING NEVER TOUCHES `qr_token` OR `manual_code`. That is the whole
+    contract of this view. A room's credentials are printed on a poster taped
+    to its door; silently reminting them because someone corrected a seat count
+    would kill that poster with no warning and no reprint prompt, and the
+    failure would only surface when a faculty member could not check in.
+    Rotating a room's codes is a separate, deliberate, confirmed act that lands
+    the operator on the reprint page (IFO-02, plan 07-04).
+
+    The room CODE is likewise immutable here -- it is the identifier printed on
+    the door and referenced by every schedule. Renaming a room means creating
+    the new one and deleting the old, which the refusal in `room_delete` will
+    correctly stop if the old code carries history.
+    """
+    room = get_object_or_404(
+        Room.objects.select_related("floor__building"), code=code)
+    if request.method == "GET":
+        return render(request, "ifo/room_form.html", _room_form_ctx(room=room))
+
+    fields = _room_form_fields(request)
+    error = _room_field_errors(fields, editing=room)
+    floor = None
+    if error is None:
+        floor = (Floor.objects.select_related("building")
+                 .filter(pk=fields["floor"]).first())
+        if floor is None:
+            error = "Select a floor."
+    if error:
+        return render(request, "ifo/room_form.html",
+                      _room_form_ctx(room=room, error=error, form=fields),
+                      status=400)
+
+    # Before-values are captured for the audit payload: "capacity changed" is
+    # not an answerable question later unless the previous value is recorded.
+    before = {"name": room.name, "capacity": room.capacity,
+              "floor": room.floor_id}
+    room.name = fields["name"]
+    room.capacity = int(fields["capacity"] or 0)
+    room.floor = floor
+    room.save(update_fields=["name", "capacity", "floor"])
+
+    changed = {f: before[f] for f, now in
+               (("name", room.name), ("capacity", room.capacity),
+                ("floor", room.floor_id))
+               if before[f] != now}
+    AuditLog.objects.create(
+        actor=request.user, event_type="room.updated",
+        target_type="room", target_id=str(room.pk),
+        payload={"code": room.code, "changed": sorted(changed),
+                 "before": changed})
+    return redirect("ifo_room_detail", code=room.code)
 
 
 # --- Duty assignments (IFO-06) ---------------------------------------------
