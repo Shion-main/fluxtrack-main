@@ -31,7 +31,13 @@ from decimal import ROUND_HALF_UP, Decimal
 from django.db.models import Case, CharField, Count, F, Q, When
 
 from campus.models import Room
-from scheduling.models import Schedule, ScheduleStatus, Session, SessionStatus
+from scheduling.models import (
+    DayOfWeek,
+    Schedule,
+    ScheduleStatus,
+    Session,
+    SessionStatus,
+)
 from verification.models import ValidationAction
 
 logger = logging.getLogger(__name__)
@@ -669,6 +675,230 @@ def room_utilization(*, start, end, term, as_of=None):
         overrun_sessions=overrun_sessions,
         early_arrival_sessions=early_arrival_sessions,
     )
+
+
+@dataclass
+class HeatCell:
+    """One (day, block) cell of the campus utilization grid (IFO-09, tier T2).
+
+    ``timetabled`` is the D-10 distinction and is NOT cosmetic: a cell the term
+    never timetables has NO capacity, which is a different fact from a cell that
+    has capacity and went unused. Conflating the two is the exact mistake D-10
+    exists to correct, so the renderer must show a "not timetabled" state for
+    ``timetabled=False`` rather than a misleading 0%.
+
+    ``room_count`` is the number of DISTINCT physical rooms that actually hosted a
+    session in this cell -- the occupancy width of the slot, against the
+    ``physical_rooms`` denominator.
+    """
+    day: int
+    used_hours: Decimal
+    booked_hours: Decimal
+    available_hours: Decimal
+    utilization_pct: int
+    session_count: int
+    room_count: int
+    timetabled: bool
+
+
+@dataclass
+class HeatRow:
+    """One ladder rung of the heat grid: a block and its cells, one per DayOfWeek."""
+    block: CampusBlock
+    cells: list = field(default_factory=list)
+
+
+@dataclass
+class BlockLoad:
+    """One block's campus-wide load over the range, for the saturation ranking."""
+    block: CampusBlock
+    used_hours: Decimal
+    booked_hours: Decimal
+    available_hours: Decimal
+    utilization_pct: int
+    session_count: int
+    peak_day: object = None      # DayOfWeek value, or None when wholly unused
+
+
+def _weekday_occurrences(start, end, as_of=None):
+    """{weekday: how many times it falls in the range}, by walking the dates.
+
+    Walked rather than divided: an arbitrary range does NOT contain equal numbers
+    of each weekday, so ``span // 7`` would silently misprice every cell whose
+    weekday happens to fall on the ragged edge of the window.
+    """
+    last_day = min(end, as_of) if as_of is not None else end
+    counts = {}
+    day = start
+    while day <= last_day:
+        counts[day.weekday()] = counts.get(day.weekday(), 0) + 1
+        day += datetime.timedelta(days=1)
+    return counts
+
+
+def _distribute(total, weights):
+    """Split ``total`` across ``weights`` proportionally, losing nothing.
+
+    Integer floor per part with the remainder handed to the last part, so the
+    parts sum EXACTLY to ``total``. That exactness is what makes the grid
+    reconcile with :func:`room_utilization` instead of drifting by a few seconds
+    per multi-block session.
+    """
+    n = len(weights)
+    if n == 0:
+        return []
+    if n == 1:
+        return [total]
+    span = sum(weights) or 1
+    parts = [total * w // span for w in weights]
+    parts[-1] += total - sum(parts)
+    return parts
+
+
+def room_heat_grid(*, start, end, term, as_of=None):
+    """IFO-09 / T2: a day-by-block grid of campus room utilization.
+
+    Answers WHERE and WHEN capacity is idle, which is what makes T1's single
+    percentage actionable: a facilities office cannot reclaim "142 room-hours", it
+    can reclaim "Tuesday 4:00 PM, which runs at 18%".
+
+    Cells aggregate **Sessions**, never Schedules (D-03). ``web.room_state.room_timetable``
+    was deliberately NOT reused: it is per-room and Schedule-based, so its cells are
+    BOOKINGS, and a booking count is precisely the mistake this phase exists to
+    correct. What IS shared with the printed timetable is the derived ladder
+    (:func:`campus_block_ladder`), so the two grids can never disagree about what a
+    slot is. Do not "simplify" this onto ``room_timetable``.
+
+    Returns ``None`` when the ladder is None (no term, or a term with no ACTIVE
+    schedules), matching the ladder's own contract and ``room_timetable``'s -- every
+    caller already handles a None ladder, so this adds no new burden.
+
+    Otherwise: one :class:`HeatRow` per ladder rung, each carrying one
+    :class:`HeatCell` per ``DayOfWeek`` in ``DayOfWeek.choices`` order.
+
+    **Reconciliation property.** A session spanning two blocks is distributed
+    across them PROPORTIONALLY to block duration, not replicated into each, so the
+    grid's summed used hours equal ``room_utilization(...).used_hours`` over the
+    same window (up to per-cell Decimal quantization). Plan 06 renders the T1 card
+    and this grid on one page; without that property the two would visibly
+    disagree and a reader would have no way to tell which was lying.
+
+    **Denominator (D-10).** A cell has capacity only if the term actually
+    timetables that (day, block) pair. A cell that is not timetabled carries zero
+    available hours and ``timetabled=False``; it is NOT the same thing as an idle
+    slot and must not render as 0%.
+    """
+    blocks = campus_block_ladder(term)
+    if not blocks:
+        return None
+
+    cells = timetabled_cells(term)
+    timetabled_pairs = {(c.day, c.start) for c in cells}
+    occurrences = _weekday_occurrences(start, end, as_of=as_of)
+    physical_rooms = _physical_rooms().count()
+    days = [int(value) for value, _label in DayOfWeek.choices]
+    block_index = {b.start: i for i, b in enumerate(blocks)}
+
+    # Accumulators keyed (block_index, day). Room ids are held in a set bounded by
+    # the physical room count -- never turned into a pk__in query (MSSQL 2100).
+    used = {}
+    booked = {}
+    sessions = {}
+    rooms_seen = {}
+
+    qs = _exclude_virtual(_scoped_sessions(start=start, end=end, as_of=as_of))
+    rows = qs.values_list(
+        "schedule__day_of_week", "schedule__start_time", "schedule__end_time",
+        "room_id", "status", "scheduled_start", "scheduled_end",
+        "actual_start", "actual_end",
+    ).iterator()
+    for (day, sched_start_t, sched_end_t, room_id, status,
+         sched_start, sched_end, act_start, act_end) in rows:
+        booked_s, used_s, running = _session_contribution(
+            status, sched_start, sched_end, act_start, act_end)
+        if running:
+            continue
+        # Half-open occupancy, mirroring web/room_state.py:131: a session occupies
+        # every rung whose start falls inside its wall-clock window. That is what
+        # makes a double-length class fill two rows with no rowspan bookkeeping.
+        occupied = [
+            b for b in blocks
+            if sched_start_t <= b.start < sched_end_t
+        ]
+        if not occupied:
+            continue
+        weights = [b.duration_seconds or 1 for b in occupied]
+        for b, part_booked, part_used in zip(
+                occupied, _distribute(booked_s, weights),
+                _distribute(used_s, weights)):
+            key = (block_index[b.start], day)
+            booked[key] = booked.get(key, 0) + part_booked
+            used[key] = used.get(key, 0) + part_used
+            sessions[key] = sessions.get(key, 0) + 1
+            rooms_seen.setdefault(key, set()).add(room_id)
+
+    grid = []
+    for i, block in enumerate(blocks):
+        row_cells = []
+        for day in days:
+            key = (i, day)
+            is_timetabled = (day, block.start) in timetabled_pairs
+            available_s = (
+                physical_rooms * occurrences.get(day, 0) * block.duration_seconds
+                if is_timetabled else 0
+            )
+            used_s = used.get(key, 0)
+            row_cells.append(HeatCell(
+                day=day,
+                used_hours=_hours(used_s),
+                booked_hours=_hours(booked.get(key, 0)),
+                available_hours=_hours(available_s),
+                utilization_pct=_hours_pct(used_s, available_s),
+                session_count=sessions.get(key, 0),
+                room_count=len(rooms_seen.get(key, ())),
+                timetabled=is_timetabled,
+            ))
+        grid.append(HeatRow(block=block, cells=row_cells))
+    return grid
+
+
+def block_saturation(*, start, end, term, as_of=None):
+    """IFO-09 / T2: the ladder ranked by utilization, most-saturated first.
+
+    The same data as :func:`room_heat_grid`, reduced along the day axis. It is
+    derived FROM that grid rather than re-queried, deliberately: two independent
+    queries computing the same figure will drift, and the grid's reconciliation
+    property is what lets one page show a grid and a ranking that agree.
+
+    Returns ``[]`` -- not None -- when the ladder is None. Plan 06 renders this as
+    a table, and an empty table is a truthful empty state, whereas a None forces
+    every caller into a branch that has nothing useful to say.
+
+    Ordered by ``utilization_pct`` DESCENDING, then by block start ascending, so
+    ties are stable: a table whose row order changes between two identical
+    requests reads as a bug.
+    """
+    grid = room_heat_grid(start=start, end=end, term=term, as_of=as_of)
+    if not grid:
+        return []
+
+    loads = []
+    for row in grid:
+        used = sum((c.used_hours for c in row.cells), Decimal("0"))
+        booked = sum((c.booked_hours for c in row.cells), Decimal("0"))
+        available = sum((c.available_hours for c in row.cells), Decimal("0"))
+        busiest = max(row.cells, key=lambda c: c.used_hours)
+        loads.append(BlockLoad(
+            block=row.block,
+            used_hours=used,
+            booked_hours=booked,
+            available_hours=available,
+            utilization_pct=_hours_pct(used, available),
+            session_count=sum(c.session_count for c in row.cells),
+            peak_day=busiest.day if busiest.used_hours > 0 else None,
+        ))
+    loads.sort(key=lambda l: (-l.utilization_pct, l.block.start))
+    return loads
 
 
 def safe_card(fn, *args, **kwargs):
