@@ -19,6 +19,8 @@ DB-BACKED (TestCase) classes, over make_room_utilization_fixture:
   ScopeTests              -- ARCHIVED schedules and the as_of clamp.
   HeatGridTests           -- T2 day x block grid; reconciliation with the T1 card.
   BlockSaturationTests    -- the same grid reduced to a deterministic ranking.
+  RoomBreakdownTests      -- per-room load over the whole room universe.
+  RollupTests             -- room -> floor -> building -> campus reconciliation.
 
 Django test runner (not pytest); reference module constants (SessionStatus,
 DayOfWeek, ScheduleStatus, HELD_STATUSES), never a bare status string. ASCII-only.
@@ -48,7 +50,9 @@ from scheduling.reporting import (
     _session_contribution,
     _span_seconds,
     block_saturation,
+    building_floor_rollup,
     campus_block_ladder,
+    room_breakdown,
     room_heat_grid,
     room_utilization,
     safe_card,
@@ -941,6 +945,174 @@ class BlockSaturationTests(GridFixtureTestCase):
         self.assertIsNone(row.peak_day)
 
 
+class BreakdownFixtureTestCase(RoomFixtureTestCase):
+    """Shared helpers for the per-room and rollup classes."""
+
+    # The fixture's per-room denominator, in minutes, added up by hand from its
+    # own documented cell set: MON (75+75+90) + WED (75+75+90) + SAT (75).
+    PER_ROOM_M = 555
+
+    def _breakdown(self, **kwargs):
+        kwargs.setdefault("start", self.f.week_start)
+        kwargs.setdefault("end", self.f.week_end)
+        return room_breakdown(term=self.f.term, **kwargs)
+
+    def _rollup(self, **kwargs):
+        kwargs.setdefault("start", self.f.week_start)
+        kwargs.setdefault("end", self.f.week_end)
+        return building_floor_rollup(term=self.f.term, **kwargs)
+
+    def _tolerance(self, rows):
+        """The quantization bound: each row's hours is quantized to 0.1."""
+        return Decimal("0.05") * rows
+
+    def _spare_room(self, code="RUTIL-SPARE"):
+        """A physical room in the fixture's first building that hosts NOTHING."""
+        return Room.objects.create(
+            floor=self.f.floors[0], code=code, capacity=30,
+            qr_token=f"rutil-qr-{code}", manual_code=code[-6:],
+        )
+
+
+class RoomBreakdownTests(BreakdownFixtureTestCase):
+    """T2: one row per PHYSICAL room, including the rooms that hosted nothing."""
+
+    def test_row_count_equals_the_physical_room_count(self):
+        self.assertEqual(len(self._breakdown()), _physical_rooms().count())
+
+    def test_a_room_that_hosted_nothing_is_present_and_leads_the_ranking(self):
+        """The regression guard against grouping from the session side.
+
+        A never-used room produces no session group, so a session-side
+        implementation drops it entirely -- and it is the single most useful row
+        in a least-used ranking.
+        """
+        spare = self._spare_room()
+        rows = self._breakdown()
+        row = next(r for r in rows if r.room_id == spare.id)
+        self.assertEqual(row.used_hours, _hours(0))
+        self.assertEqual(row.session_count, 0)
+        self.assertEqual(row.utilization_pct, 0)
+        # It still has capacity -- an empty room is idle, not weightless.
+        self.assertEqual(row.available_hours, self._hours_m(self.PER_ROOM_M))
+        self.assertEqual(rows[0].utilization_pct, 0)
+
+    def test_the_virtual_room_appears_in_no_row(self):
+        codes = {r.code for r in self._breakdown()}
+        self.assertNotIn(self.f.vroom.code, codes)
+        self.assertEqual(len(codes), self.PHYSICAL_ROOMS)
+
+    def test_summed_used_hours_reconcile_with_the_campus_card(self):
+        rows = self._breakdown()
+        self.assertEqual(
+            _hours(sum(r.used_seconds for r in rows)), self._util().used_hours)
+        self.assertEqual(
+            _hours(sum(r.booked_seconds for r in rows)), self._util().booked_hours)
+        self.assertEqual(
+            _hours(sum(r.wasted_seconds for r in rows)), self._util().wasted_hours)
+
+    def test_every_room_shares_the_same_derived_denominator(self):
+        for row in self._breakdown():
+            self.assertEqual(
+                row.available_hours, self._hours_m(self.PER_ROOM_M))
+
+    def test_rooms_at_equal_utilization_order_by_code(self):
+        a = self._spare_room("RUTIL-SPARE-B")
+        b = self._spare_room("RUTIL-SPARE-A")
+        rows = [r for r in self._breakdown() if r.room_id in (a.id, b.id)]
+        self.assertEqual([r.code for r in rows], ["RUTIL-SPARE-A", "RUTIL-SPARE-B"])
+
+    def test_the_ranking_is_utilization_ascending(self):
+        pcts = [r.utilization_pct for r in self._breakdown()]
+        self.assertEqual(pcts, sorted(pcts))
+
+    def test_an_absent_session_is_counted_on_its_own_room(self):
+        row = next(
+            r for r in self._breakdown() if r.room_id == self.f.s_absent.room_id)
+        self.assertEqual(row.absent_sessions, 1)
+        self.assertEqual(row.used_hours, _hours(0))
+        self.assertEqual(row.booked_hours, self._hours_m(75))
+        self.assertEqual(row.wasted_hours, self._hours_m(75))
+
+    def test_capacity_is_carried_but_nothing_is_derived_from_it(self):
+        """T3 seat utilization is deferred; no seat figure may land here quietly."""
+        row = self._breakdown()[0]
+        self.assertEqual(row.capacity, Room.objects.get(pk=row.room_id).capacity)
+        names = set(vars(row))
+        for banned in ("seat", "enrol", "enroll", "occupancy_rate"):
+            self.assertFalse(
+                [n for n in names if banned in n],
+                f"RoomLoad gained a {banned}* field; T3 is deferred (D-CONTEXT)",
+            )
+
+
+class RollupTests(BreakdownFixtureTestCase):
+    """Room -> floor -> building -> campus, reconciling at every level."""
+
+    def _rows(self, level):
+        return [r for r in self._rollup() if r.level == level]
+
+    def test_one_row_per_building_and_one_per_floor(self):
+        self.assertEqual(len(self._rows("building")), len(self.f.buildings))
+        self.assertEqual(len(self._rows("floor")), len(self.f.floors))
+
+    def test_two_buildings_third_floors_do_not_merge(self):
+        """Floor.unique_together is (building, number): key on the PAIR."""
+        floors = self._rows("floor")
+        numbers = [f.floor_number for f in floors]
+        self.assertEqual(sorted(numbers), [1, 1, 2, 2])
+        self.assertEqual(len({(f.building_code, f.floor_number) for f in floors}), 4)
+        for f in floors:
+            self.assertIn(f.building_code, f.label)
+
+    def test_each_buildings_used_hours_equal_the_sum_of_its_floors(self):
+        for b in self._rows("building"):
+            floors = [f for f in self._rows("floor")
+                      if f.building_code == b.building_code]
+            total = sum((f.used_hours for f in floors), Decimal("0"))
+            self.assertLessEqual(
+                abs(b.used_hours - total), self._tolerance(len(floors)))
+            self.assertEqual(b.room_count, sum(f.room_count for f in floors))
+
+    def test_the_campus_sum_of_buildings_equals_the_card(self):
+        buildings = self._rows("building")
+        total = sum((b.used_hours for b in buildings), Decimal("0"))
+        self.assertLessEqual(
+            abs(total - self._util().used_hours), self._tolerance(len(buildings)))
+
+    def test_a_scope_is_judged_against_its_own_room_count(self):
+        """A two-room floor is not measured against campus-wide capacity."""
+        for row in self._rollup():
+            self.assertEqual(
+                row.available_hours,
+                self._hours_m(row.room_count * self.PER_ROOM_M))
+
+    def test_a_building_with_no_sessions_reports_zero_not_a_crash(self):
+        building = Building.objects.create(name="Empty Hall", code="RUTIL-BE")
+        floor = Floor.objects.create(building=building, number=1)
+        Room.objects.create(
+            floor=floor, code="RUTIL-BE-1", capacity=10,
+            qr_token="rutil-qr-be1", manual_code="RBE001",
+        )
+        row = next(
+            r for r in self._rows("building") if r.building_code == "RUTIL-BE")
+        self.assertEqual(row.used_hours, _hours(0))
+        self.assertEqual(row.utilization_pct, 0)
+        self.assertEqual(row.room_count, 1)
+
+    def test_floors_follow_their_building_in_a_stable_flat_order(self):
+        rows = self._rollup()
+        current = None
+        seen = []
+        for row in rows:
+            if row.level == "building":
+                current = row.building_code
+                seen.append(current)
+            else:
+                self.assertEqual(row.building_code, current)
+        self.assertEqual(seen, sorted(seen))
+
+
 class RoomCardIsolationTests(SimpleTestCase):
     """D-05: a raising room aggregate degrades to a message, never a 500.
 
@@ -1001,6 +1173,14 @@ class RoomCardIsolationTests(SimpleTestCase):
 #   print('grid used', sum(c.used_hours for r in g for c in r.cells))
 #   print('most saturated', [(str(b.block.start), b.utilization_pct) for b in s[:3]])
 #   print('least saturated', [(str(b.block.start), b.utilization_pct) for b in s[-3:]])
+#   rb = room_breakdown(start=start, end=end, term=t, as_of=today)
+#   rr = building_floor_rollup(start=start, end=end, term=t, as_of=today)
+#   print('rooms', len(rb), '| zero-session', sum(1 for r in rb if r.session_count == 0))
+#   print('least used', [(r.code, r.utilization_pct) for r in rb[:5]])
+#   print('most used', [(r.code, r.utilization_pct) for r in rb[-3:]])
+#   for r in rr:
+#       if r.level == 'building':
+#           print('BLD', r.building_code, r.room_count, r.utilization_pct, r.used_hours)
 #   "
 #
 # The week is derived from `today` rather than hardcoded so the recipe keeps
@@ -1049,6 +1229,25 @@ class RoomCardIsolationTests(SimpleTestCase):
 #    teaches every rung on every weekday, which no real timetable does; equality
 #    means the D-10 cell gate has been bypassed and Sunday has silently bought a
 #    full ladder of capacity. Observed: 67 timetabled of 77 cells.
+#
+# 8. The per-building rollup must sum to the campus figure. Observed on the
+#    current seed: ACAD 2707.9 h used across 71 rooms at 46%, and ADMIN, GYM, IT
+#    and UNASSIGNED at 0.0 h across their 54 rooms.
+#
+#    Those four zeroes were expected to be a red flag (V-prefixed rooms, or
+#    archived sessions) and they are NOT: MMCM only timetables classes in ACAD.
+#    The other 54 physical rooms are offices, a gym and server rooms. They sit in
+#    the campus denominator under D-01, which is why the campus rate (26%) is so
+#    much lower than the teaching building's (46%). That gap is the honest answer
+#    to a question nobody has asked yet -- whether the denominator should be
+#    "physical rooms" or "physical TEACHING rooms" -- and it is NOT this phase's
+#    to decide. Do not silently narrow the denominator to make the number nicer.
+#
+# 9. Some ROOMS exceed 100%. That is real and must not be clamped: it means the
+#    room is double-booked. Observed: R116 at 131%, hosting ECE121L 07:00-10:45
+#    across two lecture slots the same morning. A room over 100% is a scheduling
+#    conflict worth surfacing. A BUILDING or FLOOR over 100% would be a bug --
+#    conflicts are local, and a scope averages them away.
 #
 # These are OBSERVATIONS to reason about, not assertions to encode. The dataset is
 # regenerated with a different seed and any test pinning a specific seeded figure
