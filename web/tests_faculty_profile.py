@@ -248,6 +248,20 @@ class ProfilePageTests(_MediaTempMixin, TestCase):
         self.assertNotIn("/notifications/mute", body)
         self.assertNotIn('name="category"', body)
 
+    def test_page_renders_the_navy_shell_without_the_franken_header(self):
+        """base.html gates the navy shell by URL NAME, not by template.
+
+        A .ft-* page whose url_name is missing from that exclusion list renders
+        the Franken admin header ON TOP of its own navy header -- two stacked
+        headers, and nothing in the template hints at it. This asserts the
+        registration rather than trusting it (found by the concurrent 07-11 work
+        on guard_room, which shipped double-headed for exactly this reason).
+        """
+        body = self.client.get(PROFILE_URL).content.decode()
+        self.assertIn("ft-top", body)                        # our own header
+        self.assertNotIn("uk-label uk-label-secondary", body)  # the Franken one
+        self.assertEqual(body.count("<header"), 1)
+
     def test_page_shows_a_placeholder_when_there_is_no_photo(self):
         body = self.client.get(PROFILE_URL).content.decode()
         self.assertIn("No photo yet", body)
