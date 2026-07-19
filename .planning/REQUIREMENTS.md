@@ -82,10 +82,10 @@ roadmap does NOT create phases for them.
 ### Guard (GRD)
 
 - [x] **GRD-01**: A Guard sees a live read-only room-status monitor for assigned floor(s), polled
-- [ ] **GRD-02**: A Guard can view each room's schedule (reusing the IFO-11 per-room view, guard-gated)
+- [x] **GRD-02**: A Guard can view each room's schedule (reusing the IFO-11 per-room view, guard-gated)
 - [x] **GRD-03**: A Guard can locate a faculty member by name — current room/building/floor, course, end time, or "Online — not on campus" / "Not in a class" + next class
-- [ ] **GRD-04**: A Guard receives debounced web-push alerts for floor activity
-- [ ] **GRD-05**: A Guard has no write access anywhere
+- [x] **GRD-04**: A Guard receives debounced web-push alerts for floor activity
+- [x] **GRD-05**: A Guard has no write access anywhere
 
 ### HR (HR)
 
@@ -95,18 +95,18 @@ roadmap does NOT create phases for them.
 
 ### IFO — remaining (IFO)
 
-- [ ] **IFO-01b**: IFO can create/edit/delete rooms from a dedicated (non-admin) UI, with the existing poster/QR actions
-- [ ] **IFO-02**: IFO can rotate a room's QR token + six-digit code, audit-logged, invalidating old posters
-- [ ] **IFO-03b**: IFO can import schedules by CSV upload with validation and conflict reporting (surfacing the existing importer)
-- [ ] **IFO-05**: IFO can create/cancel ad-hoc room bookings, conflict-checked
-- [ ] **IFO-08**: IFO can manually release a held room and resolve room-conflict notifications
+- [x] **IFO-01b**: IFO can create/edit/delete rooms from a dedicated (non-admin) UI, with the existing poster/QR actions
+- [x] **IFO-02**: IFO can rotate a room's QR token + six-digit code, audit-logged, invalidating old posters
+- [x] **IFO-03b**: IFO can import schedules by CSV upload with validation and conflict reporting (surfacing the existing importer)
+- [x] **IFO-05**: IFO can create/cancel ad-hoc room bookings, conflict-checked
+- [x] **IFO-08**: IFO can manually release a held room and resolve room-conflict notifications
 - [x] **IFO-09**: IFO sees a dashboard of summary cards over a selectable range with faculty-scorecard drill-down (shared RPT aggregates)
 
 ### Faculty — remaining (FAC)
 
-- [ ] **FAC-08**: A faculty member starts an Online session via "Verify & Start" with a valid MS Teams link (no QR); Blended still checks in by QR
-- [ ] **FAC-11**: A faculty member can view their own attendance history including Checker flags, read-only
-- [ ] **FAC-12**: A faculty member can manage their profile (photo used for Checker identity matching) and notification preferences
+- [x] **FAC-08**: A faculty member starts an Online session via "Verify & Start" with a valid MS Teams link (no QR); Blended still checks in by QR
+- [x] **FAC-11**: A faculty member can view their own attendance history including Checker flags, read-only
+- [x] **FAC-12**: A faculty member can manage their profile (photo used for Checker identity matching) and notification preferences
 
 ### System Admin (SYS)
 
@@ -185,18 +185,18 @@ phase (see ROADMAP.md). Status values: Pending / In progress / Complete.
 | HR-02 | Phase 6 | Complete |
 | HR-03 | Phase 6 | Complete |
 | GRD-01 | Phase 7 | Done (shipped out-of-band 2026-07-18) |
-| GRD-02 | Phase 7 | Pending |
+| GRD-02 | Phase 7 | Done |
 | GRD-03 | Phase 7 | Done (shipped out-of-band 2026-07-18) |
-| GRD-04 | Phase 7 | Pending |
-| GRD-05 | Phase 7 | Pending |
-| IFO-01b | Phase 7 | Pending |
-| IFO-02 | Phase 7 | Pending |
-| IFO-03b | Phase 7 | Pending |
-| IFO-05 | Phase 7 | Pending |
-| IFO-08 | Phase 7 | Pending |
-| FAC-08 | Phase 7 | Pending |
-| FAC-11 | Phase 7 | Pending |
-| FAC-12 | Phase 7 | Pending |
+| GRD-04 | Phase 7 | Done |
+| GRD-05 | Phase 7 | Done |
+| IFO-01b | Phase 7 | Done |
+| IFO-02 | Phase 7 | Done |
+| IFO-03b | Phase 7 | Done |
+| IFO-05 | Phase 7 | Done |
+| IFO-08 | Phase 7 | Done |
+| FAC-08 | Phase 7 | Done |
+| FAC-11 | Phase 7 | Done |
+| FAC-12 | Phase 7 | Done |
 | SYS-04 | Phase 7 | Done (shipped out-of-band 2026-07-18) |
 | AUTH-01 | Phase 8 | Pending |
 | AUTH-03 | Phase 8 | Pending |

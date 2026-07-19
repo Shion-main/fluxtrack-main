@@ -2,19 +2,19 @@
 gsd_state_version: 1.0
 milestone: v1.2
 milestone_name: "**Goal**: Faculty can request a lead-time-gated modality shift that a Dean approves, with rooms auto-released or auto-assigned, and the SRS brought back in sync with reality."
-current_phase: 06
-current_phase_name: Reporting Engine & Reporting Surfaces
+current_phase: 07
+current_phase_name: Remaining Operational Surfaces
 status: complete
-stopped_at: Phase 07 context gathered
-last_updated: "2026-07-18T03:23:15.992Z"
-last_activity: 2026-07-15
-last_activity_desc: 06-07 HR attendance surface (HR-01/02/03) complete
+stopped_at: n/a — phase 07 executed end-to-end 2026-07-19
+last_updated: "2026-07-19"
+last_activity: 2026-07-19
+last_activity_desc: Phase 07 complete (12/12 plans) — all 11 open requirements closed
 progress:
   total_phases: 11
-  completed_phases: 8
-  total_plans: 47
-  completed_plans: 46
-  percent: 73
+  completed_phases: 9
+  total_plans: 59
+  completed_plans: 58
+  percent: 82
 ---
 
 # Project State
@@ -28,15 +28,17 @@ See: .planning/PROJECT.md (updated 2026-07-02)
 
 ## Current Position
 
-Phase: 06 (Reporting Engine & Reporting Surfaces) — ALL PLANS COMPLETE (7/7)
-Plan: 06-07 COMPLETE (7/7) — HR session-level attendance surface (HR-01/02/03): web/hr.py hr_required + attendance() list + attendance_csv() streaming export; cross-department read-only (GET-only, POST 405); four independent filters (faculty/dept/date/term) + search, invalid date -> friendly notice not 500; is_verified via Exists() annotation so no subquery inside the .iterator() generator (MSSQL cursor-safe); reuses csv_safe for injection neutralization; 14 tests green
-Next: Phase 06 complete — verify-work / next phase
-Status: Phase 06 complete
-Last activity: 2026-07-15 — 06-07 HR attendance surface (HR-01/02/03) complete
+Phase: 07 (Remaining Operational Surfaces) — ALL PLANS COMPLETE (12/12)
+Next: Phase 08 (Auth Cutover & AWS Deployment). Two inserted items queued first:
+Phase 06.1 room utilization / IFO-09, and the Phase 07 follow-ups below.
+Status: Phase 07 complete — suite 790 tests, 3 pre-existing failures, 0 errors
+Last activity: 2026-07-19 — Phase 07 executed end-to-end
 
-**Phase 4** (modality-shift-approval-srs-v1-2): PLANNED ✓ — 8 plans across 6 waves, verified (plan-checker passed). Ready: `/gsd-execute-phase 04`. Runs parallel to 03.1 per ROADMAP.
-
-Progress: [██████████] 100% (Phase 05)
+**Suite baseline moved 515 -> 790 tests across this phase; the failure set never
+changed.** The only failures are the 3 long-standing dev-login/home-redirect
+ones (`DevLoginCoexistTests`, `DevLoginCuratedDemoTests`,
+`HomeSurfaceNavTests.test_faculty_home_links_modality_request`), which predate
+Phase 07 and remain out of scope.
 
 ## Performance Metrics
 
@@ -210,6 +212,35 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-07-18T03:23:15.978Z
-Stopped at: Phase 07 context gathered
+Last session: 2026-07-18T06:10:59.520Z
+Stopped at: context exhaustion at 75% (2026-07-18)
 Resume file: .planning/phases/07-remaining-operational-surfaces/07-CONTEXT.md
+
+## Phase 07 Follow-ups (deliberate scope calls, not defects)
+
+Recorded so they are decisions on record rather than gaps someone rediscovers:
+
+1. **Merged online siblings are not propagated on faculty self-start (FAC-08).**
+   `scheduling.merge.propagate_merged_present` fills co-scheduled siblings on a
+   room check-in; a self-start does not, because 07-09 scoped the write to
+   `update_fields` on one session and `web/scan.py` was out of bounds. A faculty
+   member teaching two merged online sections must start each. Inconsistent with
+   the 04.2 co-scheduled work, which exists so one action covers siblings.
+2. **No booking override control (IFO-05).** D-09's "absent an explicit
+   override" was read as describing the default refusal, not commissioning an
+   override. Building one would let the IFO console manufacture exactly the
+   contradictory occupancy JOB-02c detects and IFO-08 now cleans up. Recorded as
+   threat T-07-27, disposition `accept`.
+3. **Manual/browser UAT not performed for most surfaces.** Executors ran
+   automated suites but did not drive a browser (concurrent agents contended for
+   the dev server and DB). Every plan has automated equivalents, but the visual
+   result of the new IFO console pages, the Guard room page, the faculty photo
+   page and the import upload flow is unverified by eye. Run `/gsd-verify-work`.
+4. **`campus/codes.py` covers `manual_code` only.** `qr_token` uses
+   `token_urlsafe(24)` (192 bits) so collision is negligible and it deliberately
+   does not retry.
+5. **D-19's original rationale was wrong and is corrected in 07-CONTEXT.md.**
+   The PROTECT migration did not create a DB-level constraint — Django encodes
+   `on_delete` in the Python Collector, not DDL. It closed the ORM path. The
+   `room_delete_blockers` probe therefore carries more of the guarantee than
+   D-19 credited, which is why D-20's fifth relation matters.
