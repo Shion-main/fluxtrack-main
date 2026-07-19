@@ -6,7 +6,20 @@ from django.db.models import Q
 
 class Booking(models.Model):
     """Ad-hoc room booking, conflict-checked against sessions (IFO-05)."""
-    room = models.ForeignKey("campus.Room", on_delete=models.CASCADE, related_name="bookings")
+    # PROTECT, not CASCADE (D-19). Every other FK targeting campus.Room is
+    # already PROTECT — scheduling.Schedule.room, scheduling.Session.room and
+    # verification.CheckerValidation.room — and D-17 requires a room delete to
+    # be REFUSED when anything references it. While this column was CASCADE,
+    # D-17's Booking blocker was unenforceable: a room whose only references
+    # were bookings deleted cleanly and took its booking history with it, so
+    # the refusal was a view-level courtesy that anything bypassing the view
+    # (admin, shell, a future caller) silently destroyed. Under PROTECT the
+    # database itself is the guarantee.
+    #
+    # This deliberately changes behaviour for the existing Django-admin Booking
+    # surface too: deleting a room from admin now raises ProtectedError instead
+    # of cascading. That is the intended effect of D-19, not a regression.
+    room = models.ForeignKey("campus.Room", on_delete=models.PROTECT, related_name="bookings")
     created_by = models.ForeignKey(
         settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, related_name="bookings"
     )
@@ -21,6 +34,60 @@ class Booking(models.Model):
 
     def __str__(self):
         return f"{self.room} · {self.occupant_name} ({self.start_datetime:%Y-%m-%d %H:%M})"
+
+
+class ImportStaging(models.Model):
+    """A .xlsx/.csv held between the IFO-03b dry-run preview and the commit (D-12).
+
+    DESIGN CONTRACT — three stores, three distinct jobs:
+      - the BYTES live on disk under MEDIA_ROOT, at a path built server-side
+        from `token` and the extension alone;
+      - the SESSION carries only the opaque `token`;
+      - THIS ROW is the ownership plus lifecycle record (who uploaded it, how
+        big, when, and whether it has been consumed).
+
+    Why the bytes are not in the SESSION. This project sets no SESSION_ENGINE,
+    so Django's default database backend applies and the session lives in the
+    MSSQL `django_session.session_data` text column. That column is re-read on
+    every authenticated request for the life of the session, so parking a
+    multi-MB spreadsheet in it would tax every unrelated page load until the
+    session expires.
+
+    Why the bytes are not in the CACHE. This project sets no CACHES either, so
+    the default LocMemCache applies. It is per-process: the worker that handled
+    the preview request and the worker that handles the commit request are not
+    guaranteed to be the same one, so the file would be silently missing on
+    commit under any multi-worker deployment — intermittently, and only in
+    production.
+
+    `original_name` is DISPLAY TEXT ONLY and is never used to build a path
+    (T-07-04) — see ops.import_staging.stage_upload, which composes
+    `stored_path` from STAGING_PREFIX + token + extension.
+    """
+    # Opaque, server-generated: secrets.token_urlsafe(32). Never user-supplied.
+    token = models.CharField(max_length=64, unique=True, db_index=True)
+    uploaded_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE,
+        related_name="import_stagings",
+    )
+    # The client's filename, kept verbatim so the preview page can show the
+    # operator which file they picked. NEVER joined into a filesystem path.
+    original_name = models.CharField(max_length=255)
+    # Storage-relative and entirely server-built.
+    stored_path = models.CharField(max_length=255)
+    size_bytes = models.PositiveIntegerField()
+    created_at = models.DateTimeField(auto_now_add=True)
+    # NULL until the commit step consumes this upload; a consumed row can never
+    # be resolved again (single-use), which is what makes the commit idempotent
+    # against a double-submit.
+    consumed_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        state = "consumed" if self.consumed_at else "staged"
+        return f"import {self.original_name} ({state}) · {self.uploaded_by}"
 
 
 class Notification(models.Model):
