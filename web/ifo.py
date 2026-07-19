@@ -430,6 +430,128 @@ def room_edit(request, code):
     return redirect("ifo_room_detail", code=room.code)
 
 
+# Plain-language names for the five relations `room_delete_blockers` can report.
+# The probe returns machine keys; an operator needs to know WHAT they are looking
+# at and WHY it stops the delete, so the label, the icon and the explanation all
+# live here rather than being branched on in the template.
+#
+# Each row carries an icon AND a text label alongside any colour treatment --
+# colour is never the only signal (WCAG 1.4.1, the rule stated at
+# web/checker.py:636).
+_BLOCKER_LABELS = [
+    ("schedules", "Recurring class schedules", "calendar-days",
+     "Classes that meet in this room every week this term."),
+    ("sessions", "Class sessions", "history",
+     "Dated meetings of a class in this room, and the attendance recorded "
+     "against them."),
+    ("bookings", "Ad-hoc bookings", "book-marked",
+     "One-off reservations of this room, including cancelled ones -- they are "
+     "still the record of who booked what."),
+    ("validations", "Checker validations", "shield-check",
+     "Confirmations a Checker recorded while standing in this room."),
+    ("reservations", "Approved modality-shift reservations", "arrow-left-right",
+     "This room is held for an approved modality shift. Nothing in the "
+     "database would refuse this delete -- the reservation would simply be "
+     "emptied without a trace."),
+]
+
+
+def _blocker_rows(blockers):
+    """Render the probe's {relation: count} into ordered, human rows."""
+    return [{"key": key, "label": label, "icon": icon, "detail": detail,
+             "count": blockers[key]}
+            for key, label, icon, detail in _BLOCKER_LABELS if key in blockers]
+
+
+@ifo_required
+@require_http_methods(["GET", "POST"])
+def room_delete(request, code):
+    """IFO-01b / D-17: confirm page (GET) and delete action (POST), or a NAMED refusal.
+
+    D-17 rules out both easy answers. Cascade destroys attendance history,
+    which is the one thing an attendance-integrity system may never do. A
+    soft-deactivate `is_active` flag would have to be taught to every room
+    query in the codebase, including the scan resolver this phase deliberately
+    leaves untouched. What is left is a refusal -- and a refusal that does not
+    say what is blocking it is just a broken button, so NAMING each blocking
+    relation and its count IS the feature.
+
+    A real GET page, not a JavaScript confirm() dialog: a dialog cannot show
+    the blocker detail and cannot be reached by keyboard-only or screen-reader
+    users.
+
+    TWO CONTROLS, BOTH KEPT, NEITHER SUFFICIENT ALONE:
+
+      * The PROBE (`campus.services.room_delete_blockers`) is the primary
+        control. It is the only thing that catches `ModalityShiftItem.
+        assigned_room`, which is SET_NULL -- an approved reservation would be
+        silently emptied, and nothing else in the stack would notice.
+      * `ProtectedError` is the BACKSTOP. The four PROTECT relations raise it
+        from Django's Collector if a reference appears between the probe and
+        the delete. Note it is an ORM-level guarantee, not a database
+        constraint: Django never encodes `on_delete` in DDL, so every FK to
+        campus_room is NO_ACTION in the schema. Whichever control fires, the
+        operator gets the same friendly refusal and never a 500.
+
+    The POST re-runs the probe inside `transaction.atomic()`. The GET-time
+    probe is DISPLAY ONLY and is never the authorization (T-07-10) -- a room
+    can gain a session between the operator reading the page and clicking the
+    button, so the re-check is the actual control.
+
+    Both outcomes are audited: `room.deleted` on success, `room.delete_refused`
+    with the blocker counts on a refusal. The refusal trail is the one D-17's
+    discretion note asks for -- it shows IFO which destructive attempts landed
+    on rooms that turned out to be live.
+    """
+    room = get_object_or_404(
+        Room.objects.select_related("floor__building"), code=code)
+
+    if request.method == "GET":
+        blockers = room_delete_blockers(room)
+        return render(request, "ifo/room_delete.html", {
+            "room": room, "blockers": _blocker_rows(blockers),
+            "can_delete": not blockers})
+
+    refused, protected = None, False
+    deleted_pk, floor_label = room.pk, str(room.floor)
+    with transaction.atomic():
+        blockers = room_delete_blockers(room)
+        if blockers:
+            refused = blockers
+        else:
+            try:
+                room.delete()
+            except ProtectedError:
+                # Nothing was written before the Collector raised, so the
+                # transaction is clean and simply commits as a no-op. Audit
+                # writes happen after the block so they can never ride a
+                # transaction this branch has already given up on.
+                protected = True
+
+    if protected:
+        # Re-probe outside the transaction to name whatever appeared. If it
+        # still reads clean, the template falls back to a generic refusal --
+        # a 500 is never an acceptable answer here.
+        refused = room_delete_blockers(room)
+
+    if refused is not None or protected:
+        AuditLog.objects.create(
+            actor=request.user, event_type="room.delete_refused",
+            target_type="room", target_id=str(room.pk),
+            payload={"code": room.code, "blockers": refused,
+                     "protected_error": protected})
+        return render(request, "ifo/room_delete.html", {
+            "room": room, "blockers": _blocker_rows(refused),
+            "can_delete": False, "refused": True, "protected": protected,
+        }, status=400)
+
+    AuditLog.objects.create(
+        actor=request.user, event_type="room.deleted",
+        target_type="room", target_id=str(deleted_pk),
+        payload={"code": room.code, "floor": floor_label})
+    return redirect("ifo_rooms")
+
+
 # --- Duty assignments (IFO-06) ---------------------------------------------
 def _assignment_form_ctx():
     """Choice data for the assignment create form (Checkers/Guards + floors)."""

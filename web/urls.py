@@ -56,6 +56,7 @@ urlpatterns = [
     path("ifo/rooms/new", ifo.room_new, name="ifo_room_new"),
     path("ifo/rooms/<str:code>", ifo.room_detail, name="ifo_room_detail"),
     path("ifo/rooms/<str:code>/edit", ifo.room_edit, name="ifo_room_edit"),
+    path("ifo/rooms/<str:code>/delete", ifo.room_delete, name="ifo_room_delete"),
     path("ifo/rooms/<str:code>/panel", ifo.room_panel, name="ifo_room_panel"),
     path("ifo/rooms/<str:code>/poster", ifo.room_poster, name="ifo_room_poster"),
     path("ifo/rooms/<str:code>/qr.png", ifo.room_qr, name="ifo_room_qr"),

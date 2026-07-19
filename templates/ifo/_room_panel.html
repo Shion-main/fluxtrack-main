@@ -103,4 +103,8 @@ keeps polling). ASCII-only.
     <uk-icon icon="qr-code" class="size-4"></uk-icon> QR poster</a>
   <a href="/ifo/rooms/{{ room.code }}/edit" class="uk-btn uk-btn-ghost uk-btn-sm">
     <uk-icon icon="pencil" class="size-4"></uk-icon> Edit</a>
+  {% comment %}A link to a real confirmation page, not a JS confirm() -- the
+  page is where the delete either happens or names what blocks it.{% endcomment %}
+  <a href="/ifo/rooms/{{ room.code }}/delete" class="uk-btn uk-btn-ghost uk-btn-sm">
+    <uk-icon icon="trash-2" class="size-4"></uk-icon> Delete</a>
 </div>
