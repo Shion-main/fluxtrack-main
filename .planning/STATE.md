@@ -5,16 +5,16 @@ milestone_name: — "Operational Trust
 current_phase: 11
 current_phase_name: metrics-the-mission-promises
 status: executing
-stopped_at: 11-01 complete 2026-07-20; phase 11 continues (11-02 next)
-last_updated: "2026-07-20T08:45:25.919Z"
+stopped_at: 11-02 complete 2026-07-20; phase 11 continues (11-03 next)
+last_updated: "2026-07-20T09:00:00.000Z"
 last_activity: 2026-07-20
-last_activity_desc: Completed 11-01 (lateness aggregate layer)
+last_activity_desc: Completed 11-02 (lateness surfaces — weekly report, HR CSV, scorecard)
 progress:
   total_phases: 18
   completed_phases: 9
   total_plans: 63
-  completed_plans: 59
-  percent: 50
+  completed_plans: 60
+  percent: 51
 ---
 
 # Project State
@@ -28,11 +28,16 @@ See: .planning/PROJECT.md (updated 2026-07-02)
 
 ## Current Position
 
-Phase: 11 (metrics-the-mission-promises) — EXECUTING (11-01 of 4 plans complete)
+Phase: 11 (metrics-the-mission-promises) — EXECUTING (11-01 + 11-02 of 4 plans complete)
 11-01 shipped: lateness in the aggregate layer (A3) — session_minutes_late shared
 helper + _lateness_map fold; FacultyRow/Scorecard carry minutes_late_avg/late_sessions/
 chronic_late (chronic = held>=5 and >=30% late, frequency floored at >=1 whole minute).
-131 reporting tests green. Next: 11-02 (HR per-session lateness CSV imports the helper).
+11-02 shipped: lateness SURFACES (A3/D-03) — report_render.HEADER + build_csv/build_pdf
+gain two lateness columns (weekly report + Dean/IFO scorecard CSV); web.hr.CSV_HEADER
+gains a derived Minutes-late column beside the retained raw Actual-start, computed via
+the SHARED session_minutes_late helper (no drift); scorecard.html renders an avg-minutes
+-late card with a chronic pill gated at held>=5. 60 render/HR/reporting tests green.
+Next: 11-03 (verification coverage by building & weekday on the IFO dashboard, A6/D-04).
 10-VERIFICATION.md): building/floor CRUD, room out-of-service (A7), single-schedule
 add/edit/cancel (A9). Phase 09 also complete (5/5). Next: Phase 11 (Metrics).
 Env note added: the staticfiles manifest needs `DEBUG=False manage.py collectstatic`
@@ -60,7 +65,7 @@ Phase 07 and remain out of scope.
 
 **Velocity:**
 
-- Total plans completed: 23
+- Total plans completed: 24
 - Average duration: — min
 - Total execution time: 0.0 hours
 
@@ -125,6 +130,7 @@ Phase 07 and remain out of scope.
 | Phase 06 P07 | ~20min | 3 tasks | 6 files |
 | Phase 06.1 P01 | 40m | 3 tasks | 3 files |
 | Phase 11 P01 | 11min | 3 tasks tasks | 4 files files |
+| Phase 11 P02 | 12min | 3 tasks | 5 files |
 
 ## Accumulated Context
 
@@ -209,6 +215,7 @@ Recent decisions affecting current work:
 - [Phase 06]: 06-06: Dean reporting surface (web/dean.py dashboard/reports/scorecard/report_export/weekly_download) is the department-scoped, READ-ONLY consumer of the shared aggregate/render layers. Every queryset scopes to request.user.department SERVER-SIDE; scorecard + weekly_download use get_object_or_404(..., department=request.user.department) so a foreign-department id 404s (T-06-01 IDOR/BOLA, refused not hidden). Every view is @require_http_methods(['GET']) so a POST is 405 (DEAN-01 read-only, T-06-07) — a bare Django view otherwise accepts any method. NULL-department Dean gets a zeroed DeptSummary/empty table, NEVER dept_summary(department=None) (edge-case cross-department leak closed). Export reuses build_csv/build_pdf (csv_safe intact, T-06-02); weekly_download streams default_storage bytes. Shared reports/scorecard.html back link parameterized via back_url (default /ifo/dashboard) so a Dean returns to /dean/reports. 12 tests green.
 - [Phase ?]: 06.1-01: room-hours 'used' derived from actual timestamps, clamped to the scheduled window; the ended_early flag is display-only
 - [Phase 11]: 11-01: lateness enters the aggregate layer as ONE shared pure helper session_minutes_late (seconds, grace-independent max(0,actual-scheduled), 0 for NULL start) + a separate Python fold _lateness_map (never Count(filter=Q)/DurationField). FacultyRow+Scorecard gain minutes_late_avg/late_sessions/chronic_late; chronic=held>=5 and >=30% late, but the FREQUENCY count only increments at >=1 whole minute (secs>=60) so sub-minute noise never flags while the average still reflects it. In-flight ACTIVE contributes (lateness needs only the start). Plan 02 HR CSV imports the same helper. 131 reporting tests green.
+- [Phase 11]: 11-02: lateness SURFACED in all three D-03 places without re-deriving the formula. report_render.HEADER grows 6->8 cols (Avg min late + terse Yes/'' Chronic late); build_csv/build_pdf emit them from every FacultyRow (weekly report + Dean/IFO scorecard CSV). web.hr.CSV_HEADER gains a "Minutes late" column AFTER the retained raw "Actual start" (D-03 add-don't-remove), cell = session_minutes_late(scheduled_start, actual_start)//60 computed inline in the streaming rows() generator with NO DB access (HY010 open-cursor contract held); ABSENT->0. The two CSV header contracts stay DISTINCT (report_render.HEADER vs web.hr.CSV_HEADER — Pitfall 5). scorecard.html renders an avg-minutes-late KPI card with an amber "Chronic" pill gated in-template at card.0.held>=5 (D-02 floor) and always paired with the numeric average (colour not the only signal). 60 render/HR/reporting tests green; SRS docx untouched (targeted runs only).
 
 ### Pending Todos
 
