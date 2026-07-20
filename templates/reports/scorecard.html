@@ -48,6 +48,19 @@ by the Dean surface (06-06). Attendance pill uses the A-COLOR tokens. ASCII-only
         <div class="uk-text-small uk-text-muted">Early ends</div>
         <div class="uk-h2 mt-1">{{ card.0.early_ends }}</div>
       </div>
+      {% comment %}A3 / D-01..D-03 lateness card: average minutes late over held
+      sessions, with the chronic-late verdict shown ONLY at >= 5 held sessions
+      (D-02 floor -- never a chronic verdict for a faculty with too few held
+      sessions to evaluate). The "Chronic" pill is always paired with the numeric
+      average, so colour is never the only signal.{% endcomment %}
+      <div class="uk-card uk-card-body">
+        <div class="uk-text-small uk-text-muted flex items-center gap-1">
+          <uk-icon icon="clock" class="size-4"></uk-icon> Avg min late</div>
+        <div class="uk-h2 mt-1">{{ card.0.minutes_late_avg }}{% if card.0.held >= 5 and card.0.chronic_late %}
+          <span class="uk-label ml-1" style="background:var(--amber-tint);color:var(--amber)">Chronic</span>{% endif %}
+        </div>
+        <div class="uk-text-small uk-text-muted">minutes late per held session</div>
+      </div>
     </div>
 
     <h3 class="uk-h4 mb-2">Effective modality</h3>

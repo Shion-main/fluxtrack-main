@@ -261,3 +261,54 @@ class HrLatenessCsvTests(_HrBase):
         for r in absent_rows:
             self.assertEqual(r[m_idx], "0")
             self.assertEqual(r[a_idx], "")
+
+
+class ScorecardLatenessSurfaceTests(TestCase):
+    """A3 / D-02 / D-03: the faculty scorecard page renders avg-minutes-late and
+    shows the chronic verdict ONLY at the >= 5-held floor. Reads the Plan-01
+    Scorecard.minutes_late_avg / chronic_late fields; IFO-gated view."""
+
+    def setUp(self):
+        self.fx = make_reporting_fixture()
+        User = get_user_model()
+        self.ifo = User.objects.create(
+            username="score_ifo", email="score_ifo@mcm.edu.ph",
+            role=Role.IFO_ADMIN, is_active=True)
+        self.client.force_login(self.ifo)
+
+    def _range(self):
+        return {"from": self.fx.week_start.isoformat(),
+                "to": self.fx.sun.isoformat()}
+
+    def _seed_late(self, faculty, minutes, count):
+        for _ in range(count):
+            self.fx.add_session(
+                faculty, self.fx.week_start, SessionStatus.ACTIVE,
+                actual_start=_aware(self.fx.week_start, time(8, minutes)))
+
+    def test_scorecard_page_shows_lateness(self):
+        # faculty_a already has held sessions; add 5 late-by-12 held sessions so the
+        # >=5-held floor is met and >=30% frequency trips the chronic verdict.
+        self._seed_late(self.fx.faculty_a, 12, 5)
+        url = reverse("ifo_scorecard", args=[self.fx.faculty_a.id])
+        resp = self.client.get(url, self._range())
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, "Avg min late")
+        self.assertContains(resp, "12.0")
+        # >= 5 held AND chronic -> the paired Chronic verdict renders.
+        self.assertContains(resp, "Chronic")
+
+    def test_scorecard_suppresses_chronic_below_floor(self):
+        # A fresh faculty with only 2 held-with-start sessions -> below the D-02
+        # floor; the average still shows but the chronic verdict must not.
+        User = get_user_model()
+        thin = User.objects.create(
+            username="score_thin", email="score_thin@mcm.edu.ph",
+            first_name="Tina", last_name="Thin",
+            role=Role.FACULTY, department=self.fx.dept_a, is_active=True)
+        self._seed_late(thin, 6, 2)
+        url = reverse("ifo_scorecard", args=[thin.id])
+        resp = self.client.get(url, self._range())
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, "6.0")
+        self.assertNotContains(resp, "Chronic")
