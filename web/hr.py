@@ -35,6 +35,7 @@ from django.views.decorators.http import require_http_methods
 from accounts.models import Department, Role
 from scheduling.models import AcademicTerm, Session
 from scheduling.report_render import csv_safe
+from scheduling.reporting import session_minutes_late
 from verification.models import CheckerValidation, ValidationAction
 from web.pagination import paginate
 from web.reporting_common import status_label
@@ -48,9 +49,15 @@ HR_PAGE_SIZE = 50
 
 # CSV column contract (HR-03 payroll export). One constant so the header row and
 # every streamed data row can never drift.
+# "Minutes late" is a DERIVED column added immediately after the raw "Actual start"
+# timestamp (A3 / D-03: ADD the derived figure, do NOT remove the timestamp). It is
+# computed per session via the shared scheduling.reporting.session_minutes_late
+# helper so the payroll export can never disagree with the faculty aggregate that
+# reads the same helper (Pitfall 5 -- this is a SEPARATE contract from the weekly
+# report's report_render.HEADER).
 CSV_HEADER = [
     "Faculty", "Department", "Course", "Section", "Date", "Scheduled start",
-    "Actual start", "Status", "Method", "Checker-verified",
+    "Actual start", "Minutes late", "Status", "Method", "Checker-verified",
 ]
 
 
@@ -235,6 +242,11 @@ def attendance_csv(request):
                 s.date.isoformat(),
                 _fmt_dt(s.scheduled_start),
                 _fmt_dt(s.actual_start),
+                # Derived whole-minutes-late from the SHARED helper (seconds -> min);
+                # 0 for on-time/early/ABSENT (NULL start). No DB access here -- the
+                # helper reads already-loaded session fields, so the open server-side
+                # cursor / HY010 streaming contract holds (T-06-05).
+                session_minutes_late(s.scheduled_start, s.actual_start) // 60,
                 status_label(s.status),
                 csv_safe(s.get_checkin_method_display() if s.checkin_method else ""),
                 "yes" if s.is_verified else "no",
