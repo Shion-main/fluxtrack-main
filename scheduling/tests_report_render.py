@@ -6,13 +6,17 @@ Platypus PDF byte builder (build_pdf). These are pure bytes-in/bytes-out
 functions so SimpleTestCase (no DB) is sufficient -- FacultyRow instances
 are constructed directly.
 """
+import csv
+from decimal import Decimal
+
 from django.test import SimpleTestCase
 
-from scheduling.report_render import build_csv, build_pdf, csv_safe, pdf_title
+from scheduling.report_render import HEADER, build_csv, build_pdf, csv_safe, pdf_title
 from scheduling.reporting import FacultyRow
 
 
-def _row(name, scheduled=4, held=3, absent=1, verified=2, pct=75):
+def _row(name, scheduled=4, held=3, absent=1, verified=2, pct=75,
+         minutes_late_avg=Decimal("0.0"), chronic_late=False):
     """Build a FacultyRow with all required fields for render tests."""
     return FacultyRow(
         faculty_id=1,
@@ -24,10 +28,14 @@ def _row(name, scheduled=4, held=3, absent=1, verified=2, pct=75):
         attendance_pct=pct,
         early_ends=0,
         absences=[],
+        minutes_late_avg=minutes_late_avg,
+        chronic_late=chronic_late,
     )
 
 
-CSV_HEADER = "Faculty,Scheduled,Held,Absent,Attendance %,Checker-verified"
+CSV_HEADER = (
+    "Faculty,Scheduled,Held,Absent,Attendance %,Checker-verified,"
+    "Avg min late,Chronic late")
 
 
 class CsvBuildTests(SimpleTestCase):
@@ -53,6 +61,42 @@ class CsvBuildTests(SimpleTestCase):
         data_line = text.splitlines()[1]
         self.assertIn("75%", data_line)
         self.assertIn("4", data_line)
+
+
+class LatenessColumnTests(SimpleTestCase):
+    """A3 / D-03: the shared HEADER + byte builders carry the two lateness cells."""
+
+    def test_header_has_lateness(self):
+        # 8 columns total, ending in the two lateness cells (Pitfall 5: the ONE
+        # shared render-layer HEADER, distinct from web.hr.CSV_HEADER).
+        self.assertEqual(len(HEADER), 8)
+        self.assertEqual(HEADER[-2], "Avg min late")
+        self.assertEqual(HEADER[-1], "Chronic late")
+
+    def test_csv_row_has_lateness(self):
+        rows = [
+            _row("Cruz Maria", minutes_late_avg=Decimal("4.5"), chronic_late=True),
+            _row("Santos Jose", minutes_late_avg=Decimal("0.0"), chronic_late=False),
+        ]
+        lines = build_csv(rows).decode("utf-8").splitlines()
+        chronic_cells = list(csv.reader(lines))
+        # Chronic row: the avg renders "4.5" and the chronic cell is "Yes".
+        self.assertEqual(chronic_cells[1][-2], "4.5")
+        self.assertEqual(chronic_cells[1][-1], "Yes")
+        # Non-chronic row: the chronic cell is empty (colour/text terse per Pitfall 4).
+        self.assertEqual(chronic_cells[2][-1], "")
+
+    def test_pdf_has_lateness_header(self):
+        # The 8-column table must build without raising and yield %PDF bytes.
+        rows = [_row("Cruz Maria", minutes_late_avg=Decimal("12.0"), chronic_late=True)]
+        pdf = build_pdf(rows, "2026-07-13", "2026-07-19", None)
+        self.assertIsInstance(pdf, bytes)
+        self.assertTrue(pdf.startswith(b"%PDF"))
+
+    def test_empty_rows_header_only(self):
+        text = build_csv([]).decode("utf-8")
+        # Still exactly the 8-column header line, no data rows.
+        self.assertEqual(text.splitlines(), [CSV_HEADER])
 
 
 class CsvInjectionTests(SimpleTestCase):
