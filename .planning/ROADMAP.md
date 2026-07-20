@@ -56,7 +56,7 @@ standalone Phase 8 (deploy) becomes the **expanded Phase 15**.
 
 - [x] **Phase 9: Attendance Trust Under Real Operations** (CRITICAL) - CANCELLED status, IFO class-suspension + holiday/break entry, sweep honors them, real Absent-correction path (A1/A2/A5) — completed 2026-07-20; 5/5 criteria, 30 new tests, suite 965 green
 - [x] **Phase 10: Campus Structure Management** - Building/Floor CRUD, room out-of-service, single-schedule edit (A7/A9 + building gap) — completed 2026-07-20; 3/3 criteria, 29 tests, suite 994 green
-- [ ] **Phase 11: Metrics the Mission Promises** - Lateness, verification-coverage, utilization depth + deferred CSV export (A3/A6/A8)
+- [x] **Phase 11: Metrics the Mission Promises** - Lateness, verification-coverage, utilization depth + deferred CSV export (A3/A6/A8) (completed 2026-07-20)
 - [ ] **Phase 12: Term Lifecycle** - Close/archive a term + create/activate the next without destroying history (A4)
 - [ ] **Phase 13: UX Finish** - Custom error pages, phone shell-jump fix, profile reachability, login navy, global htmx errors, PWA theme (B1-B6)
 - [ ] **Phase 14: Correctness & Concurrency Hardening** - Booking/schedule oracle, room-preferring resolver, select_for_update, offline-replay retargeting (M3/M5/M6/H3)
@@ -414,7 +414,7 @@ Plans:
   2. Verification coverage (verified/held by building & day, incl. zero-coverage floors) is on the IFO dashboard.
   3. Utilization gains a booked-but-never-used ghost-room list and per-room CSV export (finishing 06.1-07). Capacity-vs-enrollment "fit" is **deferred** (reopens the `reporting.py:947` T3 deferral once `enrolled_count` is validated on a real imported term); week-over-week trend is also out of scope. A8 is therefore partially addressed here.
 
-**Plans**: 3/4 plans executed
+**Plans**: 4/4 plans complete
 **Wave 1**
 
 - [x] 11-01-PLAN.md — Lateness in the aggregate layer: session_minutes_late + _lateness_map + FacultyRow/Scorecard fields (A3, D-01/D-02)
@@ -426,7 +426,7 @@ Plans:
 
 **Wave 3** *(blocked on Wave 2 completion)*
 
-- [ ] 11-04-PLAN.md — Ghost-room list + per-room utilization CSV export, finishing 06.1-07 (A8 partial, IFO-09, D-05/D-06)
+- [x] 11-04-PLAN.md — Ghost-room list + per-room utilization CSV export, finishing 06.1-07 (A8 partial, IFO-09, D-05/D-06)
 
 ### Phase 12: Term Lifecycle
 
@@ -520,7 +520,7 @@ pulled forward but 9 still precedes any real use.
 | **— Milestone v1.3 "Operational Trust" —** | | | |
 | 9. Attendance Trust Under Real Operations (CRITICAL) | Complete | 5/5 criteria, 30 tests | 2026-07-20 |
 | 10. Campus Structure Management | Complete | 3/3 criteria, 29 tests | 2026-07-20 |
-| 11. Metrics the Mission Promises | 3/4 | In Progress|  |
+| 11. Metrics the Mission Promises | 4/4 | Complete   | 2026-07-20 |
 | 12. Term Lifecycle | 0/TBD | Not started | - |
 | 13. UX Finish | 0/TBD | Not started | - |
 | 14. Correctness & Concurrency Hardening | 0/TBD | Not started | - |

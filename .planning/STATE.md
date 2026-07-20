@@ -5,16 +5,16 @@ milestone_name: — "Operational Trust
 current_phase: 11
 current_phase_name: metrics-the-mission-promises
 status: executing
-stopped_at: 11-03 complete 2026-07-20; phase 11 continues (11-04 next)
-last_updated: "2026-07-20T09:20:00.000Z"
+stopped_at: 11-04 complete 2026-07-20; phase 11 EXECUTED (4/4 plans) — pending phase verification
+last_updated: "2026-07-20T09:45:00.000Z"
 last_activity: 2026-07-20
-last_activity_desc: Phase 11 plan 03 complete (verification coverage on the IFO dashboard, A6/D-04)
+last_activity_desc: Phase 11 plan 04 complete (ghost-room list + per-room utilization CSV, A8/IFO-09, D-05/D-06) — phase 11 fully executed
 progress:
   total_phases: 18
-  completed_phases: 9
+  completed_phases: 10
   total_plans: 63
-  completed_plans: 62
-  percent: 50
+  completed_plans: 63
+  percent: 56
 ---
 
 # Project State
@@ -28,7 +28,16 @@ See: .planning/PROJECT.md (updated 2026-07-02)
 
 ## Current Position
 
-Phase: 11 (metrics-the-mission-promises) — EXECUTING (11-01 + 11-02 + 11-03 of 4 plans complete)
+Phase: 11 (metrics-the-mission-promises) — EXECUTED (11-01 + 11-02 + 11-03 + 11-04, all 4 plans) — pending phase verification
+11-04 shipped: ghost-room list + per-room utilization CSV (A8 partial / IFO-09, D-05/D-06). ghost_rooms
+is a PURE reduction of room_breakdown keeping booked_seconds > 0 AND used_seconds == 0, keyed on the
+UNROUNDED seconds so a ~40s-use room (rounds to used_hours 0.0) is never falsely flagged — a named
+rounding-guard test pins it. utilization_csv is @ifo_required + GET-only, one row per physical room from
+room_breakdown, csv_safe on every text cell, server-built filename, a THIRD distinct header contract
+(UTILIZATION_CSV_HEADER). A "Booked but never used" ghost section + a scoped Export CSV link on the IFO
+utilization page, ghost section under its own safe_card. No seat/enrolment field added (T3 deferral held);
+capacity-fit + week-over-week trend stay deferred. 191 targeted tests green. Task 3 human-verify recorded
+as a Manual-Verification item (auto/yolo), not blocked. Next: phase 11 verification, then Phase 12/13.
 11-03 shipped: verification coverage (A6/D-04) on the IFO dashboard — coverage_by_building_day
 (verified/HELD by building x weekday, physical-only via _exclude_virtual, SEPARATE distinct-count
 verified query so a reverse-join can never inflate) + zero_coverage_floors (floor-granular, held>0
