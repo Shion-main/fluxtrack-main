@@ -398,7 +398,13 @@ Nyquist validation is **enabled**. Tests run under **Django's test runner** (not
 
 **These four are the only unverified points.** Everything else is `[VERIFIED: codebase]` from direct reads.
 
-## Open Questions
+## Open Questions (RESOLVED)
+
+> A1 (chronic-late granularity), A2 (coverage axis), A3 (virtual-room inclusion)
+> are all pinned by CONTEXT.md D-01..D-06 + the planner's locked steers:
+> chronic frequency counts ≥1 whole minute (`secs >= 60`); coverage axis =
+> weekday, physical-only; held denominator. Traceable across RESEARCH → PLAN.
+
 
 1. **Chronic-late "late" granularity (A1).** Seconds>0 vs floored minutes>0. *Recommendation:* seconds>0 (matches D-01 "continuous, grace-independent"); render average as one-decimal minutes.
 2. **Coverage grouping axis + virtual-room inclusion (A2/A3).** *Recommendation:* group by (building, weekday), list zero-coverage floors, exclude virtual rooms. Confirm in planning.

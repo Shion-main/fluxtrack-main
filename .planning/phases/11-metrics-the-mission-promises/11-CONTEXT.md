@@ -28,7 +28,7 @@ export.
 <decisions>
 ## Implementation Decisions
 
-### D-01 — Minutes-late is continuous, grace-independent
+- **D-01 — Minutes-late is continuous, grace-independent.**
 Per-session minutes late = `max(0, actual_start − scheduled_start)`, computed in
 the aggregate layer (`scheduling/reporting.py`), matching the audit A3 fix
 verbatim. It is **NOT** gated on `grace_minutes`. Grace exists for the
@@ -38,7 +38,7 @@ inside grace, so never falls Absent. Only sessions with a non-null `actual_start
 (i.e. actually held) contribute; ABSENT / CANCELLED sessions have no start and
 are excluded.
 
-### D-02 — Chronic-late flag = frequency ≥30%, reported next to magnitude
+- **D-02 — Chronic-late flag = frequency ≥30%, reported next to magnitude.**
 A faculty member is flagged **chronically late** when they are late
 (`minutes_late > 0`) in **≥ 30% of their held sessions** over the selected
 range, with a floor of **≥ 5 held sessions** in range to qualify (so one late
@@ -48,13 +48,13 @@ sessions — a dean can then tell "chronic and averages 14 min" (a real problem)
 from "chronic but averages 2 min" (noise). A raw count threshold ("≥3 late") was
 rejected because it punishes faculty who simply teach more sections.
 
-### D-03 — Lateness surfaced in all three places A3 names
+- **D-03 — Lateness surfaced in all three places A3 names.**
 The lateness figures (minutes-late aggregate + chronic flag) appear on: the
 **faculty scorecard**, the **weekly report**, and the **HR CSV export**. The HR
 export today emits raw `actual_start` with no derived lateness — this phase adds
 a derived lateness column, it does not remove the timestamp.
 
-### D-04 — Verification coverage = verified ÷ held, by building & day
+- **D-04 — Verification coverage = verified ÷ held, by building & day.**
 A coverage aggregate answering "what % of held sessions were physically
 checker-verified, and which floors/buildings had zero coverage?" Denominator is
 **held** sessions (not scheduled); numerator is checker-verified. Grouped by
@@ -63,13 +63,13 @@ held sessions but no verification must be visible, not merely a low percentage).
 Surfaced on the **IFO dashboard**. This is a historical/management view, distinct
 from the live per-floor board the on-duty checker already sees.
 
-### D-05 — Ghost-room list = booked-but-never-used
+- **D-05 — Ghost-room list = booked-but-never-used.**
 An actionable list of physical rooms with `booked_hours > 0` AND
 `used_hours = 0` over the range — bookings that produced no actual occupancy at
 all. This is the "act on it" companion to the existing heat grid, derived from
 the `RoomLoad` aggregate already computed per room.
 
-### D-06 — Per-room utilization CSV export
+- **D-06 — Per-room utilization CSV export.**
 Finish 06.1-07: a per-room CSV export of the utilization breakdown
 (`room_breakdown` / `RoomLoad` rows). This was planned and deliberately dropped
 in Phase 06.1; Phase 11 ships it.

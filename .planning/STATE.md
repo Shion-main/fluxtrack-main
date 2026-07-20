@@ -1,14 +1,14 @@
 ---
 gsd_state_version: 1.0
 milestone: v1.3
-milestone_name: "Operational Trust — the attendance record survives real campus operations (suspensions/holidays/corrections), the mission metrics are visible, IFO manages the campus without a superuser, and the app deploys safely. From docs/AUDIT-2026-07-19.md."
-current_phase: 11
-current_phase_name: Metrics the Mission Promises
+milestone_name: — "Operational Trust
+current_phase: 10
+current_phase_name: Campus Structure Management
 status: ready
 stopped_at: n/a — phase 10 complete 2026-07-20; phase 11 next
-last_updated: "2026-07-20T00:00:00.000Z"
+last_updated: "2026-07-20T08:32:34.849Z"
 last_activity: 2026-07-20
-last_activity_desc: Phase 10 (Campus Structure) complete — 3/3 criteria, suite 994 green
+last_activity_desc: Phase 09 complete, verified, committed
 progress:
   total_phases: 19
   completed_phases: 13
@@ -238,10 +238,12 @@ weekly report, HR export, and the IFO dashboard. Redeems the "lateness captured
 at the room level" claim that is currently unfulfilled. See ROADMAP Phase 11.
 
 OUTSTANDING (carry forward):
+
 - Browser UAT debt: the Phase 9 consoles (/ifo/suspensions, /ifo/breaks,
   /ifo/corrections) AND the Phase 10 consoles (/ifo/buildings, building detail,
   schedule form, room-detail service/schedule cards) are test-covered but NOT yet
   human/browser-tested. Consider a browser pass before or during Phase 13.
+
 - Phase 14 owns the deferred schedule-room-move occupancy conflict check (M3).
 
 Env notes (see memory): full test runs rewrite FluxTrack_SRS.docx (git checkout it);
@@ -295,15 +297,18 @@ Recorded so they are decisions on record rather than gaps someone rediscovers:
    building reads 46%. Both numbers are honest; they answer different questions.
    Deliberately NOT narrowed, because narrowing a denominator to make a number
    look better is how utilization metrics stop being trusted. A D-01 decision.
+
 2. **R116 reads 131% — a real double-booking**, not a bug: `ECE121L 07:00-10:45`
    overlaps two lecture slots in the same room the same morning. Left unclamped
    on purpose; clamping would hide exactly the conflict a facilities office
    wants to see. Worth investigating as DATA.
+
 3. **CSV export (plan 07) deferred** — droppable by design, nothing depends on it.
 4. **Two human-eye checks outstanding** from the 06.1-06 checkpoint: the
    greyscale/squint test on the heat grid, and the print preview. Every cell
    carries its number and untimetabled cells render a dash plus sr-only text, so
    the information should survive without colour — but no human has confirmed it.
+
 5. **No utilization target band exists.** The occupancy pill and the heat ramp are
    deliberately neutral/relative rather than good/bad: 26% is the campus's real
    baseline and an absolute ladder would render it permanently red, which teaches
