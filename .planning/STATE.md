@@ -1,19 +1,19 @@
 ---
 gsd_state_version: 1.0
 milestone: v1.3
-milestone_name: — "Operational Trust
-current_phase: 11
-current_phase_name: metrics-the-mission-promises
-status: executing
-stopped_at: 11-04 complete 2026-07-20; phase 11 EXECUTED (4/4 plans) — pending phase verification
-last_updated: "2026-07-20T09:45:00.000Z"
+milestone_name: — "Operational Trust"
+current_phase: 12
+current_phase_name: Term Lifecycle
+status: Ready to plan
+stopped_at: Phase 9 AND Phase 10 COMPLETE + verified + committed; tree clean;
+last_updated: "2026-07-20T09:59:10.364Z"
 last_activity: 2026-07-20
-last_activity_desc: Phase 11 plan 04 complete (ghost-room list + per-room utilization CSV, A8/IFO-09, D-05/D-06) — phase 11 fully executed
+last_activity_desc: Phase 11 complete, transitioned to Phase 12
 progress:
   total_phases: 18
   completed_phases: 10
   total_plans: 63
-  completed_plans: 63
+  completed_plans: 62
   percent: 56
 ---
 
@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-07-02)
 
 ## Current Position
 
-Phase: 11 (metrics-the-mission-promises) — EXECUTED (11-01 + 11-02 + 11-03 + 11-04, all 4 plans) — pending phase verification
+Phase: 12 — Term Lifecycle
 11-04 shipped: ghost-room list + per-room utilization CSV (A8 partial / IFO-09, D-05/D-06). ghost_rooms
 is a PURE reduction of room_breakdown keeping booked_seconds > 0 AND used_seconds == 0, keyed on the
 UNROUNDED seconds so a ~40s-use room (rounds to used_hours 0.0) is never falsely flagged — a named
@@ -69,7 +69,7 @@ faculty message fixed (A2). The typhoon-day mass-Absent defect is closed.
 Suite: 965 tests, 0 failures.
 Next phases: 10 Campus Structure (building/floor CRUD, room-offline, schedule edit),
 11 Metrics, 12 Term Lifecycle, 13 UX Finish, 14 Correctness, 15 Deploy, 16 Docs.
-Last activity: 2026-07-20 — Phase 11 execution started
+Last activity: 2026-07-20 — Phase 11 complete, transitioned to Phase 12
 
 **Suite baseline moved 515 -> 790 tests across this phase; the failure set never
 changed.** The only failures are the 3 long-standing dev-login/home-redirect
@@ -81,7 +81,7 @@ Phase 07 and remain out of scope.
 
 **Velocity:**
 
-- Total plans completed: 24
+- Total plans completed: 27
 - Average duration: — min
 - Total execution time: 0.0 hours
 
@@ -93,6 +93,7 @@ Phase 07 and remain out of scope.
 | 03 | 6 | - | - |
 | 04 | 8 | - | - |
 | 04.2 | 4 | - | - |
+| 11 | 4 | - | - |
 
 **Recent Trend:**
 

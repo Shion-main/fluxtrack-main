@@ -520,7 +520,7 @@ pulled forward but 9 still precedes any real use.
 | **— Milestone v1.3 "Operational Trust" —** | | | |
 | 9. Attendance Trust Under Real Operations (CRITICAL) | Complete | 5/5 criteria, 30 tests | 2026-07-20 |
 | 10. Campus Structure Management | Complete | 3/3 criteria, 29 tests | 2026-07-20 |
-| 11. Metrics the Mission Promises | 4/4 | Complete   | 2026-07-20 |
+| 11. Metrics the Mission Promises | 4/4 | Complete    | 2026-07-20 |
 | 12. Term Lifecycle | 0/TBD | Not started | - |
 | 13. UX Finish | 0/TBD | Not started | - |
 | 14. Correctness & Concurrency Hardening | 0/TBD | Not started | - |
