@@ -350,7 +350,11 @@ def make_reporting_fixture(prefix="rpt"):
     teach_start, teach_end = time(8, 0), time(9, 30)
 
     def _mk(faculty, room, d, status, *, modality=Modality.F2F, declared="",
-            ended_early=False, checkin_method=""):
+            ended_early=False, checkin_method="", actual_start=None,
+            actual_end=None):
+        # actual_start/actual_end default to None so every existing caller (and the
+        # documented faculty_a/faculty_b totals) is byte-unchanged; lateness/boundary
+        # tests pass explicit aware datetimes for known deltas (A3 / D-01).
         n = _next()
         sched = Schedule.objects.create(
             term=term, course_code=f"{prefix}{n:03d}", section="A",
@@ -363,6 +367,7 @@ def make_reporting_fixture(prefix="rpt"):
             scheduled_end=_aware(d, teach_end),
             status=status, declared_modality=declared,
             ended_early=ended_early, checkin_method=checkin_method,
+            actual_start=actual_start, actual_end=actual_end,
         )
 
     # faculty_a: one session of every reporting-relevant shape.
