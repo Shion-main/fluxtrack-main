@@ -68,6 +68,13 @@ class FacultyRow:
     attendance_pct: int
     early_ends: int
     absences: list = field(default_factory=list)
+    # A3 / D-01 / D-02: lateness derived from actual_start vs scheduled_start over
+    # HELD sessions with a start. minutes_late_avg is average minutes late over
+    # those sessions; late_sessions is the count late by >= 1 whole minute;
+    # chronic_late is D-02's >=30%-of-held frequency flag with a >=5-held floor.
+    minutes_late_avg: Decimal = field(default_factory=lambda: Decimal("0.0"))
+    late_sessions: int = 0
+    chronic_late: bool = False
 
 
 @dataclass
@@ -92,6 +99,11 @@ class Scorecard:
     early_ends: int
     absences: list = field(default_factory=list)
     modality_breakdown: dict = field(default_factory=dict)
+    # A3 / D-01 / D-02: same lateness fields as FacultyRow, populated from the same
+    # shared _lateness_map so the scorecard and the weekly row cannot disagree.
+    minutes_late_avg: Decimal = field(default_factory=lambda: Decimal("0.0"))
+    late_sessions: int = 0
+    chronic_late: bool = False
 
 
 @dataclass
@@ -381,6 +393,54 @@ def _verified_map(qs):
     return {r["faculty_id"]: r["n"] for r in verified}
 
 
+def _avg_minutes(total_seconds, held_with_start):
+    """Average minutes late over held-with-start sessions, quantized to 0.1 (A3/D-02).
+
+    The lateness sibling of :func:`_hours`: Decimal division with explicit
+    ROUND_HALF_UP, never Python ``round()`` (banker's rounding), so a dean who
+    recomputes by hand never sees an off-by-one at a tie. The denominator is HELD
+    sessions with a start (D-02), NOT late sessions only -- a faculty who is 14 min
+    late once in ten held classes averages 1.4, not 14. Returns ``Decimal("0.0")``
+    for a zero denominator (a legitimate "no held sessions", not an error).
+    """
+    if held_with_start == 0:
+        return Decimal("0.0")
+    return (Decimal(total_seconds) / Decimal(held_with_start) / Decimal(60)).quantize(
+        Decimal("0.1"), rounding=ROUND_HALF_UP)
+
+
+def _lateness_map(qs):
+    """Per-faculty ``{faculty_id: (total_late_seconds, late_count, held_with_start)}``.
+
+    A SEPARATE Python fold (like :func:`_verified_map`) so it never inflates the
+    status counts. ``Count(filter=Q)`` cannot express ``max(0, actual - scheduled)``
+    and ORM DurationField subtraction is unverified on mssql-django with no module
+    precedent, so the sanctioned escape hatch is a bounded fold over
+    ``.values_list(...).iterator()`` -- the same deviation ``room_utilization``
+    already documents -- calling the single :func:`session_minutes_late` per row.
+
+    Only HELD sessions with a non-null ``actual_start`` contribute (D-01): ABSENT
+    and CANCELLED have no start and are excluded by the filter. UNLIKE
+    :func:`_session_contribution`, an in-flight ACTIVE session (``actual_start`` set,
+    ``actual_end`` NULL) DOES contribute here -- lateness needs only the START
+    (Pitfall 1). ``late_count`` increments ONLY when a session is late by >= 1 whole
+    minute (``secs >= 60``): sub-minute check-in noise adds its magnitude to the
+    average but never inflates the chronic-frequency flag (locked chronic-frequency
+    refinement over RESEARCH A1's raw ``secs > 0`` for the FREQUENCY count only).
+    """
+    out = {}
+    rows = (
+        qs.filter(status__in=HELD_STATUSES, actual_start__isnull=False)
+        .values_list("faculty_id", "scheduled_start", "actual_start")
+        .iterator()
+    )
+    for fid, sched, actual in rows:
+        secs = session_minutes_late(sched, actual)
+        tot, late, held = out.get(fid, (0, 0, 0))
+        out[fid] = (tot + secs, late + (1 if secs >= 60 else 0), held + 1)
+    return out
+
+
 def _absence_map(qs):
     """Per-faculty list of itemized AbsenceItem for ABSENT sessions in range."""
     out = {}
@@ -423,10 +483,12 @@ def faculty_attendance(*, start, end, department=None, as_of=None):
 
     verified_by_faculty = _verified_map(qs)
     absences_by_faculty = _absence_map(qs)
+    lateness_by_faculty = _lateness_map(qs)
 
     rows = []
     for r in status_rows:
         fid = r["faculty_id"]
+        tot_late, late_ct, held_ws = lateness_by_faculty.get(fid, (0, 0, 0))
         rows.append(
             FacultyRow(
                 faculty_id=fid,
@@ -438,6 +500,9 @@ def faculty_attendance(*, start, end, department=None, as_of=None):
                 attendance_pct=_pct(r["held"], r["scheduled"]),
                 early_ends=r["early_ends"],
                 absences=absences_by_faculty.get(fid, []),
+                minutes_late_avg=_avg_minutes(tot_late, held_ws),
+                late_sessions=late_ct,
+                chronic_late=(held_ws >= 5 and late_ct / held_ws >= 0.30),
             )
         )
     return rows
@@ -495,6 +560,7 @@ def faculty_scorecard(*, faculty, start, end, as_of=None):
     modality_breakdown = {r["effective_modality"]: r["n"] for r in breakdown_rows}
 
     absences = _absence_map(qs).get(faculty.id, [])
+    tot_late, late_ct, held_ws = _lateness_map(qs).get(faculty.id, (0, 0, 0))
 
     return Scorecard(
         faculty_id=faculty.id,
@@ -506,7 +572,36 @@ def faculty_scorecard(*, faculty, start, end, as_of=None):
         early_ends=agg["early_ends"] or 0,
         absences=absences,
         modality_breakdown=modality_breakdown,
+        minutes_late_avg=_avg_minutes(tot_late, held_ws),
+        late_sessions=late_ct,
+        chronic_late=(held_ws >= 5 and late_ct / held_ws >= 0.30),
     )
+
+
+def session_minutes_late(scheduled_start, actual_start):
+    """One held session's lateness in whole SECONDS: ``max(0, actual - scheduled)``.
+
+    THE single definition of "late" for this phase (A3 / D-01), the lateness sibling
+    of :func:`_session_contribution`. Both the per-faculty aggregate fold
+    (:func:`_lateness_map`) and the HR per-session payroll CSV (Plan 02) import this
+    one function, so the faculty scorecard and the payroll export can never disagree
+    about a minute.
+
+    Grace-INDEPENDENT (D-01): it must NOT read ``grace_minutes`` or any ``past_grace``.
+    Grace exists for the absent/no-show machinery; reusing it here would hide the most
+    common real lateness -- the faculty member who habitually starts a few minutes
+    late but inside grace, so never falls Absent.
+
+    Returns ``0`` when ``actual_start is None`` -- a NULL is answered explicitly here,
+    never folded into a silent zero (mirroring :func:`_session_contribution`'s null
+    discipline). An early arrival (``actual_start < scheduled_start``) floors at 0, so
+    it never contributes a negative that would cancel a genuinely-late sibling in the
+    average. Returns SECONDS internally; the caller renders minutes. Never ORM
+    DurationField subtraction (unverified on mssql-django, no module precedent).
+    """
+    if actual_start is None:
+        return 0
+    return max(0, int((actual_start - scheduled_start).total_seconds()))
 
 
 def _session_contribution(status, scheduled_start, scheduled_end,
