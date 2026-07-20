@@ -412,7 +412,7 @@ Plans:
 
   1. Lateness (minutes late; chronic flag) is computed in the aggregate layer and shown on the scorecard, weekly report, and HR export.
   2. Verification coverage (verified/held by building & day, incl. zero-coverage floors) is on the IFO dashboard.
-  3. Utilization gains capacity-vs-enrollment fit, a booked-but-never-used ghost-room list, and per-room CSV export (finishing 06.1-07).
+  3. Utilization gains a booked-but-never-used ghost-room list and per-room CSV export (finishing 06.1-07). Capacity-vs-enrollment "fit" is **deferred** (reopens the `reporting.py:947` T3 deferral once `enrolled_count` is validated on a real imported term); week-over-week trend is also out of scope. A8 is therefore partially addressed here.
 
 **Plans**: TBD
 
