@@ -77,6 +77,12 @@ urlpatterns = [
     path("ifo/buildings/<int:pk>/floors/create", ifo.floor_create,
          name="ifo_floor_create"),
     path("ifo/floors/<int:pk>/delete", ifo.floor_delete, name="ifo_floor_delete"),
+    # Phase 10 (A9) single-schedule ops: add / edit / cancel a class mid-term.
+    path("ifo/schedules/new", ifo.schedule_new, name="ifo_schedule_new"),
+    path("ifo/schedules/<int:pk>/edit", ifo.schedule_edit,
+         name="ifo_schedule_edit"),
+    path("ifo/schedules/<int:pk>/cancel", ifo.schedule_cancel,
+         name="ifo_schedule_cancel"),
     path("ifo/rooms", ifo.rooms_list, name="ifo_rooms"),
     path("ifo/rooms/board", ifo.rooms_board, name="ifo_rooms_board"),
     # IFO-01b room CRUD. `new` MUST precede the <str:code> pattern below or the

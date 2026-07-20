@@ -152,6 +152,44 @@ room this is; on paper there is no chrome, so the sheet has to identify itself.
   {% endif %}
 </div>
 
+{% comment %}Phase 10 (A9): manage the individual classes that meet in this room
+-- edit an instructor/room/time, or cancel a dropped section. Edits touch only
+future scheduled sessions; history is never rewritten.{% endcomment %}
+<div class="uk-card uk-card-body no-print mb-6">
+  <div class="flex items-center justify-between mb-3">
+    <h3 class="uk-card-title" style="margin:0">Classes in this room</h3>
+    <a href="/ifo/schedules/new" class="uk-btn uk-btn-default uk-btn-sm">
+      <uk-icon icon="plus" class="size-4"></uk-icon> New class</a>
+  </div>
+  {% if schedules %}
+  <table class="uk-table uk-table-divider uk-table-small">
+    <thead><tr><th>Class</th><th>Instructor</th><th>Day & time</th><th></th></tr></thead>
+    <tbody>
+      {% for s in schedules %}
+      <tr>
+        <td class="font-medium">{{ s.course_code }}-{{ s.section }}</td>
+        <td>{{ s.faculty.get_full_name|default:s.faculty.username }}</td>
+        <td>{{ s.get_day_of_week_display }} {{ s.start_time|time:"g:i A" }}-{{ s.end_time|time:"g:i A" }}</td>
+        <td class="uk-text-right whitespace-nowrap">
+          <a href="/ifo/schedules/{{ s.id }}/edit" class="uk-btn uk-btn-ghost uk-btn-sm">
+            <uk-icon icon="pencil" class="size-4"></uk-icon> Edit</a>
+          <form method="post" action="/ifo/schedules/{{ s.id }}/cancel"
+                style="display:inline" class="ml-1">
+            {% csrf_token %}
+            <input type="hidden" name="reason" value="Section dropped">
+            <button type="submit" class="uk-btn uk-btn-ghost uk-btn-sm">
+              <uk-icon icon="ban" class="size-4"></uk-icon> Cancel</button>
+          </form>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p class="uk-text-muted uk-text-small">No recurring classes in this room this term.</p>
+  {% endif %}
+</div>
+
 <div class="uk-card uk-card-body no-print">
   <h3 class="uk-card-title mb-3">Upcoming sessions</h3>
   {% if upcoming %}

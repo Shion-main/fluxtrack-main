@@ -1,0 +1,133 @@
+{% extends "ifo/_console.html" %}
+{% comment %}Phase 10 (A9) schedule add/edit. One template serves both: is_edit
+picks the verbs and action. On edit, the class code/section are read-only (they
+identify the class); instructor, room, times and enrolment are editable and the
+change propagates to future scheduled sessions only. Console uk-* vocabulary, real
+labels, ASCII-only.{% endcomment %}
+{% block title %}{% if is_edit %}Edit class{% else %}New class{% endif %} - FluxTrack{% endblock %}
+{% block console_title %}{% if is_edit %}Edit {{ schedule.course_code }}-{{ schedule.section }}{% else %}New class{% endif %}{% endblock %}
+{% block page_actions %}
+<a href="/ifo/rooms" class="uk-btn uk-btn-ghost uk-btn-sm">
+  <uk-icon icon="chevron-left" class="size-4"></uk-icon> Rooms</a>
+{% endblock %}
+{% block console %}
+<div class="max-w-2xl">
+  <p class="uk-text-muted mb-6">
+    {% if is_edit %}
+      Change the instructor, room, time, or enrolment. Only upcoming (still
+      scheduled) sessions are moved to match -- classes that already met keep
+      their attendance record. The meeting day cannot be changed here.
+    {% else %}
+      Add a class to the active term. Its upcoming sessions are created
+      immediately so it is checkable right away.
+    {% endif %}</p>
+
+  <div class="uk-card uk-card-body">
+    {% if error %}
+    <div class="uk-alert uk-alert-destructive mb-4" role="alert" data-error="1">
+      <p class="uk-text-small">{{ error }}</p></div>
+    {% endif %}
+    <form method="post"
+          action="{% if is_edit %}/ifo/schedules/{{ schedule.id }}/edit{% else %}/ifo/schedules/new{% endif %}"
+          class="flex flex-col gap-4">
+      {% csrf_token %}
+
+      <div class="grid gap-4 sm:grid-cols-2">
+        <div>
+          <label class="uk-form-label" for="sc-course">Course code</label>
+          {% if is_edit %}
+          <p id="sc-course" class="uk-text-lead" style="font-weight:600">{{ schedule.course_code }}</p>
+          {% else %}
+          <input id="sc-course" type="text" name="course_code" class="uk-input h-11"
+                 maxlength="30" required value="{{ form.course_code|default:'' }}"
+                 placeholder="MMA116" autocomplete="off">
+          {% endif %}
+        </div>
+        <div>
+          <label class="uk-form-label" for="sc-section">Section</label>
+          {% if is_edit %}
+          <p id="sc-section" class="uk-text-lead" style="font-weight:600">{{ schedule.section }}</p>
+          {% else %}
+          <input id="sc-section" type="text" name="section" class="uk-input h-11"
+                 maxlength="30" required value="{{ form.section|default:'' }}"
+                 placeholder="A301" autocomplete="off">
+          {% endif %}
+        </div>
+      </div>
+
+      <div>
+        <label class="uk-form-label" for="sc-faculty">Instructor</label>
+        <select id="sc-faculty" name="faculty" class="uk-select h-11" required>
+          <option value="">Select an instructor...</option>
+          {% for f in faculty_choices %}
+          <option value="{{ f.id }}"
+            {% if form.faculty == f.id|stringformat:'s' %}selected{% elif is_edit and schedule.faculty_id == f.id %}selected{% endif %}>
+            {{ f.get_full_name|default:f.username }}</option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <div>
+        <label class="uk-form-label" for="sc-room">Room</label>
+        <select id="sc-room" name="room" class="uk-select h-11" required>
+          <option value="">Select a room...</option>
+          {% for r in rooms %}
+          <option value="{{ r.id }}"
+            {% if form.room == r.id|stringformat:'s' %}selected{% elif is_edit and schedule.room_id == r.id %}selected{% endif %}>
+            {{ r.code }}{% if r.name %} - {{ r.name }}{% endif %}</option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <div class="grid gap-4 sm:grid-cols-3">
+        {% if not is_edit %}
+        <div>
+          <label class="uk-form-label" for="sc-day">Day</label>
+          <select id="sc-day" name="day_of_week" class="uk-select h-11" required>
+            {% for value, label in days %}
+            <option value="{{ value }}" {% if form.day_of_week == value|stringformat:'s' %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        {% endif %}
+        <div>
+          <label class="uk-form-label" for="sc-start">Start time</label>
+          <input id="sc-start" type="time" name="start_time" class="uk-input h-11" required
+                 value="{% if form.start_time %}{{ form.start_time }}{% elif is_edit %}{{ schedule.start_time|time:'H:i' }}{% endif %}">
+        </div>
+        <div>
+          <label class="uk-form-label" for="sc-end">End time</label>
+          <input id="sc-end" type="time" name="end_time" class="uk-input h-11" required
+                 value="{% if form.end_time %}{{ form.end_time }}{% elif is_edit %}{{ schedule.end_time|time:'H:i' }}{% endif %}">
+        </div>
+      </div>
+
+      <div class="grid gap-4 sm:grid-cols-2">
+        <div>
+          <label class="uk-form-label" for="sc-enrolled">Enrolled</label>
+          <input id="sc-enrolled" type="number" name="enrolled_count" class="uk-input h-11"
+                 min="0" step="1" inputmode="numeric"
+                 value="{% if form.enrolled_count %}{{ form.enrolled_count }}{% elif is_edit %}{{ schedule.enrolled_count }}{% else %}0{% endif %}">
+        </div>
+        {% if not is_edit %}
+        <div>
+          <label class="uk-form-label" for="sc-modality">Modality</label>
+          <select id="sc-modality" name="modality" class="uk-select h-11">
+            {% for value, label in modalities %}
+            <option value="{{ value }}" {% if form.modality == value|stringformat:'s' %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        {% endif %}
+      </div>
+
+      <div class="flex items-center gap-3 pt-2">
+        <button type="submit" class="uk-btn uk-btn-primary h-11">
+          <uk-icon icon="{% if is_edit %}save{% else %}plus{% endif %}" class="size-4"></uk-icon>
+          {% if is_edit %}Save changes{% else %}Create class{% endif %}</button>
+        <a href="/ifo/rooms" class="uk-btn uk-btn-ghost h-11">Cancel</a>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}

@@ -35,6 +35,7 @@ from scheduling.models import (AcademicBreak, AcademicTerm, ClassSuspension,
                                 DayOfWeek, Modality, Schedule, ScheduleStatus,
                                 Session, SessionStatus)
 from scheduling.importing import reconcile
+from scheduling.schedule_ops import cancel_schedule, update_schedule
 from scheduling.suspensions import lift_suspension, suspend_classes
 from scheduling.report_render import build_csv
 from scheduling.reporting import (block_saturation, building_floor_rollup,
@@ -2007,3 +2008,143 @@ def floor_delete(request, pk):
     floor.delete()
     request.session["ifo_flash"] = f"{label} deleted."
     return redirect("ifo_building_detail", pk=building_pk)
+
+
+# --- Single-schedule ops: add / edit / cancel (Phase 10, A9) -----------------
+# Individual Schedule rows were Django-admin-only. These views let IFO handle the
+# registrar's mid-term reality -- instructor swap, room move, dropped section --
+# from the console. The propagation/cancel rules live in scheduling.schedule_ops;
+# these views only collect input, call the service, and report the outcome. Every
+# edit touches ONLY future SCHEDULED sessions (never rewrites attendance history).
+
+def _schedule_form_ctx(*, schedule=None, error=None, form=None):
+    faculty = (get_user_model().objects
+               .filter(role=Role.FACULTY, is_active=True)
+               .order_by("last_name", "username"))
+    rooms = (Room.objects.filter(out_of_service=False)
+             .select_related("floor__building")
+             .order_by("floor__building__code", "code"))
+    return {"schedule": schedule, "faculty_choices": faculty, "rooms": rooms,
+            "days": DayOfWeek.choices, "modalities": Modality.choices,
+            "error": error, "form": form or {}, "is_edit": schedule is not None}
+
+
+def _schedule_fields(request):
+    return {k: (request.POST.get(k) or "").strip() for k in
+            ("course_code", "section", "faculty", "room", "day_of_week",
+             "start_time", "end_time", "enrolled_count", "modality")}
+
+
+@ifo_required
+@require_http_methods(["GET", "POST"])
+def schedule_new(request):
+    """Create a schedule on the active term and materialize its future sessions."""
+    term = _active_term_or_none()
+    if request.method == "GET":
+        return render(request, "ifo/schedule_form.html", _schedule_form_ctx())
+
+    fields = _schedule_fields(request)
+
+    def fail(msg):
+        return render(request, "ifo/schedule_form.html",
+                      _schedule_form_ctx(error=msg, form=fields), status=400)
+
+    if term is None:
+        return fail("No active term. Import a term first.")
+    if not fields["course_code"] or not fields["section"]:
+        return fail("Course code and section are required.")
+    faculty = (get_user_model().objects.filter(pk=fields["faculty"],
+               role=Role.FACULTY).first() if fields["faculty"].isdigit() else None)
+    if faculty is None:
+        return fail("Select a faculty member.")
+    room = (Room.objects.filter(pk=fields["room"]).first()
+            if fields["room"].isdigit() else None)
+    if room is None:
+        return fail("Select a room.")
+    start = _safe_parse_time(fields["start_time"])
+    end = _safe_parse_time(fields["end_time"])
+    if start is None or end is None:
+        return fail("Enter valid start and end times.")
+    if end <= start:
+        return fail("The end time must be after the start time.")
+    if not fields["day_of_week"].isdigit():
+        return fail("Select a day of week.")
+    modality = fields["modality"] if fields["modality"] in dict(Modality.choices) \
+        else Modality.F2F
+
+    schedule = Schedule.objects.create(
+        term=term, course_code=fields["course_code"][:30],
+        section=fields["section"][:30], faculty=faculty, room=room,
+        day_of_week=int(fields["day_of_week"]), start_time=start, end_time=end,
+        enrolled_count=int(fields["enrolled_count"] or 0), modality=modality,
+        status=ScheduleStatus.ACTIVE)
+    AuditLog.objects.create(
+        actor=request.user, event_type="schedule.created",
+        target_type="schedule", target_id=str(schedule.pk),
+        payload={"course": schedule.course_code, "section": schedule.section,
+                 "room": room.code})
+    # Materialize via the canonical command so the new class is immediately
+    # checkable and never diverges from the scheduler's own materialize rules
+    # (idempotent get_or_create; honors breaks/suspensions).
+    call_command("materialize_sessions")
+    request.session["ifo_flash"] = (
+        f"{schedule.course_code}-{schedule.section} added and its upcoming "
+        f"sessions created.")
+    return redirect("ifo_room_detail", code=room.code)
+
+
+@ifo_required
+@require_http_methods(["GET", "POST"])
+def schedule_edit(request, pk):
+    """Edit a schedule's instructor, room, times, or enrolment; propagate to
+    future SCHEDULED sessions (scheduling.schedule_ops.update_schedule)."""
+    schedule = get_object_or_404(
+        Schedule.objects.select_related("faculty", "room"), pk=pk)
+    if request.method == "GET":
+        return render(request, "ifo/schedule_form.html",
+                      _schedule_form_ctx(schedule=schedule))
+
+    fields = _schedule_fields(request)
+
+    def fail(msg):
+        return render(request, "ifo/schedule_form.html",
+                      _schedule_form_ctx(schedule=schedule, error=msg, form=fields),
+                      status=400)
+
+    faculty = (get_user_model().objects.filter(pk=fields["faculty"],
+               role=Role.FACULTY).first() if fields["faculty"].isdigit() else None)
+    room = (Room.objects.filter(pk=fields["room"]).first()
+            if fields["room"].isdigit() else None)
+    start = _safe_parse_time(fields["start_time"])
+    end = _safe_parse_time(fields["end_time"])
+    if faculty is None:
+        return fail("Select a faculty member.")
+    if room is None:
+        return fail("Select a room.")
+    if start is None or end is None:
+        return fail("Enter valid start and end times.")
+    if end <= start:
+        return fail("The end time must be after the start time.")
+
+    n = update_schedule(
+        schedule, faculty=faculty, room=room, start_time=start, end_time=end,
+        enrolled_count=int(fields["enrolled_count"] or 0), actor=request.user)
+    request.session["ifo_flash"] = (
+        f"{schedule.course_code}-{schedule.section} updated; {n} upcoming "
+        f"session(s) moved to match.")
+    return redirect("ifo_room_detail", code=room.code)
+
+
+@ifo_required
+@require_http_methods(["POST"])
+def schedule_cancel(request, pk):
+    """Archive a schedule and cancel its future sessions (schedule_ops.cancel_schedule)."""
+    schedule = get_object_or_404(
+        Schedule.objects.select_related("room"), pk=pk)
+    reason = (request.POST.get("reason") or "").strip()
+    room_code = schedule.room.code
+    n = cancel_schedule(schedule, actor=request.user, reason=reason)
+    request.session["ifo_flash"] = (
+        f"{schedule.course_code}-{schedule.section} cancelled; {n} upcoming "
+        f"session(s) marked Cancelled.")
+    return redirect("ifo_room_detail", code=room_code)
