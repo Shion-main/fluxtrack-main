@@ -9,6 +9,9 @@ timezone-correct week boundary on the local Session.date DateField
 (WeekBoundaryTests). Django TestCase (not pytest); reference module constants
 (SessionStatus, HELD_STATUSES, Modality), never bare status strings.
 """
+from datetime import time
+from decimal import Decimal
+
 from django.test import SimpleTestCase, TestCase
 
 from scheduling.models import Modality, SessionStatus
@@ -24,7 +27,7 @@ from scheduling.reporting import (
     faculty_scorecard,
     safe_card,
 )
-from scheduling.test_support import make_reporting_fixture
+from scheduling.test_support import _aware, make_reporting_fixture
 
 
 class PctRoundingTests(SimpleTestCase):
@@ -248,6 +251,35 @@ class ScorecardTests(TestCase):
         self.assertEqual(card.attendance_pct, 0)
         self.assertEqual(card.modality_breakdown, {})
         self.assertEqual(card.absences, [])
+
+
+class LatenessParityTests(TestCase):
+    """A3 / D-01: faculty_attendance and faculty_scorecard expose the SAME lateness
+    fields for one faculty over one range -- the two builders share _lateness_map and
+    so cannot drift (T-11-01)."""
+
+    def setUp(self):
+        self.fx = make_reporting_fixture()
+
+    def test_facultyrow_and_scorecard_lateness_agree(self):
+        # Seed one 4-min-late held session so the parity is over non-trivial values.
+        late = _aware(self.fx.week_start, time(8, 4))
+        end = _aware(self.fx.week_start, time(9, 30))
+        self.fx.add_session(
+            self.fx.faculty_a, self.fx.week_start, SessionStatus.COMPLETED,
+            actual_start=late, actual_end=end)
+
+        rows = faculty_attendance(start=self.fx.week_start, end=self.fx.sun)
+        row = [r for r in rows if r.faculty_id == self.fx.faculty_a.id][0]
+        card = faculty_scorecard(
+            faculty=self.fx.faculty_a, start=self.fx.week_start, end=self.fx.sun)
+
+        self.assertEqual(card.minutes_late_avg, row.minutes_late_avg)
+        self.assertEqual(card.late_sessions, row.late_sessions)
+        self.assertEqual(card.chronic_late, row.chronic_late)
+        # The seeded 4-min-late session actually registered on both surfaces.
+        self.assertEqual(row.late_sessions, 1)
+        self.assertEqual(row.minutes_late_avg, Decimal("4.0"))
 
 
 class WeekBoundaryTests(TestCase):
