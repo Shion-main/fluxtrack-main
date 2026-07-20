@@ -2,19 +2,19 @@
 gsd_state_version: 1.0
 milestone: v1.3
 milestone_name: — "Operational Trust
-current_phase: 10
-current_phase_name: Campus Structure Management
-status: ready
-stopped_at: n/a — phase 10 complete 2026-07-20; phase 11 next
-last_updated: "2026-07-20T08:32:34.849Z"
+current_phase: 11
+current_phase_name: metrics-the-mission-promises
+status: executing
+stopped_at: 11-01 complete 2026-07-20; phase 11 continues (11-02 next)
+last_updated: "2026-07-20T08:45:25.919Z"
 last_activity: 2026-07-20
-last_activity_desc: Phase 09 complete, verified, committed
+last_activity_desc: Completed 11-01 (lateness aggregate layer)
 progress:
-  total_phases: 19
-  completed_phases: 13
-  total_plans: 59
-  completed_plans: 58
-  percent: 68
+  total_phases: 18
+  completed_phases: 9
+  total_plans: 63
+  completed_plans: 59
+  percent: 50
 ---
 
 # Project State
@@ -24,11 +24,15 @@ progress:
 See: .planning/PROJECT.md (updated 2026-07-02)
 
 **Core value:** A faculty member checks in with one action, and the resulting attendance record is trustworthy — presence physically verified, lateness captured, ghost bookings detected.
-**Current focus:** Phase 08 — Auth Cutover & AWS Deployment (last planned phase)
+**Current focus:** Phase 11 — metrics-the-mission-promises
 
 ## Current Position
 
-Phase: 10 (Campus Structure Management) — COMPLETE 2026-07-20 (3/3, see
+Phase: 11 (metrics-the-mission-promises) — EXECUTING (11-01 of 4 plans complete)
+11-01 shipped: lateness in the aggregate layer (A3) — session_minutes_late shared
+helper + _lateness_map fold; FacultyRow/Scorecard carry minutes_late_avg/late_sessions/
+chronic_late (chronic = held>=5 and >=30% late, frequency floored at >=1 whole minute).
+131 reporting tests green. Next: 11-02 (HR per-session lateness CSV imports the helper).
 10-VERIFICATION.md): building/floor CRUD, room out-of-service (A7), single-schedule
 add/edit/cancel (A9). Phase 09 also complete (5/5). Next: Phase 11 (Metrics).
 Env note added: the staticfiles manifest needs `DEBUG=False manage.py collectstatic`
@@ -44,7 +48,7 @@ faculty message fixed (A2). The typhoon-day mass-Absent defect is closed.
 Suite: 965 tests, 0 failures.
 Next phases: 10 Campus Structure (building/floor CRUD, room-offline, schedule edit),
 11 Metrics, 12 Term Lifecycle, 13 UX Finish, 14 Correctness, 15 Deploy, 16 Docs.
-Last activity: 2026-07-20 — Phase 09 complete, verified, committed
+Last activity: 2026-07-20 — Phase 11 execution started
 
 **Suite baseline moved 515 -> 790 tests across this phase; the failure set never
 changed.** The only failures are the 3 long-standing dev-login/home-redirect
@@ -120,6 +124,7 @@ Phase 07 and remain out of scope.
 | Phase 06 P06 | ~20min | 3 tasks | 6 files |
 | Phase 06 P07 | ~20min | 3 tasks | 6 files |
 | Phase 06.1 P01 | 40m | 3 tasks | 3 files |
+| Phase 11 P01 | 11min | 3 tasks tasks | 4 files files |
 
 ## Accumulated Context
 
@@ -203,6 +208,7 @@ Recent decisions affecting current work:
 - [Phase 06]: 06-07: HR session-level attendance surface (web/hr.py hr_required + attendance() list + attendance_csv() streaming export) is the CROSS-DEPARTMENT, READ-ONLY final reporting surface. Unlike the Dean surface, department is a FILTER not a scope boundary (HR sees all departments). Four independent filters (faculty/dept/date-range/term) + search key on FK id + date__range only (never pk__in, the 2100-param trap, T-06-16); invalid date -> friendly inline notice, never a 500. attendance_csv streams (StreamingHttpResponse + queryset.iterator() + _Echo echo-writer) to bound memory (T-06-03) and reuses scheduling.report_render.csv_safe for formula-injection neutralization (T-06-02). KEY: checker-verified is an is_verified=Exists() ANNOTATION resolved in the main query, NOT the Session.verified_by_checker property — the property runs a per-object subquery that is fatal inside a streaming .iterator() generator on MSSQL (HY010/open-cursor, T-06-15). One shared _filtered_sessions parser keeps the list and export in lock-step. Every view GET-only so POST is 405 (T-06-07). 14 tests green. Phase 06 complete (7/7).
 - [Phase 06]: 06-06: Dean reporting surface (web/dean.py dashboard/reports/scorecard/report_export/weekly_download) is the department-scoped, READ-ONLY consumer of the shared aggregate/render layers. Every queryset scopes to request.user.department SERVER-SIDE; scorecard + weekly_download use get_object_or_404(..., department=request.user.department) so a foreign-department id 404s (T-06-01 IDOR/BOLA, refused not hidden). Every view is @require_http_methods(['GET']) so a POST is 405 (DEAN-01 read-only, T-06-07) — a bare Django view otherwise accepts any method. NULL-department Dean gets a zeroed DeptSummary/empty table, NEVER dept_summary(department=None) (edge-case cross-department leak closed). Export reuses build_csv/build_pdf (csv_safe intact, T-06-02); weekly_download streams default_storage bytes. Shared reports/scorecard.html back link parameterized via back_url (default /ifo/dashboard) so a Dean returns to /dean/reports. 12 tests green.
 - [Phase ?]: 06.1-01: room-hours 'used' derived from actual timestamps, clamped to the scheduled window; the ended_early flag is display-only
+- [Phase 11]: 11-01: lateness enters the aggregate layer as ONE shared pure helper session_minutes_late (seconds, grace-independent max(0,actual-scheduled), 0 for NULL start) + a separate Python fold _lateness_map (never Count(filter=Q)/DurationField). FacultyRow+Scorecard gain minutes_late_avg/late_sessions/chronic_late; chronic=held>=5 and >=30% late, but the FREQUENCY count only increments at >=1 whole minute (secs>=60) so sub-minute noise never flags while the average still reflects it. In-flight ACTIVE contributes (lateness needs only the start). Plan 02 HR CSV imports the same helper. 131 reporting tests green.
 
 ### Pending Todos
 
@@ -226,7 +232,7 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-07-20 (Phases 9 + 10 shipped; user chose to continue next session)
+Last session: 2026-07-20T08:44:57.006Z
 Session arc + decisions: docs/sessions/2026-07-20-audit-and-phase9.md
 Stopped at: Phase 9 AND Phase 10 COMPLETE + verified + committed; tree clean;
 suite 994 green.
