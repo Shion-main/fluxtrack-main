@@ -8,10 +8,11 @@ Confirm forms reuse .ft-control + .ft-btn-navy. ASCII-only (no em dash).
 <div class="ft-outcome ft-outcome--bad" data-outcome="error">
   <div class="ft-outcome__head">
     <span class="ft-outcome__icon"><uk-icon icon="alert-triangle"></uk-icon></span>
-    <div class="ft-outcome__title">{% if error == "rate-limited" %}Too many attempts{% else %}Invalid code{% endif %}</div>
+    <div class="ft-outcome__title">{% if error == "rate-limited" %}Too many attempts{% elif error == "out-of-service" %}Room out of service{% else %}Invalid code{% endif %}</div>
   </div>
   <p class="ft-outcome__body">
     {% if error == "rate-limited" %}Manual code entry is limited. Wait a minute and try again.
+    {% elif error == "out-of-service" %}{{ error_detail }}
     {% else %}That is not a valid room QR or six-digit code.{% endif %}</p>
 </div>
 

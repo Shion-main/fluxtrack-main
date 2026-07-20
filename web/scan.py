@@ -151,6 +151,16 @@ def resolve(request):
     if room is None:
         return render(request, "faculty/_outcome.html",
                       {"resolution": None, "error": method})
+    # Out-of-service (Phase 10, A7): a room closed for renovation refuses check-in
+    # with a clear reason rather than resolving against stale schedule state.
+    if room.out_of_service:
+        detail = ("This room is out of service"
+                  + (f" ({room.out_of_service_reason})."
+                     if room.out_of_service_reason else ".")
+                  + " Ask the IFO office where your class has moved.")
+        return render(request, "faculty/_outcome.html",
+                      {"resolution": None, "error": "out-of-service",
+                       "error_detail": detail})
 
     now = timezone.now()
     sessions_today = list(

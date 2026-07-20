@@ -34,6 +34,48 @@ decision belongs before it, not on it.{% endcomment %}
   <span class="mx-2">&middot;</span>
   {{ room.floor.building.name }} &middot; Floor {{ room.floor.number }}{% if room.name %} &middot; {{ room.name }}{% endif %}{% if room.capacity %} &middot; capacity {{ room.capacity }}{% endif %}</p>
 
+{% if flash %}
+<div class="uk-alert uk-alert-success mb-4 no-print" role="status">
+  <p class="uk-text-small">{{ flash }}</p></div>
+{% endif %}
+
+{% comment %}Phase 10 (A7) out-of-service control. A room closed for renovation
+refuses scans and bookings and drops from the utilization denominator; its
+schedules and history are untouched.{% endcomment %}
+<div class="uk-card uk-card-body mb-6 no-print">
+  {% if room.out_of_service %}
+  <div class="flex items-center gap-2 mb-2">
+    <uk-icon icon="construction" class="size-4"></uk-icon>
+    <span class="uk-label uk-label-destructive">Out of service</span>
+    {% if room.out_of_service_reason %}<span class="uk-text-small uk-text-muted">{{ room.out_of_service_reason }}</span>{% endif %}
+  </div>
+  <p class="uk-text-small uk-text-muted mb-3">
+    This room is refusing new check-ins and bookings and is excluded from
+    utilization. Return it to service when it reopens.</p>
+  <form method="post" action="/ifo/rooms/{{ room.code }}/service">
+    {% csrf_token %}
+    <button type="submit" class="uk-btn uk-btn-primary uk-btn-sm">
+      <uk-icon icon="check" class="size-4"></uk-icon> Return to service</button>
+  </form>
+  {% else %}
+  <div class="flex items-center gap-2 mb-3">
+    <uk-icon icon="circle-check" class="size-4"></uk-icon>
+    <span class="uk-text-small">In service</span>
+  </div>
+  <form method="post" action="/ifo/rooms/{{ room.code }}/service"
+        class="flex items-end gap-3">
+    {% csrf_token %}
+    <div class="flex-1">
+      <label class="uk-form-label" for="oos-reason">Take out of service <span class="uk-text-muted">(reason, optional)</span></label>
+      <input id="oos-reason" type="text" name="reason" class="uk-input h-10"
+             maxlength="200" placeholder="Under renovation" autocomplete="off">
+    </div>
+    <button type="submit" class="uk-btn uk-btn-default h-10 whitespace-nowrap">
+      <uk-icon icon="construction" class="size-4"></uk-icon> Take out of service</button>
+  </form>
+  {% endif %}
+</div>
+
 {% comment %}Print-only masthead. On screen the console bar already says which
 room this is; on paper there is no chrome, so the sheet has to identify itself.
 {% endcomment %}

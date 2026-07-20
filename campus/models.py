@@ -40,6 +40,14 @@ class Room(models.Model):
         settings.AUTH_USER_MODEL, null=True, blank=True,
         on_delete=models.SET_NULL, related_name="rotated_room_codes",
     )
+    # Phase 10 (A7): a room closed for renovation/repair. Distinct from deletion
+    # (which is refused while the room carries history): an out-of-service room
+    # keeps its record and schedules but refuses new scans and bookings and drops
+    # out of the utilization denominator, so a closed room does not read as
+    # "wasted" capacity. Honored by web/scan.py, ifo.booking_create, and
+    # scheduling.reporting._physical_rooms.
+    out_of_service = models.BooleanField(default=False)
+    out_of_service_reason = models.CharField(max_length=200, blank=True)
 
     @property
     def is_virtual(self):

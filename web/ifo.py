@@ -187,8 +187,37 @@ def room_detail(request, code):
     return render(request, "ifo/room_detail.html", {
         "room": room, "schedules": schedules, "upcoming": upcoming, "term": term,
         "timetable": room_timetable(room, term),
+        "flash": request.session.pop("ifo_flash", None),
         "printed_on": timezone.localtime(),
     })
+
+
+@ifo_required
+@require_http_methods(["POST"])
+def room_toggle_service(request, code):
+    """Take a room out of service (renovation) or return it (Phase 10, A7).
+
+    Toggles `out_of_service`; taking it out captures an optional reason shown at
+    the point a scan or booking is refused. Audited. Does not touch schedules or
+    history -- an out-of-service room keeps its record, it just refuses new
+    activity and drops from the utilization denominator.
+    """
+    room = get_object_or_404(Room, code=code)
+    room.out_of_service = not room.out_of_service
+    room.out_of_service_reason = (
+        (request.POST.get("reason") or "").strip()[:200]
+        if room.out_of_service else "")
+    room.save(update_fields=["out_of_service", "out_of_service_reason"])
+    AuditLog.objects.create(
+        actor=request.user,
+        event_type="room.out_of_service" if room.out_of_service
+        else "room.in_service",
+        target_type="room", target_id=str(room.pk),
+        payload={"code": room.code, "reason": room.out_of_service_reason})
+    request.session["ifo_flash"] = (
+        f"{room.code} is now out of service."
+        if room.out_of_service else f"{room.code} is back in service.")
+    return redirect("ifo_room_detail", code=room.code)
 
 
 def live(request):
@@ -844,6 +873,9 @@ def booking_create(request):
                 .filter(pk=fields["room"]).first())
         if room is None:
             error = "Select a room."
+        elif room.out_of_service:
+            # Phase 10 (A7): a room closed for renovation cannot be booked.
+            error = f"{room.code} is out of service and cannot be booked."
 
     if error is None:
         day = _safe_parse_date(fields["date"])

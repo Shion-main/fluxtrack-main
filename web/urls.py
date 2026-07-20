@@ -85,6 +85,9 @@ urlpatterns = [
     path("ifo/rooms/<str:code>", ifo.room_detail, name="ifo_room_detail"),
     path("ifo/rooms/<str:code>/edit", ifo.room_edit, name="ifo_room_edit"),
     path("ifo/rooms/<str:code>/delete", ifo.room_delete, name="ifo_room_delete"),
+    # Phase 10 (A7): take a room out of service / return it.
+    path("ifo/rooms/<str:code>/service", ifo.room_toggle_service,
+         name="ifo_room_toggle_service"),
     path("ifo/rooms/<str:code>/panel", ifo.room_panel, name="ifo_room_panel"),
     path("ifo/rooms/<str:code>/poster", ifo.room_poster, name="ifo_room_poster"),
     # IFO-02 credential rotation: a GET confirm page, a POST-only action.

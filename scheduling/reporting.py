@@ -146,8 +146,12 @@ def _physical_rooms():
     and ``manual_code`` are CS_AS), so the uppercase prefix already matches a
     lowercase ``v``; do NOT reach for ``istartswith``, which would diverge from the
     two existing call sites for no behavioural gain.
+
+    Out-of-service rooms (Phase 10, A7) are excluded too: a room closed for
+    renovation has no capacity to use, so leaving it in the denominator would
+    render the campus permanently under-utilized for a reason that is not waste.
     """
-    return Room.objects.exclude(code__startswith="V")
+    return Room.objects.exclude(code__startswith="V").filter(out_of_service=False)
 
 
 def _exclude_virtual(qs):
