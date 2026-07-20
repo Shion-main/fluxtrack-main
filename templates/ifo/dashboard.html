@@ -31,4 +31,10 @@ weekly consolidated report now lives in the sidebar (Weekly reports). ASCII-only
 <div id="report-panel">
   {% include "ifo/_cards.html" %}
 </div>
+
+{% comment %}A6 / D-04 verification-coverage sections. Outside #report-panel but
+inside the plain GET form's reload cycle (the page is a form reload, no htmx), so it
+re-renders point-in-time on Apply like the cards above. Its own safe_card owners
+guard each section separately.{% endcomment %}
+{% include "ifo/_coverage.html" %}
 {% endblock %}

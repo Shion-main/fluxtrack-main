@@ -1,0 +1,76 @@
+{% comment %}A6 / D-04 verification-coverage surface on the IFO dashboard. TWO
+independent sections, each guarding its OWN safe_card (value, error) `.1` error and
+including reports/_error_card.html on failure (RPT-05 isolation -- never a shared
+guard), so a raising coverage aggregate errors in its own section while the sibling
+and the rest of the dashboard still render.
+
+Section one is the verified/HELD rate by building x weekday (physical rooms only,
+D-04). Section two lists every floor that had held sessions but ZERO checker
+verification EXPLICITLY (D-04): a zero-coverage floor must be VISIBLE, not merely a
+low percentage. This is the historical/management rollup, distinct from the live
+per-floor board the on-duty checker already sees. Coverage pills use the ok/warn/bad
+ladder (unlike the neutral occupancy pill) because D-04 DOES have a target: a
+checker-less floor is a genuine problem, so 0% should read red. Colour is never the
+only signal -- the percentage prints inside the pill. ASCII-only.{% endcomment %}
+<h3 class="uk-h4 mt-8 mb-2">Verification coverage</h3>
+<p class="uk-text-muted uk-text-small mb-4">Share of HELD sessions a checker physically verified, by building and weekday. Physical rooms only (A6).</p>
+
+{% if coverage.1 %}
+  {% include "reports/_error_card.html" %}
+{% else %}
+  <div class="uk-card uk-card-body p-0 table-wrap" data-coverage-table>
+    <table class="tbl">
+      <thead>
+        <tr>
+          <th scope="col">Building</th>
+          <th scope="col">Day</th>
+          <th scope="col" class="tbl__num">Held</th>
+          <th scope="col" class="tbl__num">Verified</th>
+          <th scope="col" class="tbl__num">Coverage</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in coverage.0 %}
+        <tr>
+          <td>{{ row.building_name }} <span class="uk-text-muted uk-text-small">{{ row.building_code }}</span></td>
+          <td>{{ row.day_label }}</td>
+          <td class="tbl__num">{{ row.held }}</td>
+          <td class="tbl__num">{{ row.verified }}</td>
+          <td class="tbl__num">
+            <span class="pill {% if row.pct >= 90 %}pill--ok{% elif row.pct >= 75 %}pill--warn{% else %}pill--bad{% endif %}">{{ row.pct }}%</span>
+          </td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="5" class="uk-text-muted">No held sessions in physical rooms for this range. Adjust the range above.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+{% endif %}
+
+<h3 class="uk-h4 mt-8 mb-2">Zero-coverage floors</h3>
+{% if zero_floors.1 %}
+  {% include "reports/_error_card.html" %}
+{% else %}
+  {% if zero_floors.0 %}
+  <div class="uk-card uk-card-body" data-zero-floors>
+    <p class="uk-text-small uk-text-muted mb-3">These floors had held sessions but not a single checker verification &mdash; a checker-less floor is not the same as a covered one (A6).</p>
+    <ul class="uk-list uk-list-divider">
+      {% for f in zero_floors.0 %}
+      <li class="flex items-center justify-between gap-4">
+        <span class="flex items-center gap-2">
+          <uk-icon icon="triangle-alert" class="size-4" style="color:var(--amber)"></uk-icon>
+          {{ f.building_name }} <span class="uk-text-muted uk-text-small">{{ f.building_code }}</span> &mdash; Floor {{ f.floor_number }}</span>
+        <span class="uk-text-small uk-text-muted">{{ f.held }} held, 0 verified</span>
+      </li>
+      {% endfor %}
+    </ul>
+  </div>
+  {% else %}
+  <div class="uk-card uk-card-body" data-zero-floors-empty>
+    <p class="uk-text-muted flex items-center gap-2">
+      <uk-icon icon="check" class="size-4" style="color:var(--green)"></uk-icon>
+      Every floor with held sessions had at least one checker verification.</p>
+  </div>
+  {% endif %}
+{% endif %}

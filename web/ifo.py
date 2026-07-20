@@ -39,9 +39,11 @@ from scheduling.schedule_ops import cancel_schedule, update_schedule
 from scheduling.suspensions import lift_suspension, suspend_classes
 from scheduling.report_render import build_csv
 from scheduling.reporting import (block_saturation, building_floor_rollup,
-                                  dept_summary, faculty_attendance,
-                                  faculty_scorecard, room_breakdown,
-                                  room_heat_grid, room_utilization, safe_card)
+                                  coverage_by_building_day, dept_summary,
+                                  faculty_attendance, faculty_scorecard,
+                                  room_breakdown, room_heat_grid,
+                                  room_utilization, safe_card,
+                                  zero_coverage_floors)
 from verification.models import (Assignment, AssignmentScope, AssignmentType,
                                  DutyRole)
 from verification.services import assign_online_sessions
@@ -1332,6 +1334,22 @@ def assignment_create(request):
 # surface -- no per-role copy is kept in sync by hand (code-review LO-03).
 
 
+def _coverage_card(**kwargs):
+    """``coverage_by_building_day`` with each row's weekday resolved to a label.
+
+    Same reasoning as :func:`_saturation_card`: the aggregate layer returns a
+    ``DayOfWeek`` int and stays display-free, and the label is attached INSIDE the
+    safe_card unit so the resolution is fault-isolated with the query it decorates.
+    ``CoverageRow`` is a plain (non-frozen) dataclass, so a display-only
+    ``day_label`` attribute can be attached without touching the aggregate contract.
+    """
+    labels = dict(DayOfWeek.choices)
+    rows = coverage_by_building_day(**kwargs)
+    for row in rows:
+        row.day_label = labels.get(row.day)
+    return rows
+
+
 @ifo_required
 def dashboard(request):
     """IFO-09: an unscoped reporting dashboard of summary cards over a selectable
@@ -1362,6 +1380,14 @@ def dashboard(request):
         room_utilization, start=start, end=end, term=term, as_of=as_of)
     rows = safe_card(
         faculty_attendance, start=start, end=end, department=None, as_of=as_of)
+    # A6 / D-04: verification coverage (verified / HELD by building x weekday) and
+    # the explicit zero-coverage-floor list, each its OWN safe_card owner so a
+    # raising coverage aggregate errors in its own section without touching the KPI
+    # row, the occupancy card, or the faculty table (RPT-05). The weekday label is
+    # resolved inside _coverage_card so the aggregate layer stays display-free.
+    coverage = safe_card(_coverage_card, start=start, end=end, as_of=as_of)
+    zero_floors = safe_card(
+        zero_coverage_floors, start=start, end=end, as_of=as_of)
     # Unscoped means every faculty member in the institution lands in one table --
     # the largest list in the product. Paged; the exports still cover the full set.
     # `or []` is load-bearing, do NOT remove it: safe_card returns (None, message)
@@ -1372,6 +1398,7 @@ def dashboard(request):
     pager = paginate(request, rows[0] or [])
     return render(request, "ifo/dashboard.html", {
         "summary": summary, "occupancy": occupancy, "rows": rows,
+        "coverage": coverage, "zero_floors": zero_floors,
         "date_from": start, "date_to": end, "range_note": note, **pager,
     })
 
