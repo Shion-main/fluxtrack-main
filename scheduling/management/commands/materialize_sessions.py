@@ -20,6 +20,7 @@ from ops.occupancy import release_room
 from scheduling.models import (AcademicTerm, Modality, ModalityShiftItem,
                                ModalityShiftStatus, ScheduleStatus, Session,
                                SessionStatus)
+from scheduling.suspensions import excused_checker
 
 
 def _apply_approved_shift(session, schedule, date):
@@ -123,20 +124,24 @@ class Command(BaseCommand):
         start = (datetime.strptime(o["start"], "%Y-%m-%d").date()
                  if o["start"] else timezone.localdate())
         end = start + timedelta(days=o["days"])
-        breaks = list(term.breaks.all())
-
-        def in_break(d):
-            return any(b.start_date <= d <= b.end_date for b in breaks)
+        # Calendar excusal (Phase 9, A1): breaks AND active suspensions both
+        # suppress materialization. `excused(d, building_id)` is the SAME shared
+        # helper the sweep uses, so the two can never disagree on whether a date
+        # is a class day. A building-scoped suspension only suppresses that
+        # building's rooms, hence the per-schedule building_id check below.
+        excused = excused_checker(term)
 
         schedules = (term.schedules.filter(status=ScheduleStatus.ACTIVE)
-                     .select_related("faculty", "room"))
+                     .select_related("faculty", "room", "room__floor"))
         created = existing = 0
         d = start
         while d < end:
             in_term = term.start_date <= d <= term.end_date
-            if in_term and not in_break(d):
+            if in_term:
                 for sch in schedules:
                     if sch.day_of_week != d.weekday():
+                        continue
+                    if excused(d, sch.room.floor.building_id):
                         continue
                     ss = timezone.make_aware(datetime.combine(d, sch.start_time))
                     se = timezone.make_aware(datetime.combine(d, sch.end_time))

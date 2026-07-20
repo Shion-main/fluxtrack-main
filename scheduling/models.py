@@ -30,14 +30,65 @@ class AcademicTerm(models.Model):
 
 
 class AcademicBreak(models.Model):
-    """Breaks suppress session materialization (JOB-01)."""
+    """Planned term breaks/holidays suppress session materialization (JOB-01) AND,
+    as of Phase 9 (A1), keep the sweep from marking covered-date sessions Absent."""
     term = models.ForeignKey(AcademicTerm, on_delete=models.CASCADE, related_name="breaks")
     start_date = models.DateField()
     end_date = models.DateField()
     reason = models.CharField(max_length=120, blank=True)
 
     def __str__(self):
-        return f"{self.reason} ({self.start_date}–{self.end_date})"
+        return f"{self.reason} ({self.start_date}-{self.end_date})"
+
+
+class ClassSuspension(models.Model):
+    """Phase 9 (A1): an ad-hoc class suspension -- typhoon, flooding, an LGU/CHED
+    declaration, or a one-off cancellation.
+
+    Distinct from AcademicBreak (planned, term-wide, semester-scale): a suspension
+    is emergency and usually same-day, may be scoped to a single building, must
+    flip ALREADY-materialized sessions to CANCELLED, and is reversible (``lifted_at``)
+    if the declaration is called off. Both the sweep and materialize consult active
+    (un-lifted) suspensions so no covered-date session is ever marked Absent.
+
+    ``building`` NULL means campus-wide; else only sessions in that building's rooms
+    are covered. ``[start_date, end_date]`` is an inclusive local-date range.
+    """
+    term = models.ForeignKey(AcademicTerm, on_delete=models.CASCADE,
+                             related_name="suspensions")
+    start_date = models.DateField()
+    end_date = models.DateField()
+    building = models.ForeignKey("campus.Building", null=True, blank=True,
+                                 on_delete=models.CASCADE, related_name="suspensions")
+    reason = models.CharField(max_length=200)
+    declared_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, null=True, blank=True,
+        on_delete=models.SET_NULL, related_name="declared_suspensions")
+    created_at = models.DateTimeField(auto_now_add=True)
+    lifted_at = models.DateTimeField(null=True, blank=True)
+    lifted_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, null=True, blank=True,
+        on_delete=models.SET_NULL, related_name="lifted_suspensions")
+
+    class Meta:
+        indexes = [models.Index(fields=["lifted_at", "start_date", "end_date"])]
+
+    @property
+    def is_active(self):
+        return self.lifted_at is None
+
+    def covers(self, d, building_id=None):
+        """True if local-date ``d`` (and optionally a building) falls under this
+        active suspension. A NULL building is campus-wide."""
+        if self.lifted_at is not None:
+            return False
+        if not (self.start_date <= d <= self.end_date):
+            return False
+        return self.building_id is None or self.building_id == building_id
+
+    def __str__(self):
+        scope = self.building.code if self.building_id else "campus-wide"
+        return f"Suspension {self.start_date}-{self.end_date} ({scope}): {self.reason}"
 
 
 class ScheduleStatus(models.TextChoices):
@@ -130,6 +181,9 @@ class Session(models.Model):
     ended_early = models.BooleanField(default=False)
     early_end_reason = models.CharField(max_length=255, blank=True)
     room_released_at = models.DateTimeField(null=True, blank=True)
+    # Phase 9 (A1): why a CANCELLED session did not meet (e.g. "Typhoon signal 3").
+    # Display-only provenance; the authoritative actor/detail lives in AuditLog.
+    cancelled_reason = models.CharField(max_length=200, blank=True)
 
     class Meta:
         ordering = ["-date", "scheduled_start"]

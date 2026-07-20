@@ -60,9 +60,13 @@ dates flip to CANCELLED (atomic, audited, faculty-scoped batches to respect the 
 4. IFO academic-break/holiday CRUD from the console; sweep + materialize respect it.
 5. Absent-correction action (per D3), audited; faculty message becomes true.
 
-## Open decisions for the owner
-- **D3 correction authority:** IFO-only (recommended), checker-only, or both?
-- **D4 faculty notification on suspension:** yes (recommended) or defer?
+## Owner decisions (LOCKED 2026-07-20)
+- **D3 correction authority: IFO admin ONLY.** Reinstating an Absent session is an
+  IFO action with a mandatory reason, fully audited. Checkers do real-time
+  verification, not retroactive edits. The faculty "a Checker can correct it" message
+  is rewritten to point to IFO.
+- **D4 faculty notification on suspension: YES.** One coalesced notify() per affected
+  faculty when their sessions are suspension-cancelled.
 
 ## Rough plan shape (to formalize in 09-*-PLAN.md after D3/D4)
 1. Foundation: `CANCELLED` status + `cancelled_reason` + `ClassSuspension` model +

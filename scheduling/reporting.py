@@ -538,6 +538,14 @@ def _session_contribution(status, scheduled_start, scheduled_end,
     (``overrun_sessions`` / ``early_arrival_sessions``) so the discarded time stays
     visible rather than silently vanishing.
     """
+    # Phase 9 (A1): a CANCELLED (suspended/holiday) session never booked the room
+    # in reality -- the class did not meet because classes were called off. Counting
+    # its scheduled window as booked-but-unused would fabricate exactly the "wasted
+    # hours" a suspension day did NOT cause, tanking the utilization rate on the
+    # worst possible day. It contributes nothing: 0 booked, 0 used, not in-flight.
+    if status == SessionStatus.CANCELLED:
+        return 0, 0, False
+
     if actual_start is not None and actual_end is None \
             and status == SessionStatus.ACTIVE:
         return 0, 0, True

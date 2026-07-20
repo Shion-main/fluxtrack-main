@@ -41,6 +41,7 @@ from ops.notify import notify
 from ops.policy import get_policy
 from scheduling.models import Session, SessionStatus
 from scheduling.resolver import is_no_show_past_grace
+from scheduling.suspensions import excused_checker, session_is_calendar_excused
 
 
 def sweep_no_shows(now=None, collect=None):
@@ -70,17 +71,27 @@ def sweep_no_shows(now=None, collect=None):
     # DB pre-filter derived from the SAME grace value the predicate re-affirms.
     cutoff = now - timedelta(minutes=grace_min)
     marked = 0
+    # Calendar excusal (Phase 9, A1): a date+building covered by an academic break
+    # or an active class suspension must NEVER be marked Absent. Built ONCE here
+    # (two small queries) and answered from memory per candidate -- the whole point
+    # is that a typhoon/holiday day does not mass-poison the record.
+    excused = excused_checker()
     # MSSQL/pyodbc allows only ONE active result set per connection (MARS off by
     # default). Streaming with .iterator() keeps the SELECT cursor open, so the
     # save()/AuditLog INSERT below would raise HY010 "Function sequence error".
     # Fully materialize the candidate set first (cursor closed) before mutating.
+    # room__floor is select_related so the excusal check reads building_id with no
+    # extra query.
     candidates = list(Session.objects.filter(status=SessionStatus.SCHEDULED,
                                              scheduled_start__lt=cutoff)
-                      .select_related("schedule", "room"))
+                      .select_related("schedule", "room", "room__floor"))
     for s in candidates:
         # Re-affirm via the shared predicate so the ORM cutoff and the
         # authoritative no-show rule are provably ONE rule (coupling guarantee).
         if not is_no_show_past_grace(s.scheduled_start, now, grace_min):
+            continue
+        # A suspended/holiday session is not a no-show -- skip it entirely.
+        if session_is_calendar_excused(s, excused):
             continue
         with transaction.atomic():
             # Idempotency guard mirrors web/scan.py _apply: only SCHEDULED->ABSENT,
