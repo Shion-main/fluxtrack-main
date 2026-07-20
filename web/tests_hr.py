@@ -16,7 +16,9 @@ whose export can hit full-term scale. These tests lock:
 
 Seeds the shared two-department make_reporting_fixture from 06-01. ASCII-only.
 """
-from datetime import datetime
+import csv
+import io
+from datetime import datetime, time
 
 from django.contrib.auth import get_user_model
 from django.test import TestCase
@@ -205,3 +207,57 @@ class HrReadOnlyTests(_HrBase):
             self.assertEqual(
                 resp.status_code, 405,
                 msg=f"POST to {name} should be rejected (read-only)")
+
+
+class HrLatenessCsvTests(_HrBase):
+    """A3 / D-03: the payroll CSV ADDS a derived per-session minutes-late column and
+    KEEPS the raw actual_start timestamp. The derived cell is computed via the SHARED
+    ``scheduling.reporting.session_minutes_late`` helper (imported, not re-derived) so
+    the payroll export and the faculty aggregate cannot drift (Pitfall 5)."""
+
+    def _grid(self, resp):
+        body = b"".join(resp.streaming_content).decode("utf-8")
+        return list(csv.reader(io.StringIO(body)))
+
+    def _seed_late(self, minutes):
+        # A held faculty_a session whose actual_start is `minutes` past scheduled
+        # (fixture teach_start is 08:00, so 08:00 + minutes).
+        start = _aware(self.fx.week_start, time(8, minutes))
+        return self.fx.add_session(
+            self.fx.faculty_a, self.fx.week_start, SessionStatus.ACTIVE,
+            actual_start=start)
+
+    def test_hr_csv_keeps_actual_start_and_adds_lateness(self):
+        self._seed_late(12)
+        grid = self._grid(self.client.get(reverse("hr_attendance_csv")))
+        header = grid[0]
+        # Both the raw timestamp column and the new derived column are present.
+        self.assertIn("Actual start", header)
+        self.assertIn("Minutes late", header)
+        a_idx, m_idx = header.index("Actual start"), header.index("Minutes late")
+        # The 12-min-late row still carries its raw actual_start timestamp (D-03:
+        # add the derived column, do NOT remove the timestamp).
+        late_rows = [r for r in grid[1:] if r[m_idx] == "12"]
+        self.assertEqual(len(late_rows), 1)
+        self.assertTrue(late_rows[0][a_idx], "raw actual_start cell must be retained")
+
+    def test_hr_late_session_shows_minutes(self):
+        self._seed_late(12)
+        grid = self._grid(self.client.get(reverse("hr_attendance_csv")))
+        m_idx = grid[0].index("Minutes late")
+        minutes_cells = [r[m_idx] for r in grid[1:]]
+        self.assertIn("12", minutes_cells)
+
+    def test_hr_absent_zero_minutes(self):
+        # The fixture already carries ABSENT sessions (actual_start NULL). An ABSENT
+        # row shows 0 minutes late and an empty raw actual_start cell.
+        grid = self._grid(self.client.get(reverse("hr_attendance_csv")))
+        header = grid[0]
+        s_idx = header.index("Status")
+        a_idx = header.index("Actual start")
+        m_idx = header.index("Minutes late")
+        absent_rows = [r for r in grid[1:] if r[s_idx] == "Absent"]
+        self.assertTrue(absent_rows, "fixture must contribute at least one Absent row")
+        for r in absent_rows:
+            self.assertEqual(r[m_idx], "0")
+            self.assertEqual(r[a_idx], "")
