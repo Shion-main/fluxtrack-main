@@ -1,20 +1,24 @@
 ---
 phase: 11-metrics-the-mission-promises
 verified: 2026-07-20T19:15:00Z
-status: human_needed
+status: passed
 score: 8/8 must-haves verified
 behavior_unverified: 0
 overrides_applied: 0
 human_verification:
+
   - test: "Visit /ifo/dashboard as an IFO admin. Confirm the verification-coverage section renders (verified/held by building x weekday) and that any floor with held sessions but no verification is listed explicitly in the zero-coverage-floors list (not merely a low percentage)."
     expected: "Coverage table renders with pill colours (ok/warn/bad) and the zero-coverage-floors list shows named building+floor rows, or the calm empty state when none exist."
     why_human: "Visual rendering and legibility of a Franken-UI table/list cannot be confirmed by grep or unit assertions — only that the template renders 200 with the expected strings."
+
   - test: "Visit /ifo/utilization. Confirm the 'Booked but never used' ghost-room section renders, then click Export CSV and open utilization-*.csv in a real spreadsheet."
     expected: "One row per physical room, columns match the on-screen table, and no cell (especially room code/name/building) is interpreted as a live formula by the spreadsheet application."
     why_human: "csv_safe neutralization is unit-tested (leading-quote check), but whether Excel/Sheets/LibreOffice actually renders the CSV cleanly and legibly is a real-application behavior no automated test exercises."
+
   - test: "Visit /ifo/scorecard/<id> for a faculty with late sessions. Confirm the avg-minutes-late figure shows and the chronic pill appears only when there are >= 5 held sessions in range."
     expected: "The lateness KPI card is visually legible, correctly placed beside the other KPI cards, and the chronic pill (colour + text) reads clearly."
     why_human: "Visual placement/legibility inside the existing Franken shell is a design judgment, not a grep-checkable fact."
+
   - test: "Change the From/To window on /ifo/dashboard and /ifo/utilization and Apply. Confirm the coverage grid, ghost list, and CSV export all rescope to the new range."
     expected: "All three surfaces reflect the newly applied date range consistently."
     why_human: "End-to-end range-application through the browser form is a live interaction path distinct from the unit tests that pass explicit start/end kwargs directly to the aggregate functions."
@@ -87,6 +91,7 @@ manage.py test scheduling.tests_reporting_lateness scheduling.tests_reporting_co
 Result: **Ran 222 tests — OK.** (The `RuntimeError: aggregate exploded` traceback in the output is the intentional captured exception from a card-isolation test, per both 11-03-SUMMARY.md and 11-04-SUMMARY.md — not a failure.)
 
 All 27 must_have-named tests across the four plans were located by name and confirmed present:
+
 - Lateness (12): `test_formula_max_zero`, `test_none_start_zero`, `test_early_arrival_not_negative`, `test_within_grace_but_late_counts`, `test_sub_minute_not_a_late_session`, `test_absent_zero_lateness`, `test_cancelled_excluded_from_lateness`, `test_inflight_active_contributes_to_lateness`, `test_chronic_threshold_boundary`, `test_chronic_floor_below_five_never_flagged`, `test_facultyrow_lateness_fields`, `test_scorecard_lateness_fields`.
 - Coverage (6): `test_coverage_pct_verified_over_held`, `test_coverage_excludes_virtual_rooms`, `test_merged_sibling_lowers_coverage`, `test_absent_and_cancelled_excluded_from_coverage`, `test_zero_coverage_floor_listed`, `test_covered_floor_absent`.
 - Ghost rooms (4): `test_ghost_room_booked_never_used_listed`, `test_used_room_not_ghost`, `test_ghost_rounding_guard_tiny_use_not_flagged`, `test_cancelled_room_not_ghost`.
