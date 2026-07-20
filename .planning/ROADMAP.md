@@ -414,7 +414,11 @@ Plans:
   2. Verification coverage (verified/held by building & day, incl. zero-coverage floors) is on the IFO dashboard.
   3. Utilization gains a booked-but-never-used ghost-room list and per-room CSV export (finishing 06.1-07). Capacity-vs-enrollment "fit" is **deferred** (reopens the `reporting.py:947` T3 deferral once `enrolled_count` is validated on a real imported term); week-over-week trend is also out of scope. A8 is therefore partially addressed here.
 
-**Plans**: TBD
+**Plans**: 4 plans (waves: 1 → {2, 2} → 3)
+- [ ] 11-01-PLAN.md — Lateness in the aggregate layer: session_minutes_late + _lateness_map + FacultyRow/Scorecard fields (A3, D-01/D-02)
+- [ ] 11-02-PLAN.md — Lateness surfaces: weekly report render, HR CSV derived column, scorecard card (A3, D-03)
+- [ ] 11-03-PLAN.md — Verification coverage by building & weekday + zero-coverage floors on the IFO dashboard (A6, D-04)
+- [ ] 11-04-PLAN.md — Ghost-room list + per-room utilization CSV export, finishing 06.1-07 (A8 partial, IFO-09, D-05/D-06)
 
 ### Phase 12: Term Lifecycle
 
