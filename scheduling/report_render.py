@@ -23,10 +23,17 @@ from reportlab.lib.pagesizes import A4, landscape
 from reportlab.lib.styles import getSampleStyleSheet
 from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
 
-# The six-column contract shared by the CSV and PDF renderers (RPT-03). Column
-# order is Faculty, then the status counts, the attendance %, and the honest
-# checker-verified count (see scheduling/reporting.py FacultyRow).
-HEADER = ["Faculty", "Scheduled", "Held", "Absent", "Attendance %", "Checker-verified"]
+# The eight-column contract shared by the CSV and PDF renderers (RPT-03 + A3/D-03).
+# Column order is Faculty, then the status counts, the attendance %, the honest
+# checker-verified count, and the two lateness cells derived from the Plan-01
+# aggregate fields (avg minutes late + a terse chronic flag). This is the ONE shared
+# render-layer HEADER; web.hr.CSV_HEADER is a SEPARATE payroll contract (Pitfall 5).
+# The chronic cell stays TERSE ("Yes"/"") so the landscape-A4 table absorbs 8 short
+# columns without overflow (Pitfall 4).
+HEADER = [
+    "Faculty", "Scheduled", "Held", "Absent", "Attendance %", "Checker-verified",
+    "Avg min late", "Chronic late",
+]
 
 # Excel/Sheets treat a cell as a formula when it opens with one of these; a leading
 # tab or CR can also smuggle a formula past a naive importer (OWASP CSV-injection).
@@ -71,6 +78,8 @@ def build_csv(rows):
             r.absent,
             f"{r.attendance_pct}%",
             r.verified,
+            r.minutes_late_avg,
+            "Yes" if r.chronic_late else "",
         ])
     return buf.getvalue().encode("utf-8")
 
@@ -121,7 +130,8 @@ def build_pdf(rows, period_start, period_end, department):
         return buf.getvalue()
 
     data = [HEADER] + [
-        [r.name, r.scheduled, r.held, r.absent, f"{r.attendance_pct}%", r.verified]
+        [r.name, r.scheduled, r.held, r.absent, f"{r.attendance_pct}%", r.verified,
+         r.minutes_late_avg, "Yes" if r.chronic_late else ""]
         for r in rows
     ]
     table = Table(data, repeatRows=1)
