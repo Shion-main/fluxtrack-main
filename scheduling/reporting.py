@@ -1310,6 +1310,40 @@ def room_breakdown(*, start, end, term, as_of=None):
     return loads
 
 
+def ghost_rooms(*, start, end, term, as_of=None):
+    """IFO-09 / D-05: physical rooms booked over the range but NEVER used.
+
+    The actionable companion to the heat grid: a list of rooms whose bookings
+    produced ZERO recorded occupancy -- ``booked_seconds > 0 AND used_seconds ==
+    0`` -- so a facilities office can act on a NAMED room rather than a
+    percentage. This is STRICTER than the grid's "wasted hours > 0": a ghost is a
+    room that was reserved and then never entered at all, not merely one that
+    released a few minutes early.
+
+    A PURE REDUCTION of :func:`room_breakdown`, never a second query. That source
+    already walks the whole physical room universe room-side (never-used rooms
+    present) and excludes virtual rooms (D-04/D-08), so the ghost list stays
+    reconciled with the on-screen breakdown table by construction -- a room can
+    never appear here that is absent there, nor carry a different used figure.
+
+    **Predicate on the UNROUNDED ``*_seconds`` fields, NEVER the quantized
+    ``_hours`` Decimals.** A room with ~40 s of real use rounds to ``used_hours ==
+    0.0`` but is genuinely occupied; flagging it would be a lie (Pitfall 2 /
+    D-05). ``used_seconds == 0`` is the honest zero-occupancy test. An ABSENT room
+    (booked, zero used) IS a ghost; a CANCELLED-only room booked nothing (0, 0,
+    per :func:`_session_contribution`) so it is not.
+
+    Does NOT read or add any seat/enrolment field -- capacity-vs-enrolment "fit"
+    is T3 and deferred (see :class:`RoomLoad`'s docstring). Order is inherited
+    from ``room_breakdown`` (utilization ascending, then room code); every ghost
+    is at 0% used, so they lead in stable code order.
+    """
+    return [
+        r for r in room_breakdown(start=start, end=end, term=term, as_of=as_of)
+        if r.booked_seconds > 0 and r.used_seconds == 0
+    ]
+
+
 def building_floor_rollup(*, start, end, term, as_of=None):
     """IFO-09 / T2: the same rooms rolled up to floor and building level.
 

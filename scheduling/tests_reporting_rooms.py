@@ -52,6 +52,7 @@ from scheduling.reporting import (
     block_saturation,
     building_floor_rollup,
     campus_block_ladder,
+    ghost_rooms,
     room_breakdown,
     room_heat_grid,
     room_utilization,
@@ -1111,6 +1112,73 @@ class RollupTests(BreakdownFixtureTestCase):
             else:
                 self.assertEqual(row.building_code, current)
         self.assertEqual(seen, sorted(seen))
+
+
+class GhostRoomsTests(BreakdownFixtureTestCase):
+    """D-05: booked-but-never-used rooms, a PURE reduction of room_breakdown.
+
+    The predicate keys on the UNROUNDED ``used_seconds``, never the quantized
+    ``used_hours`` -- a room with ~40 s of real use rounds to 0.0 h but is
+    genuinely occupied and must NOT be called a ghost (Pitfall 2). Each rule is
+    one assertion, over the fixture's own booked-but-unused rows (``s_absent`` on
+    MON block A; ``s_noshow_stamped`` is COMPLETED with a NULL end, also 0 used).
+    """
+
+    def _ghosts(self, **kwargs):
+        kwargs.setdefault("start", self.f.week_start)
+        kwargs.setdefault("end", self.f.week_end)
+        return ghost_rooms(term=self.f.term, **kwargs)
+
+    def test_ghost_room_booked_never_used_listed(self):
+        ghosts = self._ghosts()
+        ids = {r.room_id for r in ghosts}
+        # The ABSENT room booked its window and recorded zero occupancy: a ghost.
+        self.assertIn(self.f.s_absent.room_id, ids)
+        # Every listed room genuinely satisfies the UNROUNDED predicate.
+        for r in ghosts:
+            self.assertGreater(r.booked_seconds, 0)
+            self.assertEqual(r.used_seconds, 0)
+        # And the list is a strict REDUCTION of the full breakdown, never a
+        # re-query -- fewer rooms than the whole physical universe.
+        self.assertLess(len(ghosts), len(self._breakdown()))
+
+    def test_used_room_not_ghost(self):
+        """A fully-used room recorded occupancy, so it is never flagged."""
+        ids = {r.room_id for r in self._ghosts()}
+        self.assertNotIn(self.f.s_full.room_id, ids)
+
+    def test_ghost_rounding_guard_tiny_use_not_flagged(self):
+        """The binding guard: ~40 s of use rounds to 0.0 h but is NOT zero.
+
+        Keyed on ``used_hours == 0.0`` this room would be a false ghost; keyed on
+        the unrounded ``used_seconds > 0`` it is correctly excluded (D-05).
+        """
+        spare = self._spare_room("RUTIL-GHOST-TINY")
+        a_start, _a_end = self.f.blocks[0]
+        self.f.add_session(
+            self.f.mon, self.f.blocks[0], SessionStatus.COMPLETED, room=spare,
+            actual_start=_aware(self.f.mon, a_start),
+            actual_end=_aware(self.f.mon, a_start) + datetime.timedelta(seconds=40),
+        )
+        row = next(r for r in self._breakdown() if r.room_id == spare.id)
+        # It rounds to zero used HOURS ...
+        self.assertEqual(row.used_hours, _hours(0))
+        # ... but its unrounded used SECONDS are non-zero.
+        self.assertGreater(row.used_seconds, 0)
+        self.assertNotIn(spare.id, {r.room_id for r in self._ghosts()})
+
+    def test_cancelled_room_not_ghost(self):
+        """A CANCELLED-only room booked nothing (0 booked), so it is not a ghost.
+
+        A suspension/holiday session contributes (0, 0) per D-A1, so its room has
+        ``booked_seconds == 0`` and fails the ``booked > 0`` half of the predicate.
+        """
+        spare = self._spare_room("RUTIL-GHOST-CANC")
+        self.f.add_session(
+            self.f.mon, self.f.blocks[0], SessionStatus.CANCELLED, room=spare)
+        row = next(r for r in self._breakdown() if r.room_id == spare.id)
+        self.assertEqual(row.booked_seconds, 0)
+        self.assertNotIn(spare.id, {r.room_id for r in self._ghosts()})
 
 
 class RoomCardIsolationTests(SimpleTestCase):
