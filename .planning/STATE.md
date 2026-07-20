@@ -2,19 +2,19 @@
 gsd_state_version: 1.0
 milestone: v1.3
 milestone_name: "Operational Trust — the attendance record survives real campus operations (suspensions/holidays/corrections), the mission metrics are visible, IFO manages the campus without a superuser, and the app deploys safely. From docs/AUDIT-2026-07-19.md."
-current_phase: 10
-current_phase_name: Campus Structure Management
+current_phase: 11
+current_phase_name: Metrics the Mission Promises
 status: ready
-stopped_at: n/a — phase 09 complete 2026-07-20; phase 10 next
+stopped_at: n/a — phase 10 complete 2026-07-20; phase 11 next
 last_updated: "2026-07-20T00:00:00.000Z"
 last_activity: 2026-07-20
-last_activity_desc: Phase 09 (Attendance Trust) complete — 5/5 criteria, suite 965 green
+last_activity_desc: Phase 10 (Campus Structure) complete — 3/3 criteria, suite 994 green
 progress:
   total_phases: 19
-  completed_phases: 12
+  completed_phases: 13
   total_plans: 59
   completed_plans: 58
-  percent: 63
+  percent: 68
 ---
 
 # Project State
@@ -28,8 +28,11 @@ See: .planning/PROJECT.md (updated 2026-07-02)
 
 ## Current Position
 
-Phase: 09 (Attendance Trust Under Real Operations) — COMPLETE 2026-07-20 (5/5,
-see 09-VERIFICATION.md). Next: Phase 10 (Campus Structure Management).
+Phase: 10 (Campus Structure Management) — COMPLETE 2026-07-20 (3/3, see
+10-VERIFICATION.md): building/floor CRUD, room out-of-service (A7), single-schedule
+add/edit/cancel (A9). Phase 09 also complete (5/5). Next: Phase 11 (Metrics).
+Env note added: the staticfiles manifest needs `DEBUG=False manage.py collectstatic`
+after static changes or timetable-rendering tests error (see memory).
 Milestone: v1.3 "Operational Trust" (8 phases, 9–16) from docs/AUDIT-2026-07-19.md.
 Deploy renumbered 8 → 15 (expanded), runs last. Phases 1–7 complete (≤ v1.2).
 Quick-wins batch shipped ahead of the milestone (H1/H2/M4/M7, seed_demo guard,
