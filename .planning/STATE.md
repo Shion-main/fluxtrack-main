@@ -226,18 +226,29 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-07-20 (ingested at ~50% context by request)
+Last session: 2026-07-20 (Phases 9 + 10 shipped; user chose to continue next session)
 Session arc + decisions: docs/sessions/2026-07-20-audit-and-phase9.md
-Stopped at: Phase 9 COMPLETE + verified + committed; tree clean.
-Resume: Phase 10 (Campus Structure Management) — building/floor CRUD (still
-admin-only gap), room out-of-service (A7), single-schedule edit (A9). Reuses the
-Phase 9 CANCELLED status for a cancelled meeting. Optional first: browser UAT of
-the three new Phase 9 IFO consoles (/ifo/suspensions, /ifo/breaks,
-/ifo/corrections) — not yet human-tested.
+Stopped at: Phase 9 AND Phase 10 COMPLETE + verified + committed; tree clean;
+suite 994 green.
+
+RESUME NEXT: **Phase 11 — Metrics the Mission Promises** (A3 lateness / A6
+verification coverage / A8 utilization depth + the deferred 06.1-07 CSV export).
+Mostly aggregate-layer work in scheduling/reporting.py, consumed by scorecard,
+weekly report, HR export, and the IFO dashboard. Redeems the "lateness captured
+at the room level" claim that is currently unfulfilled. See ROADMAP Phase 11.
+
+OUTSTANDING (carry forward):
+- Browser UAT debt: the Phase 9 consoles (/ifo/suspensions, /ifo/breaks,
+  /ifo/corrections) AND the Phase 10 consoles (/ifo/buildings, building detail,
+  schedule form, room-detail service/schedule cards) are test-covered but NOT yet
+  human/browser-tested. Consider a browser pass before or during Phase 13.
+- Phase 14 owns the deferred schedule-room-move occupancy conflict check (M3).
+
+Env notes (see memory): full test runs rewrite FluxTrack_SRS.docx (git checkout it);
+tests need a fresh staticfiles manifest — run `DEBUG=False py -3.12 manage.py
+collectstatic --noinput` after static changes or timetable-rendering tests error.
 Full audit + milestone plan: docs/AUDIT-2026-07-19.md,
 docs/PLAN-2026-07-20-post-audit-milestone.md.
-Env note: full test runs regenerate FluxTrack_SRS.docx — git checkout it before
-committing.
 
 ## Phase 07 Follow-ups (deliberate scope calls, not defects)
 

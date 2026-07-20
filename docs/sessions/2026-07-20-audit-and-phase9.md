@@ -46,7 +46,29 @@ still-admin-only gap], room out-of-service flag A7, single-schedule edit A9;
 reuses CANCELLED for a cancelled meeting). STATE.md current_phase=10.
 Consider a browser UAT of Phase 9 consoles before stacking more IFO work.
 
+## Phase 10 shipped (same session, after Phase 9)
+Campus Structure Management — 3/3 criteria, 29 tests, suite 994 green.
+See `10-VERIFICATION.md`. Four commits (3 slices + verify):
+- **Building/floor CRUD** (`/ifo/buildings`, `/ifo/buildings/<pk>`): closes the
+  admin-only gap; bottom-up PROTECT-aware named delete via new
+  `campus.services.building_delete_blockers`/`floor_delete_blockers`.
+- **Room out-of-service (A7)** (`Room.out_of_service`, migration 0003): refuses
+  scans + bookings, drops from utilization denominator; toggled from room detail.
+- **Single-schedule add/edit/cancel (A9)** (`scheduling/schedule_ops.py`): edits
+  touch FUTURE SCHEDULED sessions only (history never rewritten); cancel = ARCHIVE
+  + Phase 9 CANCELLED; add materializes via the canonical command.
+- Deferred to Phase 14: schedule room-move occupancy conflict check (M3).
+
+## Resume pointer (updated)
+Next: **Phase 11 — Metrics the Mission Promises** (lateness A3, verification
+coverage A6, utilization depth A8 + 06.1-07 CSV export). Aggregate-layer work in
+`scheduling/reporting.py`. Outstanding: browser UAT of the Phase 9 + Phase 10 IFO
+consoles (test-covered, not human-tested).
+
 ## Env gotchas (see memory)
 - Running `manage.py test` **regenerates `FluxTrack_SRS.docx`** (a test invokes
   `regenerate_srs_docx`); `git checkout -- FluxTrack_SRS.docx` after full runs.
+- Tests force DEBUG=False and resolve statics via the manifest: after any
+  `static/` change run **`DEBUG=False py -3.12 manage.py collectstatic --noinput`**
+  or timetable-rendering tests error with "Missing staticfiles manifest entry".
 - Interpreter: full `Python312\python.exe` path for manage.py (bare python lacks Django).
