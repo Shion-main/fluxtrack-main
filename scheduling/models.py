@@ -72,6 +72,11 @@ class SessionStatus(models.TextChoices):
     ACTIVE = "active", "Active"
     COMPLETED = "completed", "Completed"
     ABSENT = "absent", "Absent"
+    # Phase 9 (A1): terminal. A class that did not meet because it was cancelled
+    # or suspended (holiday, typhoon/LGU suspension, one-off cancellation). It is
+    # NEITHER Absent NOR held NOR counted as booked room-hours -- the sweep must
+    # never produce it, and reports/utilization must exclude it. Fits max_length=10.
+    CANCELLED = "cancelled", "Cancelled"
 
 
 class CheckinMethod(models.TextChoices):

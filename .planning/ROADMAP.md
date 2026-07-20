@@ -47,7 +47,21 @@ Decimal phases appear between their surrounding integers in numeric order.
   - [x] 06.1-06-PLAN.md — The /ifo/utilization page: heat grid, tables, WCAG-AA heat scale
   - [ ] 06.1-07-PLAN.md — Per-room utilization CSV export — ◷ **DEFERRED** (droppable by design; nothing depends on it)
 - [x] **Phase 7: Remaining Operational Surfaces** - Guard monitor/locator, IFO room & booking ops, Faculty self-service, job monitoring (completed 2026-07-19)
-- [ ] **Phase 8: Auth Cutover & AWS Deployment** - Entra ID SSO, Node-free Tailwind build, single-EC2 + RDS deploy
+
+### Milestone v1.3 — "Operational Trust" (post-audit, added 2026-07-20)
+
+From `docs/AUDIT-2026-07-19.md` (five-lens SRS audit + first-principles mission/UI
+addendum). Sequenced mission-critical-first; deploy renumbered to run last. The old
+standalone Phase 8 (deploy) becomes the **expanded Phase 15**.
+
+- [ ] **Phase 9: Attendance Trust Under Real Operations** (CRITICAL) - CANCELLED status, IFO class-suspension + holiday/break entry, sweep honors them, real Absent-correction path (A1/A2/A5)
+- [ ] **Phase 10: Campus Structure Management** - Building/Floor CRUD, room out-of-service, single-schedule edit (A7/A9 + building gap)
+- [ ] **Phase 11: Metrics the Mission Promises** - Lateness, verification-coverage, utilization depth + deferred CSV export (A3/A6/A8)
+- [ ] **Phase 12: Term Lifecycle** - Close/archive a term + create/activate the next without destroying history (A4)
+- [ ] **Phase 13: UX Finish** - Custom error pages, phone shell-jump fix, profile reachability, login navy, global htmx errors, PWA theme (B1-B6)
+- [ ] **Phase 14: Correctness & Concurrency Hardening** - Booking/schedule oracle, room-preferring resolver, select_for_update, offline-replay retargeting (M3/M5/M6/H3)
+- [ ] **Phase 15: Deploy Hardening & Cutover** (was Phase 8, expanded) - Entra SSO + EC2/RDS + Tailwind build, PLUS shared cache, HTTPS/proxy config, media split, CDN vendoring, scheduler resilience, logging, retention/backups
+- [ ] **Phase 16: Documentation Pass** - SRS v1.3 (incl. shadcn-via-Franken), traceability restore, PROJECT.md refresh
 
 ## Phase Details
 
@@ -361,36 +375,129 @@ Plans:
 - [x] 07-11-PLAN.md — Guard per-room schedule, floor-authorized (GRD-02) [Wave 10]
 - [x] 07-12-PLAN.md — Coalesced guard push fan-out from the sweep (GRD-04) [Wave 10]
 
-### Phase 8: Auth Cutover & AWS Deployment
+### Phase 9: Attendance Trust Under Real Operations  *(CRITICAL)*
 
-**Goal**: Replace the dev-login stub with Entra ID SSO and deploy the feature-complete app to AWS with a Node-free production build — verified on staging before flipping DEBUG=False.
-**Depends on**: Phase 7 (feature-complete app to cut over and deploy)
-**Requirements**: AUTH-01, AUTH-03, AUTH-05, DEPLOY-01, DEPLOY-02
+**Goal**: The attendance record survives real Philippine-campus operations — a class suspension (typhoon/LGU declaration) or a holiday never mass-marks the campus Absent, IFO can declare both without a superuser, and a wrongly-Absent record has a real audited correction path instead of a UI message that lies.
+**Depends on**: Phase 2 (sweep + grace predicate). Nothing new.
+**Requirements**: A1, A2, A5 (audit addendum); restores part of IFO-04.
 **Success Criteria** (what must be TRUE):
 
-  1. Users authenticate via Microsoft Entra ID SSO (Authorization Code + PKCE) with Django sessions preserved; the dev-login stub is gone and a break-glass superuser remains.
-  2. An authenticated Entra identity with no provisioned User is refused application access, and deactivating a user blocks further access.
-  3. The app runs on a single AWS EC2 instance (Nginx + Gunicorn + a separate scheduler systemd unit) over HTTPS against RDS SQL Server Express.
-  4. Franken UI styling is served from a Tailwind v4 standalone build step (production Node-free), replacing the CDN.
+  1. A terminal `CANCELLED` session status exists; a cancelled/suspended meeting is neither Absent nor held nor counted as booked in any report or utilization number.
+  2. IFO can suspend classes for a date or date range (optionally building-scoped): affected already-materialized SCHEDULED sessions flip to CANCELLED (audit-logged), and future materialization skips those dates.
+  3. `sweep_no_shows` honors `AcademicBreak` AND suspensions — no session on a covered date is ever marked Absent (closes the core typhoon-day defect).
+  4. IFO can create/edit/delete academic breaks & holidays from the console (no Django admin); sweep + materialize both respect them.
+  5. A checker or IFO admin can correct a wrongly-Absent session (reinstate), audit-logged; the faculty "a Checker can correct it" message becomes true or is rewritten to match reality.
+
+**Plans**: TBD (to be created by /gsd-plan-phase)
+
+### Phase 10: Campus Structure Management
+
+**Goal**: IFO can manage the physical campus and the timetable end-to-end without a superuser — buildings, floors, rooms (done), out-of-service, and single-class corrections.
+**Depends on**: Phase 9 (reuses CANCELLED for a cancelled schedule meeting).
+**Requirements**: A7, A9 (audit addendum) + building/floor CRUD gap; restores IFO-03 CRUD half.
+**Success Criteria**:
+
+  1. IFO can create/edit/delete buildings and floors from the console with PROTECT-aware named delete (mirroring `room_delete`); the room-create floor picker shows new floors.
+  2. A room can be taken out of service: scans refuse with a clear reason, it cannot be booked, and it drops from the utilization denominator.
+  3. IFO can add/edit/cancel a single schedule meeting mid-term (not Django admin), and the safe mid-term re-import procedure is documented.
 
 **Plans**: TBD
 
-Plans:
+### Phase 11: Metrics the Mission Promises
 
-- [ ] 08-01: TBD
+**Goal**: The numbers the product exists to produce are visible — lateness, verification coverage, and utilization deep enough for facilities to act.
+**Depends on**: Phase 9 (CANCELLED excluded from denominators). Reuses `scheduling/reporting.py`.
+**Requirements**: A3, A6, A8 + IFO-09 06.1-07.
+**Success Criteria**:
+
+  1. Lateness (minutes late; chronic flag) is computed in the aggregate layer and shown on the scorecard, weekly report, and HR export.
+  2. Verification coverage (verified/held by building & day, incl. zero-coverage floors) is on the IFO dashboard.
+  3. Utilization gains capacity-vs-enrollment fit, a booked-but-never-used ghost-room list, and per-room CSV export (finishing 06.1-07).
+
+**Plans**: TBD
+
+### Phase 12: Term Lifecycle
+
+**Goal**: A term can be closed/archived read-only and the next created & activated, without deleting attendance history.
+**Depends on**: Nothing — but must land before the current term ends.
+**Requirements**: A4; restores part of IFO-04.
+**Success Criteria**:
+
+  1. A term-close flow marks a term inactive and preserves its rows read-only (no delete); `DEFAULT_TERM` is de-hardcoded.
+  2. A next-term create/activate flow stands up a new active term without touching prior data; import/materialize target the active term.
+  3. All reports/exports scope to a selectable term (HR already does — extend to Dean/IFO where missing).
+
+**Plans**: TBD
+
+### Phase 13: UX Finish
+
+**Goal**: The app reads as finished — no bare error pages, no shell jumps, one brand.
+**Depends on**: Nothing; can overlap Phases 10–12.
+**Requirements**: B1–B6 (audit addendum).
+**Success Criteria**:
+
+  1. Branded 403/404/500 templates + wired handlers keep a user oriented with a route home.
+  2. Floor roles never jump into a desktop-family page (navy notifications variant / correct routing).
+  3. Profile reachable from every faculty screen; login uses the brand-navy token; a global htmx error listener shows failures on every surface; PWA theme_color matches the shell.
+
+**Plans**: TBD
+
+### Phase 14: Correctness & Concurrency Hardening
+
+**Goal**: Close the last known ways the record can go wrong under real multi-user/offline load.
+**Depends on**: Nothing; H3 has a client change, so before real offline checkers deploy.
+**Requirements**: M3, M5, M6, H3 (main audit).
+**Success Criteria**:
+
+  1. A booking beyond the materialize horizon can no longer silently collide with a timetabled class (M3).
+  2. The scan resolver prefers a window-containing candidate whose room matches the scanned room (M5).
+  3. Modality withdraw/approve/reject use `select_for_update` (M6).
+  4. Offline replay applies a queued verification to the session the checker actually saw, not whatever is in the room now (H3).
+
+**Plans**: TBD
+
+### Phase 15: Deploy Hardening & Cutover  *(was Phase 8, expanded)*
+
+**Goal**: The feature-complete app deploys to AWS safely, over HTTPS, multi-worker-correct, with a real operational story.
+**Depends on**: Phases 9–14 (deploy the finished system).
+**Requirements**: AUTH-01, AUTH-03, AUTH-05, DEPLOY-01, DEPLOY-02 + the ops gaps from the main audit §3.
+**Success Criteria** (what must be TRUE):
+
+  1. Entra ID SSO (Auth Code + PKCE) replaces the dev-login stub with a break-glass superuser; an unprovisioned/deactivated identity is refused; single EC2 (Nginx + Gunicorn + scheduler unit) over HTTPS against RDS SQL Server Express; Node-free Tailwind build replaces the CDN.
+  2. A shared cache backend (Redis or DB cache) backs every idempotency, rate-limit, and offline-replay-dedupe key — no per-worker LocMem; multi-worker is correct.
+  3. HTTPS/proxy config complete: `CSRF_TRUSTED_ORIGINS`, `SECURE_PROXY_SSL_HEADER`, secure cookies + HSTS, fail-fast placeholder `SECRET_KEY`/`DEBUG`, env-driven SSO redirect URI, media public/private split.
+  4. Operational baseline: htmx + Franken JS + html5-qrcode vendored (not just Tailwind); scheduler resilience (`close_old_connections`, staleness alert, weekly-report backfill); LOGGING + error reporting; retention jobs (JobRun/session) + a written backup story incl. media; gunicorn + lock file; health endpoint.
+
+**Plans**: TBD. **Carried in:** the 03.1-05 live Entra UAT (blocked on redirect-URI registration + the sandbox-vs-MMCM-tenant question).
+
+### Phase 16: Documentation Pass
+
+**Goal**: The SRS and planning docs match the built system for the capstone defense.
+**Depends on**: Features complete (documents the final state).
+**Requirements**: DOC-01 follow-through.
+**Success Criteria**:
+
+  1. SRS v1.3 records every code-vs-spec divergence: MySQL→MSSQL, sessions-vs-JWT, S3→filesystem, JOB-02 room-release cut, CHK-02 online path, IFO-07 board, MOD-01 window, shadcn-via-Franken UI, plus the new suspension/holiday/campus/lifecycle features.
+  2. IFO-04, SYS-01..03, and IFO-03's schedule-CRUD half are restored to traceability — built (Phases 9–12) or recorded out-of-scope with rationale.
+  3. PROJECT.md Active/Key-Decisions refreshed; USE_CASES.md marked superseded.
+
+**Plans**: TBD
 
 ## Progress
 
 **Execution Order:**
-Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8
-(Phase 4 may run in parallel with Phase 3; both depend only on Phase 2.)
+Phases 1–7 complete (milestone ≤ v1.2). Milestone v1.3 executes:
+9 → (10 ∥ 11 ∥ 13) → 12 → 14 → 15 → 16.
+Phase 9 is CRITICAL and lands before any deploy. Deploy (15) is last so cutover
+never blocks feature work; if the defense needs a live URL sooner, 15 may be
+pulled forward but 9 still precedes any real use.
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. MSSQL Environment & Data Foundation | 3/3 | Complete | 2026-07-03 |
 | 2. Correctness Foundations | 5/5 | Complete | 2026-07-02 |
 | 3. Duty Assignments & Checker Verification | 6/6 | Complete | 2026-07-03 |
-| 03.1 Authentication — Entra ID SSO (INSERTED) | 4/5 | Live UAT deferred | - |
+| 03.1 Authentication — Entra ID SSO (INSERTED) | 4/5 | Live UAT deferred → folds into 15 | - |
 | 4. Modality Shift Approval & SRS v1.2 | 8/8 | Complete | 2026-07-03 |
 | 04.1 Real-Data Integration (INSERTED) | 4/4 | Complete | 2026-07-07 |
 | 04.2 Co-Scheduled Session Attendance (INSERTED) | 4/4 | Complete | 2026-07-07 |
@@ -398,15 +505,23 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8
 | 6. Reporting Engine & Reporting Surfaces | 7/7 | Complete | 2026-07-15 |
 | 06.1 Room Utilization & IFO-09 Closure (INSERTED) | 6/7 | Complete (export deferred) | 2026-07-19 |
 | 7. Remaining Operational Surfaces | 12/12 | Complete (verified + UAT) | 2026-07-19 |
-| 8. Auth Cutover & AWS Deployment | 0/TBD | Not started | - |
+| **— Milestone v1.3 "Operational Trust" —** | | | |
+| 9. Attendance Trust Under Real Operations (CRITICAL) | 0/TBD | In progress (planning) | - |
+| 10. Campus Structure Management | 0/TBD | Not started | - |
+| 11. Metrics the Mission Promises | 0/TBD | Not started | - |
+| 12. Term Lifecycle | 0/TBD | Not started | - |
+| 13. UX Finish | 0/TBD | Not started | - |
+| 14. Correctness & Concurrency Hardening | 0/TBD | Not started | - |
+| 15. Deploy Hardening & Cutover (was Phase 8, expanded) | 0/TBD | Not started | - |
+| 16. Documentation Pass | 0/TBD | Not started | - |
 
-**Totals:** 58/59 plans complete across 11 phases. The one incomplete plan
-(06.1-07 CSV export) is a deliberate deferral, not outstanding work.
+**Totals (≤ v1.2):** 58/59 plans complete across 11 phases (06.1-07 CSV export is a
+deliberate deferral, now folded into Phase 11).
 
-**Carried forward into Phase 8:** the 03.1-05 live Entra UAT (blocked on
-redirect-URI registration) folds into the Phase 8 auth cutover rather than
-reopening Phase 03.1.
+**Milestone v1.3** adds 8 phases (9–16) from the 2026-07-20 audit. The quick-wins
+batch (H1, H2, M4, M7, seed_demo guard, 3 red tests, dead utilities, offline drain)
+already shipped ahead of the milestone.
 
 ---
-*Roadmap created: 2026-07-02*
-*Coverage: 57/57 v1 requirement IDs mapped, 0 orphans. See REQUIREMENTS.md Traceability.*
+*Roadmap created: 2026-07-02; milestone v1.3 added 2026-07-20.*
+*Coverage: v1 requirement IDs mapped; v1.3 traces to docs/AUDIT-2026-07-19.md. Traceability reconciled in Phase 16.*

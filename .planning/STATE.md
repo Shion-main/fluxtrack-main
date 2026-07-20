@@ -1,20 +1,20 @@
 ---
 gsd_state_version: 1.0
-milestone: v1.2
-milestone_name: "**Goal**: Faculty can request a lead-time-gated modality shift that a Dean approves, with rooms auto-released or auto-assigned, and the SRS brought back in sync with reality."
-current_phase: 07
-current_phase_name: Remaining Operational Surfaces
-status: complete
-stopped_at: n/a — phase 07 executed end-to-end 2026-07-19
-last_updated: "2026-07-19T08:46:09.019Z"
-last_activity: 2026-07-19
-last_activity_desc: Phase 07 executed end-to-end
+milestone: v1.3
+milestone_name: "Operational Trust — the attendance record survives real campus operations (suspensions/holidays/corrections), the mission metrics are visible, IFO manages the campus without a superuser, and the app deploys safely. From docs/AUDIT-2026-07-19.md."
+current_phase: 09
+current_phase_name: Attendance Trust Under Real Operations
+status: planning
+stopped_at: n/a — phase 09 planning started 2026-07-20
+last_updated: "2026-07-20T00:00:00.000Z"
+last_activity: 2026-07-20
+last_activity_desc: Milestone v1.3 committed to ROADMAP; Phase 09 planning started
 progress:
-  total_phases: 12
-  completed_phases: 10
+  total_phases: 19
+  completed_phases: 11
   total_plans: 59
   completed_plans: 58
-  percent: 82
+  percent: 58
 ---
 
 # Project State
@@ -28,13 +28,17 @@ See: .planning/PROJECT.md (updated 2026-07-02)
 
 ## Current Position
 
-Phase: 07 (Remaining Operational Surfaces) — COMPLETE, VERIFIED AND UAT-PASSED
-Next: Phase 08 (Auth Cutover & AWS Deployment) — the last planned phase. Nothing
-is queued ahead of it; 06.1 shipped and the 07 manual-UAT follow-up is closed.
-Status: 07-VERIFICATION.md passed 5/5; 07-UAT.md 14/14 in a real browser.
-Suite 930 tests, the same 3 long-standing dev-login/home-redirect failures
-(confirmed pre-existing against a stashed tree, not caused by this work).
-Last activity: 2026-07-19 — Phase 07 browser UAT, one defect fixed, phase verified
+Phase: 09 (Attendance Trust Under Real Operations) — PLANNING STARTED 2026-07-20
+Milestone: v1.3 "Operational Trust" (8 phases, 9–16) committed to ROADMAP from
+docs/AUDIT-2026-07-19.md. Deploy renumbered 8 → 15 (expanded), runs last.
+Phases 1–7 complete (≤ v1.2). Quick-wins batch already shipped ahead of the
+milestone (H1, H2, M4, M7, seed_demo guard, 3 red tests, dead utilities, offline
+drain — 7 commits, suite now 935 green).
+Next: finalize the Phase 09 plan (CANCELLED status + suspension/holiday +
+sweep guard + Absent-correction), then execute.
+Suite: 935 tests, 0 failures (the 3 long-standing red tests were fixed in the
+quick-wins batch).
+Last activity: 2026-07-20 — milestone v1.3 planned; Phase 09 foundation next
 
 **Suite baseline moved 515 -> 790 tests across this phase; the failure set never
 changed.** The only failures are the 3 long-standing dev-login/home-redirect
