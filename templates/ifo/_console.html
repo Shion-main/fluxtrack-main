@@ -10,6 +10,9 @@ and fill console_title / page_actions / console. ASCII-only.{% endcomment %}
   <a href="/ifo/rooms" class="cns__link {% if un == 'ifo_rooms' or un == 'ifo_room_detail' %}is-active{% endif %}"
      {% if un == 'ifo_rooms' or un == 'ifo_room_detail' %}aria-current="page"{% endif %}>
     <uk-icon icon="building"></uk-icon> Rooms</a>
+  <a href="/ifo/buildings" class="cns__link {% if un == 'ifo_buildings' or un == 'ifo_building_detail' %}is-active{% endif %}"
+     {% if un == 'ifo_buildings' or un == 'ifo_building_detail' %}aria-current="page"{% endif %}>
+    <uk-icon icon="building-2"></uk-icon> Buildings</a>
   <a href="/ifo/import" class="cns__link {% if un == 'ifo_import' %}is-active{% endif %}"
      {% if un == 'ifo_import' %}aria-current="page"{% endif %}>
     <uk-icon icon="upload"></uk-icon> Import schedules</a>

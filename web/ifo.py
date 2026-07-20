@@ -10,6 +10,7 @@ from django.core.exceptions import PermissionDenied
 from django.core.files.storage import default_storage
 from django.core.management import call_command
 from django.db import transaction
+from django.db.models import Count
 from django.db.models.deletion import ProtectedError
 from django.http import Http404, HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
@@ -20,7 +21,8 @@ from django.views.decorators.http import require_http_methods
 from accounts.models import Role
 from campus.codes import new_room_credentials
 from campus.models import Building, Floor, Room
-from campus.services import room_delete_blockers
+from campus.services import (building_delete_blockers, floor_delete_blockers,
+                             room_delete_blockers)
 from ops.availability import room_is_free
 from ops.import_staging import (ALLOWED_EXTENSIONS, MAX_UPLOAD_BYTES,
                                 ImportStagingError, consume_staged,
@@ -1794,3 +1796,182 @@ def session_reinstate(request, pk):
     request.session["ifo_flash"] = (
         f"{session.schedule.course_code} on {session.date} reinstated as held.")
     return redirect("ifo_corrections")
+
+
+# Plain-language labels for the campus-structure delete blockers.
+_STRUCTURE_BLOCKER_LABELS = {
+    "floors": ("Floors", "layers"),
+    "rooms": ("Rooms", "building"),
+}
+
+
+def _structure_blocker_rows(blockers):
+    """Render a {relation: count} blocker dict into ordered human rows."""
+    return [{"key": key, "label": _STRUCTURE_BLOCKER_LABELS[key][0],
+             "icon": _STRUCTURE_BLOCKER_LABELS[key][1], "count": n}
+            for key, n in blockers.items() if key in _STRUCTURE_BLOCKER_LABELS]
+
+
+# --- Campus structure: buildings & floors (Phase 10) -------------------------
+# Room CRUD (IFO-01b) shipped in Phase 7, but buildings and floors stayed
+# Django-admin-only -- and the room-create form can only place a room on a floor
+# that already exists, so IFO could not stand up a new building without a
+# superuser (the 2026-07-20 audit gap). These views close that, mirroring the
+# room CRUD discipline: a named, bottom-up PROTECT-aware delete (rooms, then
+# floor, then building), every write audited.
+
+@ifo_required
+@require_http_methods(["GET"])
+def buildings_list(request):
+    """Campus structure: buildings with floor/room counts + add-building form."""
+    buildings = (Building.objects
+                 .annotate(n_floors=Count("floors", distinct=True),
+                           n_rooms=Count("floors__rooms", distinct=True))
+                 .order_by("code"))
+    flash = request.session.pop("ifo_flash", None)
+    return render(request, "ifo/buildings.html",
+                  {"buildings": buildings, "flash": flash, "form": {}})
+
+
+def _building_fields(request):
+    return {"code": (request.POST.get("code") or "").strip().upper(),
+            "name": (request.POST.get("name") or "").strip()}
+
+
+@ifo_required
+@require_http_methods(["POST"])
+def building_create(request):
+    """Create a building (code unique, upper-cased)."""
+    fields = _building_fields(request)
+
+    def fail(msg):
+        buildings = (Building.objects
+                     .annotate(n_floors=Count("floors", distinct=True),
+                               n_rooms=Count("floors__rooms", distinct=True))
+                     .order_by("code"))
+        return render(request, "ifo/buildings.html",
+                      {"buildings": buildings, "error": msg, "form": fields},
+                      status=400)
+
+    if not fields["code"]:
+        return fail("A building code is required (for example, ACAD).")
+    if not fields["name"]:
+        return fail("A building name is required.")
+    if Building.objects.filter(code=fields["code"]).exists():
+        return fail(f"A building with code {fields['code']} already exists.")
+
+    building = Building.objects.create(code=fields["code"][:20],
+                                       name=fields["name"][:120])
+    AuditLog.objects.create(
+        actor=request.user, event_type="building.created",
+        target_type="building", target_id=str(building.pk),
+        payload={"code": building.code, "name": building.name})
+    request.session["ifo_flash"] = f"Building {building.code} added."
+    return redirect("ifo_building_detail", pk=building.pk)
+
+
+@ifo_required
+@require_http_methods(["POST"])
+def building_edit(request, pk):
+    """Rename a building or change its code (code stays unique)."""
+    building = get_object_or_404(Building, pk=pk)
+    fields = _building_fields(request)
+    if not fields["code"] or not fields["name"]:
+        request.session["ifo_flash"] = "Code and name are both required. Not changed."
+        return redirect("ifo_building_detail", pk=pk)
+    clash = Building.objects.filter(code=fields["code"]).exclude(pk=pk).exists()
+    if clash:
+        request.session["ifo_flash"] = (
+            f"Another building already uses code {fields['code']}. Not changed.")
+        return redirect("ifo_building_detail", pk=pk)
+    building.code = fields["code"][:20]
+    building.name = fields["name"][:120]
+    building.save(update_fields=["code", "name"])
+    AuditLog.objects.create(
+        actor=request.user, event_type="building.updated",
+        target_type="building", target_id=str(building.pk),
+        payload={"code": building.code, "name": building.name})
+    request.session["ifo_flash"] = f"Building {building.code} updated."
+    return redirect("ifo_building_detail", pk=pk)
+
+
+@ifo_required
+@require_http_methods(["GET"])
+def building_detail(request, pk):
+    """A building's floors (with room counts) + add-floor form + edit/delete."""
+    building = get_object_or_404(Building, pk=pk)
+    floors = (building.floors.annotate(n_rooms=Count("rooms"))
+              .order_by("number"))
+    blockers = building_delete_blockers(building)
+    flash = request.session.pop("ifo_flash", None)
+    return render(request, "ifo/building_detail.html", {
+        "building": building, "floors": floors, "flash": flash,
+        "delete_blockers": _structure_blocker_rows(blockers), "form": {}})
+
+
+@ifo_required
+@require_http_methods(["POST"])
+def building_delete(request, pk):
+    """Delete a building, or refuse by name if it still holds floors/rooms."""
+    building = get_object_or_404(Building, pk=pk)
+    blockers = building_delete_blockers(building)
+    if blockers:
+        request.session["ifo_flash"] = (
+            f"{building.code} still has "
+            + ", ".join(f"{n} {k}" for k, n in blockers.items())
+            + ". Remove those first.")
+        return redirect("ifo_building_detail", pk=pk)
+    code = building.code
+    AuditLog.objects.create(
+        actor=request.user, event_type="building.deleted",
+        target_type="building", target_id=str(building.pk),
+        payload={"code": code, "name": building.name})
+    building.delete()
+    request.session["ifo_flash"] = f"Building {code} deleted."
+    return redirect("ifo_buildings")
+
+
+@ifo_required
+@require_http_methods(["POST"])
+def floor_create(request, pk):
+    """Add a floor (integer number, unique within the building) to a building."""
+    building = get_object_or_404(Building, pk=pk)
+    raw = (request.POST.get("number") or "").strip()
+    try:
+        number = int(raw)
+    except (TypeError, ValueError):
+        request.session["ifo_flash"] = "Enter a whole number for the floor."
+        return redirect("ifo_building_detail", pk=pk)
+    if Floor.objects.filter(building=building, number=number).exists():
+        request.session["ifo_flash"] = (
+            f"{building.code} already has a floor {number}.")
+        return redirect("ifo_building_detail", pk=pk)
+    floor = Floor.objects.create(building=building, number=number)
+    AuditLog.objects.create(
+        actor=request.user, event_type="floor.created",
+        target_type="floor", target_id=str(floor.pk),
+        payload={"building": building.code, "number": number})
+    request.session["ifo_flash"] = f"Floor {number} added to {building.code}."
+    return redirect("ifo_building_detail", pk=pk)
+
+
+@ifo_required
+@require_http_methods(["POST"])
+def floor_delete(request, pk):
+    """Delete a floor, or refuse by name if it still holds rooms."""
+    floor = get_object_or_404(Floor.objects.select_related("building"), pk=pk)
+    building_pk = floor.building_id
+    blockers = floor_delete_blockers(floor)
+    if blockers:
+        request.session["ifo_flash"] = (
+            f"Floor {floor.number} still has {blockers['rooms']} room(s). "
+            f"Move or delete those first.")
+        return redirect("ifo_building_detail", pk=building_pk)
+    label = f"{floor.building.code} F{floor.number}"
+    AuditLog.objects.create(
+        actor=request.user, event_type="floor.deleted",
+        target_type="floor", target_id=str(floor.pk),
+        payload={"building": floor.building.code, "number": floor.number})
+    floor.delete()
+    request.session["ifo_flash"] = f"{label} deleted."
+    return redirect("ifo_building_detail", pk=building_pk)

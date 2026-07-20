@@ -77,3 +77,38 @@ def room_delete_blockers(room):
         "reservations": room.modality_assigned_items.count(),
     }
     return {relation: n for relation, n in counts.items() if n}
+
+
+def floor_delete_blockers(floor):
+    """Return {relation: count} for what blocks deleting `floor` (Phase 10).
+
+    Floor -> Room is PROTECT, so a floor holding rooms cannot be deleted. Deleting
+    a room is itself a guarded, named act (`room_delete_blockers`), so the campus
+    structure is torn down bottom-up: rooms, then the floor, then the building.
+    Only non-zero entries are returned; an empty dict means the floor is safe to
+    delete.
+    """
+    counts = {"rooms": floor.rooms.count()}
+    return {relation: n for relation, n in counts.items() if n}
+
+
+def building_delete_blockers(building):
+    """Return {relation: count} for what blocks deleting `building` (Phase 10).
+
+    Building -> Floor is CASCADE and Floor -> Room is PROTECT, so a building whose
+    floors hold rooms cannot be deleted (the cascade hits the PROTECT). Rather than
+    rely on that indirect refusal, this names both what is under the building
+    (floors) and what ultimately blocks it (rooms), and requires the operator to
+    empty it first -- the same bottom-up, no-silent-loss discipline as
+    `room_delete_blockers`. A building with floors but no rooms is still reported
+    (``floors``) so a delete never silently cascades away floor rows an operator
+    forgot were there. Only non-zero entries are returned.
+    """
+    # Local import keeps this module free of module-level imports (its stated
+    # contract); Room is same-app, so this is not an upward dependency.
+    from campus.models import Room
+    counts = {
+        "floors": building.floors.count(),
+        "rooms": Room.objects.filter(floor__building=building).count(),
+    }
+    return {relation: n for relation, n in counts.items() if n}

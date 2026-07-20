@@ -1,0 +1,73 @@
+{% extends "ifo/_console.html" %}
+{% comment %}Phase 10 campus structure: buildings list + add form. Floors and
+rooms are managed from a building's detail page. Console uk-* vocabulary, real
+labels, PROTECT-aware bottom-up deletion (rooms -> floor -> building). ASCII-only.{% endcomment %}
+{% block title %}Buildings - FluxTrack{% endblock %}
+{% block console_title %}Buildings{% endblock %}
+{% block console %}
+<p class="uk-text-muted mb-6 max-w-2xl">
+  The campus structure rooms hang off. Add a building here, then open it to add
+  floors; rooms are placed on floors from the Rooms page. A building cannot be
+  deleted until its floors and rooms are removed -- nothing is cascaded away
+  silently.</p>
+
+{% if flash %}
+<div class="uk-alert uk-alert-success mb-4" role="status">
+  <p class="uk-text-small">{{ flash }}</p></div>
+{% endif %}
+
+<div class="max-w-2xl">
+  <div class="uk-card uk-card-body mb-6">
+    <h2 class="uk-h4 mb-3">Add a building</h2>
+    {% if error %}
+    <div class="uk-alert uk-alert-destructive mb-4" role="alert" data-error="1">
+      <p class="uk-text-small">{{ error }}</p></div>
+    {% endif %}
+    <form method="post" action="/ifo/buildings/create" class="flex flex-col gap-4">
+      {% csrf_token %}
+      <div class="grid gap-4 sm:grid-cols-2">
+        <div>
+          <label class="uk-form-label" for="b-code">Code</label>
+          <input id="b-code" type="text" name="code" class="uk-input h-11"
+                 maxlength="20" required autocomplete="off"
+                 value="{{ form.code|default:'' }}" placeholder="ACAD">
+          <p class="uk-text-small uk-text-muted">Stored upper case; must be unique.</p>
+        </div>
+        <div>
+          <label class="uk-form-label" for="b-name">Name</label>
+          <input id="b-name" type="text" name="name" class="uk-input h-11"
+                 maxlength="120" required autocomplete="off"
+                 value="{{ form.name|default:'' }}" placeholder="Academic Building">
+        </div>
+      </div>
+      <div class="pt-2">
+        <button type="submit" class="uk-btn uk-btn-primary h-11">
+          <uk-icon icon="plus" class="size-4"></uk-icon> Add building</button>
+      </div>
+    </form>
+  </div>
+
+  <h2 class="uk-h4 mb-3">Campus</h2>
+  {% if buildings %}
+  <table class="uk-table uk-table-divider uk-table-small">
+    <thead><tr><th>Code</th><th>Name</th><th>Floors</th><th>Rooms</th><th></th></tr></thead>
+    <tbody>
+      {% for b in buildings %}
+      <tr>
+        <td><a href="/ifo/buildings/{{ b.id }}" class="text-primary" style="font-weight:600">{{ b.code }}</a></td>
+        <td>{{ b.name }}</td>
+        <td>{{ b.n_floors }}</td>
+        <td>{{ b.n_rooms }}</td>
+        <td class="uk-text-right">
+          <a href="/ifo/buildings/{{ b.id }}" class="uk-btn uk-btn-ghost uk-btn-sm">
+            <uk-icon icon="settings" class="size-4"></uk-icon> Manage</a>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p class="uk-text-muted uk-text-small">No buildings yet. Add one above.</p>
+  {% endif %}
+</div>
+{% endblock %}

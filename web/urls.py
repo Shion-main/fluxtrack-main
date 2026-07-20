@@ -67,6 +67,16 @@ urlpatterns = [
     path("hr/attendance", hr.attendance, name="hr_attendance"),
     path("hr/attendance.csv", hr.attendance_csv, name="hr_attendance_csv"),
     # IFO Admin surfaces
+    # Phase 10 campus structure: building + floor CRUD (rooms hang off floors).
+    path("ifo/buildings", ifo.buildings_list, name="ifo_buildings"),
+    path("ifo/buildings/create", ifo.building_create, name="ifo_building_create"),
+    path("ifo/buildings/<int:pk>", ifo.building_detail, name="ifo_building_detail"),
+    path("ifo/buildings/<int:pk>/edit", ifo.building_edit, name="ifo_building_edit"),
+    path("ifo/buildings/<int:pk>/delete", ifo.building_delete,
+         name="ifo_building_delete"),
+    path("ifo/buildings/<int:pk>/floors/create", ifo.floor_create,
+         name="ifo_floor_create"),
+    path("ifo/floors/<int:pk>/delete", ifo.floor_delete, name="ifo_floor_delete"),
     path("ifo/rooms", ifo.rooms_list, name="ifo_rooms"),
     path("ifo/rooms/board", ifo.rooms_board, name="ifo_rooms_board"),
     # IFO-01b room CRUD. `new` MUST precede the <str:code> pattern below or the

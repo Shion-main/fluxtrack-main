@@ -1,0 +1,106 @@
+{% extends "ifo/_console.html" %}
+{% comment %}Phase 10: one building -- rename, add/remove floors, and delete the
+building (refused by name while it still holds floors/rooms). ASCII-only.{% endcomment %}
+{% block title %}{{ building.code }} - FluxTrack{% endblock %}
+{% block console_title %}Building {{ building.code }}{% endblock %}
+{% block page_actions %}
+<a href="/ifo/buildings" class="uk-btn uk-btn-ghost uk-btn-sm">
+  <uk-icon icon="chevron-left" class="size-4"></uk-icon> Buildings</a>
+{% endblock %}
+{% block console %}
+{% if flash %}
+<div class="uk-alert uk-alert-success mb-4" role="status">
+  <p class="uk-text-small">{{ flash }}</p></div>
+{% endif %}
+
+<div class="max-w-2xl flex flex-col gap-6">
+  <div class="uk-card uk-card-body">
+    <h2 class="uk-h4 mb-3">Name & code</h2>
+    <form method="post" action="/ifo/buildings/{{ building.id }}/edit"
+          class="flex flex-col gap-4">
+      {% csrf_token %}
+      <div class="grid gap-4 sm:grid-cols-2">
+        <div>
+          <label class="uk-form-label" for="e-code">Code</label>
+          <input id="e-code" type="text" name="code" class="uk-input h-11"
+                 maxlength="20" required value="{{ building.code }}">
+        </div>
+        <div>
+          <label class="uk-form-label" for="e-name">Name</label>
+          <input id="e-name" type="text" name="name" class="uk-input h-11"
+                 maxlength="120" required value="{{ building.name }}">
+        </div>
+      </div>
+      <div><button type="submit" class="uk-btn uk-btn-primary h-11">
+        <uk-icon icon="save" class="size-4"></uk-icon> Save</button></div>
+    </form>
+  </div>
+
+  <div class="uk-card uk-card-body">
+    <h2 class="uk-h4 mb-3">Floors</h2>
+    {% if floors %}
+    <table class="uk-table uk-table-divider uk-table-small mb-4">
+      <thead><tr><th>Floor</th><th>Rooms</th><th></th></tr></thead>
+      <tbody>
+        {% for f in floors %}
+        <tr>
+          <td>Floor {{ f.number }}</td>
+          <td>{{ f.n_rooms }}</td>
+          <td class="uk-text-right">
+            {% if f.n_rooms == 0 %}
+            <form method="post" action="/ifo/floors/{{ f.id }}/delete" style="display:inline">
+              {% csrf_token %}
+              <button type="submit" class="uk-btn uk-btn-ghost uk-btn-sm">
+                <uk-icon icon="trash-2" class="size-4"></uk-icon> Remove</button>
+            </form>
+            {% else %}
+            <span class="uk-text-muted uk-text-small">has rooms</span>
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <p class="uk-text-muted uk-text-small mb-4">No floors yet.</p>
+    {% endif %}
+    <form method="post" action="/ifo/buildings/{{ building.id }}/floors/create"
+          class="flex items-end gap-3">
+      {% csrf_token %}
+      <div>
+        <label class="uk-form-label" for="f-number">Add floor number</label>
+        <input id="f-number" type="number" name="number" class="uk-input h-10"
+               step="1" inputmode="numeric" required style="width:8rem" placeholder="3">
+      </div>
+      <button type="submit" class="uk-btn uk-btn-default h-10">
+        <uk-icon icon="plus" class="size-4"></uk-icon> Add floor</button>
+    </form>
+  </div>
+
+  <div class="uk-card uk-card-body">
+    <h2 class="uk-h4 mb-2">Delete building</h2>
+    {% if delete_blockers %}
+    <p class="uk-text-small uk-text-muted mb-3">
+      {{ building.code }} cannot be deleted yet -- it still holds:</p>
+    <ul class="uk-text-small mb-3" style="list-style:none;padding:0">
+      {% for r in delete_blockers %}
+      <li class="flex items-center gap-2 mb-1">
+        <uk-icon icon="{{ r.icon }}" class="size-4"></uk-icon>
+        {{ r.count }} {{ r.label|lower }}</li>
+      {% endfor %}
+    </ul>
+    <p class="uk-text-small uk-text-muted">
+      Remove its rooms (from the Rooms page) and floors first, then delete the
+      building. Nothing is cascaded away silently.</p>
+    {% else %}
+    <p class="uk-text-small uk-text-muted mb-3">
+      This building has no floors or rooms, so it can be safely deleted.</p>
+    <form method="post" action="/ifo/buildings/{{ building.id }}/delete">
+      {% csrf_token %}
+      <button type="submit" class="uk-btn uk-btn-destructive h-11">
+        <uk-icon icon="trash-2" class="size-4"></uk-icon> Delete {{ building.code }}</button>
+    </form>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}
