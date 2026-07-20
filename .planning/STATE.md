@@ -5,16 +5,16 @@ milestone_name: — "Operational Trust
 current_phase: 11
 current_phase_name: metrics-the-mission-promises
 status: executing
-stopped_at: 11-02 complete 2026-07-20; phase 11 continues (11-03 next)
-last_updated: "2026-07-20T09:00:00.000Z"
+stopped_at: 11-03 complete 2026-07-20; phase 11 continues (11-04 next)
+last_updated: "2026-07-20T09:20:00.000Z"
 last_activity: 2026-07-20
-last_activity_desc: Completed 11-02 (lateness surfaces — weekly report, HR CSV, scorecard)
+last_activity_desc: Phase 11 plan 03 complete (verification coverage on the IFO dashboard, A6/D-04)
 progress:
   total_phases: 18
   completed_phases: 9
   total_plans: 63
-  completed_plans: 60
-  percent: 51
+  completed_plans: 62
+  percent: 50
 ---
 
 # Project State
@@ -28,7 +28,14 @@ See: .planning/PROJECT.md (updated 2026-07-02)
 
 ## Current Position
 
-Phase: 11 (metrics-the-mission-promises) — EXECUTING (11-01 + 11-02 of 4 plans complete)
+Phase: 11 (metrics-the-mission-promises) — EXECUTING (11-01 + 11-02 + 11-03 of 4 plans complete)
+11-03 shipped: verification coverage (A6/D-04) on the IFO dashboard — coverage_by_building_day
+(verified/HELD by building x weekday, physical-only via _exclude_virtual, SEPARATE distinct-count
+verified query so a reverse-join can never inflate) + zero_coverage_floors (floor-granular, held>0
+AND verified==0 listed explicitly). MERGED siblings lower coverage honestly; ABSENT/CANCELLED
+excluded from both sides. Two independent safe_card sections on the dashboard, each guarding its own
+.1 error. 180 tests green (7 coverage + 13 web + existing reporting/util suites). Next: 11-04
+(ghost-room list + per-room utilization CSV, D-05/D-06).
 11-01 shipped: lateness in the aggregate layer (A3) — session_minutes_late shared
 helper + _lateness_map fold; FacultyRow/Scorecard carry minutes_late_avg/late_sessions/
 chronic_late (chronic = held>=5 and >=30% late, frequency floored at >=1 whole minute).
@@ -131,6 +138,7 @@ Phase 07 and remain out of scope.
 | Phase 06.1 P01 | 40m | 3 tasks | 3 files |
 | Phase 11 P01 | 11min | 3 tasks tasks | 4 files files |
 | Phase 11 P02 | 12min | 3 tasks | 5 files |
+| Phase 11 P03 | 18min | 3 tasks | 7 files |
 
 ## Accumulated Context
 
@@ -215,6 +223,7 @@ Recent decisions affecting current work:
 - [Phase 06]: 06-06: Dean reporting surface (web/dean.py dashboard/reports/scorecard/report_export/weekly_download) is the department-scoped, READ-ONLY consumer of the shared aggregate/render layers. Every queryset scopes to request.user.department SERVER-SIDE; scorecard + weekly_download use get_object_or_404(..., department=request.user.department) so a foreign-department id 404s (T-06-01 IDOR/BOLA, refused not hidden). Every view is @require_http_methods(['GET']) so a POST is 405 (DEAN-01 read-only, T-06-07) — a bare Django view otherwise accepts any method. NULL-department Dean gets a zeroed DeptSummary/empty table, NEVER dept_summary(department=None) (edge-case cross-department leak closed). Export reuses build_csv/build_pdf (csv_safe intact, T-06-02); weekly_download streams default_storage bytes. Shared reports/scorecard.html back link parameterized via back_url (default /ifo/dashboard) so a Dean returns to /dean/reports. 12 tests green.
 - [Phase ?]: 06.1-01: room-hours 'used' derived from actual timestamps, clamped to the scheduled window; the ended_early flag is display-only
 - [Phase 11]: 11-01: lateness enters the aggregate layer as ONE shared pure helper session_minutes_late (seconds, grace-independent max(0,actual-scheduled), 0 for NULL start) + a separate Python fold _lateness_map (never Count(filter=Q)/DurationField). FacultyRow+Scorecard gain minutes_late_avg/late_sessions/chronic_late; chronic=held>=5 and >=30% late, but the FREQUENCY count only increments at >=1 whole minute (secs>=60) so sub-minute noise never flags while the average still reflects it. In-flight ACTIVE contributes (lateness needs only the start). Plan 02 HR CSV imports the same helper. 131 reporting tests green.
+- [Phase 11]: 11-03: verification coverage (A6/D-04) added to the aggregate layer + IFO dashboard. coverage_by_building_day = verified/HELD by (building, weekday), HELD denominator never scheduled, physical-only via _exclude_virtual (Room.is_virtual is a property, unusable in .filter()); verified is a SEPARATE Count(distinct=True) query keyed on (building, day) folded in Python (mirrors _verified_map) so a reverse-join can never inflate. MERGED siblings are held-with-no-validation and LOWER coverage (not special-cased); ABSENT/CANCELLED excluded from both numerator and denominator by the HELD_STATUSES filter (a stray verified validation on an ABSENT session still never counts). zero_coverage_floors is FLOOR-granular (building_code, floor_number) — the coverage analogue of _absence_map — emitting every held floor with verified==0 so a checker-less floor is VISIBLE, not a buried low percentage. Surface: _coverage_card resolves the DayOfWeek label inside its safe_card unit (mirrors _saturation_card); dashboard carries coverage + zero_floors (value, error) tuples; ifo/_coverage.html renders the rate table + explicit zero-floor list, each its OWN .1 error guard (RPT-05 per-section isolation), included after #report-panel. Coverage pills use the ok/warn/bad ladder (D-04 has a real target, unlike the neutral occupancy pill). Did NOT touch the live per-floor board in web/checker.py (historical/management view is distinct). 180 tests green; SRS docx untouched (targeted runs only).
 - [Phase 11]: 11-02: lateness SURFACED in all three D-03 places without re-deriving the formula. report_render.HEADER grows 6->8 cols (Avg min late + terse Yes/'' Chronic late); build_csv/build_pdf emit them from every FacultyRow (weekly report + Dean/IFO scorecard CSV). web.hr.CSV_HEADER gains a "Minutes late" column AFTER the retained raw "Actual start" (D-03 add-don't-remove), cell = session_minutes_late(scheduled_start, actual_start)//60 computed inline in the streaming rows() generator with NO DB access (HY010 open-cursor contract held); ABSENT->0. The two CSV header contracts stay DISTINCT (report_render.HEADER vs web.hr.CSV_HEADER — Pitfall 5). scorecard.html renders an avg-minutes-late KPI card with an amber "Chronic" pill gated in-template at card.0.held>=5 (D-02 floor) and always paired with the numeric average (colour not the only signal). 60 render/HR/reporting tests green; SRS docx untouched (targeted runs only).
 
 ### Pending Todos
