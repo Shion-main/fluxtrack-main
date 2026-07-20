@@ -223,9 +223,18 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-07-19T08:46:00.104Z
-Stopped at: context exhaustion at 75% (2026-07-18)
-Resume file: .planning/phases/07-remaining-operational-surfaces/07-CONTEXT.md
+Last session: 2026-07-20 (ingested at ~50% context by request)
+Session arc + decisions: docs/sessions/2026-07-20-audit-and-phase9.md
+Stopped at: Phase 9 COMPLETE + verified + committed; tree clean.
+Resume: Phase 10 (Campus Structure Management) — building/floor CRUD (still
+admin-only gap), room out-of-service (A7), single-schedule edit (A9). Reuses the
+Phase 9 CANCELLED status for a cancelled meeting. Optional first: browser UAT of
+the three new Phase 9 IFO consoles (/ifo/suspensions, /ifo/breaks,
+/ifo/corrections) — not yet human-tested.
+Full audit + milestone plan: docs/AUDIT-2026-07-19.md,
+docs/PLAN-2026-07-20-post-audit-milestone.md.
+Env note: full test runs regenerate FluxTrack_SRS.docx — git checkout it before
+committing.
 
 ## Phase 07 Follow-ups (deliberate scope calls, not defects)
 
