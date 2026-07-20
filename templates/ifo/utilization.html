@@ -140,7 +140,15 @@ this sheet is or what window it covers.{% endcomment %}
 
 {% comment%}--- 3. LEAST-USED ROOMS ------------------------------------------{% endcomment %}
 <div class="uk-card uk-card-body p-0 mb-6 pr-flat" data-util-section="rooms">
-  <h3 class="uk-card-title mb-1 px-4 pt-4">Rooms, least used first</h3>
+  <div class="flex items-center justify-between gap-4 px-4 pt-4">
+    <h3 class="uk-card-title mb-1">Rooms, least used first</h3>
+    {% comment %}Export scopes to the SAME applied window as the table below it;
+    the literal & mirrors the dashboard occupancy card's link two surfaces
+    over.{% endcomment %}
+    <a class="uk-btn uk-btn-secondary uk-btn-sm no-print"
+       href="{% url 'ifo_utilization_csv' %}?from={{ date_from|date:'Y-m-d' }}&to={{ date_to|date:'Y-m-d' }}">
+      <uk-icon icon="download" class="size-4"></uk-icon> Export CSV</a>
+  </div>
   <p class="uk-text-small uk-text-muted px-4 mb-3">
     Every physical room in the campus, sorted by utilization ascending &mdash; so
     this table IS the least-used ranking, read from the top. Nothing is truncated;
@@ -186,6 +194,49 @@ this sheet is or what window it covers.{% endcomment %}
     </table>
   </div>
   <div class="px-4 pb-4">{% include "_pager.html" %}</div>
+  {% endif %}
+</div>
+
+{% comment%}--- 3b. GHOST ROOMS: booked but never used ----------------------
+Its OWN safe_card (ghosts.1) guard, so a raising ghost_rooms renders one error
+card here and the four sections around it still stand (D-05). Stricter than the
+reclaimable-hours framing above: these rooms recorded ZERO occupancy, so the
+whole booking is reclaimable.{% endcomment %}
+<div class="uk-card uk-card-body p-0 mb-6 pr-flat" data-util-section="ghosts">
+  <h3 class="uk-card-title mb-1 px-4 pt-4">Booked but never used</h3>
+  <p class="uk-text-small uk-text-muted px-4 mb-3">
+    Physical rooms booked in this window and then never entered at all &mdash;
+    zero recorded occupancy, not merely an early release. Each is reclaimable
+    capacity a facilities office can act on by name.</p>
+  {% if ghosts.1 %}
+    <div class="px-4 pb-4">{% include "reports/_error_card.html" %}</div>
+  {% else %}
+  <div class="table-wrap">
+    <table class="tbl">
+      <thead>
+        <tr>
+          <th scope="col">Room</th>
+          <th scope="col">Building</th>
+          <th scope="col" class="tbl__num">Floor</th>
+          <th scope="col" class="tbl__num">Booked h</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for r in ghosts.0 %}
+        <tr>
+          <th scope="row" class="tbl__id">
+            <a href="/ifo/rooms/{{ r.code }}">{{ r.code }}</a></th>
+          <td>{{ r.building_name|default:r.building_code }}</td>
+          <td class="tbl__num">{{ r.floor_number }}</td>
+          <td class="tbl__num">{{ r.booked_hours }}</td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="4" class="uk-text-muted">
+          No rooms were booked and left completely unused in this window.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
   {% endif %}
 </div>
 

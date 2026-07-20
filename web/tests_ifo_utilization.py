@@ -19,6 +19,8 @@ Classes:
 
 Django TestCase, never pytest. ASCII-only.
 """
+import csv
+import io
 from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
@@ -26,12 +28,14 @@ from django.test import TestCase
 from django.urls import reverse
 
 from accounts.models import Role
+from campus.models import Room
 from scheduling.reporting import RoomUtilization
 from scheduling.test_support import (
     RUTIL_WEEK_END,
     RUTIL_WEEK_START,
     make_room_utilization_fixture,
 )
+from web.ifo import UTILIZATION_CSV_HEADER
 
 # A stable marker every KPI cell carries, so the card count is asserted against
 # markup that a whitespace or class-order change cannot break.
@@ -433,5 +437,166 @@ class UtilizationAccessTests(UtilizationPageTestCase):
         self.assertNotEqual(self.client.get(self.url).status_code, 200)
 
     def test_an_anonymous_user_cannot_reach_the_page(self):
+        self.client.logout()
+        self.assertNotEqual(self.client.get(self.url).status_code, 200)
+
+
+# ===========================================================================
+# IFO-09 / 06.1-07 (D-06) -- the ghost-room section on /ifo/utilization
+# ===========================================================================
+
+
+class GhostRoomSectionTests(UtilizationPageTestCase):
+    """D-05: the booked-but-never-used section reaches the page, scoped and named."""
+
+    def test_the_page_carries_a_ghost_room_section(self):
+        body = self._get().content.decode()
+        self.assertIn('data-util-section="ghosts"', body)
+        self.assertIn("Booked but never used", body)
+
+    def test_the_context_carries_a_ghosts_two_tuple(self):
+        ghosts = self._get().context["ghosts"]
+        self.assertEqual(len(ghosts), 2)
+        self.assertIsNone(ghosts[1])
+        self.assertIsNotNone(ghosts[0])
+
+    def test_a_booked_never_used_room_is_flagged_and_a_used_room_is_not(self):
+        ids = {r.room_id for r in self._get().context["ghosts"][0]}
+        # s_absent booked its window and recorded zero occupancy: a ghost.
+        self.assertIn(self.fx.s_absent.room_id, ids)
+        # s_full recorded a full session: never a ghost.
+        self.assertNotIn(self.fx.s_full.room_id, ids)
+
+    def test_the_ghost_list_scopes_to_the_applied_range(self):
+        with patch("web.ifo.ghost_rooms") as mock_ghosts:
+            mock_ghosts.return_value = []
+            resp = self._get()
+        kwargs = mock_ghosts.call_args.kwargs
+        self.assertEqual(kwargs["start"], resp.context["date_from"])
+        self.assertEqual(kwargs["end"], resp.context["date_to"])
+        self.assertIn("as_of", kwargs)
+        self.assertIn("term", kwargs)
+
+
+class GhostCardIsolationTests(UtilizationPageTestCase):
+    """T-11-13 / D-05: a raising ghost aggregate errors in its OWN card only."""
+
+    def test_ghost_card_isolation(self):
+        with self.assertLogs("scheduling.reporting", level="ERROR"):
+            with patch("web.ifo.ghost_rooms", side_effect=BOOM):
+                resp = self._get()
+        self.assertEqual(resp.status_code, 200)
+        body = resp.content.decode()
+        # The ghost card renders its error card ...
+        self.assertIn('data-util-section="ghosts"', body)
+        self.assertIn(ERROR_TEXT, body)
+        # ... the raw exception text never reaches the page (info disclosure) ...
+        self.assertNotIn("aggregate exploded", body)
+        # ... and the four original sections still stand.
+        self.assertIn("not timetabled", body)
+        self.assertIn("Seats", body)
+        self.assertIn("Busiest day", body)
+
+
+# ===========================================================================
+# IFO-09 / 06.1-07 (D-06) -- the per-room utilization CSV export
+# ===========================================================================
+
+
+class UtilizationCsvTestCase(TestCase):
+    """Shared setup: an IFO admin, the room fixture, and the CSV export URL."""
+
+    def setUp(self):
+        self.fx = make_room_utilization_fixture("ifocsv")
+        self.ifo = get_user_model().objects.create(
+            username="ifocsv_admin", email="ifocsv_admin@mcm.edu.ph",
+            role=Role.IFO_ADMIN, is_active=True)
+        self.client.force_login(self.ifo)
+        self.url = reverse("ifo_utilization_csv")
+
+    def _csv(self, **params):
+        params.setdefault("from", RUTIL_WEEK_START.isoformat())
+        params.setdefault("to", RUTIL_WEEK_END.isoformat())
+        return self.client.get(self.url, params)
+
+    def _rows(self, resp):
+        return list(csv.reader(io.StringIO(resp.content.decode())))
+
+
+class UtilizationCsvTests(UtilizationCsvTestCase):
+    """D-06: one row per physical room, the on-screen columns, a bounded export."""
+
+    def test_utilization_csv_row_per_physical_room(self):
+        resp = self._csv()
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp["Content-Type"], "text/csv")
+        rows = self._rows(resp)
+        header, data = rows[0], rows[1:]
+        self.assertEqual(header, UTILIZATION_CSV_HEADER)
+        # Exactly one data row per physical room -- the virtual room is excluded,
+        # matching room_breakdown (the CSV cannot diverge from the on-page table).
+        self.assertEqual(len(data), len(self.fx.rooms))
+        codes = {row[0] for row in data}
+        self.assertNotIn(self.fx.vroom.code, codes)
+
+    def test_the_csv_header_is_a_distinct_third_contract(self):
+        """Pitfall 5: not the weekly report's nor the HR payroll export's header."""
+        from scheduling.report_render import HEADER as REPORT_HEADER
+        from web.hr import CSV_HEADER as HR_HEADER
+        self.assertNotEqual(UTILIZATION_CSV_HEADER, REPORT_HEADER)
+        self.assertNotEqual(UTILIZATION_CSV_HEADER, HR_HEADER)
+
+    def test_utilization_csv_formula_neutralized(self):
+        """T-11-10: a formula-triggering room name cannot become a live formula."""
+        Room.objects.create(
+            floor=self.fx.floors[0], code="IFOCSV-INJ",
+            name="=cmd|calc", capacity=10,
+            qr_token="ifocsv-inj-qr", manual_code="INJ001")
+        cells = [c for row in self._rows(self._csv()) for c in row]
+        injected = next(c for c in cells if "cmd|calc" in c)
+        # csv_safe prefixed a literal apostrophe, so the cell is inert text.
+        self.assertTrue(injected.startswith("'="))
+
+    def test_utilization_csv_scopes_to_the_applied_range(self):
+        with patch("web.ifo.room_breakdown") as mock_bd:
+            mock_bd.return_value = []
+            self._csv()
+        kwargs = mock_bd.call_args.kwargs
+        self.assertEqual(kwargs["start"], RUTIL_WEEK_START)
+        self.assertEqual(kwargs["end"], RUTIL_WEEK_END)
+        self.assertIn("as_of", kwargs)
+        self.assertIn("term", kwargs)
+
+    def test_the_filename_is_server_built_not_request_derived(self):
+        """T-11-11: no path/header injection -- the name is built from the range."""
+        resp = self._csv()
+        self.assertEqual(
+            resp["Content-Disposition"],
+            f'attachment; filename="utilization-{RUTIL_WEEK_START}.csv"')
+
+    def test_a_narrower_range_is_honoured_by_the_export(self):
+        wide = len(self._rows(self._csv())) - 1
+        # A physical room count is range-independent, but every row is still
+        # produced for the one-day window (the export never truncates rooms).
+        narrow = self._csv(
+            **{"from": self.fx.mon.isoformat(), "to": self.fx.mon.isoformat()})
+        self.assertEqual(len(self._rows(narrow)) - 1, wide)
+
+
+class UtilizationCsvAccessTests(UtilizationCsvTestCase):
+    """T-11-12: the export is IFO-only and GET-only; no new auth path opened."""
+
+    def test_utilization_csv_gate(self):
+        """A non-IFO (faculty) user is refused with 403."""
+        self.client.force_login(self.fx.faculty)
+        resp = self.client.get(self.url)
+        self.assertEqual(resp.status_code, 403)
+
+    def test_utilization_csv_post_405(self):
+        """A POST to the GET-only export is refused with 405."""
+        resp = self.client.post(self.url)
+        self.assertEqual(resp.status_code, 405)
+
+    def test_an_anonymous_user_is_refused(self):
         self.client.logout()
         self.assertNotEqual(self.client.get(self.url).status_code, 200)

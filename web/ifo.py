@@ -1,5 +1,6 @@
 """IFO Admin surfaces: rooms list, per-room schedule (IFO-11), QR poster (IFO-01),
 and a live 'today' view (IFO-07, htmx-polled)."""
+import csv
 import io
 from datetime import datetime, timedelta
 from functools import wraps
@@ -37,11 +38,11 @@ from scheduling.models import (AcademicBreak, AcademicTerm, ClassSuspension,
 from scheduling.importing import reconcile
 from scheduling.schedule_ops import cancel_schedule, update_schedule
 from scheduling.suspensions import lift_suspension, suspend_classes
-from scheduling.report_render import build_csv
+from scheduling.report_render import build_csv, csv_safe
 from scheduling.reporting import (block_saturation, building_floor_rollup,
                                   coverage_by_building_day, dept_summary,
                                   faculty_attendance, faculty_scorecard,
-                                  room_breakdown, room_heat_grid,
+                                  ghost_rooms, room_breakdown, room_heat_grid,
                                   room_utilization, safe_card,
                                   zero_coverage_floors)
 from verification.models import (Assignment, AssignmentScope, AssignmentType,
@@ -1506,6 +1507,9 @@ def utilization(request):
     breakdown = safe_card(room_breakdown, **scope)
     saturation = safe_card(_saturation_card, **scope)
     occupancy = safe_card(room_utilization, **scope)
+    # D-05: the booked-but-never-used ghost list, its OWN error owner so a raising
+    # ghost_rooms renders one error card and leaves the four sections above intact.
+    ghosts = safe_card(ghost_rooms, **scope)
 
     # `or []` is load-bearing, do NOT remove it. safe_card returns (None, message)
     # when room_breakdown raises, and Paginator(None) dies on len(), so an
@@ -1514,7 +1518,7 @@ def utilization(request):
     pager = paginate(request, breakdown[0] or [])
     return render(request, "ifo/utilization.html", {
         "grid": grid, "rollup": rollup, "breakdown": breakdown,
-        "saturation": saturation, "occupancy": occupancy,
+        "saturation": saturation, "occupancy": occupancy, "ghosts": ghosts,
         "heat_days": DayOfWeek.choices, "term": term,
         "date_from": start, "date_to": end, "range_note": note, **pager,
     })
@@ -1562,6 +1566,68 @@ def scorecard_csv(request, faculty_id):
     resp = HttpResponse(build_csv(rows), content_type="text/csv")
     resp["Content-Disposition"] = (
         f'attachment; filename="scorecard-{faculty.id}-{start}.csv"')
+    return resp
+
+
+# Per-room utilization CSV column contract (IFO-09 / 06.1-07, D-06). A THIRD,
+# DISTINCT header contract -- deliberately NOT scheduling.report_render.HEADER
+# (the weekly faculty report) nor web.hr.CSV_HEADER (the payroll export). Editing
+# either of those does not touch this one; the three answer different questions
+# (Pitfall 5). Columns mirror the on-screen room_breakdown table so the export
+# and the screen can never disagree about a room's row.
+UTILIZATION_CSV_HEADER = [
+    "Room", "Name", "Building", "Floor", "Seats", "Sessions",
+    "Absent sessions", "Used h", "Booked h", "Available h",
+    "Reclaimable h", "Utilization %",
+]
+
+
+@ifo_required
+@require_http_methods(["GET"])
+def utilization_csv(request):
+    """IFO-09 / 06.1-07 (D-06): the per-room utilization breakdown as CSV.
+
+    Finishes the export deliberately dropped in Phase 06.1. Mirrors
+    ``scorecard_csv`` exactly: ``@ifo_required`` + GET-only, the
+    ``_reporting_range`` 4-tuple unpacked first, the active term resolved inline
+    (as ``utilization`` does), then ONE row per physical room from the SAME
+    ``room_breakdown`` aggregate the screen renders -- so the CSV and the on-page
+    table can never diverge and both scope to the applied window/term.
+
+    In-memory (not streaming) is deliberate and safe: the physical-room universe
+    is bounded (~125 rooms), so ``room_breakdown`` returns a small bounded list
+    (RESEARCH A4 / D-06 discretion). Every TEXT cell (room code, name, building
+    name) is run through ``csv_safe`` so an imported room name beginning
+    ``=``/``+``/``-``/``@`` cannot become a live spreadsheet formula (T-11-10);
+    numeric cells pass through as-is. The download filename is SERVER-BUILT from
+    the range start, never request-derived, so a crafted querystring can inject
+    neither a path nor a response header (T-11-11). Read-only, side-effect-free.
+    """
+    start, end, as_of, _note = _reporting_range(request)
+    term = AcademicTerm.objects.filter(is_active=True).first()
+    rows = room_breakdown(start=start, end=end, term=term, as_of=as_of)
+
+    buf = io.StringIO()
+    writer = csv.writer(buf)
+    writer.writerow(UTILIZATION_CSV_HEADER)
+    for r in rows:
+        writer.writerow([
+            csv_safe(r.code),
+            csv_safe(r.name),
+            csv_safe(r.building_name or r.building_code),
+            r.floor_number,
+            r.capacity,
+            r.session_count,
+            r.absent_sessions,
+            r.used_hours,
+            r.booked_hours,
+            r.available_hours,
+            r.wasted_hours,
+            r.utilization_pct,
+        ])
+    resp = HttpResponse(buf.getvalue(), content_type="text/csv")
+    resp["Content-Disposition"] = (
+        f'attachment; filename="utilization-{start}.csv"')
     return resp
 
 

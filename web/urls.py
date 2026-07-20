@@ -138,6 +138,9 @@ urlpatterns = [
     path("ifo/dashboard", ifo.dashboard, name="ifo_dashboard"),
     # IFO-09 tier T2: where and when capacity is idle (heat grid + rollups)
     path("ifo/utilization", ifo.utilization, name="ifo_utilization"),
+    # IFO-09 / 06.1-07 (D-06): per-room utilization breakdown export (GET-only).
+    path("ifo/utilization.csv", ifo.utilization_csv,
+         name="ifo_utilization_csv"),
     path("ifo/scorecard/<int:faculty_id>", ifo.scorecard, name="ifo_scorecard"),
     path("ifo/scorecard/<int:faculty_id>/export.csv", ifo.scorecard_csv,
          name="ifo_scorecard_csv"),
