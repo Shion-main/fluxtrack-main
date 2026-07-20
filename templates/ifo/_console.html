@@ -23,6 +23,17 @@ and fill console_title / page_actions / console. ASCII-only.{% endcomment %}
      {% if un == 'ifo_assignments' %}aria-current="page"{% endif %}>
     <uk-icon icon="user-plus"></uk-icon> Assignments</a>
 
+  <div class="cns__sec">Campus calendar</div>
+  <a href="/ifo/suspensions" class="cns__link {% if un == 'ifo_suspensions' %}is-active{% endif %}"
+     {% if un == 'ifo_suspensions' %}aria-current="page"{% endif %}>
+    <uk-icon icon="cloud-lightning"></uk-icon> Suspensions</a>
+  <a href="/ifo/breaks" class="cns__link {% if un == 'ifo_breaks' %}is-active{% endif %}"
+     {% if un == 'ifo_breaks' %}aria-current="page"{% endif %}>
+    <uk-icon icon="calendar-off"></uk-icon> Holidays</a>
+  <a href="/ifo/corrections" class="cns__link {% if un == 'ifo_corrections' %}is-active{% endif %}"
+     {% if un == 'ifo_corrections' %}aria-current="page"{% endif %}>
+    <uk-icon icon="pencil"></uk-icon> Corrections</a>
+
   <div class="cns__sec">Reporting</div>
   <a href="/ifo/dashboard" class="cns__link {% if un == 'ifo_dashboard' %}is-active{% endif %}"
      {% if un == 'ifo_dashboard' %}aria-current="page"{% endif %}>

@@ -669,7 +669,8 @@ def online_start(request, pk):
             error = "This class is already started."
         elif session.status == SessionStatus.ABSENT:
             error = ("This class is recorded as Absent and cannot be started. "
-                     "A Checker can correct it if you did hold it.")
+                     "If you did hold it, ask the IFO office to reinstate the "
+                     "record.")
         else:
             error = "This class is already finished."
     # 4. Grace. The SHARED predicate is called, never copied -- it is the single

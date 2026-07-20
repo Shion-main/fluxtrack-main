@@ -1,0 +1,108 @@
+{% extends "ifo/_console.html" %}
+{% comment %}Phase 9 (A1) class-suspension console. Declare a suspension (typhoon,
+LGU declaration, flooding) and see/lift active ones. The service does the flip +
+faculty notify; this page only collects input and shows the outcome. Console
+uk-* vocabulary. Every control has a real <label for>. ASCII-only.{% endcomment %}
+{% block title %}Class suspensions - FluxTrack{% endblock %}
+{% block console_title %}Class suspensions{% endblock %}
+{% block console %}
+<p class="uk-text-muted mb-6 max-w-2xl">
+  Suspend classes for a day or a range -- a typhoon, an LGU declaration, flooding
+  in one building. Affected class sessions are cancelled (not marked Absent), and
+  every affected faculty member is notified once. Lift a suspension if it is
+  called off, and the sessions come back.</p>
+
+{% if flash %}
+<div class="uk-alert uk-alert-success mb-4" role="status">
+  <p class="uk-text-small">{{ flash }}</p></div>
+{% endif %}
+
+<div class="max-w-2xl">
+  <div class="uk-card uk-card-body mb-6">
+    <h2 class="uk-h4 mb-3">Declare a suspension</h2>
+    {% if not term %}
+    <div class="uk-alert uk-alert-warning" role="alert">
+      <p class="uk-text-small">No active term. Import a term before suspending classes.</p></div>
+    {% else %}
+    {% if error %}
+    <div class="uk-alert uk-alert-destructive mb-4" role="alert" data-error="1">
+      <p class="uk-text-small">{{ error }}</p></div>
+    {% endif %}
+    <form method="post" action="/ifo/suspensions/create" class="flex flex-col gap-4">
+      {% csrf_token %}
+      <div class="grid gap-4 sm:grid-cols-2">
+        <div>
+          <label class="uk-form-label" for="s-start">Start date</label>
+          <input id="s-start" type="date" name="start_date" class="uk-input h-11"
+                 value="{{ form.start|default:today|date:'Y-m-d' }}" required>
+        </div>
+        <div>
+          <label class="uk-form-label" for="s-end">End date <span class="uk-text-muted">(optional)</span></label>
+          <input id="s-end" type="date" name="end_date" class="uk-input h-11"
+                 value="{{ form.end|default:'' }}">
+          <p class="uk-text-small uk-text-muted">Leave blank for a single day.</p>
+        </div>
+      </div>
+      <div>
+        <label class="uk-form-label" for="s-building">Building</label>
+        <select id="s-building" name="building" class="uk-select h-11">
+          <option value="">All buildings (campus-wide)</option>
+          {% for b in buildings %}
+          <option value="{{ b.id }}" {% if form.building == b.id|stringformat:'s' %}selected{% endif %}>
+            {{ b.code }} - {{ b.name }}</option>
+          {% endfor %}
+        </select>
+        <p class="uk-text-small uk-text-muted">Scope to one building, or leave campus-wide.</p>
+      </div>
+      <div>
+        <label class="uk-form-label" for="s-reason">Reason</label>
+        <input id="s-reason" type="text" name="reason" class="uk-input h-11"
+               maxlength="200" required value="{{ form.reason|default:'' }}"
+               placeholder="Typhoon signal 3">
+      </div>
+      <div class="pt-2">
+        <button type="submit" class="uk-btn uk-btn-primary h-11">
+          <uk-icon icon="cloud-lightning" class="size-4"></uk-icon> Suspend classes</button>
+      </div>
+    </form>
+    {% endif %}
+  </div>
+
+  <h2 class="uk-h4 mb-3">Suspensions</h2>
+  {% if suspensions %}
+  <table class="uk-table uk-table-divider uk-table-small">
+    <thead><tr>
+      <th>Dates</th><th>Scope</th><th>Reason</th><th>Status</th><th></th>
+    </tr></thead>
+    <tbody>
+      {% for s in suspensions %}
+      <tr>
+        <td>{{ s.start_date|date:"M j" }}{% if s.end_date != s.start_date %} - {{ s.end_date|date:"M j" }}{% endif %}</td>
+        <td>{% if s.building %}{{ s.building.code }}{% else %}<span class="uk-text-muted">Campus-wide</span>{% endif %}</td>
+        <td>{{ s.reason }}</td>
+        <td>
+          {% if s.is_active %}
+          <span class="uk-label uk-label-destructive">Active</span>
+          {% else %}
+          <span class="uk-label">Lifted</span>
+          {% endif %}
+        </td>
+        <td class="uk-text-right">
+          {% if s.is_active %}
+          <form method="post" action="/ifo/suspensions/{{ s.id }}/lift" style="display:inline">
+            {% csrf_token %}
+            <button type="submit" class="uk-btn uk-btn-ghost uk-btn-sm">
+              <uk-icon icon="rotate-ccw" class="size-4"></uk-icon> Lift</button>
+          </form>
+          {% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% include "_pager.html" %}
+  {% else %}
+  <p class="uk-text-muted uk-text-small">No suspensions on record.</p>
+  {% endif %}
+</div>
+{% endblock %}

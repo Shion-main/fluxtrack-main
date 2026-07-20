@@ -102,6 +102,19 @@ urlpatterns = [
          name="ifo_session_release"),
     path("ifo/assignments", ifo.assignments_list, name="ifo_assignments"),
     path("ifo/assignments/create", ifo.assignment_create, name="ifo_assignment_create"),
+    # Phase 9 (A1/A5) campus calendar: class suspensions + holidays/breaks.
+    path("ifo/suspensions", ifo.suspensions_list, name="ifo_suspensions"),
+    path("ifo/suspensions/create", ifo.suspension_create,
+         name="ifo_suspension_create"),
+    path("ifo/suspensions/<int:pk>/lift", ifo.suspension_lift,
+         name="ifo_suspension_lift"),
+    path("ifo/breaks", ifo.breaks_list, name="ifo_breaks"),
+    path("ifo/breaks/create", ifo.break_create, name="ifo_break_create"),
+    path("ifo/breaks/<int:pk>/delete", ifo.break_delete, name="ifo_break_delete"),
+    # Phase 9 (A2, D3 IFO-only) reinstate a wrongly-Absent record.
+    path("ifo/corrections", ifo.corrections_list, name="ifo_corrections"),
+    path("ifo/sessions/<int:pk>/reinstate", ifo.session_reinstate,
+         name="ifo_session_reinstate"),
     # IFO-09 reporting dashboard + scorecard drill-down (RPT-04/RPT-05)
     path("ifo/dashboard", ifo.dashboard, name="ifo_dashboard"),
     # IFO-09 tier T2: where and when capacity is idle (heat grid + rollups)

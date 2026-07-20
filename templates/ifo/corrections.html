@@ -1,0 +1,64 @@
+{% extends "ifo/_console.html" %}
+{% comment %}Phase 9 (A2, D3 IFO-only) Absent corrections. A wrongly-Absent record
+-- a checker missed the room, a clock glitch -- can be reinstated as held by IFO,
+with a mandatory reason, fully audited. This is the surface the faculty refusal
+message now points to. Console uk-* vocabulary, ASCII-only.{% endcomment %}
+{% block title %}Corrections - FluxTrack{% endblock %}
+{% block console_title %}Absent corrections{% endblock %}
+{% block console %}
+<p class="uk-text-muted mb-6 max-w-3xl">
+  Absent is final by design -- it is official evidence, not a draft. When it is
+  genuinely wrong (a checker could not reach the room, a device clock was off),
+  an IFO admin can reinstate the session as held. Every correction needs a reason
+  and is recorded in the audit log. Showing sessions marked Absent in the last
+  {{ since|timesince }}.</p>
+
+{% if flash %}
+<div class="uk-alert uk-alert-success mb-4" role="status">
+  <p class="uk-text-small">{{ flash }}</p></div>
+{% endif %}
+
+<form method="get" class="mb-4 flex items-end gap-3">
+  <div>
+    <label class="uk-form-label" for="c-q">Filter by faculty username</label>
+    <input id="c-q" type="text" name="q" class="uk-input h-10" value="{{ q }}"
+           placeholder="e.g. cdgaray" autocomplete="off">
+  </div>
+  <button type="submit" class="uk-btn uk-btn-default h-10">Filter</button>
+  {% if q %}<a href="/ifo/corrections" class="uk-btn uk-btn-ghost h-10">Clear</a>{% endif %}
+</form>
+
+{% if sessions %}
+<table class="uk-table uk-table-divider uk-table-small">
+  <thead><tr>
+    <th>Date</th><th>Faculty</th><th>Class</th><th>Room</th><th>Reinstate</th>
+  </tr></thead>
+  <tbody>
+    {% for s in sessions %}
+    <tr>
+      <td>{{ s.date|date:"M j" }}</td>
+      <td>{{ s.faculty.get_full_name|default:s.faculty.username }}</td>
+      <td>{{ s.schedule.course_code }} {{ s.schedule.section }}</td>
+      <td>{{ s.room.code }}</td>
+      <td>
+        <form method="post" action="/ifo/sessions/{{ s.id }}/reinstate"
+              class="flex items-center gap-2">
+          {% csrf_token %}
+          <input type="text" name="reason" class="uk-input uk-form-small"
+                 maxlength="200" required placeholder="Reason (required)"
+                 aria-label="Reason for reinstating {{ s.schedule.course_code }}">
+          <button type="submit" class="uk-btn uk-btn-primary uk-btn-sm whitespace-nowrap">
+            <uk-icon icon="check" class="size-4"></uk-icon> Reinstate</button>
+        </form>
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% include "_pager.html" %}
+{% else %}
+<p class="uk-text-muted uk-text-small">
+  {% if q %}No Absent sessions for "{{ q }}" in this window.
+  {% else %}No sessions marked Absent in the last 30 days.{% endif %}</p>
+{% endif %}
+{% endblock %}

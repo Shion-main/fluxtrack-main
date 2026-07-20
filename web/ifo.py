@@ -19,7 +19,7 @@ from django.views.decorators.http import require_http_methods
 
 from accounts.models import Role
 from campus.codes import new_room_credentials
-from campus.models import Floor, Room
+from campus.models import Building, Floor, Room
 from campus.services import room_delete_blockers
 from ops.availability import room_is_free
 from ops.import_staging import (ALLOWED_EXTENSIONS, MAX_UPLOAD_BYTES,
@@ -29,9 +29,11 @@ from ops.import_staging import (ALLOWED_EXTENSIONS, MAX_UPLOAD_BYTES,
 from ops.models import AuditLog, Booking, RoomConflictFlag, WeeklyReport
 from ops.occupancy import release_room
 from ops.policy import get_policy
-from scheduling.models import (AcademicTerm, DayOfWeek, Modality, Schedule,
-                                ScheduleStatus, Session, SessionStatus)
+from scheduling.models import (AcademicBreak, AcademicTerm, ClassSuspension,
+                                DayOfWeek, Modality, Schedule, ScheduleStatus,
+                                Session, SessionStatus)
 from scheduling.importing import reconcile
+from scheduling.suspensions import lift_suspension, suspend_classes
 from scheduling.report_render import build_csv
 from scheduling.reporting import (block_saturation, building_floor_rollup,
                                   dept_summary, faculty_attendance,
@@ -1572,3 +1574,223 @@ def weekly_download(request, pk, fmt):
     resp = HttpResponse(data, content_type=content_type)
     resp["Content-Disposition"] = f'attachment; filename="{filename}"'
     return resp
+
+
+# --- Campus calendar: class suspensions & holidays (Phase 9, A1/A5) ----------
+# Two surfaces sit on the scheduling.suspensions service layer built in the Phase
+# 9 core. The console never re-implements the flip/excusal rules -- it collects
+# input, calls the service, and shows the outcome. A suspension is the emergency,
+# reversible one (typhoon/LGU); a break is the planned, term-wide one (semester
+# holidays). Both feed the SAME excused_checker the sweep and materialize read.
+
+def _active_term_or_none():
+    return AcademicTerm.objects.filter(is_active=True).first()
+
+
+def _suspension_qs(term):
+    base = ClassSuspension.objects.select_related("building", "declared_by")
+    base = base.filter(term=term) if term else base.none()
+    return base.order_by("lifted_at", "-start_date")
+
+
+@ifo_required
+@require_http_methods(["GET"])
+def suspensions_list(request):
+    """IFO class-suspension console: declare form + active/past suspensions."""
+    term = _active_term_or_none()
+    pager = paginate(request, _suspension_qs(term), per_page=25)
+    flash = request.session.pop("ifo_flash", None)
+    return render(request, "ifo/suspensions.html", {
+        "term": term, "buildings": Building.objects.order_by("code"),
+        "today": timezone.localdate(), "flash": flash, "form": {},
+        "suspensions": pager["page"].object_list, **pager})
+
+
+@ifo_required
+@require_http_methods(["POST"])
+def suspension_create(request):
+    """Declare a suspension; delegate the flip+notify to the service (Phase 9 core).
+
+    Format is settled before the ORM (the `_safe_parse_date` trap). A reason is
+    mandatory: an unexplained mass-cancellation is exactly what an attendance
+    system must keep accountable.
+    """
+    term = _active_term_or_none()
+    fields = {"start": (request.POST.get("start_date") or "").strip(),
+              "end": (request.POST.get("end_date") or "").strip(),
+              "building": (request.POST.get("building") or "").strip(),
+              "reason": (request.POST.get("reason") or "").strip()}
+
+    def fail(msg):
+        pager = paginate(request, _suspension_qs(term), per_page=25)
+        return render(request, "ifo/suspensions.html", {
+            "term": term, "buildings": Building.objects.order_by("code"),
+            "today": timezone.localdate(), "error": msg, "form": fields,
+            "suspensions": pager["page"].object_list, **pager}, status=400)
+
+    if term is None:
+        return fail("No active term. Import a term first.")
+    start = _safe_parse_date(fields["start"])
+    end = _safe_parse_date(fields["end"]) if fields["end"] else start
+    if start is None:
+        return fail("Enter a valid start date.")
+    if end is None:
+        return fail("Enter a valid end date.")
+    if end < start:
+        return fail("The end date is before the start date.")
+    if not fields["reason"]:
+        return fail("Give a reason (for example, Typhoon signal 3).")
+    building = None
+    if fields["building"]:
+        building = (Building.objects.filter(pk=fields["building"]).first()
+                    if fields["building"].isdigit() else None)
+        if building is None:
+            return fail("Select a valid building, or leave it campus-wide.")
+
+    _, n = suspend_classes(term=term, start_date=start, end_date=end,
+                           reason=fields["reason"], building=building,
+                           declared_by=request.user)
+    scope = building.code if building else "all buildings"
+    request.session["ifo_flash"] = (
+        f"Classes suspended {start}" + (f" to {end}" if end != start else "")
+        + f" ({scope}). {n} session(s) cancelled, faculty notified.")
+    return redirect("ifo_suspensions")
+
+
+@ifo_required
+@require_http_methods(["POST"])
+def suspension_lift(request, pk):
+    """Lift a suspension: reinstate the sessions it (and only it) cancelled."""
+    suspension = get_object_or_404(ClassSuspension, pk=pk)
+    n = lift_suspension(suspension, lifted_by=request.user)
+    request.session["ifo_flash"] = (
+        f"Suspension lifted. {n} session(s) reinstated to Scheduled.")
+    return redirect("ifo_suspensions")
+
+
+@ifo_required
+@require_http_methods(["GET"])
+def breaks_list(request):
+    """IFO holiday/break console: add form + the term's breaks (A5)."""
+    term = _active_term_or_none()
+    breaks = term.breaks.order_by("-start_date") if term else AcademicBreak.objects.none()
+    flash = request.session.pop("ifo_flash", None)
+    return render(request, "ifo/breaks.html", {
+        "term": term, "breaks": breaks, "form": {}, "flash": flash,
+        "today": timezone.localdate()})
+
+
+@ifo_required
+@require_http_methods(["POST"])
+def break_create(request):
+    """Add an academic break/holiday to the active term (materialize + sweep honor it)."""
+    term = _active_term_or_none()
+    fields = {"start": (request.POST.get("start_date") or "").strip(),
+              "end": (request.POST.get("end_date") or "").strip(),
+              "reason": (request.POST.get("reason") or "").strip()}
+
+    def fail(msg):
+        breaks = term.breaks.order_by("-start_date") if term else AcademicBreak.objects.none()
+        return render(request, "ifo/breaks.html",
+                      {"term": term, "breaks": breaks, "error": msg,
+                       "form": fields, "today": timezone.localdate()}, status=400)
+
+    if term is None:
+        return fail("No active term. Import a term first.")
+    start = _safe_parse_date(fields["start"])
+    end = _safe_parse_date(fields["end"]) if fields["end"] else start
+    if start is None:
+        return fail("Enter a valid start date.")
+    if end is None:
+        return fail("Enter a valid end date.")
+    if end < start:
+        return fail("The end date is before the start date.")
+    if not fields["reason"]:
+        return fail("Name the holiday (for example, Araw ng Kagitingan).")
+
+    AcademicBreak.objects.create(term=term, start_date=start, end_date=end,
+                                 reason=fields["reason"][:120])
+    AuditLog.objects.create(
+        actor=request.user, event_type="academicbreak.created",
+        target_type="term", target_id=str(term.pk),
+        payload={"start": str(start), "end": str(end), "reason": fields["reason"]})
+    request.session["ifo_flash"] = f"Holiday added: {fields['reason']} ({start})."
+    return redirect("ifo_breaks")
+
+
+@ifo_required
+@require_http_methods(["POST"])
+def break_delete(request, pk):
+    """Remove a break/holiday."""
+    brk = get_object_or_404(AcademicBreak, pk=pk)
+    label = brk.reason
+    AuditLog.objects.create(
+        actor=request.user, event_type="academicbreak.deleted",
+        target_type="term", target_id=str(brk.term_id),
+        payload={"start": str(brk.start_date), "end": str(brk.end_date),
+                 "reason": brk.reason})
+    brk.delete()
+    request.session["ifo_flash"] = f"Holiday removed: {label}."
+    return redirect("ifo_breaks")
+
+
+# --- Absent correction (Phase 9, A2; D3 = IFO-only) --------------------------
+# The audit found web/faculty.py told faculty "a Checker can correct it", but no
+# path let anyone reinstate an Absent record. D3 puts that authority with IFO --
+# the record's custodian -- not roaming checkers. A correction is a held outcome
+# (the class DID meet), so it lands COMPLETED with the scheduled window as a
+# documented best-effort (the audit row marks it a manual correction, not a scan),
+# and it is refused on anything not currently ABSENT.
+
+CORRECTIONS_PAGE_SIZE = 25
+CORRECTIONS_WINDOW_DAYS = 30
+
+
+@ifo_required
+@require_http_methods(["GET"])
+def corrections_list(request):
+    """Recent ABSENT sessions with an optional faculty filter, each reinstatable."""
+    since = timezone.localdate() - timedelta(days=CORRECTIONS_WINDOW_DAYS)
+    qs = (Session.objects.filter(status=SessionStatus.ABSENT, date__gte=since)
+          .select_related("schedule", "faculty", "room__floor__building")
+          .order_by("-date", "scheduled_start"))
+    q = (request.GET.get("q") or "").strip()
+    if q:
+        qs = qs.filter(faculty__username__icontains=q)
+    pager = paginate(request, qs, per_page=CORRECTIONS_PAGE_SIZE)
+    flash = request.session.pop("ifo_flash", None)
+    return render(request, "ifo/corrections.html", {
+        "sessions": pager["page"].object_list, "q": q, "since": since,
+        "flash": flash, **pager})
+
+
+@ifo_required
+@require_http_methods(["POST"])
+def session_reinstate(request, pk):
+    """Reinstate a wrongly-Absent session as held (COMPLETED); reason required (D3)."""
+    session = get_object_or_404(
+        Session.objects.select_related("schedule", "faculty"), pk=pk)
+    reason = (request.POST.get("reason") or "").strip()
+    if session.status != SessionStatus.ABSENT:
+        request.session["ifo_flash"] = (
+            f"That session is {session.get_status_display().lower()}, "
+            f"not Absent -- nothing to correct.")
+        return redirect("ifo_corrections")
+    if not reason:
+        request.session["ifo_flash"] = "A correction needs a reason. Not changed."
+        return redirect("ifo_corrections")
+    with transaction.atomic():
+        session.status = SessionStatus.COMPLETED
+        # Best-effort held window: we know it met, not the exact minutes. The audit
+        # row records this is an IFO manual correction, not a scan.
+        session.actual_start = session.actual_start or session.scheduled_start
+        session.actual_end = session.actual_end or session.scheduled_end
+        session.save(update_fields=["status", "actual_start", "actual_end"])
+        AuditLog.objects.create(
+            actor=request.user, event_type="session.absent_corrected",
+            target_type="session", target_id=str(session.pk),
+            payload={"reason": reason, "corrected_to": SessionStatus.COMPLETED,
+                     "times": "estimated (scheduled window)"})
+    request.session["ifo_flash"] = (
+        f"{session.schedule.course_code} on {session.date} reinstated as held.")
+    return redirect("ifo_corrections")

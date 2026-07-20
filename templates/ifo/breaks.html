@@ -1,0 +1,82 @@
+{% extends "ifo/_console.html" %}
+{% comment %}Phase 9 (A5) academic breaks / holidays. IFO can enter the term's
+holidays without Django admin; materialize skips them and the sweep never marks
+their sessions Absent. Console uk-* vocabulary, real labels, ASCII-only.{% endcomment %}
+{% block title %}Holidays - FluxTrack{% endblock %}
+{% block console_title %}Holidays & breaks{% endblock %}
+{% block console %}
+<p class="uk-text-muted mb-6 max-w-2xl">
+  The dates classes do not meet -- regular holidays, term breaks, foundation days.
+  New sessions are never created on these dates, and any already created are never
+  marked Absent. Use Suspensions for an emergency, same-day call-off instead.</p>
+
+{% if flash %}
+<div class="uk-alert uk-alert-success mb-4" role="status">
+  <p class="uk-text-small">{{ flash }}</p></div>
+{% endif %}
+
+<div class="max-w-2xl">
+  <div class="uk-card uk-card-body mb-6">
+    <h2 class="uk-h4 mb-3">Add a holiday</h2>
+    {% if not term %}
+    <div class="uk-alert uk-alert-warning" role="alert">
+      <p class="uk-text-small">No active term. Import a term first.</p></div>
+    {% else %}
+    {% if error %}
+    <div class="uk-alert uk-alert-destructive mb-4" role="alert" data-error="1">
+      <p class="uk-text-small">{{ error }}</p></div>
+    {% endif %}
+    <form method="post" action="/ifo/breaks/create" class="flex flex-col gap-4">
+      {% csrf_token %}
+      <div class="grid gap-4 sm:grid-cols-2">
+        <div>
+          <label class="uk-form-label" for="b-start">Start date</label>
+          <input id="b-start" type="date" name="start_date" class="uk-input h-11"
+                 value="{{ form.start|default:'' }}" required>
+        </div>
+        <div>
+          <label class="uk-form-label" for="b-end">End date <span class="uk-text-muted">(optional)</span></label>
+          <input id="b-end" type="date" name="end_date" class="uk-input h-11"
+                 value="{{ form.end|default:'' }}">
+          <p class="uk-text-small uk-text-muted">Leave blank for a single day.</p>
+        </div>
+      </div>
+      <div>
+        <label class="uk-form-label" for="b-reason">Holiday name</label>
+        <input id="b-reason" type="text" name="reason" class="uk-input h-11"
+               maxlength="120" required value="{{ form.reason|default:'' }}"
+               placeholder="Araw ng Kagitingan">
+      </div>
+      <div class="pt-2">
+        <button type="submit" class="uk-btn uk-btn-primary h-11">
+          <uk-icon icon="plus" class="size-4"></uk-icon> Add holiday</button>
+      </div>
+    </form>
+    {% endif %}
+  </div>
+
+  <h2 class="uk-h4 mb-3">This term</h2>
+  {% if breaks %}
+  <table class="uk-table uk-table-divider uk-table-small">
+    <thead><tr><th>Dates</th><th>Holiday</th><th></th></tr></thead>
+    <tbody>
+      {% for b in breaks %}
+      <tr>
+        <td>{{ b.start_date|date:"M j" }}{% if b.end_date != b.start_date %} - {{ b.end_date|date:"M j" }}{% endif %}</td>
+        <td>{{ b.reason|default:"(unnamed)" }}</td>
+        <td class="uk-text-right">
+          <form method="post" action="/ifo/breaks/{{ b.id }}/delete" style="display:inline">
+            {% csrf_token %}
+            <button type="submit" class="uk-btn uk-btn-ghost uk-btn-sm">
+              <uk-icon icon="trash-2" class="size-4"></uk-icon> Remove</button>
+          </form>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p class="uk-text-muted uk-text-small">No holidays entered for this term yet.</p>
+  {% endif %}
+</div>
+{% endblock %}
