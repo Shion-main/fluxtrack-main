@@ -107,6 +107,38 @@ class Scorecard:
 
 
 @dataclass
+class CoverageRow:
+    """Verification coverage for one (building, weekday) cell (A6 / D-04).
+
+    ``held`` is the HELD denominator (never scheduled); ``verified`` is the count
+    of those held sessions carrying a checker VERIFIED validation, from a SEPARATE
+    distinct-count query so a reverse-join can never inflate it. ``pct`` is
+    ``_pct(verified, held)``. ``day`` is the ``DayOfWeek`` int; the surface resolves
+    the label so this stays display-free.
+    """
+    building_code: str
+    building_name: str
+    day: int
+    held: int
+    verified: int
+    pct: int
+
+
+@dataclass
+class ZeroCoverageFloor:
+    """One (building, floor) with held sessions but ZERO checker verification (D-04).
+
+    The coverage analogue of :class:`AbsenceItem`'s itemized list: a floor that had
+    held sessions and NO verification must be VISIBLE explicitly, not buried as a low
+    percentage. Only floors with ``held > 0`` and ``verified == 0`` are emitted.
+    """
+    building_code: str
+    building_name: str
+    floor_number: int
+    held: int
+
+
+@dataclass
 class RoomUtilization:
     """Campus-wide room-hours over a range (IFO-09, tier T1).
 
@@ -524,6 +556,103 @@ def dept_summary(*, start, end, department=None, as_of=None):
         absent=agg["absent"] or 0,
         attendance_pct=_pct(agg["held"] or 0, agg["scheduled"] or 0),
     )
+
+
+def coverage_by_building_day(*, start, end, as_of=None):
+    """A6 / D-04: verification coverage = verified / HELD, by (building, weekday).
+
+    "What percentage of HELD sessions were physically checker-verified?" The
+    denominator is HELD (``HELD_STATUSES``), NEVER scheduled -- consistent with every
+    other rate in this module. PHYSICAL rooms only: an online class in a V-room
+    occupies no physical capacity a checker walks past, so :func:`_exclude_virtual`
+    drops it (online verification is a separate concern, out of scope for D-04).
+
+    The verified count is a SEPARATE distinct-count query (the :func:`_verified_map`
+    discipline), never a same-query multi-join with the held count, so a reverse-join
+    row multiplication can NEVER inflate coverage. A merge-filled MERGED sibling is
+    held with no CheckerValidation, so it correctly LOWERS the rate rather than being
+    special-cased; an ABSENT/CANCELLED session is not in HELD_STATUSES and contributes
+    to neither side. Grouped by ``(building, weekday)`` and ordered deterministically.
+    """
+    qs = _exclude_virtual(_scoped_sessions(start=start, end=end, as_of=as_of))
+
+    held_rows = (
+        qs.filter(status__in=HELD_STATUSES)
+        .values("room__floor__building__code", "room__floor__building__name",
+                "schedule__day_of_week")
+        .annotate(held=Count("id"))
+    )
+    verified_rows = (
+        qs.filter(status__in=HELD_STATUSES,
+                  validations__action=ValidationAction.VERIFIED)
+        .values("room__floor__building__code", "schedule__day_of_week")
+        .annotate(verified=Count("id", distinct=True))
+    )
+    verified_by_key = {
+        (r["room__floor__building__code"], r["schedule__day_of_week"]): r["verified"]
+        for r in verified_rows
+    }
+
+    rows = []
+    for r in held_rows:
+        code = r["room__floor__building__code"]
+        day = r["schedule__day_of_week"]
+        held = r["held"]
+        verified = verified_by_key.get((code, day), 0)
+        rows.append(CoverageRow(
+            building_code=code,
+            building_name=r["room__floor__building__name"],
+            day=day,
+            held=held,
+            verified=verified,
+            pct=_pct(verified, held),
+        ))
+    rows.sort(key=lambda x: (x.building_code, x.day))
+    return rows
+
+
+def zero_coverage_floors(*, start, end, as_of=None):
+    """A6 / D-04: every (building, floor) with held sessions but ZERO verification.
+
+    The coverage analogue of the itemized absence list (:func:`_absence_map`): a
+    zero-coverage floor must be VISIBLE, not merely a low percentage buried in the
+    building/day rate. Same physical-only, HELD-denominated, separate-verified-query
+    discipline as :func:`coverage_by_building_day`, but at FLOOR granularity. Emits a
+    :class:`ZeroCoverageFloor` for every held floor key whose verified count is 0
+    (held > 0 AND verified == 0), ordered ``(building_code, floor_number)``.
+    """
+    qs = _exclude_virtual(_scoped_sessions(start=start, end=end, as_of=as_of))
+
+    held_rows = (
+        qs.filter(status__in=HELD_STATUSES)
+        .values("room__floor__building__code", "room__floor__building__name",
+                "room__floor__number")
+        .annotate(held=Count("id"))
+    )
+    verified_rows = (
+        qs.filter(status__in=HELD_STATUSES,
+                  validations__action=ValidationAction.VERIFIED)
+        .values("room__floor__building__code", "room__floor__number")
+        .annotate(verified=Count("id", distinct=True))
+    )
+    verified_keys = {
+        (r["room__floor__building__code"], r["room__floor__number"])
+        for r in verified_rows if r["verified"] > 0
+    }
+
+    out = []
+    for r in held_rows:
+        code = r["room__floor__building__code"]
+        floor = r["room__floor__number"]
+        if r["held"] > 0 and (code, floor) not in verified_keys:
+            out.append(ZeroCoverageFloor(
+                building_code=code,
+                building_name=r["room__floor__building__name"],
+                floor_number=floor,
+                held=r["held"],
+            ))
+    out.sort(key=lambda x: (x.building_code, x.floor_number))
+    return out
 
 
 def faculty_scorecard(*, faculty, start, end, as_of=None):
