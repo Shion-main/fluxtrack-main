@@ -721,3 +721,202 @@ def make_room_utilization_fixture(prefix="rutil", activate=True):
         s_archived=s_archived,
         add_session=add_session,
     )
+
+
+# --- Verification-coverage fixture (Phase 11, A6 / D-04) --------------------
+
+# The known Mon-Sun week every coverage-fixture session lives inside. The three
+# weekdays carry distinct (building) cells so the (building, weekday) grouping is
+# exercised; Sunday deliberately carries nothing.
+COV_MON = IN_WINDOW_DATE              # 2026-07-06, a Monday (day_of_week 0)
+COV_TUE = date(2026, 7, 7)           # day_of_week 1
+COV_WED = date(2026, 7, 8)           # day_of_week 2
+COV_WEEK_START = COV_MON
+COV_WEEK_END = date(2026, 7, 12)     # the Sunday; carries nothing
+
+
+def make_coverage_fixture(prefix="cov", activate=True):
+    """Seed a coverage-shaped object graph for the A6 / D-04 verification metric.
+
+    A new fixture beside :func:`make_room_utilization_fixture` (which is room-hours
+    shaped and asserts its own totals): this one is verification shaped -- a mix of
+    verified / unverified / merged / absent / cancelled / virtual sessions across two
+    physical buildings so ``coverage_by_building_day`` and ``zero_coverage_floors``
+    are exercised end to end. Mirrors the module's ``_aware`` + prefix-namespacing
+    idiom. ASCII-only.
+
+    ``activate`` must be True for the FIRST call in a test and False for any later
+    one (a coverage aggregate resolves nothing term-scoped, but a second active term
+    is still a state the campus can never be in).
+
+    Shape -- two physical Buildings, two Floors each, one physical room per floor,
+    plus a third building holding ONE V-prefixed virtual room:
+
+      * ``b1`` F1 (Monday): PARTIAL coverage -- 2 held, 1 verified.
+      * ``b1`` F2 (Tuesday): ZERO coverage -- 2 held, 0 verified, PLUS an ABSENT
+        session (carrying a stray verified validation, to prove status dominates)
+        and a CANCELLED session (contributes nothing). The one zero-coverage floor.
+      * ``b2`` F1 (Monday): FULL coverage -- 2 held, 2 verified.
+      * ``b2`` F2 (Wednesday): a MERGED held session (no CheckerValidation) beside a
+        verified one -- the merged sibling is held-but-unverified and LOWERS the rate
+        (2 held, 1 verified).
+      * ``vroom`` (Monday): an online session in a V-room WITH a verified validation.
+        Physical-only coverage must ignore it entirely (D-04).
+
+    DOCUMENTED cells over ``COV_WEEK_START..COV_WEEK_END`` with no ``as_of``:
+
+      - (b1, Mon) held 2 verified 1 pct 50    -- partial
+      - (b1, Tue) held 2 verified 0 pct 0     -- zero (absent + cancelled excluded)
+      - (b2, Mon) held 2 verified 2 pct 100   -- full
+      - (b2, Wed) held 2 verified 1 pct 50    -- merged lowers it
+      - zero_coverage_floors: exactly [(b1, floor 2)]
+
+    ``add_session(room, d, status, **kwargs)`` seeds one more session on a fresh
+    schedule for boundary tests. Returns a SimpleNamespace.
+    """
+    User = get_user_model()
+    counter = {"n": 0}
+
+    def _next():
+        counter["n"] += 1
+        return counter["n"]
+
+    dept = Department.objects.create(name=f"{prefix} Dept", code=f"{prefix}-CD")
+    faculty = User.objects.create(
+        username=f"{prefix}_cfa", email=f"{prefix}_cfa@mcm.edu.ph",
+        first_name="Cora", last_name="Cruz",
+        role=Role.FACULTY, department=dept, is_active=True,
+    )
+    checker = User.objects.create(
+        username=f"{prefix}_cchk", email=f"{prefix}_cchk@mcm.edu.ph",
+        role=Role.CHECKER, department=dept, is_active=True,
+    )
+
+    term = AcademicTerm.objects.create(
+        name=f"{prefix} Term", start_date=date(2026, 1, 1),
+        end_date=date(2026, 12, 31), is_active=activate,
+    )
+
+    b1 = Building.objects.create(name=f"{prefix} Hall 1", code=f"{prefix}-B1")
+    b2 = Building.objects.create(name=f"{prefix} Hall 2", code=f"{prefix}-B2")
+    b1f1 = Floor.objects.create(building=b1, number=1)
+    b1f2 = Floor.objects.create(building=b1, number=2)
+    b2f1 = Floor.objects.create(building=b2, number=1)
+    b2f2 = Floor.objects.create(building=b2, number=2)
+
+    online_building = Building.objects.create(
+        name=f"{prefix} Online", code=f"{prefix}-BV")
+    online_floor = Floor.objects.create(building=online_building, number=1)
+
+    def _room(floor, code):
+        n = _next()
+        return Room.objects.create(
+            floor=floor, code=code, capacity=40,
+            qr_token=f"{prefix}-qr-{n}",
+            manual_code=f"{next(_RUTIL_MANUAL_SEQ):06d}",
+        )
+
+    r_b1f1 = _room(b1f1, f"{prefix}-R-B1F1")
+    r_b1f2 = _room(b1f2, f"{prefix}-R-B1F2")
+    r_b2f1 = _room(b2f1, f"{prefix}-R-B2F1")
+    r_b2f2 = _room(b2f2, f"{prefix}-R-B2F2")
+    # The V LEADS the code so exclude(code__startswith="V") still matches it (D-08).
+    vroom = _room(online_floor, f"V{prefix}1")
+
+    teach_start, teach_end = time(8, 0), time(9, 30)
+
+    def _mk(room, d, status, *, day=None, modality=Modality.F2F, declared="",
+            checkin_method=""):
+        n = _next()
+        sched = Schedule.objects.create(
+            term=term, course_code=f"{prefix}{n:03d}", section="A",
+            faculty=faculty, room=room,
+            day_of_week=d.weekday() if day is None else day,
+            start_time=teach_start, end_time=teach_end, modality=modality,
+        )
+        return Session.objects.create(
+            schedule=sched, faculty=faculty, room=room, date=d,
+            scheduled_start=_aware(d, teach_start),
+            scheduled_end=_aware(d, teach_end),
+            status=status, declared_modality=declared,
+            checkin_method=checkin_method,
+        )
+
+    def _verify(session, room):
+        return CheckerValidation.objects.create(
+            session=session, room=room, checker=checker,
+            action=ValidationAction.VERIFIED,
+        )
+
+    # b1 F1 (Monday): partial coverage -- 2 held, 1 verified.
+    s_partial_verified = _mk(r_b1f1, COV_MON, SessionStatus.ACTIVE)
+    s_partial_unverified = _mk(r_b1f1, COV_MON, SessionStatus.COMPLETED)
+    _verify(s_partial_verified, r_b1f1)
+
+    # b1 F2 (Tuesday): the ZERO-coverage floor -- 2 held, 0 verified, plus an ABSENT
+    # (carrying a stray verified validation to prove the HELD filter dominates) and a
+    # CANCELLED (contributes nothing to either side).
+    s_zero_a = _mk(r_b1f2, COV_TUE, SessionStatus.ACTIVE)
+    s_zero_b = _mk(r_b1f2, COV_TUE, SessionStatus.COMPLETED)
+    s_absent = _mk(r_b1f2, COV_TUE, SessionStatus.ABSENT)
+    s_cancelled = _mk(r_b1f2, COV_TUE, SessionStatus.CANCELLED)
+    _verify(s_absent, r_b1f2)   # must NOT count: ABSENT is not a HELD status
+
+    # b2 F1 (Monday): fully verified floor -- 2 held, 2 verified.
+    s_full_a = _mk(r_b2f1, COV_MON, SessionStatus.ACTIVE)
+    s_full_b = _mk(r_b2f1, COV_MON, SessionStatus.COMPLETED)
+    _verify(s_full_a, r_b2f1)
+    _verify(s_full_b, r_b2f1)
+
+    # b2 F2 (Wednesday): a MERGED held session (no validation) beside a verified one;
+    # the merged sibling is held-but-unverified and LOWERS coverage.
+    s_merged_verified = _mk(r_b2f2, COV_WED, SessionStatus.ACTIVE)
+    s_merged = _mk(r_b2f2, COV_WED, SessionStatus.ACTIVE,
+                   checkin_method=CheckinMethod.MERGED)
+    _verify(s_merged_verified, r_b2f2)
+
+    # V-room (Monday): an online session WITH a verified validation. Physical-only
+    # coverage must ignore it entirely (D-04).
+    s_virtual = _mk(vroom, COV_MON, SessionStatus.ACTIVE,
+                    modality=Modality.ONLINE, declared=Modality.ONLINE)
+    _verify(s_virtual, vroom)
+
+    def add_session(room, d, status, **kwargs):
+        """Seed one more session on a fresh schedule, for boundary tests."""
+        return _mk(room, d, status, **kwargs)
+
+    return SimpleNamespace(
+        term=term,
+        dept=dept,
+        faculty=faculty,
+        checker=checker,
+        b1=b1,
+        b2=b2,
+        b1f1=b1f1,
+        b1f2=b1f2,
+        b2f1=b2f1,
+        b2f2=b2f2,
+        online_building=online_building,
+        rooms={
+            "b1f1": r_b1f1, "b1f2": r_b1f2,
+            "b2f1": r_b2f1, "b2f2": r_b2f2, "vroom": vroom,
+        },
+        vroom=vroom,
+        week_start=COV_WEEK_START,
+        week_end=COV_WEEK_END,
+        mon=COV_MON,
+        tue=COV_TUE,
+        wed=COV_WED,
+        s_partial_verified=s_partial_verified,
+        s_partial_unverified=s_partial_unverified,
+        s_zero_a=s_zero_a,
+        s_zero_b=s_zero_b,
+        s_absent=s_absent,
+        s_cancelled=s_cancelled,
+        s_full_a=s_full_a,
+        s_full_b=s_full_b,
+        s_merged_verified=s_merged_verified,
+        s_merged=s_merged,
+        s_virtual=s_virtual,
+        add_session=add_session,
+    )
