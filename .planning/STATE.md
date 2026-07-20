@@ -2,19 +2,19 @@
 gsd_state_version: 1.0
 milestone: v1.3
 milestone_name: "Operational Trust — the attendance record survives real campus operations (suspensions/holidays/corrections), the mission metrics are visible, IFO manages the campus without a superuser, and the app deploys safely. From docs/AUDIT-2026-07-19.md."
-current_phase: 09
-current_phase_name: Attendance Trust Under Real Operations
-status: planning
-stopped_at: n/a — phase 09 planning started 2026-07-20
+current_phase: 10
+current_phase_name: Campus Structure Management
+status: ready
+stopped_at: n/a — phase 09 complete 2026-07-20; phase 10 next
 last_updated: "2026-07-20T00:00:00.000Z"
 last_activity: 2026-07-20
-last_activity_desc: Milestone v1.3 committed to ROADMAP; Phase 09 planning started
+last_activity_desc: Phase 09 (Attendance Trust) complete — 5/5 criteria, suite 965 green
 progress:
   total_phases: 19
-  completed_phases: 11
+  completed_phases: 12
   total_plans: 59
   completed_plans: 58
-  percent: 58
+  percent: 63
 ---
 
 # Project State
@@ -28,17 +28,20 @@ See: .planning/PROJECT.md (updated 2026-07-02)
 
 ## Current Position
 
-Phase: 09 (Attendance Trust Under Real Operations) — PLANNING STARTED 2026-07-20
-Milestone: v1.3 "Operational Trust" (8 phases, 9–16) committed to ROADMAP from
-docs/AUDIT-2026-07-19.md. Deploy renumbered 8 → 15 (expanded), runs last.
-Phases 1–7 complete (≤ v1.2). Quick-wins batch already shipped ahead of the
-milestone (H1, H2, M4, M7, seed_demo guard, 3 red tests, dead utilities, offline
-drain — 7 commits, suite now 935 green).
-Next: finalize the Phase 09 plan (CANCELLED status + suspension/holiday +
-sweep guard + Absent-correction), then execute.
-Suite: 935 tests, 0 failures (the 3 long-standing red tests were fixed in the
-quick-wins batch).
-Last activity: 2026-07-20 — milestone v1.3 planned; Phase 09 foundation next
+Phase: 09 (Attendance Trust Under Real Operations) — COMPLETE 2026-07-20 (5/5,
+see 09-VERIFICATION.md). Next: Phase 10 (Campus Structure Management).
+Milestone: v1.3 "Operational Trust" (8 phases, 9–16) from docs/AUDIT-2026-07-19.md.
+Deploy renumbered 8 → 15 (expanded), runs last. Phases 1–7 complete (≤ v1.2).
+Quick-wins batch shipped ahead of the milestone (H1/H2/M4/M7, seed_demo guard,
+3 red tests, dead utilities, offline drain).
+Phase 9 shipped: CANCELLED status; ClassSuspension model + scheduling/suspensions.py
+(shared excused_checker for sweep+materialize, suspend_classes/lift_suspension);
+IFO consoles for suspensions, holidays/breaks, and Absent corrections (IFO-only, D3);
+faculty message fixed (A2). The typhoon-day mass-Absent defect is closed.
+Suite: 965 tests, 0 failures.
+Next phases: 10 Campus Structure (building/floor CRUD, room-offline, schedule edit),
+11 Metrics, 12 Term Lifecycle, 13 UX Finish, 14 Correctness, 15 Deploy, 16 Docs.
+Last activity: 2026-07-20 — Phase 09 complete, verified, committed
 
 **Suite baseline moved 515 -> 790 tests across this phase; the failure set never
 changed.** The only failures are the 3 long-standing dev-login/home-redirect
