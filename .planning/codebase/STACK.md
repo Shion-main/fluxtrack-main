@@ -1,88 +1,105 @@
 # Technology Stack
 
-**Analysis Date:** 2026-07-02
+**Analysis Date:** 2026-07-21
+**Repository revision:** `6cff9a7` (2026-07-20)
 
 ## Languages
 
 **Primary:**
-- Python 3.12 — all backend code (Django apps `accounts/`, `campus/`, `scheduling/`, `verification/`, `ops/`, `web/`, plus `config/`). Invoked on Windows via the `py -3.12` launcher (see `README.md`).
-- HTML (Django templates) — server-rendered UI under `templates/` (e.g. `templates/base.html`, `templates/faculty/scan.html`, `templates/ifo/live.html`).
+- Python 3.12 - Django application, domain logic, management commands, scheduled jobs, imports, reporting, and tests (`manage.py`, `accounts/`, `campus/`, `scheduling/`, `verification/`, `ops/`, `web/`). The supported interpreter is documented in `README.md`; no Python version file is checked in.
+- Django template language / HTML - server-rendered pages and HTMX fragments (`templates/`).
 
 **Secondary:**
-- Vanilla JavaScript — two isolated client-side modules only: the camera QR scanner (`html5-qrcode`, loaded in `templates/faculty/scan.html`) and the service worker (`SW_JS` string in `web/views.py`). The IndexedDB Checker offline queue is specified but currently exists only in the proof-of-concept `poc/app.py`, not in the shipped `web/` app.
-- CSS — supplied by Franken UI (Tailwind) via CDN; no hand-authored stylesheet and no Tailwind build step wired yet.
-
-**Explicitly NOT used:** No React, no client-side SPA framework, and no Node.js runtime. There is no `package.json`, no `node_modules`, and no JS build tool anywhere in the repo. All frontend libraries are pulled from a CDN at runtime.
+- JavaScript (browser-native ES5/ES6, no bundler) - PWA/service-worker behavior, web push, QR scanning orchestration, offline Checker replay, and dynamic UI (`static/js/`, `static/checker/offline_queue.js`, `static/faculty/modality.js`, `templates/faculty/scan.html`, `templates/checker/scan.html`).
+- CSS - application shells and specialist boards/timetables (`static/css/`, `static/faculty/faculty.css`).
+- SQL - reference SQL Server schema documentation (`docs/db_schema.sql`); production schema changes are Django migrations under each app's `migrations/` directory.
 
 ## Runtime
 
 **Environment:**
-- CPython 3.12 (`README.md` pins `py -3.12`). No `.python-version` or `.nvmrc` file present.
-- WSGI application: `config.wsgi.application` (referenced in `config/settings.py:75`).
+- Python 3.12 is the documented development runtime (`README.md`).
+- Django exposes WSGI and ASGI entry points at `config/wsgi.py` and `config/asgi.py`; the documented target deployment runs WSGI through Gunicorn, but Gunicorn is not present in `requirements.txt` and no service-unit configuration is checked in.
+- A second, long-lived Python process runs `scheduling/management/commands/runscheduler.py`; never start scheduling from a web worker or `AppConfig.ready()`.
+- Browser runtime is required for HTMX, camera QR scanning, IndexedDB replay, service workers, notifications, and PushManager.
 
 **Package Manager:**
-- pip. Install command: `py -3.12 -m pip install --user -r requirements.txt` (`README.md`).
-- Lockfile: missing. Dependencies are declared with floor/ceiling ranges in `requirements.txt`; there is no `requirements.lock`, `Pipfile.lock`, or `poetry.lock`.
+- pip with `requirements.txt`.
+- Lockfile: missing. Only selected dependencies are exact-pinned; many use lower bounds/ranges, so installs are not fully reproducible.
+- No `package.json`, Node lockfile, or frontend build pipeline is checked in. Production remains Node-free at the current revision.
 
 ## Frameworks
 
 **Core:**
-- Django `>=5.0,<7.0` (`requirements.txt:3`) — full-stack framework and system of record. Serves the server-rendered UI, the REST API, and static assets as a single application. Settings in `config/settings.py`, URL root `config/urls`. SRS records the target version as Django 6.
-- Django REST Framework `>=3.15` (`requirements.txt:4`) — REST API layer. Configured in `config/settings.py:126-133` with `SessionAuthentication` and `IsAuthenticated` as defaults.
+- Django 6.0.6 - monolithic server-rendered web application, ORM, migrations, authentication, forms-by-view, admin, and test runner (`requirements.txt`, `config/settings.py`).
+- Django REST Framework >=3.15 - installed and configured globally for session authentication and authenticated access (`config/settings.py`). No DRF serializer, APIView, ViewSet, or router implementation is detected; JSON endpoints are ordinary Django views in `web/`.
+- HTMX 2.0.6 - progressive enhancement and fragment polling/swaps, loaded from jsDelivr/htmx.org in `templates/base.html`.
+- Franken UI 2.1.2 - Tailwind-derived CSS/JS component layer loaded from jsDelivr in `templates/base.html`; there is currently no local Tailwind compilation.
 
 **Testing:**
-- Django's built-in test runner (unittest-based). Test files present: `web/tests.py` (others per app). No pytest, no separate test framework, no coverage tool declared in `requirements.txt`.
+- Django `TestCase`, `TransactionTestCase`, and `SimpleTestCase` - the repository's test framework (`accounts/tests*.py`, `campus/tests.py`, `scheduling/tests*.py`, `verification/tests.py`, `ops/tests*.py`, `web/tests*.py`).
+- `unittest.mock` - patching and test doubles where external/storage behavior needs isolation (`ops/tests_push.py`, `ops/tests_reports.py`, `web/tests_dean_reporting.py`).
 
 **Build/Dev:**
-- WhiteNoise `>=6.6` (`requirements.txt:6`) — serves compressed, hashed static files directly from the Django process on EC2. Wired as middleware (`config/settings.py:49`) and as the `staticfiles` storage backend `whitenoise.storage.CompressedManifestStaticFilesStorage` (`config/settings.py:119`).
-- No Tailwind CLI / frontend bundler is wired. `templates/base.html:11` notes Franken UI is CDN-loaded "for dev; standalone-CLI build wired later (SRS §2.4)".
+- Django management commands - migrations, static collection, fixture/import workflows, report generation, and scheduler execution (`manage.py`, `*/management/commands/`).
+- WhiteNoise >=6.6 - static delivery middleware and production compressed-manifest storage (`config/settings.py`).
+- No Dockerfile, Compose file, Procfile, CI workflow, formatter config, linter config, or IaC is detected at repository root.
 
 ## Key Dependencies
 
 **Critical:**
-- `python-dotenv >=1.0` (`requirements.txt:5`) — loads `.env` at startup (`config/settings.py:10,13`). All configuration flows through this.
-- `qrcode[pil] >=7.4` (`requirements.txt:9`) — generates room QR posters (IFO-01), used by `web/ifo.py` (`room_qr`, `room_poster`).
-- `Pillow >=10.0` (`requirements.txt:10`) — imaging. Also used inline to generate PWA app icons on the fly (`web/views.py:143` `icon()` view draws the icon with `PIL.ImageDraw`).
+- `mssql-django==1.7.3` - the only configured database backend (`config/settings.py`); it pulls `pyodbc` and requires system ODBC Driver 18.
+- `social-auth-app-django==6.0.0` - Microsoft Entra single-tenant OAuth integration (`accounts/backends.py`, `accounts/pipeline.py`, `config/urls.py`).
+- `APScheduler>=3.10,<4` - exactly one `BlockingScheduler` with four jobs: materialization, sweep, weekly report, and push outbox (`scheduling/management/commands/runscheduler.py`). Keep the `<4` constraint because the code uses the APScheduler 3 API.
+- `pywebpush>=2.3,<3` - VAPID web-push delivery and dead-endpoint handling (`ops/push.py`).
+- `reportlab>=4.2,<5` - in-memory PDF generation for reports (`scheduling/report_render.py`).
 
-**Infrastructure:**
-- `APScheduler >=3.10` (`requirements.txt:13`) — intended for scheduled jobs JOB-01/02/03 (session materialization, weekly reports). DECLARED BUT NOT WIRED: no `BackgroundScheduler` or APScheduler import exists anywhere in the Python source. Scheduled work is currently run manually via management commands (`materialize_sessions`, `import_offerings` — see `README.md`).
-- `PyJWT >=2.8`, `cryptography >=42.0`, `requests >=2.31` (`requirements.txt:16-18`) — listed for Entra ID token verification, marked "wired in Phase 2". DECLARED BUT NOT WIRED: no JWT/JWKS/OAuth code exists yet (see INTEGRATIONS.md).
-- `mysqlclient >=2.2` (`requirements.txt:21`) — commented out; to be uncommented for MySQL 8.0 on AWS RDS.
+**Infrastructure and media:**
+- `python-dotenv>=1.0` - loads repository-local `.env` before settings resolve (`config/settings.py`).
+- `qrcode[pil]>=7.4` and `Pillow>=10.0` - room QR posters and image/profile-photo handling (`accounts/photos.py`, IFO poster flows in `web/ifo.py`).
+- `pypandoc_binary==1.17` - bundled Pandoc runtime used by `scheduling/management/commands/regenerate_srs_docx.py`; `FluxTrack_SRS.docx` is generated from `FluxTrack_SRS.md`.
+- `PyJWT>=2.8`, `cryptography>=42.0`, and `requests>=2.31` - explicitly constrained transitive requirements supporting social-auth/OAuth (`requirements.txt`); application modules do not directly implement their own token or HTTP client flow.
+- Python standard library `zipfile` and `xml.etree.ElementTree` - `.xlsx` ingestion without pandas/openpyxl (`scheduling/xlsx.py`).
+
+**Browser-delivered dependencies:**
+- `html5-qrcode@2.3.8` from jsDelivr - faculty and Checker camera scanning (`templates/faculty/scan.html`, `templates/checker/scan.html`).
+- HTMX and Franken UI are CDN dependencies (`templates/base.html`), so a cold client currently needs outbound internet access even when the Django application is locally hosted.
 
 ## Configuration
 
 **Environment:**
-- Env-driven via `python-dotenv`. `config/settings.py:16-21` defines `env()` and `env_bool()` helpers reading `os.environ`. `.env` is loaded from `BASE_DIR / ".env"` at import time.
-- Template file: `.env.example` (committed). Local dev runs entirely on defaults (SQLite) with no `.env` required. A real `.env` is gitignored and NOT present in the repo.
-- Key vars (see `.env.example`): `SECRET_KEY`, `DEBUG`, `ALLOWED_HOSTS`; `DB_ENGINE`/`DB_NAME`/`DB_USER`/`DB_PASSWORD`/`DB_HOST`/`DB_PORT` (commented, for MySQL); `ENTRA_TENANT_ID`/`ENTRA_CLIENT_ID`/`ENTRA_CLIENT_SECRET` (commented, Phase 2). Defaults in code: `SECRET_KEY="dev-insecure-change-me"`, `DEBUG=True`, `ALLOWED_HOSTS="*"`.
-- **Policy configuration:** `FLUXTRACK_POLICY` dict in `config/settings.py:136-144` holds tunable business-rule defaults (`grace_minutes=15`, `room_hold_minutes=30`, `manual_code_rate_limit_per_min=5`, `materialization_horizon_days=14`, `poll_interval_seconds=8`, etc.). These are seeded into the DB-backed `SystemSetting` model (`ops/models.py:76`) and read at runtime via `ops/policy.py`'s `get_policy()` — code must never hardcode these constants (per `docs/superpowers/specs/2026-07-02-deployment-and-dev-practice-design.md` §3).
+- `.env` and `.env.example` exist. Never commit or inspect real `.env` values; `config/settings.py` loads them with `python-dotenv`.
+- Core variables consumed by settings: `SECRET_KEY`, `DEBUG`, `ALLOWED_HOSTS`.
+- SQL Server variables: `DB_NAME`, `DB_USER`, `DB_PASSWORD`, `DB_HOST`, `DB_PORT`, `DB_ODBC_EXTRA`, `DB_TEST_NAME`, `DB_TRUSTED_CONNECTION` (`config/settings.py`).
+- Entra variables: `SOCIAL_AUTH_AZUREAD_TENANT_OAUTH2_KEY`, `SOCIAL_AUTH_AZUREAD_TENANT_OAUTH2_SECRET`, `SOCIAL_AUTH_AZUREAD_TENANT_OAUTH2_TENANT_ID` (`config/settings.py`).
+- Push variables: `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY_PATH`, `VAPID_SUB`; the private key is referenced by path and must stay outside version control (`config/settings.py`, `ops/push.py`).
+- Product policy defaults live in `FLUXTRACK_POLICY` and can be overridden by the database-backed system setting path (`config/settings.py`, `ops/policy.py`). Do not duplicate grace periods, polling intervals, scheduler cadence, or reporting policy in feature code.
 
 **Build:**
-- `config/settings.py` — single settings module (no split dev/prod settings files); all environment differences are env-var driven.
-- No `pyproject.toml`, `setup.cfg`, `tox.ini`, or CI config files present.
+- `config/settings.py` is the single settings module.
+- Development static files come directly from `static/`; production uses `collectstatic` into `staticfiles/` with `CompressedManifestStaticFilesStorage`.
+- Tests force the production-style static manifest behavior; after adding a new static asset, run `manage.py collectstatic` before tests that resolve it (`config/settings.py`).
+- Default media storage is `FileSystemStorage` rooted at `media/` (`config/settings.py`).
 
-## Database
+## Data and File Formats
 
-- **Development (current):** SQLite. `config/settings.py:90-96` selects `django.db.backends.sqlite3` at `BASE_DIR / db.sqlite3` whenever `DB_ENGINE != "mysql"`. The dev DB file `db.sqlite3` is committed/present in the repo root.
-- **Production switch (built, not exercised):** `config/settings.py:78-89` — setting `DB_ENGINE=mysql` selects `django.db.backends.mysql` with `utf8mb4`, targeting MySQL 8.0 on AWS RDS. Requires uncommenting `mysqlclient` in `requirements.txt`. Not connected to any live RDS instance.
-- **Planned migration (design only, NOT implemented):** `docs/superpowers/specs/2026-07-02-deployment-and-dev-practice-design.md` §1 supersedes the MySQL plan with SQL Server via `mssql-django` + `pyodbc` + Microsoft ODBC Driver 18, driven by a registrar IT requirement. This adds a third `mssql` branch to the existing `DB_ENGINE` switch and appends `mssql-django`/`pyodbc` to `requirements.txt`. Status: approved design, pending a compatibility spike against Django 6; neither the settings branch nor the dependencies exist in the code yet.
-
-## Static & Template Serving
-
-- **Static files:** `STATIC_URL=/static/`, source dir `static/` (`STATICFILES_DIRS`), collected to `staticfiles/` (`STATIC_ROOT`), served by WhiteNoise with compressed+hashed manifest storage (`config/settings.py:113-119`). The only source static content today is `static/icons/` (empty of committed files).
-- **Media:** `MEDIA_URL=/media/`, `MEDIA_ROOT=BASE_DIR/media`, default `FileSystemStorage` (`config/settings.py:117-122`). No cloud object storage backend configured — generated report files and any uploads live on the local filesystem / EC2 EBS volume.
-- **Templates:** Django template backend, `APP_DIRS=True` plus a project-level `templates/` dir (`config/settings.py:60-73`). Base shell `templates/base.html` loads Franken UI + htmx from CDN and registers the service worker. No template caching or custom loaders configured.
-- **PWA shell served dynamically from Python** (not static files): `web/views.py` serves `/manifest.webmanifest` (`manifest()`), `/sw.js` (`service_worker()` returning the inline `SW_JS` string), and `/icon-<size>.png` (`icon()` drawing icons at request time with Pillow). Routed in `web/urls.py:24-26`.
+- SQL Server is the system of record; do not introduce SQLite-only behavior. A `db.sqlite3` artifact exists at repository root but is not selected by `config/settings.py`.
+- CSV import/export uses the Python standard library and shared injection hardening (`scheduling/importing.py`, `scheduling/report_render.py`, `web/hr.py`).
+- XLSX import is a deliberately small standard-library parser (`scheduling/xlsx.py`).
+- Generated report bytes use Django `default_storage`, currently local filesystem (`ops/reports.py`, `web/dean.py`, `web/ifo.py`).
 
 ## Platform Requirements
 
 **Development:**
-- Windows (primary): Python 3.12 via `py -3.12`; console is cp1252, so management commands print ASCII only (per `docs/superpowers/specs/2026-07-02-deployment-and-dev-practice-design.md` §3). Runs with SQLite and zero external services: `py -3.12 manage.py runserver 127.0.0.1:8020`.
-- Internet access required at page load for the Franken UI / htmx / html5-qrcode CDN assets.
+- Python 3.12, pip, and Microsoft ODBC Driver 18 for SQL Server (`README.md`, `requirements.txt`).
+- A reachable SQL Server instance; local Windows development supports SQL authentication or `DB_TRUSTED_CONNECTION` (`config/settings.py`).
+- Two processes for a full local system: `manage.py runserver` and `manage.py runscheduler` (`README.md`).
+- Camera/service-worker/push features depend on a compatible browser; real web-push delivery needs a secure origin outside localhost.
 
-**Production (target, not yet provisioned):**
-- Single AWS EC2 `t3.micro`: Nginx (TLS via certbot; HTTPS required for PWA service workers) → Gunicorn → Django as a systemd service, with APScheduler as a second systemd service on the same instance. Database on AWS RDS for SQL Server Express (`db.t3.micro`). Media on the instance's EBS volume (no S3). See `docs/superpowers/specs/2026-07-02-deployment-and-dev-practice-design.md` §2. None of this is provisioned or scripted in the repo.
+**Production target (planned, not provisioned in this repository):**
+- One AWS EC2 host with Nginx, Gunicorn, WhiteNoise, and two systemd services (web plus scheduler), connecting to AWS RDS SQL Server Express over ODBC/TLS (`docs/IT_ARCHITECTURE.md`, `.planning/ROADMAP.md`).
+- Phase 15 owns deploy hardening: shared cache, HTTPS/proxy settings, media separation, CDN vendoring, scheduler resilience, logging, retention, and backups (`.planning/ROADMAP.md`). Treat those items as absent until implementation/configuration lands.
+- No checked-in AWS IaC, Nginx config, systemd units, Gunicorn dependency, deployment workflow, or shared-cache backend exists at this revision.
 
 ---
 
-*Stack analysis: 2026-07-02*
+*Stack analysis: 2026-07-21*

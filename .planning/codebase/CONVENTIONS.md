@@ -1,221 +1,121 @@
 # Coding Conventions
 
-**Analysis Date:** 2026-07-02
-
-FluxTrack is a solo-developed Django project (flat apps at repo root: `accounts/`,
-`campus/`, `scheduling/`, `verification/`, `ops/`, `web/`). The conventions below
-are the ones actually present in the code, not aspirational. Four are called out
-explicitly as project rules in
-`docs/superpowers/specs/2026-07-02-deployment-and-dev-practice-design.md` §3
-(resolver stays pure, every write emits an `AuditLog`, policy via `get_policy()`,
-management-command output is ASCII-only) — treat those as hard rules when adding code.
+**Analysis Date:** 2026-07-21
 
 ## Naming Patterns
 
 **Files:**
-- Django app modules use plain lowercase names (`models.py`, `admin.py`, `views.py`).
-- The `web/` app splits views by role/surface into separate modules rather than one
-  fat `views.py`: `web/faculty.py`, `web/ifo.py`, `web/scan.py`, `web/views.py`.
-  New role surfaces (Checker, HR, Dean, Guard) should follow this — one module per
-  surface, wired in `web/urls.py`.
-- htmx partial templates are prefixed with an underscore: `templates/faculty/_outcome.html`,
-  `templates/ifo/_live_rows.html`. Full-page templates are not: `templates/ifo/rooms.html`.
+- Use lowercase `snake_case.py` for implementation modules: `scheduling/report_render.py`, `ops/import_staging.py`, `web/reporting_common.py`.
+- Keep Django framework files at their conventional names: `models.py`, `views.py`, `apps.py`, `admin.py`, `urls.py`, and `migrations/` in each app.
+- Split a broad concern into a sibling module rather than extending an already-large generic file. Examples are `web/tests_ifo_utilization.py`, `scheduling/tests_reporting_lateness.py`, and `ops/tests_notifications.py` beside the older `tests.py` modules.
+- Name management commands with verbs in `app/management/commands/`, such as `scheduling/management/commands/materialize_sessions.py` and `accounts/management/commands/link_entra.py`.
+- Number migrations with Django's four-digit prefix and a descriptive suffix, for example `scheduling/migrations/0007_class_suspension_and_cancelled_reason.py`.
 
 **Functions:**
-- `snake_case` for all functions and view callables (`resolve_faculty_scan`, `room_detail`,
-  `live_rows`).
-- Private/module-internal helpers are prefixed with a single underscore:
-  `_room_from_payload`, `_apply`, `_notify_ifo` (`web/scan.py`); `_today_sessions`,
-  `_deep_link` (`web/ifo.py`); `_login_ctx` (`web/views.py`); `_report` (`import_offerings.py`).
-- Role-guard decorators are named `<role>_required`: `faculty_required` (`web/faculty.py:14`),
-  `ifo_required` (`web/ifo.py:18`).
+- Use `snake_case` for functions and methods: `resolve_faculty_scan`, `reporting_range`, `send_push_outbox`.
+- Prefix module-private helpers with `_`: `_aware`, `_exclude_virtual`, `_friendly_error`, `_active_term`.
+- Name pure selectors/calculations for what they return (`session_minutes_late`, `ghost_rooms`) and state-changing services with imperative verbs (`suspend_classes`, `release_room`, `notify`).
+- Name test methods `test_<behavior_or_rule>` and favor behavior language over implementation language, as in `test_within_grace_but_late_counts` in `scheduling/tests_reporting_lateness.py`.
 
 **Variables:**
-- `snake_case` locals. Short, conventional loop names are used freely (`s` for a session,
-  `r` for a room, `d` for a date, `o` for parsed command options).
+- Use `snake_case`; short domain-local names (`fx`, `resp`, `qs`, `sched`) are common inside tests and narrow functions.
+- Use uppercase module constants for contracts, policy sets, and stable fixtures: `HELD_STATUSES`, `UTILIZATION_CSV_HEADER`, `MANILA`, `TERM_BUILDINGS`.
+- Use `_id` suffixes for raw foreign-key identifiers and Django's generated `<field>_id` attributes to avoid unnecessary object loads, as in `scanned_room_id` and `online_checker_id`.
 
-**Types / Classes:**
-- `PascalCase` (`Resolution`, `FakeSession`, `AuditLog`, `SystemSetting`).
-- Enumerations use Django `TextChoices` / `IntegerChoices` with `UPPER_SNAKE` members and
-  a `(value, label)` pair: `Modality`, `SessionStatus`, `CheckinMethod`
-  (`scheduling/models.py:6,70,77`), `Role` (`accounts/models.py:14`),
-  `DayOfWeek` as `IntegerChoices` (`scheduling/models.py:12`). Never hand-roll status
-  strings — reference the choices class.
-
-**Constants:**
-- Module-level `UPPER_SNAKE`. The resolver defines outcome identifiers as module constants
-  (`CHECKED_IN`, `WRONG_ROOM`, … `scheduling/resolver.py:14-22`) and a
-  `CONFIRM_OUTCOMES` set. `web/scan.py` defines `CONFIRM_SALT`, `CONFIRM_MAX_AGE`.
-  Callers reference `R.CHECKED_IN` etc. rather than the bare string.
+**Types:**
+- Use `PascalCase` for Django models, dataclasses, enums, exceptions, and test classes: `AcademicTerm`, `Resolution`, `SessionStatus`, `ModalityShiftError`, `LatenessAggregateTests`.
+- Use Django `TextChoices`/model constant types rather than bare status strings when a type exists. `scheduling/tests_reporting_lateness.py` explicitly imports `SessionStatus`; new production and test code should do the same.
+- Use dataclasses for immutable/read-model-style aggregate outputs and pure resolver results, as in `scheduling/resolver.py` and `scheduling/reporting.py`.
 
 ## Code Style
 
 **Formatting:**
-- No autoformatter or linter is configured (no `.eslintrc`, `.prettierrc`, `pyproject.toml`,
-  `setup.cfg`, `tox.ini`, `.flake8` present). Style is maintained by hand.
-- 4-space indentation, roughly 90–100 column soft wrap. Continuation lines align under the
-  opening delimiter (see the multi-line `Session.objects.filter(...)` chains in `web/scan.py`).
+- No formatter configuration is committed: no `pyproject.toml`, Black, Ruff, Prettier, or EditorConfig file was detected. Preserve the surrounding file's PEP 8-like style manually.
+- Use four-space indentation, double quotes for most strings, trailing commas in multi-line calls/collections, and parenthesized continuation. Existing code sometimes aligns continuations to the opening call; match the edited module.
+- Keep lines readable by splitting long conditions and calls inside parentheses. Examples: `scheduling/resolver.py` and `web/reporting_common.py`.
+- Several newer modules declare `ASCII-only by convention (Windows cp1252)` in their docstrings, including `scheduling/test_support.py`, `web/tests_ifo_utilization.py`, and `web/reporting_common.py`. In those files, keep source text and comments ASCII-only. Do not propagate mojibake already visible in older files.
 
-**Docstrings — the strongest convention in the codebase:**
-- Every module opens with a one-line-to-paragraph docstring that names the SRS requirement
-  ID(s) it implements. Examples:
-  - `"""Scan endpoints (SCAN-01..07): payload lookup, rate limiting, idempotency, …"""` (`web/scan.py:1`)
-  - `"""Faculty surfaces (mobile-first, §2.5): today/week schedule (FAC-01) and check-in."""` (`web/faculty.py:1`)
-  - `"""Operations: bookings, notifications, push, audit, settings, reports (SRS §5)."""` (`ops/models.py:1`)
-- Requirement tags (`SCAN-04`, `FAC-06`, `IFO-01`, `§6.6`, `JOB-01`) are threaded through
-  inline comments too, tying code back to `FluxTrack_SRS.md`. Preserve this — it is how the
-  code stays traceable to the spec. When adding a function that implements a requirement,
-  cite the requirement ID.
+**Linting:**
+- No project-wide linter command or configuration is committed.
+- Existing targeted suppressions use inline `# noqa` with a rule when useful: `# noqa: E402` for deliberately late imports in `scheduling/tests.py`, and `# noqa: N802` for unittest hook names in `ops/tests_reports.py`.
+- Do not add broad file-level suppressions. If an import must be late for test grouping or dependency isolation, document why beside the targeted suppression.
 
 ## Import Organization
 
-Three groups, blank-line separated, alphabetical within group (standard Django layout):
+**Order:**
+1. Standard library imports (`datetime`, `decimal`, `unittest.mock`, `zoneinfo`).
+2. Blank line.
+3. Django and installed-package imports (`django.test`, `django.urls`, `pywebpush`).
+4. Blank line.
+5. Local app imports (`accounts.models`, `scheduling.reporting`, `web.ifo`).
 
-1. Standard library (`import re`, `from datetime import timedelta`, `from functools import wraps`)
-2. Django / third-party (`from django.contrib.auth.decorators import login_required`,
-   `from django.core import signing`)
-3. Local apps (`from accounts.models import Role`, `from ops.policy import get_policy`,
-   `from scheduling import resolver as R`)
+Within a group, use one import per module or parenthesized multi-name imports. Representative files: `scheduling/tests_reporting_lateness.py`, `web/tests_ifo_utilization.py`, `scheduling/test_support.py`.
 
-- The resolver is conventionally imported aliased as `R` (`from scheduling import resolver as R`)
-  so call sites read `R.resolve_faculty_scan(...)`, `R.CHECKED_IN` (`web/scan.py:23`,
-  `scheduling/tests.py:7`).
-- No path aliases (plain Django absolute app imports). No barrel/`__init__` re-exports;
-  app `__init__.py` files are empty.
-
-## Established Patterns (project rules — do not violate)
-
-**1. Pure resolver (`scheduling/resolver.py`).**
-The scan decision logic is a pure function: no ORM queries, no `save()`, no `timezone.now()`
-inside it — `now` and all policy values are passed in as arguments
-(`resolve_faculty_scan(sessions_today, scanned_room_id, occupying_session_id, now, *, grace_min, early_end_min, open_min=15)`).
-It returns a `Resolution` dataclass, never mutates anything, never raises for business outcomes.
-The web layer (`web/scan.py`) does all fetching and all writing. Keep it this way; planned
-reporting aggregates (RPT-05, SRS §6.6) are to follow the same pure-function shape.
-
-**2. `AuditLog` row on every state change.**
-Every write in `web/scan.py._apply` is paired with an `audit(...)` call
-(`session.checked_in`, `session.marked_absent`, `session.checked_out`, `session.ended_early`,
-`session.room_changed`, `session.force_handover`). Even non-mutating rejections that matter for
-security are logged (`scan.rate_limited`, `scan.bad_manual_code` in `_room_from_payload`).
-`AuditLog` (`ops/models.py:56`) fields: `actor`, `event_type` (dotted `noun.verb`),
-`target_type`, `target_id`, `payload` (JSON). New write paths must emit one.
-
-**3. Policy via `get_policy()` / `SystemSetting` — never hardcode.**
-Tunable values come from `get_policy("grace_minutes")` etc.
-(`ops/policy.py:7`), which reads a `SystemSetting` row and falls back to
-`settings.FLUXTRACK_POLICY` (`config/settings.py:136-144`). Call sites:
-`web/scan.py:153-154` (`grace_minutes`, `early_end_threshold_minutes`),
-`web/scan.py:46` (`manual_code_rate_limit_per_min`). Templates/views that need the poll
-interval read `settings.FLUXTRACK_POLICY["poll_interval_seconds"]` (`web/ifo.py:64`).
-Do not introduce magic numbers for grace windows, rate limits, horizons, or poll intervals.
-
-**4. Management commands print ASCII only (Windows console is cp1252).**
-Command output uses `self.stdout.write(self.style.SUCCESS(...))` / `self.style.ERROR(...)`
-and ASCII arrows `->` instead of Unicode (`materialize_sessions.py:64`, and the docstrings/
-comments in `import_offerings.py` use `->`). Avoid emoji and box-drawing characters in command
-output. See `scheduling/management/commands/materialize_sessions.py`,
-`.../import_offerings.py`, `accounts/management/commands/seed_demo.py`.
-
-**5. Per-view role decorators.**
-Authorization is a stacked decorator, not middleware. `faculty_required` / `ifo_required`
-wrap `@login_required` and raise `PermissionDenied` on role mismatch (superuser bypasses):
-
-```python
-def ifo_required(view):
-    @wraps(view)
-    @login_required
-    def wrapped(request, *args, **kwargs):
-        if request.user.role != Role.IFO_ADMIN and not request.user.is_superuser:
-            raise PermissionDenied
-        return view(request, *args, **kwargs)
-    return wrapped
-```
-
-State-changing scan endpoints additionally stack `@require_http_methods(["POST"])`
-(`web/scan.py:135-136,175-176`). New role surfaces get their own `<role>_required` decorator.
-
-**6. Two-step confirmation via signed tokens.**
-Outcomes in `CONFIRM_OUTCOMES` (`wrong-room`, `room-occupied`, `early-end`) are not applied on
-first scan. `resolve` signs the resolution with `django.core.signing.dumps(..., salt=CONFIRM_SALT)`
-(`web/scan.py:159`); `confirm` verifies with `signing.loads(..., salt=CONFIRM_SALT,
-max_age=CONFIRM_MAX_AGE)` and re-checks `user_id` ownership before calling `_apply`
-(`web/scan.py:177-192`). Use signed tokens (not session state) for any deferred confirm flow.
-
-**7. Rate limiting + idempotency via Django cache (locmem).**
-Manual-code entry is rate-limited per user-per-minute with a cache counter
-(`cache.get_or_set` / `cache.incr`, `web/scan.py:44-52`). Applied outcomes are made idempotent
-per `user:session:minute` key so a double-tap does not re-apply (`web/scan.py:165-171`). No
-Redis — Django's default locmem cache backs both.
-
-## Query Conventions
-
-- Always `select_related(...)` for foreign keys touched in templates/loops to avoid N+1:
-  `web/ifo.py:29-30`, `web/scan.py:146-147`, `web/faculty.py:29-30`.
-- Read a single row with `.first()` and handle `None` explicitly (`web/scan.py:40,53,148`);
-  use `get_object_or_404` for URL-addressed detail views (`web/ifo.py:49,83,92`).
-- Order querysets explicitly (`.order_by("scheduled_start")`); models also set `Meta.ordering`.
+**Path Aliases:**
+- Not applicable. Imports use absolute Django app paths such as `from scheduling.models import SessionStatus`; relative imports are not the project norm.
+- For the configured user model, use `django.contrib.auth.get_user_model()` in runtime/test code. Direct app imports are reserved for other domain models.
+- Use local imports inside helpers only when they intentionally delay model loading or isolate optional/live-data paths, as in `scheduling/tests_e2e.py`.
 
 ## Error Handling
 
-**Business outcomes are values, not exceptions.**
-The resolver enumerates nine discrete outcomes (`scheduling/resolver.py:14-22`) and always
-returns a `Resolution`; `needs_confirm` is a computed field set in `__post_init__` based on
-membership in `CONFIRM_OUTCOMES`. Callers branch on `resolution.outcome`; the template
-(`templates/faculty/_outcome.html`) is a flat `{% if/elif %}` chain over every outcome string,
-each carrying a `data-outcome="..."` hook. There is no exception-based control flow for the
-happy/edge paths.
-
-**Exceptions reserved for hard faults:**
-- Bad/expired signed token -> `HttpResponseBadRequest` (`web/scan.py:181-184`).
-- Role mismatch -> `PermissionDenied` (the `_required` decorators).
-- Malformed/absent input degrades to a rendered error partial rather than a 500:
-  `_room_from_payload` returns `(None, "rate-limited" | "bad-payload")` and the view renders
-  `_outcome.html` with `{"error": ...}` (`web/scan.py:140-142`), which the template maps to a
-  friendly alert (`_outcome.html:1-10`).
-
-**Graceful-degradation intent (planned, not yet built).**
-SRS RPT-05 (`FluxTrack_SRS.md:339`) requires report aggregates to be pure, independently tested
-functions that degrade gracefully — a single failed aggregate must not blank the page; available
-sections render while failed sections show an error state. When reporting lands, each aggregate
-should be isolated so one raising does not take down the whole report view.
+**Patterns:**
+- Domain/service layers raise named domain exceptions with stable machine-oriented messages, for example `ModalityShiftError` in `scheduling/services.py` and `PhotoError` in `accounts/photos.py`.
+- Presentation code translates known domain messages into human copy at the edge and passes unknown messages through, demonstrated by `_friendly_error` and its tests in `web/tests_modality_form.py`.
+- Validate request format in views, return a friendly `400` for correctable input, and keep business decisions in services/resolvers. The separation is documented and exercised across `web/faculty.py`, `scheduling/services.py`, and `scheduling/resolver.py`.
+- Use narrow exception handlers around optional dashboard/report cards so one aggregate failure degrades that section instead of returning HTTP 500. Tests patch individual aggregate calls to raise in `web/tests_ifo_utilization.py` and `web/tests_reporting.py`.
+- Background-job boundaries record failure and continue rather than killing the scheduler. Follow `ops/jobrun.py` for scheduled work; do not silently swallow errors in ordinary request/service code.
+- Wrap multi-row state transitions in `transaction.atomic()` and use nested savepoints where a terminal denial must commit while partial application rolls back, following `scheduling/services.py`.
 
 ## Logging
 
-- No structured logging framework is configured. Management commands write to
-  `self.stdout` / `self.stderr` via `self.style.*`.
-- The durable record of "what happened" is the `AuditLog` table, not log files. Prefer an
-  `AuditLog` row over a log line for anything security- or state-relevant.
+**Framework:** Python `logging` plus persisted operational records.
+
+**Patterns:**
+- Use `logging.getLogger(__name__)` in infrastructure modules that need process diagnostics, such as push delivery and job execution.
+- Domain mutations are primarily observable through `ops.models.AuditLog`, notifications through the single `ops.notifications.notify()` write path, and scheduled executions through `ops.models.JobRun`/`ops/jobrun.py`.
+- Do not create an `AuditLog` merely for a notification; the triggering domain action owns the audit event. Preserve this separation when adding writers.
+- Avoid `print()` in application code. Management commands should report user-facing progress through `self.stdout`/`self.stderr`.
 
 ## Comments
 
-- Comment the *why*, not the *what*. Good examples: the service-worker cache notes on why `/`
-  is never precached (`web/views.py:95-98,116-118`), and the idempotency/rate-limit rationale
-  comments in `web/scan.py`.
-- Section dividers use `# --- label ---` (`web/scan.py:30,62,134`; `web/ifo.py:73`).
-- Tie non-obvious logic back to a requirement ID in the comment.
+**When to Comment:**
+- Explain business invariants, boundary semantics, and non-obvious backend constraints: strict `>` grace behavior in `scheduling/resolver.py`, MSSQL transaction choices, effective modality, merged-session propagation, and CSV-injection defenses.
+- Include requirement/decision identifiers when they materially explain a rule (`D-01`, `IFO-09`, `JOB-02a`), as practiced throughout `scheduling/reporting.py` and focused tests.
+- Avoid comments that merely restate a line. Prefer comments that say why a tempting alternative is wrong or what regression an assertion prevents.
 
-## Function & Module Design
+**JSDoc/TSDoc:**
+- Not applicable to the Python backend. JavaScript is small progressive-enhancement code under `static/` and does not use a generated documentation system.
+- Python modules and public domain functions commonly use docstrings. Use a module docstring to define ownership/boundaries and function/class docstrings for contracts with non-obvious rules, as in `scheduling/resolver.py`, `scheduling/reporting.py`, and `scheduling/test_support.py`.
 
-- Functions stay small and single-purpose. `web/scan.py` decomposes the flow into
-  `_room_from_payload` (input -> room), `resolve_faculty_scan` (decision), `_apply` (effects),
-  `_notify_ifo` (side notification), and thin view callables that orchestrate them.
-- Views return `render(request, template, ctx)`; htmx endpoints render the `_partial.html`,
-  full navigations render the full-page template.
-- No barrel files; import directly from the module that defines the symbol.
+## Function Design
 
-## Frontend Conventions
+**Size:**
+- Prefer small pure functions for decisions and calculations. Inject `now`, policy values, and pre-fetched data rather than querying the ORM or reading the wall clock inside a resolver; `resolve_faculty_scan()` and `is_no_show_past_grace()` in `scheduling/resolver.py` are canonical.
+- Keep HTTP views thin: authorize, parse/validate format, fetch scoped context, call a service/aggregate, and render/redirect. When a role module grows, extract shared pure helpers (`web/reporting_common.py`) or a domain module instead of adding more duplication.
+- Large orchestration modules currently exist (`web/ifo.py`, `scheduling/reporting.py`). New work should add a focused sibling when it represents a distinct concern and avoid new unrelated responsibilities in those files.
 
-- Franken UI (Tailwind) is loaded from CDN in `templates/base.html:12-15`; htmx from CDN at
-  `:16`. No Node build step.
-- CSRF for htmx is set once globally via `hx-headers` on `<body>`:
-  `hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'` (`templates/base.html:24`). Forms that
-  POST also include `{% csrf_token %}` (`_outcome.html:63`).
-- htmx partials target an element and swap `innerHTML`
-  (`hx-post="/scan/confirm" hx-target="#outcome" hx-swap="innerHTML"`, `_outcome.html:62,81,102`).
-- Live surfaces poll on the policy-driven interval rather than using websockets (`web/ifo.py:62-70`).
-- UI classes use Franken UI's `uk-*` component classes plus Tailwind utilities.
+**Parameters:**
+- Use keyword-only parameters for policy/configuration values and aggregates with many same-typed arguments, for example `resolve_faculty_scan(..., *, grace_min, early_end_min, open_min=15)`.
+- Pass `now`/date ranges explicitly for deterministic domain logic. Obtain `timezone.now()`/`timezone.localdate()` at the outer seam.
+- Accept model instances for coordinated service operations and IDs for pure comparison/resolver boundaries when object loading is unnecessary.
+
+**Return Values:**
+- Return typed result objects/dataclasses for multi-field calculations (`Resolution`, `FacultyRow`, `Scorecard`, `RoomUtilization`).
+- Return booleans/counts for predicates and idempotent jobs; do not use exception flow for an expected yes/no result.
+- Return a `SimpleNamespace` only for test fixture object graphs, as in `scheduling/test_support.py`; production APIs should use named domain types.
+
+## Module Design
+
+**Exports:**
+- Use explicit module-level functions/classes/constants; wildcard imports are not used.
+- Keep pure decision modules free of ORM and wall-clock dependencies. `scheduling/resolver.py`, `verification/resolver.py`, and pure helpers in `scheduling/reporting.py` establish this constraint.
+- Put state mutation and audit/notification coordination in service modules (`scheduling/services.py`, `campus/services.py`, `ops/occupancy.py`), not templates or resolver cores.
+- Put role-specific HTTP surfaces in the corresponding `web/*.py` module and route them through `web/urls.py`.
+
+**Barrel Files:**
+- Not used. App `__init__.py` files are empty/lightweight; import from the owning module directly.
+- Do not add re-export barrels. They obscure Django app ownership and make circular imports more likely.
 
 ---
 
-*Convention analysis: 2026-07-02*
+*Convention analysis: 2026-07-21*
