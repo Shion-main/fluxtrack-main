@@ -82,6 +82,15 @@ class ImportStaging(models.Model):
         settings.AUTH_USER_MODEL, on_delete=models.CASCADE,
         related_name="import_stagings",
     )
+    # Nullable for legacy staged uploads. Plan 04 makes every new stage/resolve/
+    # consume flow bind this to an explicit Draft target.
+    term = models.ForeignKey(
+        "scheduling.AcademicTerm",
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name="import_stagings",
+    )
     # The client's filename, kept verbatim so the preview page can show the
     # operator which file they picked. NEVER joined into a filesystem path.
     original_name = models.CharField(max_length=255)
@@ -249,6 +258,11 @@ class SystemSetting(models.Model):
 
 class WeeklyReport(models.Model):
     """Weekly per-department consolidated report; files in S3 (RPT-01/02)."""
+    term = models.ForeignKey(
+        "scheduling.AcademicTerm",
+        on_delete=models.PROTECT,
+        related_name="weekly_reports",
+    )
     week_start = models.DateField()
     department = models.ForeignKey(
         "accounts.Department", null=True, blank=True,
@@ -260,7 +274,12 @@ class WeeklyReport(models.Model):
 
     class Meta:
         ordering = ["-week_start"]
-        unique_together = [("week_start", "department")]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["term", "week_start", "department"],
+                name="uniq_weekly_report_term_week_department",
+            )
+        ]
 
     def __str__(self):
         dep = self.department.code if self.department else "ALL"
