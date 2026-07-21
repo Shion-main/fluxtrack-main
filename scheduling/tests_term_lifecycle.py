@@ -17,11 +17,32 @@ from django.db import IntegrityError, transaction
 from django.contrib.auth import get_user_model
 from django.test import SimpleTestCase, TestCase, TransactionTestCase
 
-from accounts.models import Role
+from accounts.models import Department, Role
 from campus.models import Building, Floor, Room
-from ops.models import AuditLog
+from ops.models import AuditLog, Notification
 from scheduling.materialization import MaterializationError, materialize_term
-from scheduling.models import AcademicTerm, Schedule, Session, SessionStatus
+from scheduling.merge import propagate_merged_present
+from scheduling.models import (
+    AcademicTerm,
+    ClassSuspension,
+    Modality,
+    ModalityShiftItem,
+    ModalityShiftRequest,
+    ModalityShiftStatus,
+    Schedule,
+    ScheduleStatus,
+    Session,
+    SessionStatus,
+)
+from scheduling.schedule_ops import cancel_schedule, update_schedule
+from scheduling.services import (
+    ModalityShiftError,
+    apply_approval,
+    reject_modality_shift,
+    submit_modality_shift,
+    withdraw_modality_shift,
+)
+from scheduling.suspensions import lift_suspension, suspend_classes
 from scheduling.term_lifecycle import (
     TermLifecycleError,
     activate_term,
@@ -847,3 +868,277 @@ class ActiveTermJobScopeTests(TestCase):
         self.assertIn('call_command("materialize_sessions")', scheduler_source)
         self.assertIn("materialize_term(", command_source)
         self.assertNotIn("while d < end", command_source)
+
+
+class ArchiveFreezeServiceTests(TestCase):
+    """D-04: reusable service writers refuse archived term ownership."""
+
+    def setUp(self):
+        self.dept = Department.objects.create(name="Freeze Dept", code="FRZ")
+        self.ifo = _user("freeze_ifo")
+        self.faculty = _user("freeze_faculty", role=Role.FACULTY,
+                             department=self.dept)
+        self.dean = _user("freeze_dean", role=Role.DEAN, department=self.dept)
+        self.archived = AcademicTerm.objects.create(
+            name="Freeze Archived",
+            start_date=date(2026, 5, 1),
+            end_date=date(2026, 5, 31),
+            status=AcademicTerm.Status.ARCHIVED,
+        )
+        self.active = AcademicTerm.objects.create(
+            name="Freeze Active",
+            start_date=date(2026, 6, 1),
+            end_date=date(2026, 6, 30),
+            status=AcademicTerm.Status.ACTIVE,
+        )
+
+    def _schedule(self, term, prefix):
+        return _schedule(term, self.faculty, prefix)
+
+    def _session(self, schedule, status=SessionStatus.SCHEDULED):
+        return _session(schedule, self.faculty, status)
+
+    def _pending_request(self, schedule):
+        req = ModalityShiftRequest.objects.create(
+            requester=self.faculty,
+            dean=self.dean,
+            department=self.dept,
+            target_modality=Modality.ONLINE,
+            window_start=date(2026, 5, 1),
+            window_end=date(2026, 5, 1),
+            status=ModalityShiftStatus.PENDING,
+        )
+        ModalityShiftItem.objects.create(request=req, schedule=schedule)
+        return req
+
+    def _counts(self):
+        return {
+            "audit": AuditLog.objects.count(),
+            "notification": Notification.objects.count(),
+            "requests": ModalityShiftRequest.objects.count(),
+            "items": ModalityShiftItem.objects.count(),
+            "suspensions": ClassSuspension.objects.count(),
+        }
+
+    def test_schedule_update_and_cancel_refuse_archived_without_side_effects(self):
+        schedule = self._schedule(self.archived, "frzsch")
+        session = self._session(schedule)
+        before = self._counts()
+
+        with self.assertRaises(ArchivedTermError):
+            update_schedule(
+                schedule,
+                faculty=self.dean,
+                room=schedule.room,
+                start_time=time(10, 0),
+                end_time=time(11, 30),
+                enrolled_count=20,
+                actor=self.ifo,
+                today=date(2026, 5, 1),
+            )
+        with self.assertRaises(ArchivedTermError):
+            cancel_schedule(
+                schedule, actor=self.ifo, reason="Archived correction",
+                today=date(2026, 5, 1),
+            )
+
+        schedule.refresh_from_db()
+        session.refresh_from_db()
+        self.assertEqual(schedule.status, ScheduleStatus.ACTIVE)
+        self.assertEqual(session.status, SessionStatus.SCHEDULED)
+        self.assertEqual(self._counts(), before)
+
+    def test_suspension_declare_and_lift_refuse_archived_without_side_effects(self):
+        schedule = self._schedule(self.archived, "frzsus")
+        session = self._session(schedule)
+        suspension = ClassSuspension.objects.create(
+            term=self.archived,
+            start_date=session.date,
+            end_date=session.date,
+            reason="Archived",
+            declared_by=self.ifo,
+        )
+        before = self._counts()
+
+        with self.assertRaises(ArchivedTermError):
+            suspend_classes(
+                term=self.archived,
+                start_date=session.date,
+                end_date=session.date,
+                reason="Archived",
+                declared_by=self.ifo,
+            )
+        with self.assertRaises(ArchivedTermError):
+            lift_suspension(suspension, lifted_by=self.ifo)
+
+        session.refresh_from_db()
+        suspension.refresh_from_db()
+        self.assertEqual(session.status, SessionStatus.SCHEDULED)
+        self.assertIsNone(suspension.lifted_at)
+        self.assertEqual(self._counts(), before)
+
+    def test_modality_submit_refuses_archived_and_mixed_terms_without_writes(self):
+        archived_schedule = self._schedule(self.archived, "frzmod")
+        active_schedule = self._schedule(self.active, "frzact")
+        self._session(archived_schedule)
+        before = self._counts()
+
+        with self.assertRaises(ModalityShiftError):
+            submit_modality_shift(
+                self.faculty,
+                [archived_schedule],
+                Modality.ONLINE,
+                date(2026, 5, 1),
+                date(2026, 5, 1),
+                now=_aware(date(2026, 4, 20), time(8, 0)),
+            )
+        with self.assertRaises(ModalityShiftError):
+            submit_modality_shift(
+                self.faculty,
+                [archived_schedule, active_schedule],
+                Modality.ONLINE,
+                date(2026, 5, 1),
+                date(2026, 5, 1),
+                now=_aware(date(2026, 4, 20), time(8, 0)),
+            )
+
+        self.assertEqual(self._counts(), before)
+
+    def test_modality_decision_writers_refuse_archived_without_side_effects(self):
+        schedule = self._schedule(self.archived, "frzdec")
+        session = self._session(schedule)
+        for writer in ("withdraw", "reject", "apply"):
+            req = self._pending_request(schedule)
+            before = self._counts()
+            with self.subTest(writer=writer):
+                with self.assertRaises(ModalityShiftError):
+                    if writer == "withdraw":
+                        withdraw_modality_shift(req, self.faculty)
+                    elif writer == "reject":
+                        reject_modality_shift(req, self.dean, "No")
+                    else:
+                        apply_approval(req, self.dean, now=_aware(session.date, time(9, 0)))
+
+                req.refresh_from_db()
+                session.refresh_from_db()
+                self.assertEqual(req.status, ModalityShiftStatus.PENDING)
+                self.assertEqual(session.status, SessionStatus.SCHEDULED)
+                self.assertEqual(session.declared_modality, "")
+                self.assertEqual(self._counts(), before)
+
+    def test_merge_propagation_refuses_archived_anchor_without_audit_or_status_write(self):
+        anchor_schedule = self._schedule(self.archived, "frzmrg")
+        sibling_schedule = self._schedule(self.archived, "frzmrs")
+        sibling_schedule.course_code = anchor_schedule.course_code
+        sibling_schedule.save(update_fields=["course_code"])
+        anchor = self._session(anchor_schedule)
+        sibling = self._session(sibling_schedule)
+        before = self._counts()
+
+        with self.assertRaises(ArchivedTermError):
+            propagate_merged_present(
+                anchor,
+                now=_aware(anchor.date, time(8, 5)),
+                actor=self.faculty,
+            )
+
+        anchor.refresh_from_db()
+        sibling.refresh_from_db()
+        self.assertEqual(anchor.status, SessionStatus.SCHEDULED)
+        self.assertEqual(sibling.status, SessionStatus.SCHEDULED)
+        self.assertEqual(self._counts(), before)
+
+    def test_merge_propagation_filters_same_start_candidates_to_anchor_term(self):
+        anchor_schedule = self._schedule(self.active, "frzma")
+        archived_schedule = self._schedule(self.archived, "frzmb")
+        archived_schedule.course_code = anchor_schedule.course_code
+        archived_schedule.save(update_fields=["course_code"])
+        anchor = self._session(anchor_schedule)
+        archived = self._session(archived_schedule)
+
+        filled = propagate_merged_present(
+            anchor,
+            now=_aware(anchor.date, time(8, 5)),
+            actor=self.faculty,
+        )
+
+        archived.refresh_from_db()
+        self.assertEqual(filled, [])
+        self.assertEqual(archived.status, SessionStatus.SCHEDULED)
+
+
+class ArchiveFreezeCommandTests(TestCase):
+    """D-04/D-16: management commands do not mutate archived history."""
+
+    def setUp(self):
+        self.ifo = _user("freeze_cmd_ifo")
+        self.faculty = _user("freeze_cmd_faculty", role=Role.FACULTY)
+        self.archived = AcademicTerm.objects.create(
+            name="Command Archived",
+            start_date=date(2026, 1, 1),
+            end_date=date(2026, 5, 31),
+            status=AcademicTerm.Status.ARCHIVED,
+        )
+        self.schedule = _schedule(self.archived, self.faculty, "cmdarc")
+        self.session = _session(self.schedule, self.faculty)
+
+    def _row_counts(self):
+        return {
+            "terms": AcademicTerm.objects.count(),
+            "schedules": Schedule.objects.count(),
+            "sessions": Session.objects.count(),
+            "audit": AuditLog.objects.count(),
+        }
+
+    def test_reset_term_is_retired_and_cannot_write_rows(self):
+        before = self._row_counts()
+
+        with self.assertRaisesMessage(CommandError, "reset_term is retired"):
+            call_command("reset_term", yes=True)
+
+        self.assertEqual(self._row_counts(), before)
+        self.assertTrue(Schedule.objects.filter(pk=self.schedule.pk).exists())
+        self.assertTrue(Session.objects.filter(pk=self.session.pk).exists())
+
+    def test_reset_term_source_has_no_legacy_target_or_destructive_orm(self):
+        source = Path("scheduling/management/commands/reset_term.py").read_text(
+            encoding="utf-8"
+        )
+
+        self.assertNotIn("DEFAULT_TERM", source)
+        self.assertNotIn("2nd Term SY 2025-2026", source)
+        self.assertNotIn(".delete(", source)
+        self.assertNotIn("Session.objects", source)
+        self.assertNotIn("Schedule.objects", source)
+
+    def test_seed_term_without_active_term_fails_before_archived_rows_change(self):
+        before = self._row_counts()
+
+        with self.assertRaisesMessage(CommandError, "No ACTIVE academic term"):
+            call_command("seed_term", force=True)
+
+        self.assertEqual(self._row_counts(), before)
+        self.session.refresh_from_db()
+        self.assertEqual(self.session.status, SessionStatus.SCHEDULED)
+
+    def test_retained_commands_use_authoritative_active_resolver_source_guard(self):
+        seed_source = Path(
+            "scheduling/management/commands/seed_term.py"
+        ).read_text(encoding="utf-8")
+        audit_source = Path(
+            "scheduling/management/commands/audit_merge_coverage.py"
+        ).read_text(encoding="utf-8")
+
+        for source in (seed_source, audit_source):
+            self.assertIn("require_active_term", source)
+            self.assertNotIn("filter(is_active=True)", source)
+            self.assertNotIn(".first()", source)
+
+    def test_audit_merge_coverage_without_active_term_is_read_only(self):
+        before = self._row_counts()
+        out = StringIO()
+
+        call_command("audit_merge_coverage", stdout=out)
+
+        self.assertIn("no active term", out.getvalue())
+        self.assertEqual(self._row_counts(), before)

@@ -30,7 +30,7 @@ User = get_user_model()
 def _term():
     return AcademicTerm.objects.create(
         name="SUSP Term", start_date=date(2026, 1, 1),
-        end_date=date(2026, 12, 31), is_active=True)
+        end_date=date(2026, 12, 31), status=AcademicTerm.Status.ACTIVE)
 
 
 class SuspensionFixture:
@@ -38,14 +38,17 @@ class SuspensionFixture:
     session on a given date whose start is already past grace (so the sweep would
     otherwise mark it Absent)."""
 
-    def __init__(self, term):
+    def __init__(self, term, prefix="susp"):
         self.term = term
-        self.dept = Department.objects.create(name="Susp Dept", code="SUS")
+        self.dept = Department.objects.create(
+            name=f"{prefix} Dept", code=f"{prefix[:3].upper()}")
         self.faculty = User.objects.create(
-            username="susp_fac", email="susp_fac@mcm.edu.ph",
+            username=f"{prefix}_fac", email=f"{prefix}_fac@mcm.edu.ph",
             role=Role.FACULTY, department=self.dept)
-        self.bldg_a = Building.objects.create(name="Alpha", code="ALP")
-        self.bldg_b = Building.objects.create(name="Beta", code="BET")
+        self.bldg_a = Building.objects.create(
+            name=f"{prefix} Alpha", code=f"{prefix[:2].upper()}A")
+        self.bldg_b = Building.objects.create(
+            name=f"{prefix} Beta", code=f"{prefix[:2].upper()}B")
         self.floor_a = Floor.objects.create(building=self.bldg_a, number=1)
         self.floor_b = Floor.objects.create(building=self.bldg_b, number=1)
         self._seq = 0
@@ -53,8 +56,9 @@ class SuspensionFixture:
     def _room(self, floor):
         self._seq += 1
         return Room.objects.create(
-            floor=floor, code=f"R{self._seq:03d}", capacity=40,
-            qr_token=f"susp-qr-{self._seq}", manual_code=f"77{self._seq:04d}")
+            floor=floor, code=f"{self.dept.code}-R{self._seq:03d}", capacity=40,
+            qr_token=f"{self.dept.code}-qr-{self._seq}",
+            manual_code=f"{self.dept.code[:2]}{self._seq:04d}"[:6])
 
     def session(self, on_date, *, floor=None, faculty=None,
                 status=SessionStatus.SCHEDULED, minutes_before_now=90):
@@ -199,6 +203,25 @@ class SuspendClassesServiceTests(TestCase):
         self.assertEqual(a.status, SessionStatus.CANCELLED)
         self.assertEqual(b.status, SessionStatus.SCHEDULED)
 
+    def test_suspend_classes_filters_same_date_sessions_by_explicit_term(self):
+        active = self.fx.session(self.d)
+        archived_term = AcademicTerm.objects.create(
+            name="SUSP Archived",
+            start_date=date(2026, 1, 1),
+            end_date=date(2026, 12, 31),
+            status=AcademicTerm.Status.ARCHIVED,
+        )
+        other_fx = SuspensionFixture(archived_term, "othsus")
+        archived = other_fx.session(self.d)
+
+        suspend_classes(term=self.term, start_date=self.d, end_date=self.d,
+                        reason="Active only", declared_by=self.ifo)
+
+        active.refresh_from_db()
+        archived.refresh_from_db()
+        self.assertEqual(active.status, SessionStatus.CANCELLED)
+        self.assertEqual(archived.status, SessionStatus.SCHEDULED)
+
     def test_notifies_each_faculty_once_coalesced(self):
         other = User.objects.create(username="susp_fac2", role=Role.FACULTY)
         self.fx.session(self.d)                      # faculty 1, session 1
@@ -225,6 +248,29 @@ class SuspendClassesServiceTests(TestCase):
         self.assertEqual(s.cancelled_reason, "")
         susp.refresh_from_db()
         self.assertIsNotNone(susp.lifted_at)
+
+    def test_lift_suspension_filters_same_date_sessions_by_explicit_term(self):
+        s = self.fx.session(self.d)
+        archived_term = AcademicTerm.objects.create(
+            name="SUSP Lift Archived",
+            start_date=date(2026, 1, 1),
+            end_date=date(2026, 12, 31),
+            status=AcademicTerm.Status.ARCHIVED,
+        )
+        other_fx = SuspensionFixture(archived_term, "olifts")
+        archived = other_fx.session(self.d)
+        archived.status = SessionStatus.CANCELLED
+        archived.cancelled_reason = "Lifted later"
+        archived.save(update_fields=["status", "cancelled_reason"])
+        susp, _ = suspend_classes(term=self.term, start_date=self.d, end_date=self.d,
+                                  reason="Lifted later", declared_by=self.ifo)
+
+        lift_suspension(susp, lifted_by=self.ifo)
+
+        s.refresh_from_db()
+        archived.refresh_from_db()
+        self.assertEqual(s.status, SessionStatus.SCHEDULED)
+        self.assertEqual(archived.status, SessionStatus.CANCELLED)
 
 
 class CancelledUtilizationTests(TestCase):
