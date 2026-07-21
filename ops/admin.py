@@ -1,5 +1,7 @@
 from django.contrib import admin
 
+from scheduling.admin_guards import TermOwnedAdminGuardMixin
+
 from .models import (AuditLog, Booking, Notification, PushSubscription,
                      SystemSetting, WeeklyReport)
 
@@ -37,7 +39,7 @@ class AuditLogAdmin(admin.ModelAdmin):
 
 
 @admin.register(WeeklyReport)
-class WeeklyReportAdmin(admin.ModelAdmin):
+class WeeklyReportAdmin(TermOwnedAdminGuardMixin, admin.ModelAdmin):
     list_display = ("week_start", "department", "generated_at")
 
 
