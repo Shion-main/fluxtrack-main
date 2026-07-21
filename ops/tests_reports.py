@@ -13,6 +13,8 @@ from unittest.mock import patch
 from django.contrib.auth import get_user_model
 from django.core.files.storage import default_storage
 from django.core.management import call_command
+from django.db import IntegrityError
+from django.db.models.deletion import ProtectedError
 from django.test import TestCase, override_settings
 
 from accounts.models import Role
@@ -20,7 +22,7 @@ from ops.models import Notification, WeeklyReport
 from ops.notifications import WEEKLY_REPORT_READY
 from ops.reports import (generate_weekly_report, notify_report_ready,
                          report_week_bounds)
-from scheduling.models import SessionStatus
+from scheduling.models import AcademicTerm, SessionStatus
 from scheduling.reporting import faculty_attendance
 from scheduling.test_support import make_reporting_fixture
 
@@ -76,6 +78,51 @@ class IdempotencyTests(TestCase):
         # from any request input, so it can never traverse out of the reports tree.
         self.assertTrue(report.csv_path.startswith(f"reports/{fx.week_start}/"))
         self.assertIn(fx.dept_a.code, report.csv_path)
+
+
+class WeeklyReportTermIdentityTests(TestCase):
+    """D-12: stored reports are identified by term, week and department."""
+
+    def setUp(self):
+        self.fx = make_reporting_fixture()
+        self.other_term = AcademicTerm.objects.create(
+            name="rpt Other Term",
+            start_date=date(2027, 1, 1),
+            end_date=date(2027, 6, 30),
+            status=AcademicTerm.Status.DRAFT,
+        )
+
+    def test_same_week_department_can_repeat_across_terms(self):
+        WeeklyReport.objects.create(
+            term=self.fx.term, week_start=self.fx.week_start,
+            department=self.fx.dept_a,
+        )
+        WeeklyReport.objects.create(
+            term=self.other_term, week_start=self.fx.week_start,
+            department=self.fx.dept_a,
+        )
+
+        self.assertEqual(
+            WeeklyReport.objects.filter(
+                week_start=self.fx.week_start, department=self.fx.dept_a
+            ).count(),
+            2,
+        )
+
+    def test_term_is_required_for_new_weekly_reports(self):
+        with self.assertRaises(IntegrityError):
+            WeeklyReport.objects.create(
+                week_start=self.fx.week_start, department=self.fx.dept_a
+            )
+
+    def test_term_delete_is_protected_by_stored_report_history(self):
+        WeeklyReport.objects.create(
+            term=self.fx.term, week_start=self.fx.week_start,
+            department=self.fx.dept_a,
+        )
+
+        with self.assertRaises(ProtectedError):
+            self.fx.term.delete()
 
 
 @override_settings(MEDIA_ROOT=_MEDIA)
