@@ -1,19 +1,19 @@
 ---
 gsd_state_version: 1.0
 milestone: v1.3
-milestone_name: — "Operational Trust
+milestone_name: — "Operational Trust"
 current_phase: 12
 current_phase_name: Term Lifecycle
-status: Ready to plan
-stopped_at: Phase 12 context gathered
-last_updated: "2026-07-21T16:32:00.823Z"
+status: In Progress
+stopped_at: Completed 12-01-PLAN.md
+last_updated: "2026-07-21T17:11:13.651Z"
 last_activity: 2026-07-20
 last_activity_desc: Phase 11 complete, transitioned to Phase 12
 progress:
   total_phases: 18
   completed_phases: 10
-  total_plans: 63
-  completed_plans: 62
+  total_plans: 75
+  completed_plans: 63
   percent: 56
 ---
 
@@ -149,6 +149,7 @@ Phase 07 and remain out of scope.
 | Phase 11 P01 | 11min | 3 tasks tasks | 4 files files |
 | Phase 11 P02 | 12min | 3 tasks | 5 files |
 | Phase 11 P03 | 18min | 3 tasks | 7 files |
+| Phase 12 P01 | 29 min | 3 tasks | 7 files |
 
 ## Accumulated Context
 
@@ -235,9 +236,10 @@ Recent decisions affecting current work:
 - [Phase 11]: 11-01: lateness enters the aggregate layer as ONE shared pure helper session_minutes_late (seconds, grace-independent max(0,actual-scheduled), 0 for NULL start) + a separate Python fold _lateness_map (never Count(filter=Q)/DurationField). FacultyRow+Scorecard gain minutes_late_avg/late_sessions/chronic_late; chronic=held>=5 and >=30% late, but the FREQUENCY count only increments at >=1 whole minute (secs>=60) so sub-minute noise never flags while the average still reflects it. In-flight ACTIVE contributes (lateness needs only the start). Plan 02 HR CSV imports the same helper. 131 reporting tests green.
 - [Phase 11]: 11-03: verification coverage (A6/D-04) added to the aggregate layer + IFO dashboard. coverage_by_building_day = verified/HELD by (building, weekday), HELD denominator never scheduled, physical-only via _exclude_virtual (Room.is_virtual is a property, unusable in .filter()); verified is a SEPARATE Count(distinct=True) query keyed on (building, day) folded in Python (mirrors _verified_map) so a reverse-join can never inflate. MERGED siblings are held-with-no-validation and LOWER coverage (not special-cased); ABSENT/CANCELLED excluded from both numerator and denominator by the HELD_STATUSES filter (a stray verified validation on an ABSENT session still never counts). zero_coverage_floors is FLOOR-granular (building_code, floor_number) — the coverage analogue of _absence_map — emitting every held floor with verified==0 so a checker-less floor is VISIBLE, not a buried low percentage. Surface: _coverage_card resolves the DayOfWeek label inside its safe_card unit (mirrors _saturation_card); dashboard carries coverage + zero_floors (value, error) tuples; ifo/_coverage.html renders the rate table + explicit zero-floor list, each its OWN .1 error guard (RPT-05 per-section isolation), included after #report-panel. Coverage pills use the ok/warn/bad ladder (D-04 has a real target, unlike the neutral occupancy pill). Did NOT touch the live per-floor board in web/checker.py (historical/management view is distinct). 180 tests green; SRS docx untouched (targeted runs only).
 - [Phase 11]: 11-02: lateness SURFACED in all three D-03 places without re-deriving the formula. report_render.HEADER grows 6->8 cols (Avg min late + terse Yes/'' Chronic late); build_csv/build_pdf emit them from every FacultyRow (weekly report + Dean/IFO scorecard CSV). web.hr.CSV_HEADER gains a "Minutes late" column AFTER the retained raw "Actual start" (D-03 add-don't-remove), cell = session_minutes_late(scheduled_start, actual_start)//60 computed inline in the streaming rows() generator with NO DB access (HY010 open-cursor contract held); ABSENT->0. The two CSV header contracts stay DISTINCT (report_render.HEADER vs web.hr.CSV_HEADER — Pitfall 5). scorecard.html renders an avg-minutes-late KPI card with an amber "Chronic" pill gated in-template at card.0.held>=5 (D-02 floor) and always paired with the numeric average (colour not the only signal). 60 render/HR/reporting tests green; SRS docx untouched (targeted runs only).
+- [Phase 12]: Replaced AcademicTerm.is_active with explicit DRAFT/ACTIVE/ARCHIVED status; future active-term callers should use `status=AcademicTerm.Status.ACTIVE` or `term_scope.get_active_term()`.
+- [Phase 12]: Creation, close, and reopen services re-authorize and recompute blockers inside `transaction.atomic()` before state changes; AuditLog is written in the same transaction.
 
 ### Pending Todos
-
 [From .planning/todos/pending/ — ideas captured during sessions]
 
 None yet.
@@ -258,18 +260,17 @@ None yet.
 
 ## Session Continuity
 
-**Resume file:** .planning/phases/12-term-lifecycle/12-CONTEXT.md
+**Resume file:** None
 
-Last session: 2026-07-21T08:25:48.200Z
+Last session: 2026-07-21T17:11:13.387Z
 Session arc + decisions: docs/sessions/2026-07-20-audit-and-phase9.md
-Stopped at: Phase 12 context gathered
+Stopped at: Completed 12-01-PLAN.md
 suite 994 green.
 
-RESUME NEXT: **Phase 11 — Metrics the Mission Promises** (A3 lateness / A6
-verification coverage / A8 utilization depth + the deferred 06.1-07 CSV export).
-Mostly aggregate-layer work in scheduling/reporting.py, consumed by scorecard,
-weekly report, HR export, and the IFO dashboard. Redeems the "lateness captured
-at the room level" claim that is currently unfulfilled. See ROADMAP Phase 11.
+RESUME NEXT: **Phase 12 Plan 02 — Term Lifecycle**. Plan 01 shipped the status
+schema, legacy migration, active/writable primitives, and create/close/reopen
+services. Plan 02 should build on `AcademicTerm.Status`, `term_scope`, and
+`term_lifecycle` without reintroducing `AcademicTerm.is_active`.
 
 OUTSTANDING (carry forward):
 

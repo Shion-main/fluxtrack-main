@@ -439,7 +439,20 @@ Plans:
   2. A next-term create/activate flow stands up a new active term without touching prior data; import/materialize target the active term.
   3. All reports/exports scope to a selectable term (HR already does — extend to Dean/IFO where missing).
 
-**Plans**: TBD
+**Plans**: 1/12 plans executed
+
+- [x] 12-01-PLAN.md
+- [ ] 12-02-PLAN.md
+- [ ] 12-03-PLAN.md
+- [ ] 12-04-PLAN.md
+- [ ] 12-05-PLAN.md
+- [ ] 12-06-PLAN.md
+- [ ] 12-07-PLAN.md
+- [ ] 12-08-PLAN.md
+- [ ] 12-09-PLAN.md
+- [ ] 12-10-PLAN.md
+- [ ] 12-11-PLAN.md
+- [ ] 12-12-PLAN.md
 
 ### Phase 13: UX Finish
 
@@ -521,7 +534,7 @@ pulled forward but 9 still precedes any real use.
 | 9. Attendance Trust Under Real Operations (CRITICAL) | Complete | 5/5 criteria, 30 tests | 2026-07-20 |
 | 10. Campus Structure Management | Complete | 3/3 criteria, 29 tests | 2026-07-20 |
 | 11. Metrics the Mission Promises | 4/4 | Complete    | 2026-07-20 |
-| 12. Term Lifecycle | 0/TBD | Not started | - |
+| 12. Term Lifecycle | 1/12 | In Progress|  |
 | 13. UX Finish | 0/TBD | Not started | - |
 | 14. Correctness & Concurrency Hardening | 0/TBD | Not started | - |
 | 15. Deploy Hardening & Cutover (was Phase 8, expanded) | 0/TBD | Not started | - |
