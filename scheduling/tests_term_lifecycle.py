@@ -6,10 +6,12 @@ against the configured Django test database, and production-shaped data still
 needs the migration rehearsal described in the plan before production use.
 """
 from datetime import date, datetime, time
+from io import StringIO
 from pathlib import Path
 from unittest.mock import patch
 from zoneinfo import ZoneInfo
 
+from django.core.management import call_command
 from django.db import IntegrityError, transaction
 from django.contrib.auth import get_user_model
 from django.test import SimpleTestCase, TestCase, TransactionTestCase
@@ -17,6 +19,7 @@ from django.test import SimpleTestCase, TestCase, TransactionTestCase
 from accounts.models import Role
 from campus.models import Building, Floor, Room
 from ops.models import AuditLog
+from scheduling.materialization import MaterializationError, materialize_term
 from scheduling.models import AcademicTerm, Schedule, Session, SessionStatus
 from scheduling.term_lifecycle import (
     TermLifecycleError,
@@ -468,3 +471,134 @@ class TermTransitionTests(TestCase):
         self.term.refresh_from_db()
         self.assertEqual(self.term.status, AcademicTerm.Status.ACTIVE)
         self.assertFalse(AuditLog.objects.filter(event_type="term.archived").exists())
+
+
+class ActivationMaterializationTests(TestCase):
+    def setUp(self):
+        self.ifo = _user("activation_ifo")
+        self.faculty = _user("activation_faculty", role=Role.FACULTY)
+        self.active = AcademicTerm.objects.create(
+            name="Materialize Active",
+            start_date=date(2026, 7, 6),
+            end_date=date(2026, 7, 20),
+            status=AcademicTerm.Status.ACTIVE,
+        )
+        self.draft = AcademicTerm.objects.create(
+            name="Materialize Draft",
+            start_date=date(2026, 7, 6),
+            end_date=date(2026, 7, 20),
+            status=AcademicTerm.Status.DRAFT,
+        )
+        self.archived = AcademicTerm.objects.create(
+            name="Materialize Archived",
+            start_date=date(2026, 7, 6),
+            end_date=date(2026, 7, 20),
+            status=AcademicTerm.Status.ARCHIVED,
+        )
+
+    def test_materialize_term_targets_only_the_explicit_term_and_is_idempotent(self):
+        active_schedule = _schedule(self.active, self.faculty, "mat")
+        draft_schedule = _schedule(self.draft, self.faculty, "mdr")
+
+        first = materialize_term(
+            self.active, start=date(2026, 7, 6), days=7
+        )
+        second = materialize_term(
+            self.active, start=date(2026, 7, 6), days=7
+        )
+
+        self.assertEqual(first.created, 1)
+        self.assertEqual(first.existing, 0)
+        self.assertEqual(first.skipped, 0)
+        self.assertEqual(second.created, 0)
+        self.assertEqual(second.existing, 1)
+        self.assertEqual(
+            Session.objects.filter(schedule__term=self.active).count(), 1
+        )
+        self.assertFalse(
+            Session.objects.filter(schedule=draft_schedule).exists()
+        )
+        self.assertTrue(
+            Session.objects.filter(schedule=active_schedule).exists()
+        )
+
+    def test_materialize_term_clamps_to_term_bounds(self):
+        _schedule(self.active, self.faculty, "clp")
+
+        result = materialize_term(
+            self.active, start=date(2026, 6, 29), days=14
+        )
+
+        self.assertEqual(result.created, 1)
+        self.assertEqual(
+            list(Session.objects.values_list("date", flat=True)),
+            [date(2026, 7, 6)],
+        )
+
+    def test_materialize_term_rejects_draft_unless_internal_override(self):
+        _schedule(self.draft, self.faculty, "drf")
+
+        with self.assertRaises(MaterializationError):
+            materialize_term(self.draft, start=date(2026, 7, 6), days=7)
+
+        result = materialize_term(
+            self.draft, start=date(2026, 7, 6), days=7, allow_draft=True
+        )
+
+        self.assertEqual(result.created, 1)
+
+    def test_materialize_term_always_rejects_archived_terms(self):
+        _schedule(self.archived, self.faculty, "arc")
+
+        with self.assertRaises(MaterializationError):
+            materialize_term(
+                self.archived, start=date(2026, 7, 6), days=7,
+                allow_draft=True,
+            )
+
+        self.assertEqual(Session.objects.count(), 0)
+
+    def test_command_without_term_uses_authoritative_active_term(self):
+        _schedule(self.active, self.faculty, "cmd")
+        _schedule(self.draft, self.faculty, "cmdr")
+        out = StringIO()
+
+        call_command(
+            "materialize_sessions",
+            start="2026-07-06",
+            days=7,
+            stdout=out,
+        )
+
+        self.assertIn("Materialized 2026-07-06", out.getvalue())
+        self.assertEqual(
+            Session.objects.filter(schedule__term=self.active).count(), 1
+        )
+        self.assertEqual(
+            Session.objects.filter(schedule__term=self.draft).count(), 0
+        )
+
+    def test_command_term_option_refuses_draft_and_archived_targets(self):
+        _schedule(self.draft, self.faculty, "cdt")
+        _schedule(self.archived, self.faculty, "car")
+
+        for target in (str(self.draft.pk), self.archived.name):
+            with self.subTest(target=target):
+                with self.assertRaisesMessage(Exception, "ACTIVE"):
+                    call_command(
+                        "materialize_sessions",
+                        term=target,
+                        start="2026-07-06",
+                        days=7,
+                    )
+
+        self.assertEqual(Session.objects.count(), 0)
+
+    def test_materialize_command_delegates_to_service_without_recurrence_loop(self):
+        source = Path(
+            "scheduling/management/commands/materialize_sessions.py"
+        ).read_text(encoding="utf-8")
+
+        self.assertIn("materialize_term(", source)
+        self.assertNotIn(".filter(is_active=True).first()", source)
+        self.assertNotIn("while d < end", source)
