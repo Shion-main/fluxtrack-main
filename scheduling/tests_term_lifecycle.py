@@ -23,6 +23,7 @@ from scheduling.materialization import MaterializationError, materialize_term
 from scheduling.models import AcademicTerm, Schedule, Session, SessionStatus
 from scheduling.term_lifecycle import (
     TermLifecycleError,
+    activate_term,
     close_term,
     create_term,
     preflight_term_action,
@@ -602,3 +603,137 @@ class ActivationMaterializationTests(TestCase):
         self.assertIn("materialize_term(", source)
         self.assertNotIn(".filter(is_active=True).first()", source)
         self.assertNotIn("while d < end", source)
+
+    def test_activate_refuses_when_another_term_is_active(self):
+        _schedule(self.draft, self.faculty, "actblk")
+
+        with self.assertRaises(TermLifecycleError) as ctx:
+            activate_term(
+                self.draft.pk,
+                actor=self.ifo,
+                confirmation_name=self.draft.name,
+            )
+
+        self.assertIn("another_active", ctx.exception.blockers)
+        self.draft.refresh_from_db()
+        self.assertEqual(self.draft.status, AcademicTerm.Status.DRAFT)
+
+    def test_activate_materializes_policy_horizon_before_status_and_audit(self):
+        self.active.status = AcademicTerm.Status.ARCHIVED
+        self.active.save(update_fields=["status"])
+        _schedule(self.draft, self.faculty, "actok")
+
+        with patch("scheduling.term_lifecycle.get_policy", return_value=14):
+            activated = activate_term(
+                self.draft.pk,
+                actor=self.ifo,
+                confirmation_name=self.draft.name,
+            )
+
+        self.assertEqual(activated.status, AcademicTerm.Status.ACTIVE)
+        self.assertEqual(
+            Session.objects.filter(schedule__term=self.draft).count(), 2
+        )
+        audit = AuditLog.objects.get(event_type="term.activated")
+        self.assertEqual(audit.payload["horizon_days"], 14)
+        self.assertEqual(audit.payload["materialization"]["created"], 2)
+        self.assertEqual(audit.payload["before"], AcademicTerm.Status.DRAFT)
+        self.assertEqual(audit.payload["after"], AcademicTerm.Status.ACTIVE)
+
+    def test_activate_rolls_back_materialized_sessions_state_and_audit_on_failure(self):
+        self.active.status = AcademicTerm.Status.ARCHIVED
+        self.active.save(update_fields=["status"])
+        schedule = _schedule(self.draft, self.faculty, "actfail")
+
+        def fail_after_create(term, *, start, days, allow_draft=False):
+            Session.objects.create(
+                schedule=schedule,
+                faculty=self.faculty,
+                room=schedule.room,
+                date=date(2026, 7, 6),
+                scheduled_start=_aware(date(2026, 7, 6), schedule.start_time),
+                scheduled_end=_aware(date(2026, 7, 6), schedule.end_time),
+                status=SessionStatus.SCHEDULED,
+            )
+            raise RuntimeError("materializer failed after first create")
+
+        with patch(
+            "scheduling.term_lifecycle.materialize_term",
+            side_effect=fail_after_create,
+        ):
+            with self.assertRaises(RuntimeError):
+                activate_term(
+                    self.draft.pk,
+                    actor=self.ifo,
+                    confirmation_name=self.draft.name,
+                )
+
+        self.draft.refresh_from_db()
+        self.assertEqual(self.draft.status, AcademicTerm.Status.DRAFT)
+        self.assertFalse(Session.objects.filter(schedule__term=self.draft).exists())
+        self.assertFalse(AuditLog.objects.filter(event_type="term.activated").exists())
+
+    def test_empty_schedule_warning_must_be_acknowledged_before_activation(self):
+        self.active.status = AcademicTerm.Status.ARCHIVED
+        self.active.save(update_fields=["status"])
+
+        with self.assertRaises(TermLifecycleError) as ctx:
+            activate_term(
+                self.draft.pk,
+                actor=self.ifo,
+                confirmation_name=self.draft.name,
+            )
+        self.assertIn("warnings_unacknowledged", ctx.exception.blockers)
+        self.assertIn("empty_schedule_set", ctx.exception.warnings)
+
+        activated = activate_term(
+            self.draft.pk,
+            actor=self.ifo,
+            confirmation_name=self.draft.name,
+            acknowledged_warnings=("empty_schedule_set",),
+        )
+
+        self.assertEqual(activated.status, AcademicTerm.Status.ACTIVE)
+        self.assertEqual(Session.objects.filter(schedule__term=self.draft).count(), 0)
+
+
+class SingleActiveTests(TransactionTestCase):
+    reset_sequences = True
+
+    def setUp(self):
+        self.ifo = _user("single_active_ifo")
+        self.faculty = _user("single_active_faculty", role=Role.FACULTY)
+        self.first = AcademicTerm.objects.create(
+            name="Single Draft A",
+            start_date=date(2026, 7, 6),
+            end_date=date(2026, 7, 20),
+            status=AcademicTerm.Status.DRAFT,
+        )
+        self.second = AcademicTerm.objects.create(
+            name="Single Draft B",
+            start_date=date(2026, 8, 3),
+            end_date=date(2026, 8, 17),
+            status=AcademicTerm.Status.DRAFT,
+        )
+        _schedule(self.first, self.faculty, "saa")
+        _schedule(self.second, self.faculty, "sab")
+
+    def test_losing_activation_reports_controlled_blocker_and_preserves_single_active(self):
+        activate_term(
+            self.first.pk,
+            actor=self.ifo,
+            confirmation_name=self.first.name,
+        )
+
+        with self.assertRaises(TermLifecycleError) as ctx:
+            activate_term(
+                self.second.pk,
+                actor=self.ifo,
+                confirmation_name=self.second.name,
+            )
+
+        self.assertIn("another_active", ctx.exception.blockers)
+        self.assertEqual(
+            AcademicTerm.objects.filter(status=AcademicTerm.Status.ACTIVE).count(),
+            1,
+        )
