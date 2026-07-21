@@ -1,8 +1,10 @@
 """Phase 12 Plan 06: active-term live surface and archived-id write guards."""
 from datetime import date, datetime, time, timedelta
+from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
 from django.test import TestCase
+from django.urls import reverse
 from django.utils import timezone
 
 from accounts.models import Department, Role
@@ -435,3 +437,149 @@ class IfoActiveTermScopeTests(_LiveTermFixture):
         source = open("web/ifo.py", encoding="utf-8").read()
         self.assertIn("get_active_term()", source)
         self.assertNotIn("AcademicTerm.objects.filter(is_active=True)", source)
+
+
+class _TermConsoleFixture(TestCase):
+    def setUp(self):
+        self.User = get_user_model()
+        self.ifo = self.User.objects.create(
+            username="console_ifo", email="console_ifo@mcm.edu.ph",
+            role=Role.IFO_ADMIN, is_active=True,
+        )
+        self.superuser = self.User.objects.create_superuser(
+            username="console_root", email="console_root@mcm.edu.ph",
+            password="test",
+        )
+        self.denied_users = [
+            self.User.objects.create(
+                username=f"console_{role}", email=f"console_{role}@mcm.edu.ph",
+                role=role, is_active=True,
+            )
+            for role in (
+                Role.DEAN, Role.HR_ADMIN, Role.FACULTY, Role.CHECKER, Role.GUARD,
+            )
+        ]
+
+    def _details(self, **overrides):
+        data = {
+            "step": "details",
+            "name": "AY 2027-2028",
+            "start_date": "2027-06-01",
+            "end_date": "2028-05-31",
+        }
+        data.update(overrides)
+        return data
+
+    def _confirm(self, **overrides):
+        data = self._details(step="confirm", confirmation_name="AY 2027-2028")
+        data.update(overrides)
+        return data
+
+
+class TermCreateViewTests(_TermConsoleFixture):
+    def test_list_and_detail_are_ifo_or_superuser_only_and_get_is_read_only(self):
+        term = AcademicTerm.objects.create(
+            name="Console Draft", start_date=date(2027, 1, 1),
+            end_date=date(2027, 5, 31), status=AcademicTerm.Status.DRAFT,
+        )
+        routes = [reverse("ifo_terms"), reverse("ifo_term_detail", args=[term.pk])]
+        for user in (self.ifo, self.superuser):
+            self.client.force_login(user)
+            for route in routes:
+                with self.subTest(user=user.username, route=route):
+                    response = self.client.get(route)
+                    self.assertEqual(response.status_code, 200)
+        for user in self.denied_users:
+            self.client.force_login(user)
+            for route in routes:
+                with self.subTest(user=user.username, route=route):
+                    self.assertEqual(self.client.get(route).status_code, 403)
+        self.assertEqual(AcademicTerm.objects.count(), 1)
+        self.assertFalse(AuditLog.objects.exists())
+
+    def test_terms_list_is_status_first_then_date_descending(self):
+        active = AcademicTerm.objects.create(
+            name="Active", start_date=date(2027, 1, 1), end_date=date(2027, 5, 31),
+            status=AcademicTerm.Status.ACTIVE,
+        )
+        newer_draft = AcademicTerm.objects.create(
+            name="New Draft", start_date=date(2028, 1, 1), end_date=date(2028, 5, 31),
+            status=AcademicTerm.Status.DRAFT,
+        )
+        older_draft = AcademicTerm.objects.create(
+            name="Old Draft", start_date=date(2026, 1, 1), end_date=date(2026, 5, 31),
+            status=AcademicTerm.Status.DRAFT,
+        )
+        archived = AcademicTerm.objects.create(
+            name="Archive", start_date=date(2025, 1, 1), end_date=date(2025, 5, 31),
+            status=AcademicTerm.Status.ARCHIVED,
+        )
+        self.client.force_login(self.ifo)
+
+        response = self.client.get(reverse("ifo_terms"))
+
+        self.assertEqual(
+            [term.pk for term in response.context["terms"]],
+            [active.pk, newer_draft.pk, older_draft.pk, archived.pk],
+        )
+
+    def test_details_post_is_read_only_preflight_and_confirmation_starts_empty(self):
+        self.client.force_login(self.ifo)
+
+        response = self.client.post(reverse("ifo_term_create"), self._details())
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.context["preflight"].candidate_name, "AY 2027-2028")
+        self.assertEqual(response.context["confirmation_name"], "")
+        self.assertContains(response, 'name="confirmation_name"', html=False)
+        self.assertFalse(AcademicTerm.objects.exists())
+        self.assertFalse(AuditLog.objects.exists())
+
+    def test_confirmation_is_distinct_exact_and_stale_preflight_refuses(self):
+        self.client.force_login(self.ifo)
+        for confirmation in ("", "ay 2027-2028"):
+            response = self.client.post(
+                reverse("ifo_term_create"), self._confirm(confirmation_name=confirmation),
+            )
+            self.assertEqual(response.status_code, 400)
+            self.assertFalse(AcademicTerm.objects.exists())
+            self.assertFalse(AuditLog.objects.exists())
+
+        preflight = self.client.post(reverse("ifo_term_create"), self._details())
+        self.assertEqual(preflight.status_code, 200)
+        AcademicTerm.objects.create(
+            name="Inserted overlap", start_date=date(2027, 7, 1),
+            end_date=date(2027, 7, 31), status=AcademicTerm.Status.DRAFT,
+        )
+        response = self.client.post(reverse("ifo_term_create"), self._confirm())
+        self.assertEqual(response.status_code, 400)
+        self.assertFalse(AcademicTerm.objects.filter(name="AY 2027-2028").exists())
+        self.assertFalse(AuditLog.objects.exists())
+
+    def test_confirmed_create_redirects_to_blank_draft_with_atomic_audit(self):
+        self.client.force_login(self.ifo)
+
+        response = self.client.post(reverse("ifo_term_create"), self._confirm())
+
+        term = AcademicTerm.objects.get(name="AY 2027-2028")
+        self.assertRedirects(response, reverse("ifo_term_detail", args=[term.pk]))
+        self.assertEqual(term.status, AcademicTerm.Status.DRAFT)
+        self.assertFalse(term.schedules.exists())
+        audit = AuditLog.objects.get(event_type="term.created")
+        self.assertEqual(audit.actor, self.ifo)
+        self.assertIsNone(audit.payload["reason"])
+        self.assertIsNone(audit.payload["before"])
+        self.assertEqual(audit.payload["after"], AcademicTerm.Status.DRAFT)
+        self.assertEqual(audit.payload["schedule_count"], 0)
+        self.assertEqual(audit.payload["session_count"], 0)
+
+    def test_injected_audit_failure_rolls_back_and_rerenders_400(self):
+        self.client.force_login(self.ifo)
+        with patch("scheduling.term_lifecycle.AuditLog.objects.create",
+                   side_effect=RuntimeError("audit unavailable")):
+            response = self.client.post(reverse("ifo_term_create"), self._confirm())
+
+        self.assertEqual(response.status_code, 400)
+        self.assertContains(response, "could not be committed", status_code=400)
+        self.assertFalse(AcademicTerm.objects.exists())
+        self.assertFalse(AuditLog.objects.exists())
