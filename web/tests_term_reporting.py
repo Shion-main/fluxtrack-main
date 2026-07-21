@@ -57,6 +57,82 @@ class IfoWeeklyReportTermTests(SimpleTestCase):
         self.assertIn("get_object_or_404(WeeklyReport, pk=pk, term=scope.term)", source)
 
 
+class DeanReportTermTests(SimpleTestCase):
+    def test_dean_scope_composes_term_and_department(self):
+        source = Path("web/dean.py").read_text(encoding="utf-8")
+        self.assertIn("def _dean_report_scope(request):", source)
+        self.assertIn("term=scope.term, start=start, end=end, department=dept", source)
+        self.assertIn(
+            "WeeklyReport, pk=pk, term=scope.term, department=dept", source
+        )
+
+
+class DeanReportLinkPropagationTests(SimpleTestCase):
+    def test_dean_templates_propagate_normalized_scope(self):
+        for template in (
+            "templates/dean/dashboard.html",
+            "templates/dean/reports.html",
+            "templates/reports/scorecard.html",
+        ):
+            self.assertIn(
+                "scope_query", Path(template).read_text(encoding="utf-8"), template
+            )
+
+
+class WeeklyReportTermTests(SimpleTestCase):
+    def test_all_stored_downloads_compose_selected_term_with_role_scope(self):
+        self.assertIn(
+            "pk=pk, term=scope.term",
+            Path("web/ifo.py").read_text(encoding="utf-8"),
+        )
+        self.assertIn(
+            "pk=pk, term=scope.term, department=dept",
+            Path("web/dean.py").read_text(encoding="utf-8"),
+        )
+
+
+class Phase12CouplingGuardTests(SimpleTestCase):
+    PRODUCTION_FILES = (
+        "scheduling/term_scope.py",
+        "scheduling/term_lifecycle.py",
+        "scheduling/importing.py",
+        "scheduling/materialization.py",
+        "scheduling/jobs.py",
+        "scheduling/reporting.py",
+        "ops/reports.py",
+        "web/hr.py",
+        "web/ifo.py",
+        "web/dean.py",
+    )
+
+    def test_no_legacy_or_first_row_term_selection_survives(self):
+        forbidden = (
+            "DEFAULT_TERM",
+            "filter(is_active=True)",
+            "order_by(\"-is_active\")",
+            "AcademicTerm.objects.first()",
+        )
+        for filename in self.PRODUCTION_FILES:
+            source = Path(filename).read_text(encoding="utf-8")
+            for token in forbidden:
+                self.assertNotIn(token, source, f"{filename}: {token}")
+
+    def test_management_report_controllers_use_explicit_scope(self):
+        for filename in ("web/hr.py", "web/ifo.py", "web/dean.py"):
+            source = Path(filename).read_text(encoding="utf-8")
+            self.assertIn("selected_report_scope", source, filename)
+            self.assertIn("scope.term", source, filename)
+
+
+class TermLifecycleReportingE2ETests(SimpleTestCase):
+    def test_cycle_components_are_wired_without_reset_or_clone(self):
+        lifecycle = Path("web/ifo_terms.py").read_text(encoding="utf-8")
+        for service in ("create_term", "activate_term", "close_term", "reopen_term"):
+            self.assertIn(service, lifecycle)
+        self.assertNotIn("reset_term", lifecycle)
+        self.assertNotIn("clone", lifecycle.lower())
+
+
 class ReportScopeTests(TestCase):
     """D-10/D-11: one explicit term plus a bounded, normalized window."""
 

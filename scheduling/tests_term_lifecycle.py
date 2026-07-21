@@ -1421,3 +1421,22 @@ class AdminDeleteQuerysetFreezeTests(SimpleTestCase):
             guard_source.index("for obj in objects"),
             guard_source.index("super().delete_queryset"),
         )
+
+
+class ArchivedWriterCouplingTests(SimpleTestCase):
+    """Known Phase 12 writers must declare active or writable term enforcement."""
+
+    WRITER_CONTRACTS = {
+        "scheduling/jobs.py": "get_active_term",
+        "scheduling/materialization.py": "AcademicTerm.Status.ARCHIVED",
+        "ops/import_staging.py": "term=term",
+        "scheduling/schedule_ops.py": "require_writable_term",
+        "scheduling/suspensions.py": "require_writable_term",
+        "verification/services.py": "get_active_term",
+        "scheduling/admin_guards.py": "require_writable_term",
+    }
+
+    def test_known_writer_inventory_declares_term_guard(self):
+        for filename, guard in self.WRITER_CONTRACTS.items():
+            source = Path(filename).read_text(encoding="utf-8")
+            self.assertIn(guard, source, filename)
