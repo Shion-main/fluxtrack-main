@@ -26,23 +26,21 @@ What it does now (vs. the old CSV-only importer that dropped 1,215 meetings):
           rooms); roomless ONLINE sections get an Online placeholder room.
   * D8  — still sets ``Schedule.faculty``; materialize_sessions copies it onto
           Session.faculty unchanged (that path is NOT touched here).
-  * D6  — the AcademicTerm window stays centered on TODAY, exactly one active term.
+  * D6  — the AcademicTerm target is explicit; lifecycle transitions happen elsewhere.
 
 Usage:
-    py -3.12 manage.py import_offerings --dry-run                       # parse + report
-    py -3.12 manage.py import_offerings                                 # whole term (xlsx)
+    py -3.12 manage.py import_offerings --term "2nd Term SY 2025-2026" --dry-run
+    py -3.12 manage.py import_offerings --term 1                         # whole term (xlsx)
     py -3.12 manage.py import_offerings --file data/fixtures/r3_synthetic.csv \
-        --building R --floor 3                                          # a CSV slice
+        --term 1 --building R --floor 3                                  # a CSV slice
 """
 import csv
 import os
 import secrets
-from datetime import timedelta
 
 from django.contrib.auth import get_user_model
-from django.core.management.base import BaseCommand
+from django.core.management.base import BaseCommand, CommandError
 from django.db import transaction
-from django.utils import timezone
 from django.utils.text import slugify
 
 from accounts.models import Role
@@ -54,6 +52,7 @@ from scheduling.importing import (classify_room, modality_for_room,
 from scheduling.importing import _is_real_room as is_real_room  # shared D9 rule
 from scheduling.models import (AcademicTerm, Modality, Schedule,
                                ScheduleStatus)
+from scheduling.term_scope import ArchivedTermError, require_writable_term
 
 User = get_user_model()
 
@@ -77,7 +76,11 @@ class Command(BaseCommand):
         p.add_argument("--building", help="Filter to a building prefix, e.g. R")
         p.add_argument("--floor", type=int, help="Filter to a floor number")
         p.add_argument("--limit", type=int, help="Max sections to import")
-        p.add_argument("--term-name", default="2nd Term SY 2025-2026")
+        p.add_argument(
+            "--term",
+            required=True,
+            help="Writable AcademicTerm target, resolved by primary key or exact name.",
+        )
         p.add_argument("--dry-run", action="store_true")
 
     # ------------------------------------------------------------------
@@ -100,7 +103,26 @@ class Command(BaseCommand):
             return ""
         return (row[i] or "").strip()
 
+    def _resolve_term(self, raw):
+        lookup = (raw or "").strip()
+        if not lookup:
+            raise CommandError("--term is required")
+
+        try:
+            if lookup.isdigit():
+                term = AcademicTerm.objects.get(pk=int(lookup))
+            else:
+                term = AcademicTerm.objects.get(name=lookup)
+        except AcademicTerm.DoesNotExist:
+            raise CommandError(f"AcademicTerm not found for --term {lookup!r}") from None
+
+        try:
+            return require_writable_term(term)
+        except ArchivedTermError as exc:
+            raise CommandError(str(exc)) from exc
+
     def handle(self, *args, **o):
+        term = self._resolve_term(o["term"])
         rows = self._read_rows(o["file"], o["sheet"])
         if not rows:
             self.stdout.write(self.style.ERROR(f"No rows read from {o['file']}"))
@@ -111,19 +133,6 @@ class Command(BaseCommand):
         stats = {"sections": 0, "rooms": set(), "faculty": set(), "schedules": 0,
                  "skip_no_schedule": 0, "skip_bad_time": 0, "skip_filtered": 0,
                  "tba_rows": 0, "online_no_room_rows": 0}
-
-        term = None
-        if not o["dry_run"]:
-            term, _ = AcademicTerm.objects.get_or_create(
-                name=o["term_name"],
-                defaults={"start_date": timezone.now().date() - timedelta(days=14),
-                          "end_date": timezone.now().date() + timedelta(days=100),
-                          "is_active": True})
-            # D6: enforce "exactly one active term" — make this the sole active one.
-            AcademicTerm.objects.exclude(pk=term.pk).update(is_active=False)
-            if not term.is_active:
-                term.is_active = True
-                term.save(update_fields=["is_active"])
 
         filtered = bool(o["building"]) or o["floor"] is not None
         name_cache = {}  # normalized-name key -> User (blank-email dedup, D7)

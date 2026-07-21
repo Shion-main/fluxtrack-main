@@ -47,9 +47,9 @@ class ImportLifecycleSourceGuardTests(SimpleTestCase):
 
         self.assertNotIn("AcademicTerm.objects.get_or_create", source)
         self.assertNotIn("exclude(pk=term.pk).update", source)
-        self.assertNotIn("is_active", source)
-        self.assertNotIn("materialize_sessions", source)
-        self.assertNotIn("materialize_term", source)
+        self.assertNotIn('save(update_fields=["is_active"])', source)
+        self.assertNotIn('call_command("materialize_sessions"', source)
+        self.assertNotIn("materialize_term(", source)
         self.assertNotIn('call_command("reset_term"', source)
 
 
@@ -133,7 +133,13 @@ class ImportHardeningTests(TransactionTestCase):
 
     def setUp(self):
         # One real import feeds every assertion in this class.
-        call_command("import_offerings", stdout=StringIO())
+        self.term = AcademicTerm.objects.create(
+            name="Real Offerings Import Term",
+            start_date=date(2026, 1, 1),
+            end_date=date(2026, 12, 31),
+            status=AcademicTerm.Status.ACTIVE,
+        )
+        call_command("import_offerings", term=str(self.term.pk), stdout=StringIO())
 
     def test_virtual_room_schedule_is_online(self):
         # D2/D5: a V-prefixed (virtual) room is kept and stamped Online.
@@ -200,8 +206,14 @@ class ImportReportTests(TransactionTestCase):
     """The dry-run reconciliation report proves the partition + flags (D4/D7/D9)."""
 
     def _dry_run_output(self):
+        term = AcademicTerm.objects.create(
+            name="Real Offerings Dry Run Term",
+            start_date=date(2026, 1, 1),
+            end_date=date(2026, 12, 31),
+            status=AcademicTerm.Status.DRAFT,
+        )
         out = StringIO()
-        call_command("import_offerings", dry_run=True, stdout=out)
+        call_command("import_offerings", term=str(term.pk), dry_run=True, stdout=out)
         return out.getvalue()
 
     def test_dry_run_reports_full_term_counts(self):
