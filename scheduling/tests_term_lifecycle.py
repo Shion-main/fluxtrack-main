@@ -12,6 +12,7 @@ from unittest.mock import patch
 from zoneinfo import ZoneInfo
 
 from django.core.management import call_command
+from django.core.management.base import CommandError
 from django.db import IntegrityError, transaction
 from django.contrib.auth import get_user_model
 from django.test import SimpleTestCase, TestCase, TransactionTestCase
@@ -745,3 +746,104 @@ class SingleActiveTests(TransactionTestCase):
             AcademicTerm.objects.filter(status=AcademicTerm.Status.ACTIVE).count(),
             1,
         )
+
+
+class ActiveTermJobScopeTests(TestCase):
+    def setUp(self):
+        self.ifo = _user("active_job_ifo")
+        self.faculty = _user("active_job_faculty", role=Role.FACULTY)
+        self.active = AcademicTerm.objects.create(
+            name="Job Active",
+            start_date=date(2026, 7, 6),
+            end_date=date(2026, 7, 20),
+            status=AcademicTerm.Status.ACTIVE,
+        )
+        self.draft = AcademicTerm.objects.create(
+            name="Job Draft",
+            start_date=date(2026, 7, 6),
+            end_date=date(2026, 7, 20),
+            status=AcademicTerm.Status.DRAFT,
+        )
+        self.archived = AcademicTerm.objects.create(
+            name="Job Archived",
+            start_date=date(2026, 7, 6),
+            end_date=date(2026, 7, 20),
+            status=AcademicTerm.Status.ARCHIVED,
+        )
+        self.active_schedule = _schedule(self.active, self.faculty, "jba")
+        self.draft_schedule = _schedule(self.draft, self.faculty, "jbd")
+        self.archived_schedule = _schedule(self.archived, self.faculty, "jbh")
+
+    def test_no_option_command_touches_only_authoritative_active_term(self):
+        out = StringIO()
+
+        call_command(
+            "materialize_sessions",
+            start="2026-07-06",
+            days=7,
+            stdout=out,
+        )
+
+        self.assertEqual(
+            Session.objects.filter(schedule=self.active_schedule).count(), 1
+        )
+        self.assertFalse(Session.objects.filter(schedule=self.draft_schedule).exists())
+        self.assertFalse(
+            Session.objects.filter(schedule=self.archived_schedule).exists()
+        )
+        out.getvalue().encode("ascii")
+
+    def test_term_option_selects_only_exact_active_target_and_is_idempotent(self):
+        for _ in range(2):
+            call_command(
+                "materialize_sessions",
+                term=self.active.name,
+                start="2026-07-06",
+                days=7,
+            )
+
+        self.assertEqual(
+            Session.objects.filter(schedule=self.active_schedule).count(), 1
+        )
+        self.assertFalse(Session.objects.filter(schedule=self.draft_schedule).exists())
+        self.assertFalse(
+            Session.objects.filter(schedule=self.archived_schedule).exists()
+        )
+
+    def test_public_command_refuses_draft_and_archived_terms_without_writes(self):
+        for target in (str(self.draft.pk), self.archived.name):
+            with self.subTest(target=target):
+                with self.assertRaisesMessage(CommandError, "ACTIVE"):
+                    call_command(
+                        "materialize_sessions",
+                        term=target,
+                        start="2026-07-06",
+                        days=7,
+                    )
+
+        self.assertEqual(Session.objects.count(), 0)
+
+    def test_public_command_without_active_term_fails_friendly_without_writes(self):
+        self.active.status = AcademicTerm.Status.ARCHIVED
+        self.active.save(update_fields=["status"])
+
+        with self.assertRaisesMessage(CommandError, "No ACTIVE academic term"):
+            call_command(
+                "materialize_sessions",
+                start="2026-07-06",
+                days=7,
+            )
+
+        self.assertEqual(Session.objects.count(), 0)
+
+    def test_scheduler_materialize_job_inherits_command_adapter(self):
+        scheduler_source = Path(
+            "scheduling/management/commands/runscheduler.py"
+        ).read_text(encoding="utf-8")
+        command_source = Path(
+            "scheduling/management/commands/materialize_sessions.py"
+        ).read_text(encoding="utf-8")
+
+        self.assertIn('call_command("materialize_sessions")', scheduler_source)
+        self.assertIn("materialize_term(", command_source)
+        self.assertNotIn("while d < end", command_source)
