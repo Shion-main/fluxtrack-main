@@ -29,7 +29,7 @@ from ops.import_staging import (ALLOWED_EXTENSIONS, MAX_UPLOAD_BYTES,
                                 ImportStagingError, consume_staged,
                                 discard_staged, resolve_staged, staged_path,
                                 stage_upload, sweep_abandoned)
-from ops.models import AuditLog, Booking, RoomConflictFlag, WeeklyReport
+from ops.models import AuditLog, Booking, ImportStaging, RoomConflictFlag, WeeklyReport
 from ops.occupancy import release_room
 from ops.policy import get_policy
 from scheduling.models import (AcademicBreak, AcademicTerm, ClassSuspension,
@@ -1070,6 +1070,18 @@ def _staged_for(request):
     return resolve_staged(token, request.user) if token else None
 
 
+def _locked_staging_for(request):
+    token = request.session.get(IMPORT_SESSION_KEY)
+    if not token:
+        return None
+    return (ImportStaging.objects
+            .select_for_update()
+            .select_related("term")
+            .filter(token=token, uploaded_by=request.user,
+                    consumed_at__isnull=True)
+            .first())
+
+
 def _draft_terms():
     return AcademicTerm.objects.filter(
         status=AcademicTerm.Status.DRAFT
@@ -1192,27 +1204,45 @@ def import_commit(request):
     path that clears 2000+ Schedule/Session rows -- is NOT imported anywhere in
     `web/` and must not be (D-13, T-07-36).
     """
-    staging = _staged_for(request)
-    if staging is None:
-        return render(request, "ifo/_import_panel.html", _import_ctx(
-            request, error=("That upload is no longer available. Please upload "
-                            "the file again.")), status=400)
-
-    path = staged_path(staging)
-    if staging.term_id is None:
-        discard_staged(staging)
-        request.session.pop(IMPORT_SESSION_KEY, None)
-        return render(request, "ifo/_import_panel.html", _import_ctx(
-            request, error=("That upload has no Draft term target. Please "
-                            "upload the file again.")), status=400)
-
-    before = Schedule.objects.filter(term=staging.term).count()
+    staging = None
     buf = io.StringIO()
     try:
-        # Same options the preview used, so preview and commit can never
-        # describe different work.
-        call_command("import_offerings", file=path, term=str(staging.term_id),
-                     dry_run=False, stdout=buf)
+        with transaction.atomic():
+            staging = _locked_staging_for(request)
+            if staging is None:
+                return render(request, "ifo/_import_panel.html", _import_ctx(
+                    request,
+                    error=("That upload is no longer available. Please upload "
+                           "the file again.")), status=400)
+            if staging.term_id is None:
+                return render(request, "ifo/_import_panel.html", _import_ctx(
+                    request, staging=staging,
+                    error=("That upload has no Draft term target. Please upload "
+                           "the file again.")), status=400)
+            term = AcademicTerm.objects.select_for_update().get(pk=staging.term_id)
+            if term.status != AcademicTerm.Status.DRAFT:
+                return render(request, "ifo/_import_panel.html", _import_ctx(
+                    request, staging=staging,
+                    error=("That target is no longer a Draft term. Please choose "
+                           "a Draft term and preview the file again.")), status=400)
+
+            path = staged_path(staging)
+            before = Schedule.objects.filter(term=term).count()
+            # Same staged target the preview used. Any posted term value is
+            # deliberately ignored; ImportStaging.term is the authority.
+            call_command("import_offerings", file=path, term=str(term.pk),
+                         dry_run=False, stdout=buf)
+            created = Schedule.objects.filter(term=term).count() - before
+            consume_staged(staging)
+            AuditLog.objects.create(
+                actor=request.user, event_type="schedule.imported",
+                target_type="import", target_id=str(staging.pk),
+                # `original_name` is display text only -- never a path (T-07-31).
+                payload={"original_name": staging.original_name,
+                         "size_bytes": staging.size_bytes,
+                         "schedules_created": created,
+                         "term_id": term.pk,
+                         "term_name": term.name})
     except Exception as exc:
         # The staging row is deliberately NOT consumed: the operator should be
         # able to retry or discard rather than being stranded.
@@ -1220,18 +1250,8 @@ def import_commit(request):
             request, staging=staging,
             error=f"The import stopped partway through: {exc}"), status=400)
 
-    created = Schedule.objects.filter(term=staging.term).count() - before
-    consume_staged(staging)
     _delete_staged_file(staging)
     request.session.pop(IMPORT_SESSION_KEY, None)
-
-    AuditLog.objects.create(
-        actor=request.user, event_type="schedule.imported",
-        target_type="import", target_id=str(staging.pk),
-        # `original_name` is display text only -- never a path (T-07-31).
-        payload={"original_name": staging.original_name,
-                 "size_bytes": staging.size_bytes,
-                 "schedules_created": created})
 
     return render(request, "ifo/_import_panel.html", _import_ctx(
         request, committed={"created": created, "detail": buf.getvalue(),
