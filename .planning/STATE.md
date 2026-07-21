@@ -5,16 +5,16 @@ milestone_name: — "Operational Trust"
 current_phase: 12
 current_phase_name: Term Lifecycle
 status: In Progress
-stopped_at: Completed 12-01-PLAN.md
-last_updated: "2026-07-21T17:11:13.651Z"
+stopped_at: Completed 12-02-PLAN.md
+last_updated: "2026-07-21T17:24:46.632Z"
 last_activity: 2026-07-20
 last_activity_desc: Phase 11 complete, transitioned to Phase 12
 progress:
   total_phases: 18
   completed_phases: 10
   total_plans: 75
-  completed_plans: 63
-  percent: 56
+  completed_plans: 64
+  percent: 85
 ---
 
 # Project State
@@ -150,6 +150,7 @@ Phase 07 and remain out of scope.
 | Phase 11 P02 | 12min | 3 tasks | 5 files |
 | Phase 11 P03 | 18min | 3 tasks | 7 files |
 | Phase 12 P01 | 29 min | 3 tasks | 7 files |
+| Phase 12 P02 | 9 min | 3 tasks | 5 files |
 
 ## Accumulated Context
 
@@ -238,6 +239,8 @@ Recent decisions affecting current work:
 - [Phase 11]: 11-02: lateness SURFACED in all three D-03 places without re-deriving the formula. report_render.HEADER grows 6->8 cols (Avg min late + terse Yes/'' Chronic late); build_csv/build_pdf emit them from every FacultyRow (weekly report + Dean/IFO scorecard CSV). web.hr.CSV_HEADER gains a "Minutes late" column AFTER the retained raw "Actual start" (D-03 add-don't-remove), cell = session_minutes_late(scheduled_start, actual_start)//60 computed inline in the streaming rows() generator with NO DB access (HY010 open-cursor contract held); ABSENT->0. The two CSV header contracts stay DISTINCT (report_render.HEADER vs web.hr.CSV_HEADER — Pitfall 5). scorecard.html renders an avg-minutes-late KPI card with an amber "Chronic" pill gated in-template at card.0.held>=5 (D-02 floor) and always paired with the numeric average (colour not the only signal). 60 render/HR/reporting tests green; SRS docx untouched (targeted runs only).
 - [Phase 12]: Replaced AcademicTerm.is_active with explicit DRAFT/ACTIVE/ARCHIVED status; future active-term callers should use `status=AcademicTerm.Status.ACTIVE` or `term_scope.get_active_term()`.
 - [Phase 12]: Creation, close, and reopen services re-authorize and recompute blockers inside `transaction.atomic()` before state changes; AuditLog is written in the same transaction.
+- [Phase 12]: Public materialization never receives the Draft override; only activate_term calls materialize_term(..., allow_draft=True) in production source.
+- [Phase 12]: Activation records materialization counts in the term.activated AuditLog payload and lets unexpected materialization failures escape for full rollback.
 
 ### Pending Todos
 [From .planning/todos/pending/ — ideas captured during sessions]
@@ -262,15 +265,15 @@ None yet.
 
 **Resume file:** None
 
-Last session: 2026-07-21T17:11:13.387Z
+Last session: 2026-07-21T17:24:46.301Z
 Session arc + decisions: docs/sessions/2026-07-20-audit-and-phase9.md
-Stopped at: Completed 12-01-PLAN.md
+Stopped at: Completed 12-02-PLAN.md
 suite 994 green.
 
-RESUME NEXT: **Phase 12 Plan 02 — Term Lifecycle**. Plan 01 shipped the status
+RESUME NEXT: **Phase 12 Plan 03 — Term Lifecycle**. Plan 01 shipped the status
 schema, legacy migration, active/writable primitives, and create/close/reopen
-services. Plan 02 should build on `AcademicTerm.Status`, `term_scope`, and
-`term_lifecycle` without reintroducing `AcademicTerm.is_active`.
+services. Plan 03 should build on `AcademicTerm.Status`, `term_scope`, `materialize_term`, and
+`activate_term` without reintroducing `AcademicTerm.is_active`.
 
 OUTSTANDING (carry forward):
 
