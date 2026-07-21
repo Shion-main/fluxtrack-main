@@ -3,10 +3,11 @@
 from dataclasses import dataclass, field
 
 from django.db import transaction
+from django.utils import timezone
 
 from accounts.models import Role
 from ops.models import AuditLog
-from scheduling.models import AcademicTerm, Session
+from scheduling.models import AcademicTerm, Session, SessionStatus
 
 
 @dataclass(frozen=True)
@@ -144,6 +145,159 @@ def create_term(*, actor, name, start_date, end_date, confirmation_name):
                 "end_date": term.end_date.isoformat(),
                 "schedule_count": schedule_count,
                 "session_count": session_count,
+            },
+        )
+        return term
+
+
+def _term_counts(term):
+    schedule_count = term.schedules.count()
+    sessions = Session.objects.filter(schedule__term=term)
+    return {
+        "schedule_count": schedule_count,
+        "session_count": sessions.count(),
+        "active_session_count": sessions.filter(status=SessionStatus.ACTIVE).count(),
+        "scheduled_session_count": sessions.filter(
+            status=SessionStatus.SCHEDULED
+        ).count(),
+    }
+
+
+def _action_preflight(term, *, action, today):
+    counts = _term_counts(term)
+    blockers = []
+    warnings = []
+
+    if action == "close":
+        if term.status != AcademicTerm.Status.ACTIVE:
+            blockers.append("not_active")
+        if today < term.end_date:
+            blockers.append("before_end_date")
+        if counts["active_session_count"]:
+            blockers.append("active_sessions")
+        if counts["scheduled_session_count"]:
+            warnings.append("scheduled_sessions_present")
+    elif action == "reopen":
+        if term.status != AcademicTerm.Status.ARCHIVED:
+            blockers.append("not_archived")
+        active_successor_exists = AcademicTerm.objects.filter(
+            status=AcademicTerm.Status.ACTIVE
+        ).exclude(pk=term.pk).exists()
+        if active_successor_exists:
+            warnings.append("active_successor_exists")
+    else:
+        blockers.append("unknown_action")
+
+    return TermPreflight(
+        action=action,
+        term_id=term.pk,
+        term_name=term.name,
+        start_date=term.start_date,
+        end_date=term.end_date,
+        blockers=tuple(blockers),
+        warnings=tuple(warnings),
+        counts=counts,
+    )
+
+
+def preflight_term_action(term_id, action, actor, today=None):
+    _authorize(actor)
+    today = today or timezone.localdate()
+    term = AcademicTerm.objects.get(pk=term_id)
+    return _action_preflight(term, action=action, today=today)
+
+
+def _validate_common_action_inputs(term, *, preflight, confirmation_name, reason,
+                                   acknowledged_warnings):
+    blockers = list(preflight.blockers)
+    if (confirmation_name or "") != term.name:
+        blockers.append("confirmation_mismatch")
+    normalized_reason = (reason or "").strip()
+    if not normalized_reason:
+        blockers.append("reason_required")
+
+    acknowledged = set(acknowledged_warnings or ())
+    current = set(preflight.warnings)
+    if acknowledged != current:
+        blockers.append("warnings_unacknowledged")
+
+    if blockers:
+        raise TermLifecycleError(
+            "term lifecycle action has blockers",
+            blockers=tuple(dict.fromkeys(blockers)),
+            warnings=preflight.warnings,
+            preflight=preflight,
+        )
+    return normalized_reason, tuple(preflight.warnings)
+
+
+def close_term(term_id, *, actor, confirmation_name, reason,
+               acknowledged_warnings=(), today=None):
+    today = today or timezone.localdate()
+    with transaction.atomic():
+        _authorize(actor)
+        term = AcademicTerm.objects.select_for_update().get(pk=term_id)
+        preflight = _action_preflight(term, action="close", today=today)
+        normalized_reason, acknowledged = _validate_common_action_inputs(
+            term,
+            preflight=preflight,
+            confirmation_name=confirmation_name,
+            reason=reason,
+            acknowledged_warnings=acknowledged_warnings,
+        )
+
+        before = term.status
+        term.status = AcademicTerm.Status.ARCHIVED
+        term.save(update_fields=["status"])
+        AuditLog.objects.create(
+            actor=actor,
+            event_type="term.archived",
+            target_type="academic_term",
+            target_id=str(term.pk),
+            payload={
+                "reason": normalized_reason,
+                "before": before,
+                "after": AcademicTerm.Status.ARCHIVED,
+                "schedule_count": preflight.counts["schedule_count"],
+                "session_count": preflight.counts["session_count"],
+                "active_session_count": preflight.counts["active_session_count"],
+                "acknowledged_warning_keys": list(acknowledged),
+            },
+        )
+        return term
+
+
+def reopen_term(term_id, *, actor, confirmation_name, reason,
+                acknowledged_warnings=(), today=None):
+    today = today or timezone.localdate()
+    with transaction.atomic():
+        _authorize(actor)
+        term = AcademicTerm.objects.select_for_update().get(pk=term_id)
+        preflight = _action_preflight(term, action="reopen", today=today)
+        normalized_reason, acknowledged = _validate_common_action_inputs(
+            term,
+            preflight=preflight,
+            confirmation_name=confirmation_name,
+            reason=reason,
+            acknowledged_warnings=acknowledged_warnings,
+        )
+
+        before = term.status
+        term.status = AcademicTerm.Status.DRAFT
+        term.save(update_fields=["status"])
+        AuditLog.objects.create(
+            actor=actor,
+            event_type="term.reopened",
+            target_type="academic_term",
+            target_id=str(term.pk),
+            payload={
+                "reason": normalized_reason,
+                "before": before,
+                "after": AcademicTerm.Status.DRAFT,
+                "schedule_count": preflight.counts["schedule_count"],
+                "session_count": preflight.counts["session_count"],
+                "active_session_count": preflight.counts["active_session_count"],
+                "acknowledged_warning_keys": list(acknowledged),
             },
         )
         return term
