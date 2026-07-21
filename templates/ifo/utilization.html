@@ -23,7 +23,7 @@ anything with. ASCII-only.{% endcomment %}
 {% block page_actions %}
 <button type="button" class="uk-btn uk-btn-secondary uk-btn-sm no-print" onclick="window.print()">
   <uk-icon icon="printer" class="size-4"></uk-icon> Print</button>
-<a href="/ifo/dashboard" class="uk-btn uk-btn-ghost uk-btn-sm no-print">
+<a href="/ifo/dashboard?{{ scope_query }}" class="uk-btn uk-btn-ghost uk-btn-sm no-print">
   <uk-icon icon="chevron-left" class="size-4"></uk-icon> Dashboard</a>
 {% endblock %}
 {% block console %}
@@ -33,16 +33,9 @@ anything with. ASCII-only.{% endcomment %}
 
 <form method="get" class="uk-card uk-card-body mb-6 no-print">
   <div class="flex flex-wrap items-end gap-4">
-    <label class="flex flex-col gap-1">
-      <span class="uk-text-small uk-text-muted">From</span>
-      <input type="date" name="from" class="uk-input" value="{{ date_from|date:'Y-m-d' }}">
-    </label>
-    <label class="flex flex-col gap-1">
-      <span class="uk-text-small uk-text-muted">To</span>
-      <input type="date" name="to" class="uk-input" value="{{ date_to|date:'Y-m-d' }}">
-    </label>
+    {% include "reports/_term_filter.html" %}
     <button type="submit" class="uk-btn uk-btn-primary uk-btn-sm">Apply</button>
-    <a href="/ifo/utilization" class="uk-btn uk-btn-ghost uk-btn-sm">Reset</a>
+    <a href="/ifo/utilization{% if scope.term %}?term={{ scope.term.pk }}{% endif %}" class="uk-btn uk-btn-ghost uk-btn-sm">Reset</a>
   </div>
   {% if range_note %}
   <p class="uk-text-small mt-2" style="color:var(--amber)">{{ range_note }}</p>
@@ -146,7 +139,7 @@ this sheet is or what window it covers.{% endcomment %}
     the literal & mirrors the dashboard occupancy card's link two surfaces
     over.{% endcomment %}
     <a class="uk-btn uk-btn-secondary uk-btn-sm no-print"
-       href="{% url 'ifo_utilization_csv' %}?from={{ date_from|date:'Y-m-d' }}&to={{ date_to|date:'Y-m-d' }}">
+       href="{% url 'ifo_utilization_csv' %}?{{ scope_query }}">
       <uk-icon icon="download" class="size-4"></uk-icon> Export CSV</a>
   </div>
   <p class="uk-text-small uk-text-muted px-4 mb-3">

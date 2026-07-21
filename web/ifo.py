@@ -52,7 +52,10 @@ from verification.services import assign_online_sessions
 from web.pagination import paginate
 from web.room_state import (ROOM_PROBLEM_STATES, ROOM_STATE_ORDER, occupies,
                             room_tile, room_timetable)
-from web.reporting_common import reporting_range as _reporting_range
+from web.reporting_common import (
+    reporting_range as _reporting_range,
+    selected_report_scope,
+)
 
 
 def ifo_required(view):
@@ -1430,6 +1433,13 @@ def _coverage_card(**kwargs):
     return rows
 
 
+def _ifo_report_scope(request):
+    """Preserve the established current-week ACTIVE default in ReportScope."""
+    return selected_report_scope(
+        request, default_window=lambda _term: _reporting_range(request)[:2]
+    )
+
+
 @ifo_required
 def dashboard(request):
     """IFO-09: an unscoped reporting dashboard of summary cards over a selectable
@@ -1450,8 +1460,19 @@ def dashboard(request):
     and ``rows`` -- and the template guards each one separately, so no single
     aggregate can blank the row.
     """
-    start, end, as_of, note = _reporting_range(request)
-    term = get_active_term()
+    scope = _ifo_report_scope(request)
+    start, end, as_of, note = scope.start, scope.end, scope.as_of, scope.note
+    term = scope.term
+    if not scope.is_valid:
+        error_card = (None, scope.error)
+        pager = paginate(request, [])
+        return render(request, "ifo/dashboard.html", {
+            "scope": scope, "scope_query": scope.scope_query,
+            "summary": error_card, "occupancy": error_card, "rows": error_card,
+            "coverage": error_card, "zero_floors": error_card,
+            "date_from": start, "date_to": end, "range_note": scope.error,
+            **pager,
+        })
     summary = safe_card(
         dept_summary, term=term, start=start, end=end, department=None,
         as_of=as_of)
@@ -1477,9 +1498,11 @@ def dashboard(request):
     # whole point of safe_card. Regression: web.tests_ifo_utilization
     # .DashboardCardIsolationTests.test_faculty_attendance_failure_does_not_500_via_paginate.
     pager = paginate(request, rows[0] or [])
+    pager["querystring"] = f"{scope.scope_query}&"
     return render(request, "ifo/dashboard.html", {
         "summary": summary, "occupancy": occupancy, "rows": rows,
         "coverage": coverage, "zero_floors": zero_floors,
+        "scope": scope, "scope_query": scope.scope_query,
         "date_from": start, "date_to": end, "range_note": note, **pager,
     })
 
@@ -1578,8 +1601,22 @@ def utilization(request):
     unwrapped, and ``date_from`` / ``date_to`` / ``range_note`` always present so
     the range control re-renders the applied window and its note.
     """
-    start, end, as_of, note = _reporting_range(request)
-    term = get_active_term()
+    report_scope = _ifo_report_scope(request)
+    start, end, as_of, note = (
+        report_scope.start, report_scope.end, report_scope.as_of, report_scope.note
+    )
+    term = report_scope.term
+    if not report_scope.is_valid:
+        error_card = (None, report_scope.error)
+        pager = paginate(request, [])
+        return render(request, "ifo/utilization.html", {
+            "scope": report_scope, "scope_query": report_scope.scope_query,
+            "grid": error_card, "rollup": error_card, "breakdown": error_card,
+            "saturation": error_card, "occupancy": error_card, "ghosts": error_card,
+            "heat_days": DayOfWeek.choices, "term": None,
+            "date_from": start, "date_to": end, "range_note": report_scope.error,
+            **pager,
+        })
     scope = {"start": start, "end": end, "term": term, "as_of": as_of}
 
     grid = safe_card(_heat_grid_card, **scope)
@@ -1596,10 +1633,12 @@ def utilization(request):
     # unguarded breakdown[0] turns one card failure into a 500 -- the exact bug
     # fixed on the dashboard in plan 03, which this page must not reintroduce.
     pager = paginate(request, breakdown[0] or [])
+    pager["querystring"] = f"{report_scope.scope_query}&"
     return render(request, "ifo/utilization.html", {
         "grid": grid, "rollup": rollup, "breakdown": breakdown,
         "saturation": saturation, "occupancy": occupancy, "ghosts": ghosts,
         "heat_days": DayOfWeek.choices, "term": term,
+        "scope": report_scope, "scope_query": report_scope.scope_query,
         "date_from": start, "date_to": end, "range_note": note, **pager,
     })
 
@@ -1613,9 +1652,16 @@ def scorecard(request, faculty_id):
     ``safe_card`` so an aggregate failure renders the shared error card, not a 500.
     """
     faculty = get_object_or_404(get_user_model(), pk=faculty_id)
-    start, end, as_of, note = _reporting_range(request)
+    scope = _ifo_report_scope(request)
+    start, end, as_of, note = scope.start, scope.end, scope.as_of, scope.note
+    if not scope.is_valid:
+        return render(request, "reports/scorecard.html", {
+            "faculty": faculty, "card": (None, scope.error),
+            "date_from": start, "date_to": end, "range_note": scope.error,
+            "scope_query": "", "export_csv_url": None,
+        })
     card = safe_card(
-        faculty_scorecard, term=get_active_term(), faculty=faculty,
+        faculty_scorecard, term=scope.term, faculty=faculty,
         start=start, end=end, as_of=as_of)
     modality_items = None
     if card[0] is not None:
@@ -1625,6 +1671,7 @@ def scorecard(request, faculty_id):
     return render(request, "reports/scorecard.html", {
         "faculty": faculty, "card": card, "modality_items": modality_items,
         "date_from": start, "date_to": end, "range_note": note,
+        "scope_query": scope.scope_query,
         "export_csv_url": f"/ifo/scorecard/{faculty.id}/export.csv",
     })
 
@@ -1641,13 +1688,16 @@ def scorecard_csv(request, faculty_id):
     out-of-range faculty simply yields a header-only CSV. Read-only (GET-only).
     """
     faculty = get_object_or_404(get_user_model(), pk=faculty_id)
-    start, end, as_of, _note = _reporting_range(request)
+    scope = _ifo_report_scope(request)
+    if not scope.is_valid:
+        return HttpResponse(scope.error, status=400, content_type="text/plain")
+    start, end, as_of = scope.start, scope.end, scope.as_of
     rows = [r for r in faculty_attendance(
-                term=get_active_term(), start=start, end=end, as_of=as_of)
+                term=scope.term, start=start, end=end, as_of=as_of)
             if r.faculty_id == faculty.id]
     resp = HttpResponse(build_csv(rows), content_type="text/csv")
     resp["Content-Disposition"] = (
-        f'attachment; filename="scorecard-{faculty.id}-{start}.csv"')
+        f'attachment; filename="scorecard-{faculty.id}-term-{scope.term.pk}-{start}.csv"')
     return resp
 
 
@@ -1685,8 +1735,10 @@ def utilization_csv(request):
     the range start, never request-derived, so a crafted querystring can inject
     neither a path nor a response header (T-11-11). Read-only, side-effect-free.
     """
-    start, end, as_of, _note = _reporting_range(request)
-    term = get_active_term()
+    scope = _ifo_report_scope(request)
+    if not scope.is_valid:
+        return HttpResponse(scope.error, status=400, content_type="text/plain")
+    start, end, as_of, term = scope.start, scope.end, scope.as_of, scope.term
     rows = room_breakdown(start=start, end=end, term=term, as_of=as_of)
 
     buf = io.StringIO()
@@ -1709,7 +1761,7 @@ def utilization_csv(request):
         ])
     resp = HttpResponse(buf.getvalue(), content_type="text/csv")
     resp["Content-Disposition"] = (
-        f'attachment; filename="utilization-{start}.csv"')
+        f'attachment; filename="utilization-term-{term.pk}-{start}.csv"')
     return resp
 
 
@@ -1734,27 +1786,34 @@ def weekly_reports(request):
     departments and the consolidated roll-up. Read-only (GET-only). An institution
     with no generated reports yet gets a calm Pattern-F empty state, never a crash.
     """
+    scope = _ifo_report_scope(request)
+    if not scope.is_valid:
+        return render(request, "ifo/weekly_reports.html", {
+            "scope": scope, "scope_query": "", "reports": [], "week": None,
+            "weeks": [], "range_note": scope.error,
+        })
     week_raw = (request.GET.get("week") or "").strip()
     week = parse_date(week_raw) if week_raw else None
     if week is None:
-        latest = WeeklyReport.objects.order_by("-week_start").first()
+        latest = WeeklyReport.objects.filter(term=scope.term).order_by("-week_start").first()
         week = latest.week_start if latest else None
 
     weeks = list(
-        WeeklyReport.objects.order_by("-week_start")
+        WeeklyReport.objects.filter(term=scope.term).order_by("-week_start")
         .values_list("week_start", flat=True).distinct())
 
     if week is not None:
         # NULLs sort first in ASC on both SQLite and MSSQL, so the department=None
         # roll-up leads the list; the template labels it "All departments".
         reports = list(
-            WeeklyReport.objects.filter(week_start=week)
+            WeeklyReport.objects.filter(term=scope.term, week_start=week)
             .select_related("department")
             .order_by("department__code"))
     else:
         reports = []
 
     return render(request, "ifo/weekly_reports.html", {
+        "scope": scope, "scope_query": scope.scope_query,
         "reports": reports, "week": week, "weeks": weeks,
     })
 
@@ -1769,7 +1828,10 @@ def weekly_download(request, pk, fmt):
     scoping: IFO is institution-wide, so any report pk -- INCLUDING the org-wide
     ``department=None`` roll-up -- resolves. Read-only (GET-only).
     """
-    report = get_object_or_404(WeeklyReport, pk=pk)
+    scope = _ifo_report_scope(request)
+    if not scope.is_valid:
+        raise Http404(scope.error)
+    report = get_object_or_404(WeeklyReport, pk=pk, term=scope.term)
     if fmt == "csv":
         path, content_type = report.csv_path, "text/csv"
     elif fmt == "pdf":

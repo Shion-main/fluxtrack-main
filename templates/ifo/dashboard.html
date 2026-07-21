@@ -12,16 +12,9 @@ weekly consolidated report now lives in the sidebar (Weekly reports). ASCII-only
 
 <form method="get" class="uk-card uk-card-body mb-6">
   <div class="flex flex-wrap items-end gap-4">
-    <label class="flex flex-col gap-1">
-      <span class="uk-text-small uk-text-muted">From</span>
-      <input type="date" name="from" class="uk-input" value="{{ date_from|date:'Y-m-d' }}">
-    </label>
-    <label class="flex flex-col gap-1">
-      <span class="uk-text-small uk-text-muted">To</span>
-      <input type="date" name="to" class="uk-input" value="{{ date_to|date:'Y-m-d' }}">
-    </label>
+    {% include "reports/_term_filter.html" %}
     <button type="submit" class="uk-btn uk-btn-primary uk-btn-sm">Apply</button>
-    <a href="/ifo/dashboard" class="uk-btn uk-btn-ghost uk-btn-sm">Reset</a>
+    <a href="/ifo/dashboard{% if scope.term %}?term={{ scope.term.pk }}{% endif %}" class="uk-btn uk-btn-ghost uk-btn-sm">Reset</a>
   </div>
   {% if range_note %}
   <p class="uk-text-small mt-2" style="color:var(--amber)">{{ range_note }}</p>

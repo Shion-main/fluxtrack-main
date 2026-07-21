@@ -51,7 +51,7 @@ value so colour is never the only signal. ASCII-only.
       how much capacity is idle, and the only useful next question is WHERE, which
       is the utilization page's whole job (IFO-09 tier T2).{% endcomment %}
       <div class="uk-h2 mt-1">
-        <a href="{% url 'ifo_utilization' %}?from={{ date_from|date:'Y-m-d' }}&to={{ date_to|date:'Y-m-d' }}">{{ occupancy.0.used_hours }}</a></div>
+        <a href="{% url 'ifo_utilization' %}?{{ scope_query }}">{{ occupancy.0.used_hours }}</a></div>
       <div class="uk-text-small uk-text-muted">session-hours used of {{ occupancy.0.booked_hours }} booked</div>
       {% comment %}Deliberately pill--info (neutral), NOT the ok/warn/bad ladder
       the attendance pills use. Attendance has an agreed target; room utilization
@@ -113,7 +113,7 @@ value so colour is never the only signal. ASCII-only.
         {% for row in page.object_list %}
         <tr>
           <td class="tbl__id">
-            <a class="inline-flex items-center gap-1" href="{% url 'ifo_scorecard' row.faculty_id %}?from={{ date_from|date:'Y-m-d' }}&to={{ date_to|date:'Y-m-d' }}">
+            <a class="inline-flex items-center gap-1" href="{% url 'ifo_scorecard' row.faculty_id %}?{{ scope_query }}">
               {{ row.name }} <uk-icon icon="chevron-right" class="size-4"></uk-icon></a>
           </td>
           <td class="tbl__num">{{ row.scheduled }}</td>

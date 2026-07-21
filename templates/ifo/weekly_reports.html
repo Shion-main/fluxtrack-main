@@ -11,9 +11,10 @@ NO write controls. ASCII-only.{% endcomment %}
 {% block console %}
 <p class="uk-text-muted mb-6">Download the stored weekly attendance reports (RPT-01/03). Each department has its own report; the institution-wide roll-up covers every department. Read-only.</p>
 
-{% if weeks %}
 <form method="get" class="uk-card uk-card-body mb-6">
   <div class="flex flex-wrap items-end gap-4">
+    {% include "reports/_term_filter.html" %}
+    {% if weeks %}
     <label class="flex flex-col gap-1">
       <span class="uk-text-small uk-text-muted">Week of</span>
       <select name="week" class="uk-select" onchange="this.form.submit()">
@@ -22,10 +23,10 @@ NO write controls. ASCII-only.{% endcomment %}
         {% endfor %}
       </select>
     </label>
+    {% endif %}
     <button type="submit" class="uk-btn uk-btn-primary uk-btn-sm">Apply</button>
   </div>
 </form>
-{% endif %}
 
 {% if reports %}
 <div class="uk-card uk-card-body p-0 table-wrap">
@@ -50,9 +51,9 @@ NO write controls. ASCII-only.{% endcomment %}
         <td class="tbl__time">{{ r.week_start|date:'M j, Y' }}</td>
         <td class="tbl__actions">
           <div class="flex items-center justify-end gap-2">
-            <a href="{% url 'ifo_weekly_download' r.pk 'csv' %}" class="uk-btn uk-btn-secondary uk-btn-sm" download>
+            <a href="{% url 'ifo_weekly_download' r.pk 'csv' %}?{{ scope_query }}&amp;week={{ r.week_start|date:'Y-m-d' }}" class="uk-btn uk-btn-secondary uk-btn-sm" download>
               <uk-icon icon="download" class="size-4"></uk-icon> Export CSV</a>
-            <a href="{% url 'ifo_weekly_download' r.pk 'pdf' %}" class="uk-btn uk-btn-primary uk-btn-sm" download>
+            <a href="{% url 'ifo_weekly_download' r.pk 'pdf' %}?{{ scope_query }}&amp;week={{ r.week_start|date:'Y-m-d' }}" class="uk-btn uk-btn-primary uk-btn-sm" download>
               <uk-icon icon="file-text" class="size-4"></uk-icon> Download PDF</a>
           </div>
         </td>
