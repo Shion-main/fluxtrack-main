@@ -70,6 +70,12 @@ urlpatterns = [
     path("ifo/terms", ifo_terms.terms_list, name="ifo_terms"),
     path("ifo/terms/create", ifo_terms.term_create, name="ifo_term_create"),
     path("ifo/terms/<int:pk>", ifo_terms.term_detail, name="ifo_term_detail"),
+    path("ifo/terms/<int:pk>/activate", ifo_terms.term_activate,
+         name="ifo_term_activate"),
+    path("ifo/terms/<int:pk>/close", ifo_terms.term_close,
+         name="ifo_term_close"),
+    path("ifo/terms/<int:pk>/reopen", ifo_terms.term_reopen,
+         name="ifo_term_reopen"),
     # Phase 10 campus structure: building + floor CRUD (rooms hang off floors).
     path("ifo/buildings", ifo.buildings_list, name="ifo_buildings"),
     path("ifo/buildings/create", ifo.building_create, name="ifo_building_create"),

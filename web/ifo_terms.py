@@ -9,8 +9,12 @@ from django.views.decorators.http import require_http_methods
 from scheduling.models import AcademicTerm
 from scheduling.term_lifecycle import (
     TermLifecycleError,
+    activate_term,
+    close_term,
     create_term,
+    preflight_term_action,
     preflight_term_creation,
+    reopen_term,
 )
 from web.ifo import ifo_required
 
@@ -22,6 +26,24 @@ _STATUS_ORDER = Case(
     default=Value(3),
     output_field=IntegerField(),
 )
+
+_BLOCKER_COPY = {
+    "not_active": "Only the Active term can be closed.",
+    "before_end_date": "The term cannot close before its end date.",
+    "active_sessions": "Active sessions must finish before this term can close.",
+    "not_archived": "Only an Archived term can be reopened.",
+    "not_draft": "Only a Draft term can be activated.",
+    "date_order": "The term dates are not ordered.",
+    "another_active": "Another term is Active. Close it in a separate request first.",
+    "confirmation_mismatch": "The typed name does not exactly match this term.",
+    "reason_required": "A reason is required for this action.",
+    "warnings_unacknowledged": "Every current warning must be acknowledged.",
+}
+_WARNING_COPY = {
+    "empty_schedule_set": "This Draft has no recurring schedules.",
+    "scheduled_sessions_present": "Scheduled sessions remain and will be preserved.",
+    "active_successor_exists": "A newer term is Active and will remain unchanged.",
+}
 
 
 def _term_queryset():
@@ -119,3 +141,91 @@ def term_detail(request, pk):
         "term": term,
         "actions": actions,
     })
+
+
+def _action_context(term, action, preflight, *, error="", refusal_blockers=()):
+    return {
+        "term": term,
+        "action": action,
+        "action_label": {
+            "activate": "Activate term",
+            "close": "Close and archive term",
+            "reopen": "Reopen as Draft",
+        }[action],
+        "preflight": preflight,
+        "needs_reason": action in {"close", "reopen"},
+        "blocker_rows": [
+            (key, _BLOCKER_COPY.get(key, key.replace("_", " ")))
+            for key in preflight.blockers
+        ],
+        "warning_rows": [
+            (key, _WARNING_COPY.get(key, key.replace("_", " ")))
+            for key in preflight.warnings
+        ],
+        "error": error,
+        "refusal_rows": [
+            (key, _BLOCKER_COPY.get(key, key.replace("_", " ")))
+            for key in refusal_blockers
+        ],
+    }
+
+
+def _term_action(request, pk, action):
+    term = get_object_or_404(AcademicTerm, pk=pk)
+    preflight = preflight_term_action(pk, action, actor=request.user)
+    if request.method == "GET":
+        return render(
+            request,
+            "ifo/term_action.html",
+            _action_context(term, action, preflight),
+        )
+
+    common = {
+        "actor": request.user,
+        "confirmation_name": request.POST.get("confirmation_name", ""),
+        "acknowledged_warnings": request.POST.getlist("acknowledged_warnings"),
+    }
+    try:
+        if action == "activate":
+            changed = activate_term(pk, **common)
+        elif action == "close":
+            changed = close_term(pk, reason=request.POST.get("reason", ""), **common)
+        else:
+            changed = reopen_term(pk, reason=request.POST.get("reason", ""), **common)
+    except TermLifecycleError as exc:
+        # Display state is never authority. Re-run the service preflight after
+        # every refusal so the 400 page reflects the state that blocked POST.
+        term.refresh_from_db()
+        fresh = preflight_term_action(pk, action, actor=request.user)
+        return render(request, "ifo/term_action.html", _action_context(
+            term,
+            action,
+            fresh,
+            error=str(exc),
+            refusal_blockers=exc.blockers,
+        ), status=400)
+
+    messages.success(request, {
+        "activate": f"{changed.name} is now Active.",
+        "close": f"{changed.name} was closed and archived.",
+        "reopen": f"{changed.name} was reopened as Draft.",
+    }[action])
+    return redirect("ifo_term_detail", pk=changed.pk)
+
+
+@ifo_required
+@require_http_methods(["GET", "POST"])
+def term_activate(request, pk):
+    return _term_action(request, pk, "activate")
+
+
+@ifo_required
+@require_http_methods(["GET", "POST"])
+def term_close(request, pk):
+    return _term_action(request, pk, "close")
+
+
+@ifo_required
+@require_http_methods(["GET", "POST"])
+def term_reopen(request, pk):
+    return _term_action(request, pk, "reopen")

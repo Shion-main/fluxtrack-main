@@ -1,0 +1,37 @@
+{% extends "ifo/_console.html" %}
+{% block title %}{{ action_label }} - FluxTrack{% endblock %}
+{% block console_title %}{{ action_label }}{% endblock %}
+{% block page_actions %}<a href="{% url 'ifo_term_detail' term.pk %}" class="uk-btn uk-btn-ghost uk-btn-sm">Back to {{ term.name }}</a>{% endblock %}
+{% block console %}
+<div class="max-w-3xl">
+  {% if error %}<div class="uk-alert uk-alert-destructive mb-4" role="alert"><p><strong>Nothing changed.</strong> {{ error }}</p>
+    {% if refusal_rows %}<ul class="list-disc pl-5">{% for key, copy in refusal_rows %}<li data-refusal="{{ key }}">{{ copy }} ({{ key }})</li>{% endfor %}</ul>{% endif %}</div>{% endif %}
+  <div class="uk-card uk-card-body mb-6">
+    <div class="flex items-center gap-3 mb-4"><h2 class="uk-h3">{{ term.name }}</h2><span class="pill">{{ term.get_status_display }}</span></div>
+    <p class="uk-text-small uk-text-muted mb-4">{{ term.start_date }} - {{ term.end_date }}</p>
+    <dl class="grid gap-3 sm:grid-cols-3 uk-text-small">
+      <div><dt class="uk-text-muted">Schedules</dt><dd>{{ preflight.counts.schedule_count }}</dd></div>
+      <div><dt class="uk-text-muted">Sessions</dt><dd>{{ preflight.counts.session_count }}</dd></div>
+      <div><dt class="uk-text-muted">Active sessions</dt><dd>{{ preflight.counts.active_session_count }}</dd></div>
+    </dl>
+  </div>
+
+  {% if blocker_rows %}<div class="uk-alert uk-alert-destructive mb-6" role="alert">
+    <h2 class="uk-h4 mb-2">This action is blocked</h2><ul class="list-disc pl-5">{% for key, copy in blocker_rows %}<li data-blocker="{{ key }}">{{ copy }} ({{ key }})</li>{% endfor %}</ul>
+  </div>{% endif %}
+
+  <form method="post" class="uk-card uk-card-body flex flex-col gap-4">
+    {% csrf_token %}
+    {% if warning_rows %}<fieldset><legend class="uk-h4 mb-2">Warnings to acknowledge</legend>
+      {% for key, copy in warning_rows %}<label class="flex items-start gap-2 mb-2" data-warning="{{ key }}">
+        <input type="checkbox" name="acknowledged_warnings" value="{{ key }}" required>
+        <span>{{ copy }} ({{ key }})</span></label>{% endfor %}
+    </fieldset>{% endif %}
+    <div><label class="uk-form-label" for="confirmation-name">Type the exact term name: {{ term.name }}</label>
+      <input id="confirmation-name" class="uk-input h-11" type="text" name="confirmation_name" required autocomplete="off"></div>
+    {% if needs_reason %}<div><label class="uk-form-label" for="action-reason">Reason</label>
+      <textarea id="action-reason" class="uk-textarea" name="reason" rows="4" required></textarea></div>{% endif %}
+    <button type="submit" class="uk-btn {% if action == 'close' %}uk-btn-destructive{% else %}uk-btn-primary{% endif %} h-11" {% if preflight.blockers %}disabled aria-disabled="true"{% endif %}>{{ action_label }}</button>
+  </form>
+</div>
+{% endblock %}
