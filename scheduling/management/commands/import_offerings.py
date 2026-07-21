@@ -24,8 +24,8 @@ What it does now (vs. the old CSV-only importer that dropped 1,215 meetings):
   * D9  — roomless PHYSICAL sections load against a single shared "TBA" placeholder
           Room in the Unassigned building (section labels are never treated as
           rooms); roomless ONLINE sections get an Online placeholder room.
-  * D8  — still sets ``Schedule.faculty``; materialize_sessions copies it onto
-          Session.faculty unchanged (that path is NOT touched here).
+  * D8  — still sets ``Schedule.faculty`` on recurring Schedule rows; dated
+          Session rows are created by the separate materialization service.
   * D6  — the AcademicTerm target is explicit; lifecycle transitions happen elsewhere.
 
 Usage:
