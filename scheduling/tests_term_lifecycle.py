@@ -5,7 +5,7 @@ checked-in SQLite file is not migration evidence; the constraint tests must run
 against the configured Django test database, and production-shaped data still
 needs the migration rehearsal described in the plan before production use.
 """
-from datetime import date, datetime, time
+from datetime import date, datetime, time, timedelta
 from io import StringIO
 from pathlib import Path
 from unittest.mock import patch
@@ -16,10 +16,12 @@ from django.core.management.base import CommandError
 from django.db import IntegrityError, transaction
 from django.contrib.auth import get_user_model
 from django.test import SimpleTestCase, TestCase, TransactionTestCase
+from django.utils import timezone
 
 from accounts.models import Department, Role
 from campus.models import Building, Floor, Room
-from ops.models import AuditLog, Notification
+from ops.models import AuditLog, Notification, RoomConflictFlag
+from scheduling.jobs import detect_room_conflicts, sweep_no_shows
 from scheduling.materialization import MaterializationError, materialize_term
 from scheduling.merge import propagate_merged_present
 from scheduling.models import (
@@ -59,6 +61,8 @@ from scheduling.term_scope import (
     require_active_term,
     require_writable_term,
 )
+from verification.models import Assignment, AssignmentScope, DutyRole
+from verification.services import assign_online_sessions
 
 
 class TermConstraintTests(TransactionTestCase):
@@ -794,6 +798,166 @@ class ActiveTermJobScopeTests(TestCase):
         self.active_schedule = _schedule(self.active, self.faculty, "jba")
         self.draft_schedule = _schedule(self.draft, self.faculty, "jbd")
         self.archived_schedule = _schedule(self.archived, self.faculty, "jbh")
+
+    def _job_session(
+        self,
+        schedule,
+        *,
+        status=SessionStatus.SCHEDULED,
+        room=None,
+        hour=8,
+    ):
+        d = date(2026, 7, 6)
+        start = timezone.make_aware(datetime.combine(d, time(hour, 0)))
+        return Session.objects.create(
+            schedule=schedule,
+            faculty=self.faculty,
+            room=room or schedule.room,
+            date=d,
+            scheduled_start=start,
+            scheduled_end=start + timedelta(minutes=90),
+            status=status,
+        )
+
+    def test_sweep_no_shows_marks_only_active_term_same_date_candidates(self):
+        active = self._job_session(self.active_schedule)
+        draft = self._job_session(self.draft_schedule)
+        archived = self._job_session(self.archived_schedule)
+        now = timezone.make_aware(datetime(2026, 7, 6, 10, 0))
+
+        marked = sweep_no_shows(now=now)
+
+        self.assertEqual(marked, 1)
+        active.refresh_from_db()
+        draft.refresh_from_db()
+        archived.refresh_from_db()
+        self.assertEqual(active.status, SessionStatus.ABSENT)
+        self.assertEqual(draft.status, SessionStatus.SCHEDULED)
+        self.assertEqual(archived.status, SessionStatus.SCHEDULED)
+        self.assertEqual(
+            list(AuditLog.objects.values_list("target_id", flat=True)),
+            [str(active.pk)],
+        )
+
+    def test_sweep_no_shows_without_active_term_is_zero_effect(self):
+        self.active.status = AcademicTerm.Status.ARCHIVED
+        self.active.save(update_fields=["status"])
+        session = self._job_session(self.active_schedule)
+        now = timezone.make_aware(datetime(2026, 7, 6, 10, 0))
+
+        marked = sweep_no_shows(now=now)
+
+        session.refresh_from_db()
+        self.assertEqual(marked, 0)
+        self.assertEqual(session.status, SessionStatus.SCHEDULED)
+        self.assertEqual(AuditLog.objects.count(), 0)
+
+    def test_conflict_detection_ignores_non_active_same_room_sessions(self):
+        room = self.active_schedule.room
+        self._job_session(self.draft_schedule, status=SessionStatus.ACTIVE, room=room)
+        self._job_session(
+            self.archived_schedule,
+            status=SessionStatus.ACTIVE,
+            room=room,
+        )
+
+        flagged = detect_room_conflicts()
+
+        self.assertEqual(flagged, 0)
+        self.assertEqual(RoomConflictFlag.objects.count(), 0)
+        self.assertEqual(Notification.objects.count(), 0)
+
+    def test_conflict_detection_flags_only_active_term_room_pairs(self):
+        room = self.active_schedule.room
+        self._job_session(self.active_schedule, status=SessionStatus.ACTIVE, room=room)
+        self._job_session(
+            self.archived_schedule,
+            status=SessionStatus.ACTIVE,
+            room=room,
+        )
+
+        self.assertEqual(detect_room_conflicts(), 0)
+
+        other_active_schedule = _schedule(self.active, self.faculty, "jbc")
+        self._job_session(other_active_schedule, status=SessionStatus.ACTIVE, room=room)
+
+        self.assertEqual(detect_room_conflicts(), 1)
+        self.assertEqual(RoomConflictFlag.objects.count(), 1)
+
+    def test_online_assignment_uses_only_active_sessions_and_duty(self):
+        checker = _user("active_job_checker", role=Role.CHECKER)
+        Assignment.objects.create(
+            user=checker,
+            role=DutyRole.CHECKER,
+            type="standing",
+            scope=AssignmentScope.ONLINE,
+            term=self.active,
+            status="active",
+        )
+        self.active_schedule.modality = Modality.ONLINE
+        self.active_schedule.save(update_fields=["modality"])
+        self.draft_schedule.modality = Modality.ONLINE
+        self.draft_schedule.save(update_fields=["modality"])
+        self.archived_schedule.modality = Modality.ONLINE
+        self.archived_schedule.save(update_fields=["modality"])
+        active = self._job_session(self.active_schedule)
+        draft = self._job_session(self.draft_schedule)
+        archived = self._job_session(self.archived_schedule)
+
+        result = assign_online_sessions(date(2026, 7, 6))
+
+        self.assertEqual(result, {"assigned": 1, "unassigned": 0})
+        active.refresh_from_db()
+        draft.refresh_from_db()
+        archived.refresh_from_db()
+        self.assertEqual(active.online_checker_id, checker.id)
+        self.assertIsNone(draft.online_checker_id)
+        self.assertIsNone(archived.online_checker_id)
+
+    def test_online_assignment_ignores_non_active_duty_and_no_active_is_noop(self):
+        checker = _user("draft_job_checker", role=Role.CHECKER)
+        Assignment.objects.create(
+            user=checker,
+            role=DutyRole.CHECKER,
+            type="standing",
+            scope=AssignmentScope.ONLINE,
+            term=self.draft,
+            status="active",
+        )
+        self.active_schedule.modality = Modality.ONLINE
+        self.active_schedule.save(update_fields=["modality"])
+        active = self._job_session(self.active_schedule)
+
+        result = assign_online_sessions(date(2026, 7, 6))
+
+        active.refresh_from_db()
+        self.assertEqual(result, {"assigned": 0, "unassigned": 1})
+        self.assertIsNone(active.online_checker_id)
+
+        Notification.objects.all().delete()
+        self.active.status = AcademicTerm.Status.ARCHIVED
+        self.active.save(update_fields=["status"])
+
+        result = assign_online_sessions(date(2026, 7, 6))
+
+        active.refresh_from_db()
+        self.assertEqual(result, {"assigned": 0, "unassigned": 0})
+        self.assertIsNone(active.online_checker_id)
+        self.assertEqual(Notification.objects.count(), 0)
+
+    def test_job_source_coupling_names_authoritative_active_scope(self):
+        jobs_source = Path("scheduling/jobs.py").read_text(encoding="utf-8")
+        services_source = Path("verification/services.py").read_text(encoding="utf-8")
+        command_source = Path(
+            "scheduling/management/commands/assign_online.py"
+        ).read_text(encoding="utf-8")
+
+        self.assertIn("get_active_term()", jobs_source)
+        self.assertIn("schedule__term=active_term", jobs_source)
+        self.assertIn("get_active_term()", services_source)
+        self.assertIn("schedule__term=active_term", services_source)
+        self.assertIn("term=active_term", services_source)
+        self.assertIn("get_active_term()", command_source)
 
     def test_no_option_command_touches_only_authoritative_active_term(self):
         out = StringIO()

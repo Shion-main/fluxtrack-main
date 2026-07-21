@@ -128,7 +128,8 @@ class _CheckerFixtureMixin:
         self.other_floor = Floor.objects.create(building=self.bldg, number=2)
         self.term = AcademicTerm.objects.create(
             name="Checker Term", start_date=date(2026, 1, 1),
-            end_date=date(2026, 12, 31), is_active=True)
+            end_date=date(2026, 12, 31),
+            status=AcademicTerm.Status.ACTIVE)
         self._i = 0
 
     def _next(self):
@@ -486,6 +487,83 @@ class DistributeDBTests(_CheckerFixtureMixin, TestCase):
     def _online_session(self, status=SessionStatus.SCHEDULED):
         # An online session (schedule.modality online) with no owner yet.
         return self._session(self._room(), modality=Modality.ONLINE, status=status)
+
+    def test_assignment_scopes_sessions_to_authoritative_active_term(self):
+        from verification.services import assign_online_sessions
+        checker = self._checker()
+        self._online_duty(checker)
+        active_session = self._online_session()
+        draft = AcademicTerm.objects.create(
+            name="Checker Draft Term",
+            start_date=self.term.start_date,
+            end_date=self.term.end_date,
+            status=AcademicTerm.Status.DRAFT,
+        )
+        archived = AcademicTerm.objects.create(
+            name="Checker Archived Term",
+            start_date=self.term.start_date,
+            end_date=self.term.end_date,
+            status=AcademicTerm.Status.ARCHIVED,
+        )
+        draft_session = self._online_session()
+        draft_session.schedule.term = draft
+        draft_session.schedule.save(update_fields=["term"])
+        archived_session = self._online_session()
+        archived_session.schedule.term = archived
+        archived_session.schedule.save(update_fields=["term"])
+
+        result = assign_online_sessions(timezone.localdate())
+
+        self.assertEqual(result, {"assigned": 1, "unassigned": 0})
+        active_session.refresh_from_db()
+        draft_session.refresh_from_db()
+        archived_session.refresh_from_db()
+        self.assertEqual(active_session.online_checker_id, checker.id)
+        self.assertIsNone(draft_session.online_checker_id)
+        self.assertIsNone(archived_session.online_checker_id)
+
+    def test_assignment_ignores_duty_outside_active_term(self):
+        from verification.services import assign_online_sessions
+        ifo = self._ifo_admin()
+        checker = self._checker()
+        draft = AcademicTerm.objects.create(
+            name="Checker Duty Draft Term",
+            start_date=self.term.start_date,
+            end_date=self.term.end_date,
+            status=AcademicTerm.Status.DRAFT,
+        )
+        Assignment.objects.create(
+            user=checker,
+            role=DutyRole.CHECKER,
+            type="standing",
+            scope="online",
+            term=draft,
+            status="active",
+        )
+        session = self._online_session()
+
+        result = assign_online_sessions(timezone.localdate())
+
+        session.refresh_from_db()
+        self.assertEqual(result, {"assigned": 0, "unassigned": 1})
+        self.assertIsNone(session.online_checker_id)
+        self.assertTrue(
+            Notification.objects.filter(user=ifo, type="online_unassigned").exists())
+
+    def test_assignment_without_active_term_is_noop(self):
+        from verification.services import assign_online_sessions
+        checker = self._checker()
+        self._online_duty(checker)
+        session = self._online_session()
+        self.term.status = AcademicTerm.Status.ARCHIVED
+        self.term.save(update_fields=["status"])
+
+        result = assign_online_sessions(timezone.localdate())
+
+        session.refresh_from_db()
+        self.assertEqual(result, {"assigned": 0, "unassigned": 0})
+        self.assertIsNone(session.online_checker_id)
+        self.assertEqual(Notification.objects.count(), 0)
 
     def test_no_checker_leaves_unassigned(self):
         # No online-duty Checker exists for the date -> the online session stays
