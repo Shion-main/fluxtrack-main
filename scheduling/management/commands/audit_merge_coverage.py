@@ -29,7 +29,8 @@ from collections import defaultdict
 from django.core.management.base import BaseCommand, CommandError
 
 from scheduling.merge import merged_sibling_ids
-from scheduling.models import AcademicTerm, Modality, Session
+from scheduling.models import Modality, Session
+from scheduling.term_scope import NoActiveTermError, require_active_term
 
 
 def _effective_modality(session):
@@ -42,8 +43,9 @@ class Command(BaseCommand):
             "term (read-only, criterion #3).")
 
     def handle(self, *args, **o):
-        term = AcademicTerm.objects.filter(is_active=True).first()
-        if term is None:
+        try:
+            term = require_active_term()
+        except NoActiveTermError:
             self.stdout.write("audit_merge_coverage: no active term -> nothing to audit.")
             return
 

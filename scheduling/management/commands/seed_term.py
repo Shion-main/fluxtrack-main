@@ -44,10 +44,13 @@ from django.utils import timezone
 from accounts.models import Department, Role
 from campus.models import Floor, Room
 from ops.models import JobRun, Notification
-from scheduling.models import (AcademicTerm, CheckinMethod, Modality,
+from scheduling.models import (CheckinMethod, Modality,
                                ModalityShiftItem, ModalityShiftRequest,
                                ModalityShiftStatus, Schedule, ScheduleStatus,
                                Session, SessionStatus)
+from scheduling.term_scope import (ArchivedTermError, NoActiveTermError,
+                                   require_active_term,
+                                   require_writable_term)
 from verification.models import (Assignment, AssignmentScope, AssignmentType,
                                  CheckerValidation, DutyRole, ValidationAction)
 
@@ -124,6 +127,15 @@ def _purge(model, chunk=400):
         model.objects.filter(pk__in=ids).delete()
 
 
+def _purge_queryset(qs, chunk=400):
+    """Delete rows from an already-scoped queryset in small SQL Server-safe chunks."""
+    while True:
+        ids = list(qs.values_list("pk", flat=True)[:chunk])
+        if not ids:
+            return
+        qs.model.objects.filter(pk__in=ids).delete()
+
+
 class Command(BaseCommand):
     help = "Reshape the imported term into a realistic populated snapshot."
 
@@ -140,9 +152,12 @@ class Command(BaseCommand):
                 "really mean it.")
 
         self.rng = random.Random(SEED)
-        self.term = AcademicTerm.objects.filter(is_active=True).first()
-        if self.term is None:
-            raise CommandError("No active term. Run the offering import first.")
+        try:
+            self.term = require_writable_term(require_active_term())
+        except NoActiveTermError as exc:
+            raise CommandError("No ACTIVE academic term. Activate a term first.") from exc
+        except ArchivedTermError as exc:
+            raise CommandError(str(exc)) from exc
 
         self.today = timezone.localdate()
         self.stdout.write(self.style.MIGRATE_HEADING(
@@ -301,7 +316,7 @@ class Command(BaseCommand):
     # -- 4. Sessions from term start to today ----------------------------------
     def step_sessions(self, keep=False):
         if not keep:
-            _purge(Session)
+            _purge_queryset(Session.objects.filter(schedule__term=self.term))
 
         schedules = list(Schedule.objects.filter(
             term=self.term, status=ScheduleStatus.ACTIVE
@@ -349,6 +364,7 @@ class Command(BaseCommand):
         now = timezone.now()
         done, absent, late = [], [], []
         for s in Session.objects.filter(
+                schedule__term=self.term,
                 scheduled_end__lt=now).select_related("schedule").iterator():
             bad = s.faculty_id in self.problem_faculty
             roll = self.rng.random()
@@ -383,6 +399,7 @@ class Command(BaseCommand):
 
         # Whatever is running right now should read as running.
         active = list(Session.objects.filter(
+            schedule__term=self.term,
             scheduled_start__lte=now, scheduled_end__gt=now,
             status=SessionStatus.SCHEDULED)[:400])
         for s in active:
@@ -400,10 +417,13 @@ class Command(BaseCommand):
 
     # -- 6. Checker validations -------------------------------------------------
     def step_validations(self):
-        _purge(CheckerValidation)
+        _purge_queryset(
+            CheckerValidation.objects.filter(session__schedule__term=self.term)
+        )
         rows = []
         held = (Session.objects
-                .filter(status__in=[SessionStatus.COMPLETED, SessionStatus.ACTIVE])
+                .filter(schedule__term=self.term,
+                        status__in=[SessionStatus.COMPLETED, SessionStatus.ACTIVE])
                 .select_related("room")
                 .order_by("-date")[:2500])
         for s in held:
@@ -416,7 +436,8 @@ class Command(BaseCommand):
                 identity_match=True,
                 scanned_at=s.actual_start or s.scheduled_start))
         # A few honest contradictions, so the flag path is not hypothetical.
-        for s in Session.objects.filter(status=SessionStatus.ABSENT)[:60]:
+        for s in Session.objects.filter(
+                schedule__term=self.term, status=SessionStatus.ABSENT)[:60]:
             rows.append(CheckerValidation(
                 session=s, room=s.room, checker=self.rng.choice(self.checkers),
                 action=ValidationAction.FLAG_NOT_PRESENT, identity_match=False,
@@ -426,7 +447,7 @@ class Command(BaseCommand):
 
     # -- 7. Duty rosters ---------------------------------------------------------
     def step_duty(self):
-        _purge(Assignment)
+        _purge_queryset(Assignment.objects.filter(term=self.term))
         floors = list(Floor.objects.select_related("building")
                       .exclude(building__code="ONLINE").order_by("building__code", "number"))
         made = 0
@@ -456,7 +477,11 @@ class Command(BaseCommand):
     def step_shift_requests(self):
         """A spread across every status, so the Dean queue has something pending
         AND a decided history to page through."""
-        _purge(ModalityShiftRequest)
+        _purge_queryset(
+            ModalityShiftRequest.objects
+            .filter(items__schedule__term=self.term)
+            .distinct()
+        )
         schedules = list(Schedule.objects.filter(
             term=self.term, status=ScheduleStatus.ACTIVE
         ).select_related("faculty", "faculty__department", "room")[:600])
@@ -506,8 +531,11 @@ class Command(BaseCommand):
     def step_notifications(self):
         _purge(Notification)
         rows = []
-        pending = ModalityShiftRequest.objects.filter(
-            status=ModalityShiftStatus.PENDING).select_related("dean", "requester")
+        pending = (ModalityShiftRequest.objects.filter(
+            items__schedule__term=self.term,
+            status=ModalityShiftStatus.PENDING)
+            .select_related("dean", "requester")
+            .distinct())
         for req in pending:
             if req.dean_id:
                 rows.append(Notification(
@@ -516,8 +544,11 @@ class Command(BaseCommand):
                     body=f"{req.requester.get_full_name() or req.requester.username} "
                          f"requested a shift to {req.get_target_modality_display()}.",
                     link="/dean/requests"))
-        decided = ModalityShiftRequest.objects.exclude(
-            status=ModalityShiftStatus.PENDING).select_related("requester")[:40]
+        decided = (ModalityShiftRequest.objects.filter(
+            items__schedule__term=self.term)
+            .exclude(status=ModalityShiftStatus.PENDING)
+            .select_related("requester")
+            .distinct()[:40])
         for req in decided:
             rows.append(Notification(
                 user_id=req.requester_id, type="modality_decision",
