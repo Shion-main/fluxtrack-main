@@ -5,16 +5,16 @@ milestone_name: — "Operational Trust"
 current_phase: 12
 current_phase_name: Term Lifecycle
 status: In Progress
-stopped_at: Completed 12-02-PLAN.md
-last_updated: "2026-07-21T17:24:46.632Z"
+stopped_at: Completed 12-03-PLAN.md
+last_updated: "2026-07-21T17:34:39.739Z"
 last_activity: 2026-07-20
 last_activity_desc: Phase 11 complete, transitioned to Phase 12
 progress:
   total_phases: 18
   completed_phases: 10
   total_plans: 75
-  completed_plans: 64
-  percent: 85
+  completed_plans: 65
+  percent: 87
 ---
 
 # Project State
@@ -151,6 +151,7 @@ Phase 07 and remain out of scope.
 | Phase 11 P03 | 18min | 3 tasks | 7 files |
 | Phase 12 P01 | 29 min | 3 tasks | 7 files |
 | Phase 12 P02 | 9 min | 3 tasks | 5 files |
+| Phase 12 P03 | 22 min | 2 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -241,8 +242,11 @@ Recent decisions affecting current work:
 - [Phase 12]: Creation, close, and reopen services re-authorize and recompute blockers inside `transaction.atomic()` before state changes; AuditLog is written in the same transaction.
 - [Phase 12]: Public materialization never receives the Draft override; only activate_term calls materialize_term(..., allow_draft=True) in production source.
 - [Phase 12]: Activation records materialization counts in the term.activated AuditLog payload and lets unexpected materialization failures escape for full rollback.
+- [Phase 12]: WeeklyReport legacy backfill assigns term only when the report week intersects exactly one AcademicTerm; no current-ACTIVE fallback is allowed.
+- [Phase 12]: ImportStaging.term is nullable only for legacy staged rows; Plan 04 owns mandatory term binding for new stage/resolve/consume flows.
 
 ### Pending Todos
+
 [From .planning/todos/pending/ — ideas captured during sessions]
 
 None yet.
@@ -265,15 +269,15 @@ None yet.
 
 **Resume file:** None
 
-Last session: 2026-07-21T17:24:46.301Z
+Last session: 2026-07-21T17:34:39.301Z
 Session arc + decisions: docs/sessions/2026-07-20-audit-and-phase9.md
-Stopped at: Completed 12-02-PLAN.md
+Stopped at: Completed 12-03-PLAN.md
 suite 994 green.
 
-RESUME NEXT: **Phase 12 Plan 03 — Term Lifecycle**. Plan 01 shipped the status
-schema, legacy migration, active/writable primitives, and create/close/reopen
-services. Plan 03 should build on `AcademicTerm.Status`, `term_scope`, `materialize_term`, and
-`activate_term` without reintroducing `AcademicTerm.is_active`.
+RESUME NEXT: **Phase 12 Plan 04 — Term Lifecycle**. Plan 03 shipped durable
+term ownership for staged imports and stored weekly reports, including fail-loud
+legacy report backfill. Plan 04 should bind every new ImportStaging stage,
+resolve, and consume flow to an explicit writable Draft term.
 
 OUTSTANDING (carry forward):
 
