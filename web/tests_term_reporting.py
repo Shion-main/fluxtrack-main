@@ -7,12 +7,13 @@ ASCII-only by convention (Windows cp1252).
 """
 from datetime import date, datetime, time
 from html import unescape
+from pathlib import Path
 from unittest.mock import patch
 from urllib.parse import parse_qs, urlparse
 
 from django.contrib.auth import get_user_model
 from django.template.loader import render_to_string
-from django.test import RequestFactory, TestCase
+from django.test import RequestFactory, SimpleTestCase, TestCase
 from django.urls import reverse
 from django.utils import timezone
 
@@ -21,6 +22,39 @@ from scheduling.models import (AcademicTerm, Modality, Schedule, Session,
                                SessionStatus)
 from scheduling.test_support import make_reporting_fixture
 from web.reporting_common import selected_report_scope
+
+
+class IfoReportTermTests(SimpleTestCase):
+    def test_ifo_report_views_use_one_shared_scope_and_explicit_term(self):
+        source = Path("web/ifo.py").read_text(encoding="utf-8")
+        self.assertIn("def _ifo_report_scope(request):", source)
+        for aggregate in (
+            "dept_summary, term=term",
+            "room_utilization, start=start, end=end, term=term",
+            "faculty_scorecard, term=scope.term",
+            "term=scope.term, start=start, end=end, as_of=as_of",
+        ):
+            self.assertIn(aggregate, source)
+
+
+class IfoReportLinkPropagationTests(SimpleTestCase):
+    def test_ifo_templates_propagate_normalized_scope_query(self):
+        for template in (
+            "templates/ifo/_cards.html",
+            "templates/ifo/utilization.html",
+            "templates/ifo/weekly_reports.html",
+            "templates/reports/scorecard.html",
+        ):
+            self.assertIn(
+                "scope_query", Path(template).read_text(encoding="utf-8"), template
+            )
+
+
+class IfoWeeklyReportTermTests(SimpleTestCase):
+    def test_list_and_download_require_selected_term(self):
+        source = Path("web/ifo.py").read_text(encoding="utf-8")
+        self.assertIn("WeeklyReport.objects.filter(term=scope.term)", source)
+        self.assertIn("get_object_or_404(WeeklyReport, pk=pk, term=scope.term)", source)
 
 
 class ReportScopeTests(TestCase):
