@@ -27,8 +27,10 @@ from django.utils import timezone
 
 from ops.models import AuditLog
 from ops.policy import get_policy
-from scheduling.models import CheckinMethod, Modality, Session, SessionStatus
+from scheduling.models import (AcademicTerm, CheckinMethod, Modality, Session,
+                               SessionStatus)
 from scheduling.resolver import is_no_show_past_grace
+from scheduling.term_scope import require_writable_term
 
 
 def merged_sibling_ids(anchor, candidates):
@@ -98,6 +100,7 @@ def _materialize_candidates(anchor):
         Session.objects.filter(
             faculty_id=anchor.faculty_id,
             scheduled_start=anchor.scheduled_start,
+            schedule__term_id=anchor.schedule.term_id,
         )
         .exclude(pk=anchor.pk)
         .select_related("schedule")
@@ -127,6 +130,14 @@ def propagate_merged_present(anchor, now, actor):
     mutate-while-iterate trap (T-04.2-03).
     """
     with transaction.atomic():
+        anchor = (
+            Session.objects.select_for_update()
+            .select_related("schedule__term")
+            .get(pk=anchor.pk)
+        )
+        term = AcademicTerm.objects.select_for_update().get(
+            pk=anchor.schedule.term_id)
+        require_writable_term(term)
         candidates = _materialize_candidates(anchor)
         sib_ids = merged_sibling_ids(anchor, candidates)
         fill_ids = list(
@@ -178,6 +189,14 @@ def propagate_merged_absent(anchor, actor, now=None):
     if not is_no_show_past_grace(anchor.scheduled_start, now, grace_min):
         return []
     with transaction.atomic():
+        anchor = (
+            Session.objects.select_for_update()
+            .select_related("schedule__term")
+            .get(pk=anchor.pk)
+        )
+        term = AcademicTerm.objects.select_for_update().get(
+            pk=anchor.schedule.term_id)
+        require_writable_term(term)
         candidates = _materialize_candidates(anchor)
         sib_ids = merged_sibling_ids(anchor, candidates)
         fill_ids = list(

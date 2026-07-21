@@ -46,9 +46,11 @@ from scheduling.models import (
     ModalityShiftItem,
     ModalityShiftRequest,
     ModalityShiftStatus,
+    AcademicTerm,
     Session,
     SessionStatus,
 )
+from scheduling.term_scope import ArchivedTermError, require_writable_term
 
 _OCCUPYING_STATUSES = (SessionStatus.SCHEDULED, SessionStatus.ACTIVE)
 
@@ -64,6 +66,32 @@ class ModalityShiftError(Exception):
     Carries a human-readable ``message`` the web layer surfaces as a friendly
     400 rather than a 500 -- the request is refused, nothing is written.
     """
+
+
+def _single_term_id_for_schedules(schedules):
+    term_ids = {sch.term_id for sch in schedules}
+    if len(term_ids) != 1:
+        raise ModalityShiftError("selected schedules must belong to one academic term")
+    return term_ids.pop()
+
+
+def _single_term_id_for_request(req):
+    term_ids = set(
+        req.items.select_related("schedule")
+        .values_list("schedule__term_id", flat=True)
+        .distinct()
+    )
+    if len(term_ids) != 1:
+        raise ModalityShiftError("request schedules must belong to one academic term")
+    return term_ids.pop()
+
+
+def _lock_writable_term(term_id):
+    term = AcademicTerm.objects.select_for_update().get(pk=term_id)
+    try:
+        return require_writable_term(term)
+    except ArchivedTermError as exc:
+        raise ModalityShiftError(str(exc)) from exc
 
 
 # ---------------------------------------------------------------------------
@@ -187,6 +215,7 @@ def submit_modality_shift(faculty, schedules, target_modality, window_start,
     schedules = list(schedules)
     if not schedules:
         raise ModalityShiftError("no schedules selected")
+    term_id = _single_term_id_for_schedules(schedules)
     if target_modality not in Modality.values:
         raise ModalityShiftError("invalid target modality")
     if window_start > window_end:
@@ -270,6 +299,7 @@ def submit_modality_shift(faculty, schedules, target_modality, window_start,
         validated_pref[sch.pk] = room if ok else None
 
     with transaction.atomic():
+        _lock_writable_term(term_id)
         request = ModalityShiftRequest.objects.create(
             requester=faculty, dean=dean, department=faculty.department,
             target_modality=target_modality,
@@ -318,6 +348,7 @@ def withdraw_modality_shift(request, actor):
     """
     with transaction.atomic():
         req = ModalityShiftRequest.objects.get(pk=request.pk)
+        _lock_writable_term(_single_term_id_for_request(req))
         if req.requester_id != actor.pk:
             raise ModalityShiftError("only the requester may withdraw this request")
         if req.status != ModalityShiftStatus.PENDING:
@@ -343,6 +374,7 @@ def reject_modality_shift(request, dean, reason):
     now = timezone.now()
     with transaction.atomic():
         req = ModalityShiftRequest.objects.get(pk=request.pk)
+        _lock_writable_term(_single_term_id_for_request(req))
         if dean.role != Role.DEAN or req.department_id != dean.department_id:
             raise ModalityShiftError(
                 "only the routed department Dean may reject this request")
@@ -503,6 +535,7 @@ def apply_approval(request, dean, *, now=None):
     now = now or timezone.now()
     with transaction.atomic():
         req = ModalityShiftRequest.objects.get(pk=request.pk)
+        _lock_writable_term(_single_term_id_for_request(req))
         if dean.role != Role.DEAN or req.department_id != dean.department_id:
             raise ModalityShiftError(
                 "only the routed department Dean may approve this request")

@@ -38,7 +38,7 @@ from scheduling.models import (AcademicBreak, AcademicTerm, ClassSuspension,
 from scheduling.importing import reconcile
 from scheduling.schedule_ops import cancel_schedule, update_schedule
 from scheduling.suspensions import lift_suspension, suspend_classes
-from scheduling.term_scope import get_active_term
+from scheduling.term_scope import ArchivedTermError, get_active_term, require_writable_term
 from scheduling.report_render import build_csv, csv_safe
 from scheduling.reporting import (block_saturation, building_floor_rollup,
                                   coverage_by_building_day, dept_summary,
@@ -1774,7 +1774,7 @@ def weekly_download(request, pk, fmt):
 # holidays). Both feed the SAME excused_checker the sweep and materialize read.
 
 def _active_term_or_none():
-    return AcademicTerm.objects.filter(is_active=True).first()
+    return get_active_term()
 
 
 def _suspension_qs(term):
@@ -1820,6 +1820,10 @@ def suspension_create(request):
 
     if term is None:
         return fail("No active term. Import a term first.")
+    try:
+        require_writable_term(term)
+    except ArchivedTermError:
+        return fail("Archived terms are read-only.")
     start = _safe_parse_date(fields["start"])
     end = _safe_parse_date(fields["end"]) if fields["end"] else start
     if start is None:
@@ -2206,6 +2210,10 @@ def schedule_new(request):
 
     if term is None:
         return fail("No active term. Import a term first.")
+    try:
+        require_writable_term(term)
+    except ArchivedTermError:
+        return fail("Archived terms are read-only.")
     if not fields["course_code"] or not fields["section"]:
         return fail("Course code and section are required.")
     faculty = (get_user_model().objects.filter(pk=fields["faculty"],

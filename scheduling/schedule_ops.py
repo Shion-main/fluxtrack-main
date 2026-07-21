@@ -27,7 +27,8 @@ from django.db import transaction
 from django.utils import timezone
 
 from ops.models import AuditLog
-from scheduling.models import ScheduleStatus, Session, SessionStatus
+from scheduling.models import Schedule, ScheduleStatus, Session, SessionStatus
+from scheduling.term_scope import require_writable_term
 
 
 def _future_scheduled(schedule, today):
@@ -47,6 +48,12 @@ def update_schedule(schedule, *, faculty=None, room=None, start_time=None,
     Returns the count of future sessions updated.
     """
     today = today or timezone.localdate()
+    schedule = (
+        Schedule.objects.select_for_update()
+        .select_related("term")
+        .get(pk=schedule.pk)
+    )
+    require_writable_term(schedule.term)
     before = {"faculty": schedule.faculty_id, "room": schedule.room_id,
               "start_time": str(schedule.start_time),
               "end_time": str(schedule.end_time),
@@ -93,6 +100,12 @@ def cancel_schedule(schedule, *, actor=None, reason="", today=None):
     are untouched. Returns the count of sessions cancelled.
     """
     today = today or timezone.localdate()
+    schedule = (
+        Schedule.objects.select_for_update()
+        .select_related("term")
+        .get(pk=schedule.pk)
+    )
+    require_writable_term(schedule.term)
     reason = (reason or "Class no longer offered").strip()[:200]
     schedule.status = ScheduleStatus.ARCHIVED
     schedule.save(update_fields=["status"])

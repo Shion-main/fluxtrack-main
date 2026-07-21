@@ -19,6 +19,7 @@ from ops.models import AuditLog
 from ops.notify import notify
 from scheduling.models import (AcademicTerm, ClassSuspension, Session,
                                SessionStatus)
+from scheduling.term_scope import require_writable_term
 
 # Batch size for the SCHEDULED->CANCELLED flip: an `id__in` over more than the
 # MSSQL 2100-parameter limit is the 04.1-04 failure class. A whole-campus typhoon
@@ -34,7 +35,8 @@ def excused_checker(term=None):
     then answers from memory -- so the sweep can test hundreds of candidate sessions
     with zero extra queries. ``term`` defaults to the active term.
     """
-    term = term or AcademicTerm.objects.filter(is_active=True).first()
+    term = term or AcademicTerm.objects.filter(
+        status=AcademicTerm.Status.ACTIVE).first()
     if term is None:
         return lambda d, building_id=None: False
     breaks = [(b.start_date, b.end_date) for b in term.breaks.all()]
@@ -77,11 +79,14 @@ def suspend_classes(*, term, start_date, end_date, reason, building=None,
     creates a second suspension row but flips nothing new.
     """
     now = now or timezone.now()
+    term = AcademicTerm.objects.select_for_update().get(pk=term.pk)
+    require_writable_term(term)
     suspension = ClassSuspension.objects.create(
         term=term, start_date=start_date, end_date=end_date, building=building,
         reason=reason, declared_by=declared_by)
 
     qs = Session.objects.filter(
+        schedule__term=term,
         status=SessionStatus.SCHEDULED,
         date__gte=start_date, date__lte=end_date)
     if building is not None:
@@ -133,9 +138,16 @@ def lift_suspension(suspension, *, lifted_by=None, now=None):
     materialize stop excusing its dates.
     """
     now = now or timezone.now()
+    suspension = (
+        ClassSuspension.objects.select_for_update()
+        .select_related("term")
+        .get(pk=suspension.pk)
+    )
+    require_writable_term(suspension.term)
     if suspension.lifted_at is not None:
         return 0
     qs = Session.objects.filter(
+        schedule__term=suspension.term,
         status=SessionStatus.CANCELLED, cancelled_reason=suspension.reason[:200],
         date__gte=suspension.start_date, date__lte=suspension.end_date)
     if suspension.building_id is not None:
