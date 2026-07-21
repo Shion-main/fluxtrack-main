@@ -20,10 +20,30 @@ class DayOfWeek(models.IntegerChoices):
 
 
 class AcademicTerm(models.Model):
-    name = models.CharField(max_length=60)
+    class Status(models.TextChoices):
+        DRAFT = "draft", "Draft"
+        ACTIVE = "active", "Active"
+        ARCHIVED = "archived", "Archived"
+
+    name = models.CharField(max_length=60, unique=True)
     start_date = models.DateField()
     end_date = models.DateField()
-    is_active = models.BooleanField(default=False)  # exactly one active at a time
+    status = models.CharField(
+        max_length=10, choices=Status.choices, default=Status.DRAFT
+    )
+
+    class Meta:
+        constraints = [
+            models.CheckConstraint(
+                condition=models.Q(end_date__gte=models.F("start_date")),
+                name="term_dates_ordered",
+            ),
+            models.UniqueConstraint(
+                fields=["status"],
+                condition=models.Q(status=Status.ACTIVE),
+                name="uniq_active_academic_term",
+            ),
+        ]
 
     def __str__(self):
         return self.name

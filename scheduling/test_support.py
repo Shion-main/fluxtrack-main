@@ -85,7 +85,7 @@ def make_shift_fixture(prefix="msf"):
 
     term = AcademicTerm.objects.create(
         name=f"{prefix} Term", start_date=date(2026, 1, 1),
-        end_date=date(2026, 12, 31), is_active=True,
+        end_date=date(2026, 12, 31), status=AcademicTerm.Status.ACTIVE,
     )
 
     # F2F schedule in room A: a Monday 08:00-09:30 slot with one in-window session.
@@ -186,7 +186,7 @@ def make_merge_fixture(prefix="mmf"):
     floor = Floor.objects.create(building=building, number=4)
     term = AcademicTerm.objects.create(
         name=f"{prefix} Term", start_date=date(2026, 1, 1),
-        end_date=date(2026, 12, 31), is_active=True,
+        end_date=date(2026, 12, 31), status=AcademicTerm.Status.ACTIVE,
     )
 
     f2f_start_t, f2f_end_t = time(15, 45), time(17, 15)
@@ -313,7 +313,7 @@ def make_reporting_fixture(prefix="rpt"):
 
     term = AcademicTerm.objects.create(
         name=f"{prefix} Term", start_date=date(2026, 1, 1),
-        end_date=date(2026, 12, 31), is_active=True,
+        end_date=date(2026, 12, 31), status=AcademicTerm.Status.ACTIVE,
     )
     dept_a = Department.objects.create(name=f"{prefix} Dept A", code=f"{prefix}-DA")
     dept_b = Department.objects.create(name=f"{prefix} Dept B", code=f"{prefix}-DB")
@@ -557,7 +557,11 @@ def make_room_utilization_fixture(prefix="rutil", activate=True):
 
     term = AcademicTerm.objects.create(
         name=f"{prefix} Term", start_date=date(2026, 1, 1),
-        end_date=date(2026, 12, 31), is_active=activate,
+        end_date=date(2026, 12, 31),
+        status=(
+            AcademicTerm.Status.ACTIVE if activate
+            else AcademicTerm.Status.ARCHIVED
+        ),
     )
 
     def _room(floor, code):
@@ -794,7 +798,11 @@ def make_coverage_fixture(prefix="cov", activate=True):
 
     term = AcademicTerm.objects.create(
         name=f"{prefix} Term", start_date=date(2026, 1, 1),
-        end_date=date(2026, 12, 31), is_active=activate,
+        end_date=date(2026, 12, 31),
+        status=(
+            AcademicTerm.Status.ACTIVE if activate
+            else AcademicTerm.Status.ARCHIVED
+        ),
     )
 
     b1 = Building.objects.create(name=f"{prefix} Hall 1", code=f"{prefix}-B1")

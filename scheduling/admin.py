@@ -5,8 +5,8 @@ from .models import AcademicBreak, AcademicTerm, Schedule, Session
 
 @admin.register(AcademicTerm)
 class AcademicTermAdmin(admin.ModelAdmin):
-    list_display = ("name", "start_date", "end_date", "is_active")
-    list_filter = ("is_active",)
+    list_display = ("name", "start_date", "end_date", "status")
+    list_filter = ("status",)
 
 
 @admin.register(AcademicBreak)
