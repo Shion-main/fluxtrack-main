@@ -23,7 +23,8 @@ from django.views.decorators.http import require_http_methods
 from accounts.models import Role
 from campus.models import Room
 from ops.policy import get_policy
-from scheduling.models import (AcademicTerm, Modality, Session, SessionStatus)
+from scheduling.models import Modality, Session, SessionStatus
+from scheduling.term_scope import get_active_term
 from verification import resolver as R
 from verification.models import Assignment, AssignmentScope, DutyRole
 from web.room_state import occupies, room_timetable, room_tile
@@ -49,10 +50,14 @@ def _guard_floor_ids(user, now):
     """
     local = timezone.localtime(now)
     today, now_t = local.date(), local.time()
+    active_term = get_active_term()
+    if active_term is None:
+        return set()
     floor_ids = set()
     for a in (Assignment.objects
               .filter(user=user, role=DutyRole.GUARD,
-                      scope=AssignmentScope.FLOOR, status="active")
+                      scope=AssignmentScope.FLOOR, status="active",
+                      term=active_term)
               .prefetch_related("floors")):
         if R.assignment_covers_now(a, today, now_t):
             # `.all()` reads the prefetch cache; `.values_list()` on the related
@@ -81,11 +86,13 @@ def monitor(request):
 @require_http_methods(["GET"])
 def monitor_rows(request):
     now = timezone.now()
+    active_term = get_active_term()
     floor_ids = _guard_floor_ids(request.user, now)
     sessions = None
-    if floor_ids:
+    if floor_ids and active_term is not None:
         sessions = (Session.objects
-                    .filter(date=timezone.localdate(), room__floor_id__in=floor_ids)
+                    .filter(date=timezone.localdate(), room__floor_id__in=floor_ids,
+                            schedule__term=active_term)
                     .select_related("room", "schedule", "faculty")
                     .order_by("scheduled_start"))
     return render(request, "guard/_monitor_rows.html",
@@ -144,17 +151,20 @@ def room_detail(request, code):
         raise Http404("No such room on your posted floors.")
 
     grace = timedelta(minutes=int(get_policy("grace_minutes")))
+    term = get_active_term()
     # MSSQL/pyodbc runs with MARS off: materialize each queryset before the next
     # one is issued (precedent: web/ifo.py room_panel).
-    today = list(room.sessions.filter(date=timezone.localdate())
-                 .select_related("schedule", "faculty")
-                 .order_by("scheduled_start"))
+    today = []
+    if term is not None:
+        today = list(room.sessions.filter(date=timezone.localdate(),
+                                          schedule__term=term)
+                     .select_related("schedule", "faculty")
+                     .order_by("scheduled_start"))
     tile = room_tile(room, today, now, grace)
     # Same rule as the tile: an online class is not in this physical room, so it
     # is not in its day either. In a virtual room it is the whole timetable.
     today = [s for s in today if occupies(s, room)]
 
-    term = AcademicTerm.objects.filter(is_active=True).first()
     return render(request, "guard/room.html", {
         "room": room, "tile": tile, "today": today, "term": term,
         "style": _ROOM_CARD_STYLES[tile["state"]],
@@ -179,14 +189,22 @@ def locate(request):
         if len(matches) == 1:
             faculty = matches[0]
             now, today = timezone.now(), timezone.localdate()
+            active_term = get_active_term()
+            if active_term is None:
+                return render(request, "guard/locate.html", {
+                    "q": q, "faculty": faculty, "matches": matches,
+                    "current": current, "next": nxt, "online_now": online_now})
             current = (Session.objects
-                       .filter(faculty=faculty, date=today, status=SessionStatus.ACTIVE)
+                       .filter(faculty=faculty, date=today,
+                               status=SessionStatus.ACTIVE,
+                               schedule__term=active_term)
                        .select_related("room", "schedule").order_by("scheduled_start").first())
             if current is not None:
                 eff = current.declared_modality or current.schedule.modality
                 online_now = eff == Modality.ONLINE
             nxt = (Session.objects
-                   .filter(faculty=faculty, date=today, scheduled_start__gte=now)
+                   .filter(faculty=faculty, date=today, scheduled_start__gte=now,
+                           schedule__term=active_term)
                    .exclude(status=SessionStatus.ABSENT)
                    .select_related("room", "schedule").order_by("scheduled_start").first())
     return render(request, "guard/locate.html", {

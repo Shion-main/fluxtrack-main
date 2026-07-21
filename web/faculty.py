@@ -45,6 +45,7 @@ from scheduling.models import (
     SessionStatus,
 )
 from scheduling.resolver import is_no_show_past_grace
+from scheduling.term_scope import get_active_term
 from verification.models import CheckerValidation, ValidationAction
 from web.pagination import paginate
 from web.reporting_common import status_label
@@ -122,8 +123,12 @@ def _faculty_cards(user, now):
     Returns (today_cards, week_cards, today)."""
     today = now.date()
     week_end = today + timedelta(days=7)
+    active_term = get_active_term()
+    if active_term is None:
+        return [], [], today
     sessions = (Session.objects.filter(faculty=user,
-                                       date__gte=today, date__lt=week_end)
+                                       date__gte=today, date__lt=week_end,
+                                       schedule__term=active_term)
                 .select_related("schedule", "room__floor__building")
                 .order_by("date", "scheduled_start"))
     todays, upcoming = [], []
@@ -242,7 +247,7 @@ def _modality_new_ctx(user, *, error=None, posted=None):
     preview, never a reservation.
     """
     today = timezone.localdate()
-    term = AcademicTerm.objects.filter(is_active=True).first()
+    term = get_active_term()
     schedules = []
     if term:
         schedules = list(
@@ -303,9 +308,10 @@ def modality_rooms(request):
     ids = [s for s in (r.strip() for r in raw) if s.isdigit()]
     rows = []
     if ids:
+        active_term = get_active_term()
         schedules = (Schedule.objects
                      .filter(pk__in=ids, faculty=request.user,
-                             status=ScheduleStatus.ACTIVE)
+                             status=ScheduleStatus.ACTIVE, term=active_term)
                      .select_related("room__floor__building")
                      .order_by("day_of_week", "start_time"))
         today = timezone.localdate()
@@ -572,8 +578,11 @@ def _online_rows(user, now):
     `select_related` covers everything the card reads, so the list is one query.
     """
     grace_min = get_policy("grace_minutes")
+    active_term = get_active_term()
+    if active_term is None:
+        return []
     sessions = (Session.objects
-                .filter(faculty=user, date=now.date())
+                .filter(faculty=user, date=now.date(), schedule__term=active_term)
                 .select_related("schedule", "room")
                 .order_by("scheduled_start"))
     return [_online_row(s, now, grace_min)
@@ -652,9 +661,10 @@ def online_start(request, pk):
 
     # 1. Ownership, re-gated on the re-fetched row. A foreign pk is a 404, not a
     #    403: this surface must not confirm that another faculty's session exists.
+    active_term = get_active_term()
     session = get_object_or_404(
         Session.objects.select_related("schedule", "room"),
-        pk=pk, faculty=request.user)
+        pk=pk, faculty=request.user, schedule__term=active_term)
 
     error = None
     # 2. Effective modality, re-derived server-side.
@@ -833,8 +843,7 @@ def history(request):
         s.flag_reason = reasons.get(s.pk, "")
 
     ctx = {"sessions": sessions, "filters": filters,
-           "term_choices": AcademicTerm.objects.order_by("-is_active",
-                                                         "-start_date"),
+           "term_choices": AcademicTerm.objects.order_by("-start_date"),
            "greeting": _greeting(timezone.localtime()),
            "today": timezone.localdate(), **pager}
     return render(request, "faculty/history.html", ctx)

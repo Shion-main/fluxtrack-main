@@ -36,6 +36,7 @@ from ops.policy import get_policy
 from scheduling.merge import (propagate_merged_absent,
                               propagate_merged_present)
 from scheduling.models import CheckinMethod, Modality, Session, SessionStatus
+from scheduling.term_scope import get_active_term
 from verification import resolver as R
 from verification.models import (Assignment, AssignmentScope, CheckerValidation,
                                  DutyRole, ValidationAction)
@@ -80,10 +81,14 @@ def _active_floor_ids(user, now):
     """
     local = timezone.localtime(now)
     today, now_t = local.date(), local.time()
+    active_term = get_active_term()
+    if active_term is None:
+        return set()
     floor_ids = set()
     assignments = (Assignment.objects
                    .filter(user=user, role=DutyRole.CHECKER,
-                           scope=AssignmentScope.FLOOR, status="active")
+                           scope=AssignmentScope.FLOOR, status="active",
+                           term=active_term)
                    .prefetch_related("floors"))
     for a in assignments:
         if R.assignment_covers_now(a, today, now_t):  # shared predicate (IN-03)
@@ -102,9 +107,13 @@ def _is_online_on_duty(user, now):
     """
     local = timezone.localtime(now)
     today, now_t = local.date(), local.time()
+    active_term = get_active_term()
+    if active_term is None:
+        return False
     for a in (Assignment.objects
               .filter(user=user, role=DutyRole.CHECKER,
-                      scope=AssignmentScope.ONLINE, status="active")):
+                      scope=AssignmentScope.ONLINE, status="active",
+                      term=active_term)):
         if R.assignment_covers_now(a, today, now_t):  # shared predicate (IN-03)
             return True
     return False
@@ -121,7 +130,11 @@ def _online_session(session_id, user):
     """
     if not str(session_id or "").isdigit():
         return None
+    active_term = get_active_term()
+    if active_term is None:
+        return None
     session = (Session.objects.filter(pk=session_id)
+               .filter(schedule__term=active_term)
                .select_related("schedule", "faculty", "room").first())
     if session is None:
         return None
@@ -236,8 +249,12 @@ def _room_session_state(room, now):
     stale earlier-in-the-day ABSENT session (ABSENT is never COMPLETED) must NOT
     latch and block verifying a later session in the same room.
     """
+    active_term = get_active_term()
+    if active_term is None:
+        return None, None
     sessions = list(Session.objects
-                    .filter(room=room, date=timezone.localdate())
+                    .filter(room=room, date=timezone.localdate(),
+                            schedule__term=active_term)
                     .exclude(status=SessionStatus.COMPLETED)
                     .select_related("schedule", "faculty")
                     .order_by("scheduled_start"))
@@ -562,10 +579,11 @@ def _online_action(request, session_id, action_val, note, now):
         # Refuse: not owned / not on duty / already resolved. Audit + no write.
         outcome = "absent-excluded" if (session is not None and not actionable) \
             else "off-duty"
-        AuditLog.objects.create(
-            actor=request.user, event_type="checker.action_refused",
-            target_type="session", target_id=str(session_id or ""),
-            payload={"outcome": outcome, "action": action_val, "online": True})
+        if session is not None:
+            AuditLog.objects.create(
+                actor=request.user, event_type="checker.action_refused",
+                target_type="session", target_id=str(session.pk),
+                payload={"outcome": outcome, "action": action_val, "online": True})
         return render(request, "checker/_outcome.html", {
             "resolution": _OnlineRefusal(outcome), "session": session})
 
@@ -598,10 +616,15 @@ def online_list(request):
     """CHK-02 online-to-verify list: today's owned online sessions not yet
     verified. A verified online session becomes ACTIVE and drops off the list;
     Absent/Completed are excluded too (only SCHEDULED effective-online remain)."""
+    active_term = get_active_term()
+    if active_term is None:
+        sessions = []
+        return render(request, "checker/online_list.html", {"sessions": sessions})
     sessions = [
         s for s in (Session.objects
                     .filter(online_checker=request.user, date=timezone.localdate(),
-                            status=SessionStatus.SCHEDULED)
+                            status=SessionStatus.SCHEDULED,
+                            schedule__term=active_term)
                     .select_related("schedule", "faculty", "room")
                     .order_by("scheduled_start"))
         if (s.declared_modality or s.schedule.modality) == Modality.ONLINE]
@@ -682,13 +705,17 @@ def floor_rows(request):
     AND the coverage denominator (Pitfall 5) so the numbers can never disagree.
     """
     now = timezone.now()
+    active_term = get_active_term()
     floor_ids = _active_floor_ids(request.user, now)
-    active = list(Session.objects
-                  .filter(room__floor_id__in=floor_ids, date=timezone.localdate())
-                  .exclude(status=SessionStatus.ABSENT)
-                  .select_related("room", "room__floor", "schedule", "faculty")
-                  .prefetch_related("validations")
-                  .order_by("scheduled_start"))
+    active = []
+    if active_term is not None:
+        active = list(Session.objects
+                      .filter(room__floor_id__in=floor_ids, date=timezone.localdate(),
+                              schedule__term=active_term)
+                      .exclude(status=SessionStatus.ABSENT)
+                      .select_related("room", "room__floor", "schedule", "faculty")
+                      .prefetch_related("validations")
+                      .order_by("scheduled_start"))
     # F2F/Blended board only: drop effective-online sessions (declared overrides
     # schedule), matching _room_session_state's online short-circuit.
     board = [s for s in active

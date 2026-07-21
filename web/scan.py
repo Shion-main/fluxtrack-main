@@ -25,6 +25,7 @@ from ops.policy import get_policy
 from scheduling import resolver as R
 from scheduling.merge import propagate_merged_present
 from scheduling.models import CheckinMethod, Session, SessionStatus
+from scheduling.term_scope import get_active_term
 
 CONFIRM_SALT = "fluxtrack.scan.confirm"
 CONFIRM_MAX_AGE = 180  # seconds a two-step token stays valid (SCAN-04)
@@ -67,8 +68,15 @@ def _apply(request, resolution, room, method, reason=""):
     """Apply the resolved outcome's state changes. Returns context for rendering."""
     now = timezone.now()
     user = request.user
-    session = (Session.objects.filter(pk=resolution.session_id).first()
-               if resolution.session_id else None)
+    active_term = get_active_term()
+    session = (
+        Session.objects.filter(pk=resolution.session_id, schedule__term=active_term)
+        .select_related("schedule", "room")
+        .first()
+        if resolution.session_id and active_term is not None else None
+    )
+    if resolution.session_id and session is None:
+        return {"resolution": None, "room": room, "error": "bad-payload"}
 
     def audit(event, **payload):
         AuditLog.objects.create(actor=user, event_type=event,
@@ -121,7 +129,13 @@ def _apply(request, resolution, room, method, reason=""):
         # occupant is a DIFFERENT faculty and is never merge-filled (faculty-
         # scoped helper, T-04.2-01).
         with transaction.atomic():
-            prior = Session.objects.filter(pk=resolution.prior_session_id).first()
+            prior = (
+                Session.objects.filter(
+                    pk=resolution.prior_session_id,
+                    schedule__term=active_term,
+                ).first()
+                if active_term is not None else None
+            )
             if prior and prior.status == SessionStatus.ACTIVE:
                 prior.status = SessionStatus.COMPLETED
                 prior.actual_end = now
@@ -163,15 +177,24 @@ def resolve(request):
                        "error_detail": detail})
 
     now = timezone.now()
+    active_term = get_active_term()
+    if active_term is None:
+        return render(request, "faculty/_outcome.html",
+                      {"resolution": None, "error": "bad-payload"})
     sessions_today = list(
-        Session.objects.filter(faculty=request.user, date=timezone.localdate())
+        Session.objects.filter(
+            faculty=request.user,
+            date=timezone.localdate(),
+            schedule__term=active_term,
+        )
         .select_related("schedule", "room").order_by("scheduled_start"))
     # room_released_at filter (audit M4): an ACTIVE session whose room was
     # manually released (IFO-08) no longer holds the room — same rule as
     # ops/availability.py and the JOB-02c conflict query. Without it, the next
     # scan force-hands-over a ghost session and stamps a bogus actual_end.
     occupying = (Session.objects.filter(room=room, status=SessionStatus.ACTIVE,
-                                        room_released_at__isnull=True)
+                                        room_released_at__isnull=True,
+                                        schedule__term=active_term)
                  .exclude(faculty=request.user).values_list("pk", flat=True).first())
 
     resolution = R.resolve_faculty_scan(
@@ -194,7 +217,10 @@ def resolve(request):
             ctx = _apply(request, resolution, room, method)
             cache.set(idem, resolution.outcome, timeout=120)
         else:
-            ctx["session"] = Session.objects.filter(pk=resolution.session_id).first()
+            ctx["session"] = Session.objects.filter(
+                pk=resolution.session_id,
+                schedule__term=active_term,
+            ).first()
     return render(request, "faculty/_outcome.html", ctx)
 
 
