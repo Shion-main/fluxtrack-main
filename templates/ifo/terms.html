@@ -1,0 +1,29 @@
+{% extends "ifo/_console.html" %}
+{% block title %}Academic terms - FluxTrack{% endblock %}
+{% block console_title %}Academic terms{% endblock %}
+{% block page_actions %}
+<a href="{% url 'ifo_term_create' %}" class="uk-btn uk-btn-primary uk-btn-sm">
+  <uk-icon icon="plus" class="size-4"></uk-icon> New Draft term</a>
+{% endblock %}
+{% block console %}
+<p class="uk-text-muted mb-6 max-w-3xl">
+  Prepare a blank Draft, then activate, close, or reopen it through separate
+  confirmed actions. Existing schedules and attendance are never cloned or reset.</p>
+{% if messages %}{% for message in messages %}
+<div class="uk-alert uk-alert-success mb-4" role="status"><p>{{ message }}</p></div>
+{% endfor %}{% endif %}
+<div class="uk-card uk-card-body">
+  {% if terms %}
+  <div class="table-wrap"><table class="uk-table uk-table-divider uk-table-small">
+    <thead><tr><th>Term</th><th>Status</th><th>Dates</th><th>Schedules</th><th>Sessions</th><th></th></tr></thead>
+    <tbody>{% for term in terms %}<tr>
+      <td><a href="{% url 'ifo_term_detail' term.pk %}" class="text-primary" style="font-weight:600">{{ term.name }}</a></td>
+      <td><span class="pill">{{ term.get_status_display }}</span></td>
+      <td>{{ term.start_date }} - {{ term.end_date }}</td>
+      <td>{{ term.schedule_count }}</td><td>{{ term.session_count }}</td>
+      <td class="uk-text-right"><a href="{% url 'ifo_term_detail' term.pk %}" class="uk-btn uk-btn-ghost uk-btn-sm">Inspect</a></td>
+    </tr>{% endfor %}</tbody>
+  </table></div>
+  {% else %}<p class="uk-text-muted">No academic terms exist yet.</p>{% endif %}
+</div>
+{% endblock %}

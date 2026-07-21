@@ -1,7 +1,7 @@
 from django.urls import path
 
-from . import (checker, dean, faculty, guard, hr, ifo, notifications, push, scan,
-               sys, views)
+from . import (checker, dean, faculty, guard, hr, ifo, ifo_terms, notifications,
+               push, scan, sys, views)
 
 urlpatterns = [
     path("", views.home, name="home"),
@@ -67,6 +67,9 @@ urlpatterns = [
     path("hr/attendance", hr.attendance, name="hr_attendance"),
     path("hr/attendance.csv", hr.attendance_csv, name="hr_attendance_csv"),
     # IFO Admin surfaces
+    path("ifo/terms", ifo_terms.terms_list, name="ifo_terms"),
+    path("ifo/terms/create", ifo_terms.term_create, name="ifo_term_create"),
+    path("ifo/terms/<int:pk>", ifo_terms.term_detail, name="ifo_term_detail"),
     # Phase 10 campus structure: building + floor CRUD (rooms hang off floors).
     path("ifo/buildings", ifo.buildings_list, name="ifo_buildings"),
     path("ifo/buildings/create", ifo.building_create, name="ifo_building_create"),

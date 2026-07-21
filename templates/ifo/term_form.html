@@ -1,0 +1,52 @@
+{% extends "ifo/_console.html" %}
+{% block title %}Create academic term - FluxTrack{% endblock %}
+{% block console_title %}Create Draft term{% endblock %}
+{% block page_actions %}<a href="{% url 'ifo_terms' %}" class="uk-btn uk-btn-ghost uk-btn-sm">Back to terms</a>{% endblock %}
+{% block console %}
+<div class="max-w-3xl">
+  {% if error %}<div class="uk-alert uk-alert-destructive mb-4" role="alert"><p>{{ error }}</p></div>{% endif %}
+  {% if preflight %}
+  <div class="uk-card uk-card-body mb-6">
+    <h2 class="uk-h4 mb-3">Creation preflight</h2>
+    <dl class="grid gap-2 sm:grid-cols-2 uk-text-small">
+      <div><dt class="uk-text-muted">Proposed name</dt><dd>{{ preflight.candidate_name|default:"(missing)" }}</dd></div>
+      <div><dt class="uk-text-muted">Dates</dt><dd>{{ preflight.start_date|default:"(missing)" }} - {{ preflight.end_date|default:"(missing)" }}</dd></div>
+      <div><dt class="uk-text-muted">Schedules copied</dt><dd>{{ preflight.counts.schedule_count }}</dd></div>
+      <div><dt class="uk-text-muted">Sessions copied</dt><dd>{{ preflight.counts.session_count }}</dd></div>
+    </dl>
+    {% if preflight.blockers %}<div class="uk-alert uk-alert-destructive mt-4" role="alert">
+      <strong>Creation is blocked.</strong><ul class="list-disc pl-5">{% for blocker in preflight.blockers %}<li>{{ blocker }}</li>{% endfor %}</ul>
+    </div>{% else %}<div class="uk-alert uk-alert-success mt-4" role="status"><p>The proposed blank Draft is valid.</p></div>{% endif %}
+  </div>
+  {% if not preflight.blockers %}
+  <div class="uk-card uk-card-body">
+    <h2 class="uk-h4 mb-2">Confirm this separate creation step</h2>
+    <p class="uk-text-small uk-text-muted mb-4">Type the exact proposed name. The details field is carried only as the candidate and is never accepted as confirmation.</p>
+    <form method="post" action="{% url 'ifo_term_create' %}" class="flex flex-col gap-4">
+      {% csrf_token %}<input type="hidden" name="step" value="confirm">
+      <input type="hidden" name="name" value="{{ form.name }}">
+      <input type="hidden" name="start_date" value="{{ form.start_date }}">
+      <input type="hidden" name="end_date" value="{{ form.end_date }}">
+      <div><label class="uk-form-label" for="confirmation-name">Exact proposed term name</label>
+        <input id="confirmation-name" class="uk-input h-11" type="text" name="confirmation_name" value="{{ confirmation_name|default:'' }}" required autocomplete="off"></div>
+      <button class="uk-btn uk-btn-primary h-11" type="submit">Create blank Draft</button>
+    </form>
+  </div>
+  {% endif %}
+  {% else %}
+  <div class="uk-card uk-card-body">
+    <h2 class="uk-h4 mb-2">Draft details</h2>
+    <p class="uk-text-small uk-text-muted mb-4">This step only checks the proposal. It creates no term and writes no audit record.</p>
+    <form method="post" action="{% url 'ifo_term_create' %}" class="flex flex-col gap-4">
+      {% csrf_token %}<input type="hidden" name="step" value="details">
+      <div><label class="uk-form-label" for="term-name">Name</label><input id="term-name" class="uk-input h-11" type="text" name="name" value="{{ form.name|default:'' }}" maxlength="60" required></div>
+      <div class="grid gap-4 sm:grid-cols-2">
+        <div><label class="uk-form-label" for="term-start">Start date</label><input id="term-start" class="uk-input h-11" type="date" name="start_date" value="{{ form.start_date|default:'' }}" required></div>
+        <div><label class="uk-form-label" for="term-end">End date</label><input id="term-end" class="uk-input h-11" type="date" name="end_date" value="{{ form.end_date|default:'' }}" required></div>
+      </div>
+      <button class="uk-btn uk-btn-primary h-11" type="submit">Review creation preflight</button>
+    </form>
+  </div>
+  {% endif %}
+</div>
+{% endblock %}

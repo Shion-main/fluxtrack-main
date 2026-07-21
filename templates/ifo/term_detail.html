@@ -1,0 +1,18 @@
+{% extends "ifo/_console.html" %}
+{% block title %}{{ term.name }} - FluxTrack{% endblock %}
+{% block console_title %}{{ term.name }}{% endblock %}
+{% block page_actions %}<a href="{% url 'ifo_terms' %}" class="uk-btn uk-btn-ghost uk-btn-sm">Back to terms</a>{% endblock %}
+{% block console %}
+<div class="max-w-3xl">
+  {% if messages %}{% for message in messages %}<div class="uk-alert uk-alert-success mb-4" role="status"><p>{{ message }}</p></div>{% endfor %}{% endif %}
+  <div class="uk-card uk-card-body mb-6">
+    <div class="flex items-center gap-3 mb-4"><span class="pill">{{ term.get_status_display }}</span><span class="uk-text-muted">{{ term.start_date }} - {{ term.end_date }}</span></div>
+    <dl class="grid gap-4 sm:grid-cols-2"><div><dt class="uk-text-muted">Recurring schedules</dt><dd class="uk-h3">{{ term.schedule_count }}</dd></div><div><dt class="uk-text-muted">Dated sessions</dt><dd class="uk-h3">{{ term.session_count }}</dd></div></dl>
+  </div>
+  <div class="uk-card uk-card-body">
+    <h2 class="uk-h4 mb-2">Eligible lifecycle action</h2>
+    <p class="uk-text-small uk-text-muted mb-4">Every transition has its own preflight and confirmation page. Closing never activates another term, and reopening never changes the current Active term.</p>
+    {% for label, route in actions %}<a href="/ifo/terms/{{ term.pk }}/{{ route }}" class="uk-btn uk-btn-secondary h-11">{{ label }}</a>{% empty %}<p>No lifecycle action is available.</p>{% endfor %}
+  </div>
+</div>
+{% endblock %}

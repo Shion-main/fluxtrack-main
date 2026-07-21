@@ -26,6 +26,11 @@ and fill console_title / page_actions / console. ASCII-only.{% endcomment %}
      {% if un == 'ifo_assignments' %}aria-current="page"{% endif %}>
     <uk-icon icon="user-plus"></uk-icon> Assignments</a>
 
+  <div class="cns__sec">Academic lifecycle</div>
+  <a href="/ifo/terms" class="cns__link {% if un == 'ifo_terms' or un == 'ifo_term_create' or un == 'ifo_term_detail' or un == 'ifo_term_activate' or un == 'ifo_term_close' or un == 'ifo_term_reopen' %}is-active{% endif %}"
+     {% if un == 'ifo_terms' or un == 'ifo_term_create' or un == 'ifo_term_detail' or un == 'ifo_term_activate' or un == 'ifo_term_close' or un == 'ifo_term_reopen' %}aria-current="page"{% endif %}>
+    <uk-icon icon="calendar-range"></uk-icon> Terms</a>
+
   <div class="cns__sec">Campus calendar</div>
   <a href="/ifo/suspensions" class="cns__link {% if un == 'ifo_suspensions' %}is-active{% endif %}"
      {% if un == 'ifo_suspensions' %}aria-current="page"{% endif %}>
