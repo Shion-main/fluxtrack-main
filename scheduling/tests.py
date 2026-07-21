@@ -247,7 +247,19 @@ class ImportPathTests(TransactionTestCase):
     sessions). TransactionTestCase because the commands wrap work in atomic()."""
 
     def test_synthetic_fixture_import_and_materialize_counts(self):
-        call_command("import_offerings", file=FIXTURE_CSV, building="R", floor=3)
+        term = AcademicTerm.objects.create(
+            name="Synthetic Import Term",
+            start_date=date(2026, 1, 1),
+            end_date=date(2026, 12, 31),
+            status=AcademicTerm.Status.ACTIVE,
+        )
+        call_command(
+            "import_offerings",
+            file=FIXTURE_CSV,
+            building="R",
+            floor=3,
+            term=str(term.pk),
+        )
         call_command("materialize_sessions", days=7)
         User = get_user_model()
         self.assertEqual(Schedule.objects.count(), 3)

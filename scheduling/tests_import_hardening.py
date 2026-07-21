@@ -18,19 +18,108 @@ TransactionTestCase because the command wraps its writes in ``transaction.atomic
 """
 import os
 import re
+from datetime import date
 from io import StringIO
+from pathlib import Path
 from unittest import skipUnless
 
 from django.contrib.auth import get_user_model
 from django.core.management import call_command
+from django.core.management.base import CommandError
 from django.db.models import Count, Q
-from django.test import TransactionTestCase
+from django.test import SimpleTestCase, TransactionTestCase
 
 from accounts.models import Role
 from campus.models import Room
-from scheduling.models import Modality, Schedule
+from scheduling.models import AcademicTerm, Modality, Schedule, Session
 
 OFFERINGS_XLSX = "data/raw/2T-25-26-Course Offerring (1).xlsx"
+FIXTURE_CSV = "data/fixtures/r3_synthetic.csv"
+
+
+class ImportLifecycleSourceGuardTests(SimpleTestCase):
+    """Plan 12-04: the importer must not own term lifecycle or materialization."""
+
+    def test_importer_has_no_term_creation_or_lifecycle_side_effects(self):
+        source = Path(
+            "scheduling/management/commands/import_offerings.py"
+        ).read_text(encoding="utf-8")
+
+        self.assertNotIn("AcademicTerm.objects.get_or_create", source)
+        self.assertNotIn("exclude(pk=term.pk).update", source)
+        self.assertNotIn("is_active", source)
+        self.assertNotIn("materialize_sessions", source)
+        self.assertNotIn("materialize_term", source)
+        self.assertNotIn('call_command("reset_term"', source)
+
+
+class ExplicitTermImportTests(TransactionTestCase):
+    """Plan 12-04: imports write schedules only under one explicit writable term."""
+
+    def _term(self, name, status):
+        return AcademicTerm.objects.create(
+            name=name,
+            start_date=date(2026, 1, 1),
+            end_date=date(2026, 12, 31),
+            status=status,
+        )
+
+    def _import(self, term):
+        call_command(
+            "import_offerings",
+            file=FIXTURE_CSV,
+            building="R",
+            floor=3,
+            term=str(term.pk),
+            stdout=StringIO(),
+        )
+
+    def test_draft_import_creates_schedules_only_under_chosen_term(self):
+        active = self._term("Current Active", AcademicTerm.Status.ACTIVE)
+        draft = self._term("Future Draft", AcademicTerm.Status.DRAFT)
+
+        self._import(draft)
+
+        self.assertEqual(Schedule.objects.filter(term=draft).count(), 3)
+        self.assertEqual(Schedule.objects.filter(term=active).count(), 0)
+        self.assertEqual(Session.objects.count(), 0)
+        active.refresh_from_db()
+        draft.refresh_from_db()
+        self.assertEqual(active.status, AcademicTerm.Status.ACTIVE)
+        self.assertEqual(draft.status, AcademicTerm.Status.DRAFT)
+
+    def test_same_input_under_two_explicit_terms_does_not_cross_count(self):
+        first = self._term("First Import Target", AcademicTerm.Status.ACTIVE)
+        first.status = AcademicTerm.Status.DRAFT
+        first.save(update_fields=["status"])
+        second = self._term("Second Import Target", AcademicTerm.Status.ACTIVE)
+
+        self._import(first)
+        self._import(second)
+
+        self.assertEqual(Schedule.objects.filter(term=first).count(), 3)
+        self.assertEqual(Schedule.objects.filter(term=second).count(), 3)
+
+    def test_archived_target_refuses_before_writes(self):
+        archived = self._term("Archived Import Target", AcademicTerm.Status.ARCHIVED)
+
+        with self.assertRaises(CommandError):
+            self._import(archived)
+
+        self.assertEqual(Schedule.objects.count(), 0)
+
+    def test_missing_target_refuses_before_writes(self):
+        with self.assertRaises(CommandError):
+            call_command(
+                "import_offerings",
+                file=FIXTURE_CSV,
+                building="R",
+                floor=3,
+                term="999999",
+                stdout=StringIO(),
+            )
+
+        self.assertEqual(Schedule.objects.count(), 0)
 
 
 @skipUnless(os.path.exists(OFFERINGS_XLSX),
