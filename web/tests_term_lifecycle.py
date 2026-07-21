@@ -1,5 +1,6 @@
 """Phase 12 Plan 06: active-term live surface and archived-id write guards."""
 from datetime import date, datetime, time, timedelta
+import re
 from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
@@ -598,6 +599,27 @@ class TermAuthorityAndPreflightTests(_TermConsoleFixture):
             status=status,
         )
 
+    def _schedule_session(self, term, status, suffix):
+        faculty = next(user for user in self.denied_users if user.role == Role.FACULTY)
+        building = Building.objects.create(name=f"Lifecycle {suffix}", code=f"LC{suffix}")
+        floor = Floor.objects.create(building=building, number=1)
+        room = Room.objects.create(
+            floor=floor, code=f"LC{suffix}01", capacity=30,
+            qr_token=f"lifecycle-{suffix}", manual_code=f"8{suffix.zfill(5)}"[-6:],
+        )
+        schedule = Schedule.objects.create(
+            term=term, course_code=f"LC{suffix}", section="A", faculty=faculty,
+            room=room, day_of_week=self.today.weekday(), start_time=time(8, 0),
+            end_time=time(9, 0), modality=Modality.F2F,
+        )
+        start = timezone.make_aware(datetime.combine(self.today, time(8, 0)))
+        session = Session.objects.create(
+            schedule=schedule, faculty=faculty, room=room, date=self.today,
+            scheduled_start=start, scheduled_end=start + timedelta(hours=1),
+            status=status,
+        )
+        return schedule, session
+
     def test_each_transition_has_separate_authorized_get_preflight(self):
         draft = self._term("Action Draft", AcademicTerm.Status.DRAFT, 30, 120)
         active = self._term("Action Active", AcademicTerm.Status.ACTIVE, -120, -1)
@@ -705,3 +727,187 @@ class TermAuthorityAndPreflightTests(_TermConsoleFixture):
         self.assertRedirects(reopened, reverse("ifo_term_detail", args=[active.pk]))
         active.refresh_from_db()
         self.assertEqual(active.status, AcademicTerm.Status.DRAFT)
+
+    def test_denied_roles_cannot_post_creation_or_transitions(self):
+        draft = self._term("Denied Draft", AcademicTerm.Status.DRAFT, 30, 120)
+        for user in self.denied_users:
+            self.client.force_login(user)
+            create = self.client.post(reverse("ifo_term_create"), self._confirm())
+            activate = self.client.post(
+                reverse("ifo_term_activate", args=[draft.pk]),
+                {"confirmation_name": draft.name,
+                 "acknowledged_warnings": "empty_schedule_set"},
+            )
+            self.assertEqual(create.status_code, 403)
+            self.assertEqual(activate.status_code, 403)
+        draft.refresh_from_db()
+        self.assertEqual(draft.status, AcademicTerm.Status.DRAFT)
+        self.assertFalse(AuditLog.objects.exists())
+
+    def test_creation_preflight_surfaces_duplicate_date_order_and_overlap_without_writes(self):
+        self._term("Existing Term", AcademicTerm.Status.ARCHIVED, 200, 260)
+        self.client.force_login(self.ifo)
+
+        duplicate = self.client.post(reverse("ifo_term_create"), self._details(
+            name="Existing Term", start_date=str(self.today + timedelta(days=300)),
+            end_date=str(self.today + timedelta(days=360)),
+        ))
+        inverted = self.client.post(reverse("ifo_term_create"), self._details(
+            name="Inverted Proposal", start_date=str(self.today + timedelta(days=500)),
+            end_date=str(self.today + timedelta(days=400)),
+        ))
+        overlap = self.client.post(reverse("ifo_term_create"), self._details(
+            name="Overlap Proposal", start_date=str(self.today + timedelta(days=220)),
+            end_date=str(self.today + timedelta(days=280)),
+        ))
+
+        self.assertContains(duplicate, "duplicate_name")
+        self.assertContains(inverted, "date_order")
+        self.assertContains(overlap, "overlapping_term")
+        self.assertEqual(AcademicTerm.objects.count(), 1)
+        self.assertFalse(AuditLog.objects.exists())
+
+    def test_close_rechecks_before_end_active_sessions_and_stale_warning(self):
+        active = self._term("Guarded Active", AcademicTerm.Status.ACTIVE, -30, 10)
+        self.client.force_login(self.ifo)
+        route = reverse("ifo_term_close", args=[active.pk])
+
+        early = self.client.post(route, {
+            "confirmation_name": active.name, "reason": "Too early",
+        })
+        self.assertEqual(early.status_code, 400)
+        self.assertContains(early, "before_end_date", status_code=400)
+
+        active.end_date = self.today - timedelta(days=1)
+        active.save(update_fields=["end_date"])
+        self.client.get(route)
+        _, session = self._schedule_session(active, SessionStatus.SCHEDULED, "201")
+        stale_warning = self.client.post(route, {
+            "confirmation_name": active.name, "reason": "Term complete",
+        })
+        self.assertEqual(stale_warning.status_code, 400)
+        self.assertContains(stale_warning, "warnings_unacknowledged", status_code=400)
+
+        session.status = SessionStatus.ACTIVE
+        session.save(update_fields=["status"])
+        blocked = self.client.post(route, {
+            "confirmation_name": active.name, "reason": "Term complete",
+            "acknowledged_warnings": "scheduled_sessions_present",
+        })
+        self.assertEqual(blocked.status_code, 400)
+        self.assertContains(blocked, "active_sessions", status_code=400)
+        active.refresh_from_db()
+        self.assertEqual(active.status, AcademicTerm.Status.ACTIVE)
+        self.assertFalse(AuditLog.objects.exists())
+
+    def test_activation_rechecks_another_active_inserted_after_get(self):
+        draft = self._term("Stale Draft", AcademicTerm.Status.DRAFT, 30, 120)
+        self.client.force_login(self.ifo)
+        route = reverse("ifo_term_activate", args=[draft.pk])
+        displayed = self.client.get(route)
+        self.assertNotContains(displayed, "another_active")
+        self._term("Inserted Active", AcademicTerm.Status.ACTIVE, -120, -1)
+
+        response = self.client.post(route, {
+            "confirmation_name": draft.name,
+            "acknowledged_warnings": "empty_schedule_set",
+        })
+
+        self.assertEqual(response.status_code, 400)
+        self.assertContains(response, "another_active", status_code=400)
+        draft.refresh_from_db()
+        self.assertEqual(draft.status, AcademicTerm.Status.DRAFT)
+        self.assertFalse(AuditLog.objects.exists())
+
+    def test_materializer_failure_rolls_back_sessions_state_and_audit(self):
+        draft = self._term("Failure Draft", AcademicTerm.Status.DRAFT, 0, 60)
+        schedule, _ = self._schedule_session(
+            draft, SessionStatus.SCHEDULED, "301",
+        )
+        Session.objects.filter(schedule=schedule).delete()
+        faculty = schedule.faculty
+
+        def fail_after_write(term, *, start, days, allow_draft=False):
+            scheduled_start = timezone.make_aware(datetime.combine(start, time(8, 0)))
+            Session.objects.create(
+                schedule=schedule, faculty=faculty, room=schedule.room, date=start,
+                scheduled_start=scheduled_start,
+                scheduled_end=scheduled_start + timedelta(hours=1),
+                status=SessionStatus.SCHEDULED,
+            )
+            raise RuntimeError("materialization failed")
+
+        self.client.force_login(self.ifo)
+        with patch("scheduling.term_lifecycle.materialize_term", side_effect=fail_after_write):
+            with self.assertRaises(RuntimeError):
+                self.client.post(reverse("ifo_term_activate", args=[draft.pk]), {
+                    "confirmation_name": draft.name,
+                })
+
+        draft.refresh_from_db()
+        self.assertEqual(draft.status, AcademicTerm.Status.DRAFT)
+        self.assertFalse(Session.objects.filter(schedule=schedule).exists())
+        self.assertFalse(AuditLog.objects.exists())
+
+    def test_close_then_activate_are_two_committed_requests_with_audit_evidence(self):
+        current = self._term("Rollover Current", AcademicTerm.Status.ACTIVE, -120, -1)
+        draft = self._term("Rollover Next", AcademicTerm.Status.DRAFT, 30, 120)
+        self.client.force_login(self.ifo)
+
+        closed = self.client.post(reverse("ifo_term_close", args=[current.pk]), {
+            "confirmation_name": current.name, "reason": "Academic year complete",
+        })
+        self.assertRedirects(closed, reverse("ifo_term_detail", args=[current.pk]))
+        draft.refresh_from_db()
+        self.assertEqual(draft.status, AcademicTerm.Status.DRAFT)
+        self.assertFalse(AuditLog.objects.filter(event_type="term.activated").exists())
+
+        activated = self.client.post(reverse("ifo_term_activate", args=[draft.pk]), {
+            "confirmation_name": draft.name,
+            "acknowledged_warnings": "empty_schedule_set",
+        })
+        self.assertRedirects(activated, reverse("ifo_term_detail", args=[draft.pk]))
+        draft.refresh_from_db()
+        self.assertEqual(draft.status, AcademicTerm.Status.ACTIVE)
+        close_audit = AuditLog.objects.get(event_type="term.archived")
+        activate_audit = AuditLog.objects.get(event_type="term.activated")
+        self.assertEqual(close_audit.actor, self.ifo)
+        self.assertEqual(close_audit.payload["reason"], "Academic year complete")
+        self.assertEqual(close_audit.payload["before"], AcademicTerm.Status.ACTIVE)
+        self.assertEqual(close_audit.payload["after"], AcademicTerm.Status.ARCHIVED)
+        self.assertEqual(activate_audit.actor, self.ifo)
+        self.assertIsNone(activate_audit.payload["reason"])
+        self.assertEqual(activate_audit.payload["before"], AcademicTerm.Status.DRAFT)
+        self.assertEqual(activate_audit.payload["after"], AcademicTerm.Status.ACTIVE)
+
+    def test_reopen_keeps_newer_active_untouched_and_superuser_uses_same_service(self):
+        archived = self._term("Historic Archive", AcademicTerm.Status.ARCHIVED, -300, -200)
+        current = self._term("Current Active", AcademicTerm.Status.ACTIVE, -120, 60)
+        self.client.force_login(self.superuser)
+
+        response = self.client.post(reverse("ifo_term_reopen", args=[archived.pk]), {
+            "confirmation_name": archived.name,
+            "reason": "Registrar correction",
+            "acknowledged_warnings": "active_successor_exists",
+        })
+
+        self.assertRedirects(response, reverse("ifo_term_detail", args=[archived.pk]))
+        archived.refresh_from_db()
+        current.refresh_from_db()
+        self.assertEqual(archived.status, AcademicTerm.Status.DRAFT)
+        self.assertEqual(current.status, AcademicTerm.Status.ACTIVE)
+        audit = AuditLog.objects.get(event_type="term.reopened")
+        self.assertEqual(audit.actor, self.superuser)
+        self.assertEqual(audit.payload["reason"], "Registrar correction")
+        self.assertEqual(audit.payload["before"], AcademicTerm.Status.ARCHIVED)
+        self.assertEqual(audit.payload["after"], AcademicTerm.Status.DRAFT)
+
+    def test_lifecycle_controller_source_delegates_without_reset_or_status_writes(self):
+        source = open("web/ifo_terms.py", encoding="utf-8").read()
+        for service_call in (
+            "preflight_term_creation(", "create_term(", "preflight_term_action(",
+            "activate_term(", "close_term(", "reopen_term(",
+        ):
+            self.assertIn(service_call, source)
+        self.assertNotIn("reset_term", source)
+        self.assertIsNone(re.search(r"\.status\s*=(?!=)", source))
