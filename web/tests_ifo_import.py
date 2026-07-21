@@ -28,6 +28,7 @@ ASCII-only.
 """
 import shutil
 import tempfile
+from datetime import date
 from pathlib import Path
 
 from django.conf import settings
@@ -39,7 +40,7 @@ from django.urls import reverse
 from accounts.models import Role
 from ops.import_staging import MAX_UPLOAD_BYTES
 from ops.models import AuditLog, ImportStaging
-from scheduling.models import Schedule, Session
+from scheduling.models import AcademicTerm, Schedule, Session
 from web.ifo import IMPORT_SESSION_KEY
 
 _TMP_MEDIA = tempfile.mkdtemp(prefix="fluxtrack-import-web-tests-")
@@ -65,6 +66,24 @@ class _ImportBase(TestCase):
         self.faculty = User.objects.create(
             username="fac_import", email="fac_import@mcm.edu.ph",
             role=Role.FACULTY, is_active=True)
+        self.active_term = AcademicTerm.objects.create(
+            name="Current Active Term",
+            start_date=date(2026, 1, 1),
+            end_date=date(2026, 5, 31),
+            status=AcademicTerm.Status.ACTIVE,
+        )
+        self.draft_term = AcademicTerm.objects.create(
+            name="Future Draft Term",
+            start_date=date(2026, 6, 1),
+            end_date=date(2026, 10, 31),
+            status=AcademicTerm.Status.DRAFT,
+        )
+        self.archived_term = AcademicTerm.objects.create(
+            name="Archived Old Term",
+            start_date=date(2025, 1, 1),
+            end_date=date(2025, 5, 31),
+            status=AcademicTerm.Status.ARCHIVED,
+        )
         self.client.force_login(self.ifo)
 
     def _fixture_bytes(self):
@@ -93,9 +112,11 @@ class _ImportBase(TestCase):
         return SimpleUploadedFile(name, base + row * rows,
                                   content_type="text/csv")
 
-    def _preview(self, upload=None):
+    def _preview(self, upload=None, *, term=None):
         return self.client.post(reverse("ifo_import_preview"),
-                                {"file": upload or self._small_upload()})
+                                {"file": upload or self._small_upload(),
+                                 "term": term if term is not None
+                                 else str(self.draft_term.pk)})
 
     def _commit(self):
         return self.client.post(reverse("ifo_import_commit"))
@@ -145,6 +166,51 @@ class ImportPreviewTests(_ImportBase):
         self._preview()
         self.assertEqual(ImportStaging.objects.count(), 1)
         self.assertFalse(ImportStaging.objects.filter(pk=first.pk).exists())
+
+
+class DraftTermImportTests(_ImportBase):
+    """Plan 12-04: browser import targets exactly one selected Draft term."""
+
+    def test_import_page_offers_only_draft_terms(self):
+        resp = self.client.get(reverse("ifo_import"))
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, self.draft_term.name)
+        self.assertContains(resp, f'value="{self.draft_term.pk}"')
+        self.assertNotContains(resp, self.active_term.name)
+        self.assertNotContains(resp, self.archived_term.name)
+
+    def test_preview_requires_a_draft_term_selection(self):
+        resp = self._preview(term="")
+        self.assertEqual(resp.status_code, 400)
+        self.assertContains(resp, "Select a Draft term", status_code=400)
+        self.assertEqual(ImportStaging.objects.count(), 0)
+
+    def test_preview_refuses_active_and_archived_targets(self):
+        for term in (self.active_term, self.archived_term):
+            with self.subTest(term=term.status):
+                resp = self._preview(term=str(term.pk))
+                self.assertEqual(resp.status_code, 400)
+                self.assertContains(resp, "Select a Draft term", status_code=400)
+                self.assertEqual(ImportStaging.objects.count(), 0)
+
+    def test_preview_stores_selected_draft_on_staging_row(self):
+        resp = self._preview()
+        self.assertEqual(resp.status_code, 200)
+        staging = ImportStaging.objects.get()
+        self.assertEqual(staging.term_id, self.draft_term.pk)
+        self.assertContains(resp, self.draft_term.name)
+        self.assertContains(resp, f"data-term-id=\"{self.draft_term.pk}\"")
+
+    def test_reload_uses_staging_bound_term(self):
+        self._preview()
+        self.draft_term.name = "Renamed Draft Target"
+        self.draft_term.save(update_fields=["name"])
+
+        resp = self.client.get(reverse("ifo_import"))
+
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, "Renamed Draft Target")
+        self.assertContains(resp, f"data-term-id=\"{self.draft_term.pk}\"")
 
 
 class StagingLifecycleTests(_ImportBase):
