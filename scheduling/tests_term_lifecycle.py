@@ -5,21 +5,26 @@ checked-in SQLite file is not migration evidence; the constraint tests must run
 against the configured Django test database, and production-shaped data still
 needs the migration rehearsal described in the plan before production use.
 """
-from datetime import date
+from datetime import date, datetime, time
 from pathlib import Path
 from unittest.mock import patch
+from zoneinfo import ZoneInfo
 
 from django.db import IntegrityError, transaction
 from django.contrib.auth import get_user_model
 from django.test import SimpleTestCase, TestCase, TransactionTestCase
 
 from accounts.models import Role
+from campus.models import Building, Floor, Room
 from ops.models import AuditLog
-from scheduling.models import AcademicTerm
+from scheduling.models import AcademicTerm, Schedule, Session, SessionStatus
 from scheduling.term_lifecycle import (
     TermLifecycleError,
+    close_term,
     create_term,
+    preflight_term_action,
     preflight_term_creation,
+    reopen_term,
 )
 from scheduling.term_scope import (
     ArchivedTermError,
@@ -106,6 +111,49 @@ def _user(username, role=Role.IFO_ADMIN, **kwargs):
         role=role,
         is_active=True,
         **kwargs,
+    )
+
+
+def _aware(d, t):
+    return datetime(d.year, d.month, d.day, t.hour, t.minute, tzinfo=ZoneInfo("Asia/Manila"))
+
+
+def _room(prefix):
+    building = Building.objects.create(name=f"{prefix} Hall", code=f"{prefix}-BLD")
+    floor = Floor.objects.create(building=building, number=1)
+    return Room.objects.create(
+        floor=floor,
+        code=f"{prefix}-101",
+        capacity=40,
+        qr_token=f"{prefix}-qr",
+        manual_code=f"{prefix[:1].upper()}0001"[:6],
+    )
+
+
+def _schedule(term, faculty, prefix="tlc"):
+    room = _room(prefix)
+    return Schedule.objects.create(
+        term=term,
+        course_code=f"{prefix.upper()}101",
+        section="A",
+        faculty=faculty,
+        room=room,
+        day_of_week=0,
+        start_time=time(8, 0),
+        end_time=time(9, 30),
+    )
+
+
+def _session(schedule, faculty, status=SessionStatus.SCHEDULED):
+    d = date(2026, 5, 1)
+    return Session.objects.create(
+        schedule=schedule,
+        faculty=faculty,
+        room=schedule.room,
+        date=d,
+        scheduled_start=_aware(d, schedule.start_time),
+        scheduled_end=_aware(d, schedule.end_time),
+        status=status,
     )
 
 
@@ -263,3 +311,160 @@ class TermCreateTests(TestCase):
                 )
 
         self.assertFalse(AcademicTerm.objects.filter(name="Rollback Term").exists())
+
+
+class TermTransitionTests(TestCase):
+    def setUp(self):
+        self.ifo = _user("term_transition_ifo")
+        self.faculty = _user("term_transition_faculty", role=Role.FACULTY)
+        self.today = date(2026, 6, 1)
+        self.term = AcademicTerm.objects.create(
+            name="Transition Active",
+            start_date=date(2026, 1, 1),
+            end_date=date(2026, 5, 31),
+            status=AcademicTerm.Status.ACTIVE,
+        )
+
+    def test_close_refuses_before_end_date(self):
+        with self.assertRaises(TermLifecycleError) as ctx:
+            close_term(
+                self.term.pk,
+                actor=self.ifo,
+                confirmation_name=self.term.name,
+                reason="End of term",
+                today=date(2026, 5, 30),
+            )
+        self.assertIn("before_end_date", ctx.exception.blockers)
+        self.term.refresh_from_db()
+        self.assertEqual(self.term.status, AcademicTerm.Status.ACTIVE)
+
+    def test_close_refuses_active_sessions(self):
+        schedule = _schedule(self.term, self.faculty, "act")
+        _session(schedule, self.faculty, SessionStatus.ACTIVE)
+
+        with self.assertRaises(TermLifecycleError) as ctx:
+            close_term(
+                self.term.pk,
+                actor=self.ifo,
+                confirmation_name=self.term.name,
+                reason="End of term",
+                today=self.today,
+            )
+        self.assertIn("active_sessions", ctx.exception.blockers)
+
+    def test_close_requires_exact_confirmation_and_reason(self):
+        with self.assertRaises(TermLifecycleError) as wrong:
+            close_term(
+                self.term.pk,
+                actor=self.ifo,
+                confirmation_name="transition active",
+                reason="End of term",
+                today=self.today,
+            )
+        self.assertIn("confirmation_mismatch", wrong.exception.blockers)
+
+        with self.assertRaises(TermLifecycleError) as missing_reason:
+            close_term(
+                self.term.pk,
+                actor=self.ifo,
+                confirmation_name=self.term.name,
+                reason=" ",
+                today=self.today,
+            )
+        self.assertIn("reason_required", missing_reason.exception.blockers)
+
+    def test_close_revalidates_warning_acknowledgements_under_lock(self):
+        preflight = preflight_term_action(
+            self.term.pk, "close", actor=self.ifo, today=self.today
+        )
+        self.assertEqual(preflight.warnings, ())
+        schedule = _schedule(self.term, self.faculty, "warn")
+        _session(schedule, self.faculty, SessionStatus.SCHEDULED)
+
+        with self.assertRaises(TermLifecycleError) as ctx:
+            close_term(
+                self.term.pk,
+                actor=self.ifo,
+                confirmation_name=self.term.name,
+                reason="End of term",
+                today=self.today,
+                acknowledged_warnings=preflight.warnings,
+            )
+        self.assertIn("warnings_unacknowledged", ctx.exception.blockers)
+
+    def test_successful_close_preserves_schedules_sessions_and_audits(self):
+        schedule = _schedule(self.term, self.faculty, "done")
+        session = _session(schedule, self.faculty, SessionStatus.COMPLETED)
+
+        closed = close_term(
+            self.term.pk,
+            actor=self.ifo,
+            confirmation_name=self.term.name,
+            reason="Registrar close",
+            today=self.today,
+        )
+
+        self.assertEqual(closed.status, AcademicTerm.Status.ARCHIVED)
+        self.assertTrue(Schedule.objects.filter(pk=schedule.pk).exists())
+        session.refresh_from_db()
+        self.assertEqual(session.status, SessionStatus.COMPLETED)
+        audit = AuditLog.objects.get(event_type="term.archived")
+        self.assertEqual(audit.actor, self.ifo)
+        self.assertEqual(audit.payload["reason"], "Registrar close")
+        self.assertEqual(audit.payload["before"], AcademicTerm.Status.ACTIVE)
+        self.assertEqual(audit.payload["after"], AcademicTerm.Status.ARCHIVED)
+        self.assertEqual(audit.payload["schedule_count"], 1)
+        self.assertEqual(audit.payload["session_count"], 1)
+        self.assertEqual(audit.payload["active_session_count"], 0)
+
+    def test_reopen_requires_reason_and_returns_archived_to_draft_with_active_untouched(self):
+        self.term.status = AcademicTerm.Status.ARCHIVED
+        self.term.save(update_fields=["status"])
+        current = AcademicTerm.objects.create(
+            name="Current Active",
+            start_date=date(2026, 6, 1),
+            end_date=date(2026, 12, 31),
+            status=AcademicTerm.Status.ACTIVE,
+        )
+
+        with self.assertRaises(TermLifecycleError) as missing_reason:
+            reopen_term(
+                self.term.pk,
+                actor=self.ifo,
+                confirmation_name=self.term.name,
+                reason=" ",
+            )
+        self.assertIn("reason_required", missing_reason.exception.blockers)
+
+        reopened = reopen_term(
+            self.term.pk,
+            actor=self.ifo,
+            confirmation_name=self.term.name,
+            reason="Correction window",
+            acknowledged_warnings=("active_successor_exists",),
+        )
+
+        reopened.refresh_from_db()
+        current.refresh_from_db()
+        self.assertEqual(reopened.status, AcademicTerm.Status.DRAFT)
+        self.assertEqual(current.status, AcademicTerm.Status.ACTIVE)
+        audit = AuditLog.objects.get(event_type="term.reopened")
+        self.assertEqual(audit.payload["before"], AcademicTerm.Status.ARCHIVED)
+        self.assertEqual(audit.payload["after"], AcademicTerm.Status.DRAFT)
+        self.assertIn("active_successor_exists", audit.payload["acknowledged_warning_keys"])
+
+    def test_injected_audit_failure_rolls_back_close(self):
+        with patch("scheduling.term_lifecycle.AuditLog.objects.create") as create_audit:
+            create_audit.side_effect = RuntimeError("audit insert failed")
+            with self.assertRaises(RuntimeError):
+                close_term(
+                    self.term.pk,
+                    actor=self.ifo,
+                    confirmation_name=self.term.name,
+                    reason="End of term",
+                    today=self.today,
+                )
+
+        self.term.refresh_from_db()
+        self.assertEqual(self.term.status, AcademicTerm.Status.ACTIVE)
+        self.assertFalse(AuditLog.objects.filter(event_type="term.archived").exists())
