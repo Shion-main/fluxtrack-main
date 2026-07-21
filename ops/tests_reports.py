@@ -8,11 +8,12 @@ isolated temp MEDIA_ROOT so no real repo files are touched. ASCII-only.
 import shutil
 import tempfile
 from datetime import date
+import inspect
 from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
 from django.core.files.storage import default_storage
-from django.core.management import call_command
+from django.core.management import call_command, CommandError
 from django.db import IntegrityError
 from django.db.models.deletion import ProtectedError
 from django.test import TestCase, override_settings
@@ -357,6 +358,49 @@ class JobFillTests(TestCase):
         call_command("generate_weekly_report", week=str(fx.week_start))
         self.assertEqual(WeeklyReport.objects.count(), 3)
 
+    def test_on_demand_command_accepts_explicit_active_term_pk(self):
+        fx = make_reporting_fixture()
+        call_command(
+            "generate_weekly_report",
+            week=str(fx.week_start),
+            term=str(fx.term.pk),
+        )
+        self.assertEqual(
+            WeeklyReport.objects.filter(term=fx.term).count(), 3)
+
+    def test_on_demand_command_accepts_explicit_active_term_name(self):
+        fx = make_reporting_fixture()
+        call_command(
+            "generate_weekly_report",
+            week=str(fx.week_start),
+            term=fx.term.name,
+        )
+        self.assertEqual(
+            WeeklyReport.objects.filter(term=fx.term).count(), 3)
+
+    def test_on_demand_command_refuses_explicit_non_active_term(self):
+        fx = make_reporting_fixture()
+        draft = AcademicTerm.objects.create(
+            name="jobfill Draft", start_date=fx.week_start, end_date=fx.sun,
+            status=AcademicTerm.Status.DRAFT)
+
+        with self.assertRaises(CommandError):
+            call_command(
+                "generate_weekly_report",
+                week=str(fx.week_start),
+                term=str(draft.pk),
+            )
+
+        self.assertFalse(WeeklyReport.objects.filter(term=draft).exists())
+
+    def test_scheduler_no_active_is_safe_noop(self):
+        fx = make_reporting_fixture()
+        AcademicTerm.objects.filter(pk=fx.term.pk).update(
+            status=AcademicTerm.Status.ARCHIVED)
+
+        self.assertEqual(self._run_job_for_fixture_week(fx), 0)
+        self.assertFalse(WeeklyReport.objects.exists())
+
     def test_scheduler_still_registers_exactly_four_jobs(self):
         from scheduling.management.commands.runscheduler import build_scheduler
         sched = build_scheduler()
@@ -367,3 +411,23 @@ class JobFillTests(TestCase):
         finally:
             if getattr(sched, "running", False):
                 sched.shutdown(wait=False)
+
+
+class WeeklyReportProductionCouplingTests(TestCase):
+    """D-12/T-12-07: production adapters pass term; service performs no lookup."""
+
+    def test_report_service_has_no_implicit_active_lookup(self):
+        import ops.reports as reports
+
+        src = inspect.getsource(reports)
+        self.assertNotIn("get_active_term", src)
+        self.assertNotIn("require_active_term", src)
+
+    def test_scheduler_and_command_call_generate_week_reports_with_term(self):
+        from scheduling.management.commands import generate_weekly_report
+        from scheduling.management.commands import runscheduler
+
+        scheduler_src = inspect.getsource(runscheduler._job_weekly_report)
+        command_src = inspect.getsource(generate_weekly_report.Command.handle)
+        self.assertIn("term=", scheduler_src)
+        self.assertIn("term=", command_src)
