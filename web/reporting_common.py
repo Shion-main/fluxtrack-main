@@ -146,8 +146,8 @@ def selected_report_scope(
     )
     note = None
     if invalid_date:
-        note = ("One or more dates were not valid, so the report used the "
-                "selected term's safe defaults.")
+        note = ("That date wasn't valid, so the date filter was ignored and "
+                "the selected term's safe default was used.")
 
     start = parsed_start if parsed_start is not None else default_start
     end = parsed_end if parsed_end is not None else default_end

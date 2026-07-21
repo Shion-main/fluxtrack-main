@@ -21,24 +21,26 @@ convention (Windows cp1252).
 """
 import csv
 from functools import wraps
+from types import SimpleNamespace
+from urllib.parse import urlencode
 
 from django.contrib.auth import get_user_model
 from django.contrib.auth.decorators import login_required
 from django.core.exceptions import PermissionDenied
 from django.db.models import Exists, OuterRef, Q
-from django.http import StreamingHttpResponse
+from django.http import HttpResponse, StreamingHttpResponse
 from django.shortcuts import render
+from django.urls import reverse
 from django.utils import timezone
-from django.utils.dateparse import parse_date
 from django.views.decorators.http import require_http_methods
 
 from accounts.models import Department, Role
-from scheduling.models import AcademicTerm, Session
+from scheduling.models import Session
 from scheduling.report_render import csv_safe
 from scheduling.reporting import session_minutes_late
 from verification.models import CheckerValidation, ValidationAction
 from web.pagination import paginate
-from web.reporting_common import status_label
+from web.reporting_common import selected_report_scope, status_label
 
 # The on-screen list is PAGED, not capped. The old behaviour sliced to 200 rows
 # and said "showing up to 200" -- which never told the reader whether they were
@@ -78,7 +80,16 @@ def hr_required(view):
     return wrapped
 
 
-def _filtered_sessions(request):
+def _hr_default_window(term):
+    """Preserve HR's established whole-term payroll window for ACTIVE."""
+    return term.start_date, term.end_date
+
+
+def _report_scope(request):
+    return selected_report_scope(request, default_window=_hr_default_window)
+
+
+def _filtered_sessions(request, scope):
     """Parse the HR GET filter bar and return ``(queryset, filters)`` (HR-02).
 
     Builds the session-level base queryset -- ``select_related`` for the faculty /
@@ -87,33 +98,39 @@ def _filtered_sessions(request):
     query (crucial for the streaming CSV: the annotation is resolved in the main
     query, so no subquery runs inside the ``.iterator()`` generator).
 
-    Applies four INDEPENDENT filters + a free-text search, each keyed on an FK id or
-    ``date__range`` (NEVER a ``pk__in`` id list -> the 2100-param trap): faculty
-    (id), department (``faculty__department`` id), term (``schedule__term`` id),
-    date range (``from``/``to`` via ``parse_date``), and a search over faculty
-    name / course_code. Invalid input degrades to a friendly note and is simply
-    ignored -- it never raises a 500 (T-06-16). The SAME parser feeds both the list
-    view and the CSV export so they always agree on scope.
+    Term/date scope is normalized before this function. Faculty, department, and
+    search remain independent, authorization-neutral filters. The same parser
+    feeds list and CSV so they always agree on scope.
     """
+    faculty_raw = (request.GET.get("faculty") or "").strip()
+    dept_raw = (request.GET.get("department") or "").strip()
+    q = (request.GET.get("q") or "").strip()
+
+    filters = {
+        "faculty": faculty_raw,
+        "department": dept_raw,
+        "term": str(scope.term.pk) if scope.term else "",
+        "date_from": scope.start.isoformat() if scope.start else "",
+        "date_to": scope.end.isoformat() if scope.end else "",
+        "q": q,
+        "note": scope.note,
+        "any_applied": bool(
+            faculty_raw or dept_raw or q
+            or any(name in request.GET for name in ("term", "from", "to", "as_of"))
+        ),
+    }
+    if not scope.is_valid:
+        return Session.objects.none(), filters
+
     verified_sq = CheckerValidation.objects.filter(
         session=OuterRef("pk"), action=ValidationAction.VERIFIED)
     qs = (Session.objects
+          .filter(schedule__term=scope.term,
+                  date__range=(scope.start, scope.end))
           .select_related("schedule", "schedule__term", "faculty",
                           "faculty__department", "room")
           .annotate(is_verified=Exists(verified_sq))
-          # Newest-first: the page cap then shows the most RECENT sessions, not
-          # the oldest historical rows once volume exceeds one page (code-review
-          # HIGH). The CSV export streams the full set in the same order.
           .order_by("-date", "-scheduled_start"))
-
-    faculty_raw = (request.GET.get("faculty") or "").strip()
-    dept_raw = (request.GET.get("department") or "").strip()
-    term_raw = (request.GET.get("term") or "").strip()
-    from_raw = (request.GET.get("from") or "").strip()
-    to_raw = (request.GET.get("to") or "").strip()
-    q = (request.GET.get("q") or "").strip()
-
-    note = None
 
     # FK-id filters: applied only when the value is a clean integer id. A forged or
     # garbage value is ignored (never fed to the ORM as a raw non-numeric lookup).
@@ -121,21 +138,6 @@ def _filtered_sessions(request):
         qs = qs.filter(faculty_id=int(faculty_raw))
     if dept_raw.isdigit():
         qs = qs.filter(faculty__department_id=int(dept_raw))
-    if term_raw.isdigit():
-        qs = qs.filter(schedule__term_id=int(term_raw))
-
-    # Date-range filter: parse_date-validated. An invalid date leaves a friendly
-    # note and drops just that bound -- a 200 with a notice, never a 500 (HR-02).
-    d_from = parse_date(from_raw) if from_raw else None
-    d_to = parse_date(to_raw) if to_raw else None
-    if (from_raw and d_from is None) or (to_raw and d_to is None):
-        note = ("That date wasn't valid, so the date filter was ignored. "
-                "Enter dates as YYYY-MM-DD.")
-    if d_from is not None:
-        qs = qs.filter(date__gte=d_from)
-    if d_to is not None:
-        qs = qs.filter(date__lte=d_to)
-
     # Free-text search over the faculty display name + course code.
     if q:
         qs = qs.filter(
@@ -143,30 +145,34 @@ def _filtered_sessions(request):
             | Q(faculty__last_name__icontains=q)
             | Q(schedule__course_code__icontains=q))
 
-    filters = {
-        "faculty": faculty_raw, "department": dept_raw, "term": term_raw,
-        "date_from": from_raw, "date_to": to_raw, "q": q, "note": note,
-        "any_applied": bool(faculty_raw or dept_raw or term_raw
-                            or from_raw or to_raw or q),
-    }
     return qs, filters
 
 
 def _filter_choices():
-    """Choice data for the Pattern-A filter bar (faculty / department / term).
-
-    The term list preselects the single active term in the template. Cross-
-    department by design: every department and every faculty is a filter option
-    (HR is not department-scoped).
-    """
+    """Cross-department faculty/department choices for the HR filter bar."""
     faculty = (get_user_model().objects
                .filter(role=Role.FACULTY, is_active=True)
                .order_by("last_name", "first_name", "username"))
     departments = Department.objects.order_by("code")
-    terms = AcademicTerm.objects.order_by("-is_active", "-start_date")
-    active_term = AcademicTerm.objects.filter(is_active=True).first()
-    return {"faculty_choices": faculty, "department_choices": departments,
-            "term_choices": terms, "active_term": active_term}
+    return {"faculty_choices": faculty, "department_choices": departments}
+
+
+def _surface_filter_params(filters):
+    return {
+        key: value for key, value in (
+            ("faculty", filters["faculty"]),
+            ("department", filters["department"]),
+            ("q", filters["q"]),
+        ) if value
+    }
+
+
+def _scope_url(view_name, scope, filters=None):
+    params = dict(scope.query_params)
+    if filters:
+        params.update(_surface_filter_params(filters))
+    query = urlencode(params)
+    return f"{reverse(view_name)}?{query}" if query else reverse(view_name)
 
 
 @hr_required
@@ -181,13 +187,37 @@ def attendance(request):
     full filtered set is still what the CSV export streams. Invalid filter input
     degrades to a friendly note, never a 500.
     """
-    qs, filters = _filtered_sessions(request)
-    pager = paginate(request, qs, per_page=HR_PAGE_SIZE)
+    scope = _report_scope(request)
+    qs, filters = _filtered_sessions(request, scope)
+    # A fresh request has no GET term to preserve, so feed pagination a known,
+    # normalized query mapping rather than the untrusted raw request mapping.
+    normalized_get = request.GET.copy()
+    normalized_get.clear()
+    normalized_get.update(scope.query_params)
+    normalized_get.update(_surface_filter_params(filters))
+    if request.GET.get("page"):
+        normalized_get["page"] = request.GET["page"]
+    pager = paginate(SimpleNamespace(GET=normalized_get), qs,
+                     per_page=HR_PAGE_SIZE)
     sessions = list(pager["page"].object_list)
     for s in sessions:
         s.present_label = status_label(s.status)
-    ctx = {"sessions": sessions, "filters": filters,
-           **pager, **_filter_choices()}
+    ctx = {
+        "sessions": sessions,
+        "filters": filters,
+        "scope": scope,
+        "scope_query": scope.scope_query,
+        "export_url": (
+            _scope_url("hr_attendance_csv", scope, filters)
+            if scope.is_valid else ""
+        ),
+        "reset_url": (
+            _scope_url("hr_attendance", scope)
+            if scope.is_valid else reverse("hr_attendance")
+        ),
+        **pager,
+        **_filter_choices(),
+    }
     return render(request, "hr/attendance.html", ctx)
 
 
@@ -227,7 +257,10 @@ def attendance_csv(request):
     query, so no subquery runs while the server-side cursor is open (MSSQL
     HY010/cursor-open trap avoided, T-06-15). Read-only (GET-only).
     """
-    qs, _filters = _filtered_sessions(request)
+    scope = _report_scope(request)
+    if not scope.is_valid:
+        return HttpResponse(scope.error, status=400, content_type="text/plain")
+    qs, _filters = _filtered_sessions(request, scope)
     writer = csv.writer(_Echo())
 
     def rows():
@@ -252,7 +285,11 @@ def attendance_csv(request):
                 "yes" if s.is_verified else "no",
             ])
 
-    filename = f"hr-attendance-{timezone.localdate().isoformat()}.csv"
+    filename = (f"hr-attendance-term-{scope.term.pk}-"
+                f"{timezone.localdate().isoformat()}.csv")
     resp = StreamingHttpResponse(rows(), content_type="text/csv")
     resp["Content-Disposition"] = f'attachment; filename="{filename}"'
+    resp["X-Report-Term"] = str(scope.term.pk)
+    resp["X-Report-From"] = scope.start.isoformat()
+    resp["X-Report-To"] = scope.end.isoformat()
     return resp

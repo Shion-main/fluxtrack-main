@@ -34,23 +34,7 @@ a scope boundary. NO write controls exist on this surface. ASCII-only.{% endcomm
           {% endfor %}
         </select>
       </label>
-      <label class="flex flex-col gap-1">
-        <span class="uk-text-small uk-text-muted">Term</span>
-        <select name="term" class="uk-select">
-          <option value="">All terms</option>
-          {% for t in term_choices %}
-          <option value="{{ t.id }}" {% if filters.term == t.id|stringformat:'s' %}selected{% elif not filters.term and t.is_active %}selected{% endif %}>{{ t.name }}</option>
-          {% endfor %}
-        </select>
-      </label>
-      <label class="flex flex-col gap-1">
-        <span class="uk-text-small uk-text-muted">From</span>
-        <input type="date" name="from" class="uk-input" value="{{ filters.date_from }}">
-      </label>
-      <label class="flex flex-col gap-1">
-        <span class="uk-text-small uk-text-muted">To</span>
-        <input type="date" name="to" class="uk-input" value="{{ filters.date_to }}">
-      </label>
+      {% include "reports/_term_filter.html" %}
       <label class="flex flex-col gap-1">
         <span class="uk-text-small uk-text-muted">Search</span>
         <span class="inline-flex items-center gap-1">
@@ -59,16 +43,24 @@ a scope boundary. NO write controls exist on this surface. ASCII-only.{% endcomm
         </span>
       </label>
       <button type="submit" class="uk-btn uk-btn-primary uk-btn-sm">Apply</button>
-      <a href="/hr/attendance" class="uk-btn uk-btn-ghost uk-btn-sm">Reset</a>
+      <a href="{{ reset_url }}" class="uk-btn uk-btn-ghost uk-btn-sm">Reset</a>
       <span class="grow"></span>
-      <a href="/hr/attendance.csv?faculty={{ filters.faculty }}&department={{ filters.department }}&term={{ filters.term }}&from={{ filters.date_from }}&to={{ filters.date_to }}&q={{ filters.q|urlencode }}"
+      {% if export_url %}
+      <a href="{{ export_url }}"
          class="uk-btn uk-btn-secondary uk-btn-sm" download>
         <uk-icon icon="download" class="size-4"></uk-icon> Export CSV</a>
+      {% endif %}
     </div>
     {% if filters.note %}
     <p class="uk-text-small mt-2" style="color:var(--amber)">{{ filters.note }}</p>
     {% endif %}
   </form>
+
+  {% if scope.error %}
+  <div class="uk-alert uk-alert-warning mb-6" role="alert">
+    <p>{{ scope.error }}</p>
+  </div>
+  {% endif %}
 
   {% if sessions %}
   {% comment %}Eight columns was over the ~6 budget and the two weakest earned
