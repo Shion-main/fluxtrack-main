@@ -5,16 +5,16 @@ milestone_name: — "Operational Trust"
 current_phase: 12
 current_phase_name: Term Lifecycle
 status: In Progress
-stopped_at: Completed 12-08-PLAN.md
-last_updated: "2026-07-21T18:12:46.524Z"
+stopped_at: Completed 12-05-PLAN.md
+last_updated: "2026-07-21T18:25:19.860Z"
 last_activity: 2026-07-20
 last_activity_desc: Phase 11 complete, transitioned to Phase 12
 progress:
   total_phases: 18
   completed_phases: 10
   total_plans: 75
-  completed_plans: 67
-  percent: 89
+  completed_plans: 68
+  percent: 91
 ---
 
 # Project State
@@ -154,6 +154,7 @@ Phase 07 and remain out of scope.
 | Phase 12 P03 | 22 min | 2 tasks | 4 files |
 | Phase 12 P04 | 20 min | 3 tasks | 9 files |
 | Phase 12 P08 | 10 min | 3 tasks | 13 files |
+| Phase 12 P05 | 49 min | 2 tasks | 11 files |
 
 ## Accumulated Context
 
@@ -251,9 +252,11 @@ Recent decisions affecting current work:
 - [Phase 12]: Attendance/coverage report aggregate services now require explicit term and filter the shared Session root with `schedule__term=term`; report controllers/adapters resolve term, services do not.
 - [Phase 12]: Stored weekly report generation uses term/week/department identity and writes new files under `reports/term-<pk>/<week>/<code>.csv|pdf`.
 - [Phase 12]: `generate_weekly_report --term` accepts an ACTIVE term by pk or exact name; scheduler resolves the authoritative ACTIVE term once and returns 0 when none exists.
+- [Phase 12]: `reset_term` remains as a command name only, raising `CommandError` with lifecycle guidance before any ORM access.
+- [Phase 12]: Modality request writers refuse mixed-term ownership instead of guessing which term owns the request.
+- [Phase 12]: `seed_term` keeps its active-term operator flow but resolves through `require_active_term` and scopes term-owned rewrites to that term.
 
 ### Pending Todos
-
 [From .planning/todos/pending/ — ideas captured during sessions]
 
 None yet.
@@ -276,12 +279,12 @@ None yet.
 
 **Resume file:** None
 
-Last session: 2026-07-21T18:12:46.494Z
+Last session: 2026-07-21T18:25:08.876Z
 Session arc + decisions: docs/sessions/2026-07-20-audit-and-phase9.md
-Stopped at: Completed 12-08-PLAN.md
+Stopped at: Completed 12-05-PLAN.md
 suite 994 green.
 
-RESUME NEXT: **Phase 12 Plan 05 — Term Lifecycle**. Plan 04 shipped explicit Draft-bound import staging and commit. Plan 05 should enforce the ARCHIVED write freeze across reusable domain services and management commands.
+RESUME NEXT: **Phase 12 Plan 06 - Active Term Operational Scope**. Plan 05 shipped archive write freeze across reusable service and command writers; Plan 06 should scope every live reader/writer and background job to the authoritative ACTIVE term.
 
 OUTSTANDING (carry forward):
 
