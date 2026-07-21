@@ -4,16 +4,16 @@ milestone: v1.3
 milestone_name: — "Operational Trust"
 current_phase: 12
 current_phase_name: Term Lifecycle
-status: In Progress
-stopped_at: Completed 12-07-PLAN.md
-last_updated: "2026-07-21T19:05:24.101Z"
-last_activity: 2026-07-20
-last_activity_desc: Phase 11 complete, transitioned to Phase 12
+status: Human Verification Required
+stopped_at: Phase 12 implementation complete; Django/MSSQL and browser gates pending
+last_updated: "2026-07-22T03:35:00+08:00"
+last_activity: 2026-07-22
+last_activity_desc: Phase 12 executed 12/12 plans; structural verification complete
 progress:
   total_phases: 18
   completed_phases: 10
   total_plans: 75
-  completed_plans: 70
+  completed_plans: 74
   percent: 56
 ---
 
@@ -24,7 +24,7 @@ progress:
 See: .planning/PROJECT.md (updated 2026-07-02)
 
 **Core value:** A faculty member checks in with one action, and the resulting attendance record is trustworthy — presence physically verified, lateness captured, ghost bookings detected.
-**Current focus:** Phase 11 — metrics-the-mission-promises
+**Current focus:** Phase 12 — term lifecycle runtime and human verification
 
 ## Current Position
 
@@ -292,7 +292,7 @@ Session arc + decisions: docs/sessions/2026-07-20-audit-and-phase9.md
 Stopped at: Completed 12-07-PLAN.md
 suite 994 green.
 
-RESUME NEXT: **Phase 12 Plan 07**. Plan 06 shipped ACTIVE-term scoping for live jobs, role surfaces, and IFO mutation seams; runtime Django verification remains environment-blocked in this shell.
+RESUME NEXT: Run the Phase 12 Django/MSSQL and browser verification gates documented in `12-VERIFICATION.md`; implementation is complete at 12/12 plans.
 
 OUTSTANDING (carry forward):
 
