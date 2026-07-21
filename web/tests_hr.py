@@ -115,7 +115,8 @@ class HrFilterTests(_HrBase):
         # A second (inactive) term with one uniquely-coded session for faculty_a.
         other_term = AcademicTerm.objects.create(
             name="Other Term", start_date=self.fx.term.start_date,
-            end_date=self.fx.term.end_date, is_active=False)
+            end_date=self.fx.term.end_date,
+            status=AcademicTerm.Status.ARCHIVED)
         sched = Schedule.objects.create(
             term=other_term, course_code="OTHERTERMSESS", section="Z",
             faculty=self.fx.faculty_a, room=self.fx.room_a, day_of_week=0,
@@ -139,6 +140,12 @@ class HrFilterTests(_HrBase):
                                 {"term": other_term.id})
         self.assertEqual(resp2.status_code, 200)
         self.assertContains(resp2, "OTHERTERMSESS")
+
+    def test_fresh_request_resolves_active_term_in_context(self):
+        resp = self.client.get(reverse("hr_attendance"))
+        self.assertEqual(resp.context["scope"].term, self.fx.term)
+        self.assertEqual(resp.context["filters"]["term"], str(self.fx.term.pk))
+        self.assertIn(f"term={self.fx.term.pk}", resp.context["scope_query"])
 
     def test_invalid_date_is_friendly_not_500(self):
         resp = self.client.get(reverse("hr_attendance"),
@@ -196,6 +203,12 @@ class HrExportTests(_HrBase):
         body = self._body(resp)
         self.assertIn(self.fx.faculty_a.last_name, body)
         self.assertNotIn(self.fx.faculty_b.last_name, body)
+
+    def test_csv_filename_identifies_selected_term(self):
+        resp = self.client.get(reverse("hr_attendance_csv"))
+        self.assertIn(
+            f"term-{self.fx.term.pk}", resp["Content-Disposition"])
+        self.assertEqual(resp["X-Report-Term"], str(self.fx.term.pk))
 
 
 class HrReadOnlyTests(_HrBase):

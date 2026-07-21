@@ -5,13 +5,21 @@ the shared parser independent from any one role surface, then exercise the HR
 consumer against adversarial same-date data in ``HrReportTermTests``.
 ASCII-only by convention (Windows cp1252).
 """
-from datetime import date
+from datetime import date, datetime, time
+from html import unescape
 from unittest.mock import patch
+from urllib.parse import parse_qs, urlparse
 
+from django.contrib.auth import get_user_model
 from django.template.loader import render_to_string
 from django.test import RequestFactory, TestCase
+from django.urls import reverse
+from django.utils import timezone
 
-from scheduling.models import AcademicTerm
+from accounts.models import Role
+from scheduling.models import (AcademicTerm, Modality, Schedule, Session,
+                               SessionStatus)
+from scheduling.test_support import make_reporting_fixture
 from web.reporting_common import selected_report_scope
 
 
@@ -133,3 +141,126 @@ class ReportScopeTests(TestCase):
         self.assertIn('name="to"', html)
         self.assertIn('name="department" value="7"', html)
         self.assertIn('name="q" value="A&amp;B"', html)
+
+
+def _aware(day, value):
+    return timezone.make_aware(datetime.combine(day, value))
+
+
+class HrReportTermTests(TestCase):
+    """D-09/D-12: HR HTML/CSV consume one identical selected term."""
+
+    def setUp(self):
+        self.fx = make_reporting_fixture(prefix="hrterm")
+        User = get_user_model()
+        self.hr = User.objects.create(
+            username="hr_term_admin", email="hr_term_admin@mcm.edu.ph",
+            role=Role.HR_ADMIN, is_active=True,
+        )
+        self.client.force_login(self.hr)
+        self.archived = AcademicTerm.objects.create(
+            name="Archived HR Term", start_date=self.fx.term.start_date,
+            end_date=self.fx.term.end_date,
+            status=AcademicTerm.Status.ARCHIVED,
+        )
+        self.archived_schedule = Schedule.objects.create(
+            term=self.archived, course_code="ARCHIVEONLY", section="HX",
+            faculty=self.fx.faculty_a, room=self.fx.room_a, day_of_week=0,
+            start_time=time(8), end_time=time(9), modality=Modality.F2F,
+        )
+        self.archived_session = Session.objects.create(
+            schedule=self.archived_schedule, faculty=self.fx.faculty_a,
+            room=self.fx.room_a, date=self.fx.week_start,
+            scheduled_start=_aware(self.fx.week_start, time(8)),
+            scheduled_end=_aware(self.fx.week_start, time(9)),
+            actual_start=_aware(self.fx.week_start, time(8, 5)),
+            status=SessionStatus.ACTIVE,
+        )
+
+    def _csv_body(self, params=None):
+        response = self.client.get(reverse("hr_attendance_csv"), params or {})
+        return response, b"".join(response.streaming_content).decode("utf-8")
+
+    def test_fresh_html_and_csv_query_only_active_term(self):
+        page = self.client.get(reverse("hr_attendance"))
+        self.assertEqual(page.context["scope"].term, self.fx.term)
+        self.assertContains(page, self.fx.s_active.schedule.course_code)
+        self.assertNotContains(page, "ARCHIVEONLY")
+
+        export, body = self._csv_body()
+        self.assertEqual(export.status_code, 200)
+        self.assertIn(self.fx.s_active.schedule.course_code, body)
+        self.assertNotIn("ARCHIVEONLY", body)
+
+    def test_archived_html_and_csv_default_to_full_archived_span(self):
+        params = {"term": self.archived.pk}
+        page = self.client.get(reverse("hr_attendance"), params)
+        scope = page.context["scope"]
+        self.assertEqual((scope.start, scope.end),
+                         (self.archived.start_date, self.archived.end_date))
+        self.assertContains(page, "ARCHIVEONLY")
+        self.assertNotContains(page, self.fx.s_active.schedule.course_code)
+
+        _export, body = self._csv_body(params)
+        self.assertIn("ARCHIVEONLY", body)
+        self.assertNotIn(self.fx.s_active.schedule.course_code, body)
+
+    def test_explicit_dates_clamp_identically_for_html_and_csv(self):
+        params = {
+            "term": self.archived.pk,
+            "from": "1900-01-01",
+            "to": "2099-12-31",
+        }
+        page = self.client.get(reverse("hr_attendance"), params)
+        scope = page.context["scope"]
+        self.assertEqual(scope.start, self.archived.start_date)
+        self.assertEqual(scope.end, self.archived.end_date)
+        export, body = self._csv_body(params)
+        self.assertEqual(export["X-Report-From"], self.archived.start_date.isoformat())
+        self.assertEqual(export["X-Report-To"], self.archived.end_date.isoformat())
+        self.assertIn("ARCHIVEONLY", body)
+
+    def test_invalid_explicit_term_is_friendly_and_never_falls_back(self):
+        page = self.client.get(reverse("hr_attendance"), {"term": "missing"})
+        self.assertEqual(page.status_code, 200)
+        self.assertEqual(page.context["scope"].error_code, "invalid-term")
+        self.assertContains(page, "academic term is not available")
+        self.assertNotContains(page, self.fx.s_active.schedule.course_code)
+
+        export = self.client.get(
+            reverse("hr_attendance_csv"), {"term": "missing"})
+        self.assertEqual(export.status_code, 400)
+        self.assertNotIn(self.fx.s_active.schedule.course_code,
+                         export.content.decode("utf-8"))
+
+    def test_export_reset_and_pager_links_preserve_normalized_scope(self):
+        # Force two archived rows across two pages without changing production's
+        # bounded page size.
+        Session.objects.create(
+            schedule=self.archived_schedule, faculty=self.fx.faculty_a,
+            room=self.fx.room_a, date=self.fx.week_start,
+            scheduled_start=_aware(self.fx.week_start, time(10)),
+            scheduled_end=_aware(self.fx.week_start, time(11)),
+            status=SessionStatus.ABSENT,
+        )
+        params = {
+            "term": self.archived.pk,
+            "from": "1900-01-01",
+            "to": "2099-12-31",
+            "faculty": self.fx.faculty_a.pk,
+            "q": "ARCHIVE",
+        }
+        with patch("web.hr.HR_PAGE_SIZE", 1):
+            page = self.client.get(reverse("hr_attendance"), params)
+        html = unescape(page.content.decode("utf-8"))
+        expected_scope = {
+            "term": [str(self.archived.pk)],
+            "from": [self.archived.start_date.isoformat()],
+            "to": [self.archived.end_date.isoformat()],
+        }
+        for url in (page.context["export_url"], page.context["reset_url"]):
+            parsed = parse_qs(urlparse(url).query)
+            for key, value in expected_scope.items():
+                self.assertEqual(parsed[key], value)
+        self.assertIn(f"term={self.archived.pk}&from=", html)
+        self.assertIn("page=2", html)
