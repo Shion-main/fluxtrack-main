@@ -1,0 +1,28 @@
+{% comment %}
+Shared GET report-scope fields. The controller owns parsing through ReportScope;
+this partial only renders normalized scope values and optional surface-specific
+hidden fields. Expected context: scope, optional scope_hidden_fields iterable of
+{"name": ..., "value": ...}. ASCII-only.
+{% endcomment %}
+{% for field in scope_hidden_fields %}
+<input type="hidden" name="{{ field.name }}" value="{{ field.value }}">
+{% endfor %}
+<label class="flex flex-col gap-1">
+  <span class="uk-text-small uk-text-muted">Term</span>
+  <select name="term" class="uk-select" required>
+    {% for choice in scope.term_choices %}
+    <option value="{{ choice.pk }}" {% if scope.term.pk == choice.pk %}selected{% endif %}>{{ choice.name }} ({{ choice.get_status_display }})</option>
+    {% endfor %}
+  </select>
+</label>
+<label class="flex flex-col gap-1">
+  <span class="uk-text-small uk-text-muted">From</span>
+  <input type="date" name="from" class="uk-input" value="{{ scope.start|date:'Y-m-d' }}">
+</label>
+<label class="flex flex-col gap-1">
+  <span class="uk-text-small uk-text-muted">To</span>
+  <input type="date" name="to" class="uk-input" value="{{ scope.end|date:'Y-m-d' }}">
+</label>
+{% if scope.as_of %}
+<input type="hidden" name="as_of" value="{{ scope.as_of|date:'Y-m-d' }}">
+{% endif %}

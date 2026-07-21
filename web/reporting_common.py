@@ -12,17 +12,173 @@ history page and the HR payroll export describe the SAME session differently,
 which is exactly the failure this module exists to prevent.
 ASCII-only by convention (Windows cp1252).
 """
-from datetime import timedelta
+from dataclasses import dataclass
+from datetime import date, timedelta
+from types import MappingProxyType
+from typing import Callable, Mapping
+from urllib.parse import urlencode
 
 from django.utils import timezone
 from django.utils.dateparse import parse_date
 
 from ops.policy import get_policy
-from scheduling.models import SessionStatus
+from scheduling.models import AcademicTerm, SessionStatus
+from scheduling.term_scope import get_active_term
 
 # reporting_week_start policy value -> Python weekday() index (Mon=0 .. Sun=6).
 _WEEKDAY_INDEX = {"monday": 0, "tuesday": 1, "wednesday": 2, "thursday": 3,
                   "friday": 4, "saturday": 5, "sunday": 6}
+
+
+@dataclass(frozen=True)
+class ReportScope:
+    """One immutable, explicit management-report scope (D-09..D-12).
+
+    ``term`` is deliberately optional only for the two named empty/error states.
+    A valid scope always has a term, bounded dates, and normalized query values.
+    ``term_choices`` is materialized as a tuple so templates cannot accidentally
+    re-run or mutate a lazy queryset while rendering.
+    """
+
+    term: AcademicTerm | None
+    term_choices: tuple[AcademicTerm, ...]
+    start: date | None
+    end: date | None
+    as_of: date | None
+    note: str | None
+    error: str | None
+    error_code: str | None
+    query_params: Mapping[str, str]
+    scope_query: str
+
+    @property
+    def is_valid(self):
+        return self.error_code is None and self.term is not None
+
+
+def _report_term_choices():
+    """Return ACTIVE first, then every other term newest-first."""
+    terms = list(AcademicTerm.objects.all())
+    terms.sort(key=lambda term: (
+        term.status != AcademicTerm.Status.ACTIVE,
+        -term.start_date.toordinal(),
+        -term.pk,
+    ))
+    return tuple(terms)
+
+
+def _empty_report_scope(*, choices, code, message):
+    return ReportScope(
+        term=None, term_choices=choices, start=None, end=None, as_of=None,
+        note=None, error=message, error_code=code,
+        query_params=MappingProxyType({}), scope_query="",
+    )
+
+
+def _clamp(value, lower, upper):
+    return min(max(value, lower), upper)
+
+
+def selected_report_scope(
+        request, *,
+        default_window: Callable[[AcademicTerm], tuple[date, date]],
+):
+    """Resolve one selected term and a normalized, term-bounded report window.
+
+    A missing ``term`` parameter selects the authoritative ACTIVE term. Once a
+    caller supplies ``term``, however, a malformed or missing id is an explicit
+    friendly error -- it never falls back to ACTIVE and never produces an
+    all-term queryset (T-12-06). Archived terms default to their complete span;
+    ACTIVE uses the controller's established useful-window callback.
+
+    The returned query mapping/string is built only from normalized server-side
+    values. This function never reads or writes ``request.session`` (D-10).
+    """
+    choices = _report_term_choices()
+    term_was_supplied = "term" in request.GET
+    term_raw = (request.GET.get("term") or "").strip()
+
+    if term_was_supplied:
+        if not term_raw.isdigit():
+            return _empty_report_scope(
+                choices=choices, code="invalid-term",
+                message=("That academic term is not available. Choose a term "
+                         "from the report filter."),
+            )
+        try:
+            term = AcademicTerm.objects.get(pk=int(term_raw))
+        except AcademicTerm.DoesNotExist:
+            return _empty_report_scope(
+                choices=choices, code="invalid-term",
+                message=("That academic term is not available. Choose a term "
+                         "from the report filter."),
+            )
+    else:
+        term = get_active_term()
+        if term is None:
+            return _empty_report_scope(
+                choices=choices, code="no-active-term",
+                message=("No active academic term is available. Select a term "
+                         "explicitly to view historical reports."),
+            )
+
+    today = timezone.localdate()
+    if term.status == AcademicTerm.Status.ACTIVE:
+        default_start, default_end = default_window(term)
+    else:
+        default_start, default_end = term.start_date, term.end_date
+    default_start = _clamp(default_start, term.start_date, term.end_date)
+    default_end = _clamp(default_end, term.start_date, term.end_date)
+    if default_start > default_end:
+        default_start, default_end = term.start_date, term.end_date
+
+    from_raw = (request.GET.get("from") or "").strip()
+    to_raw = (request.GET.get("to") or "").strip()
+    as_of_raw = (request.GET.get("as_of") or "").strip()
+    parsed_start = parse_date(from_raw) if from_raw else None
+    parsed_end = parse_date(to_raw) if to_raw else None
+    parsed_as_of = parse_date(as_of_raw) if as_of_raw else None
+
+    invalid_date = (
+        (from_raw and parsed_start is None)
+        or (to_raw and parsed_end is None)
+        or (as_of_raw and parsed_as_of is None)
+    )
+    note = None
+    if invalid_date:
+        note = ("One or more dates were not valid, so the report used the "
+                "selected term's safe defaults.")
+
+    start = parsed_start if parsed_start is not None else default_start
+    end = parsed_end if parsed_end is not None else default_end
+    start = _clamp(start, term.start_date, term.end_date)
+    end = _clamp(end, term.start_date, term.end_date)
+    if start > end:
+        start, end = default_start, default_end
+        note = ("The start date was after the end date, so the report used "
+                "the selected term's default range.")
+
+    as_of_cap = min(end, today)
+    as_of = parsed_as_of if parsed_as_of is not None else as_of_cap
+    # A future term can begin after today; the upper as-of boundary still wins
+    # because report denominators must never include future sessions.
+    if as_of_cap >= term.start_date:
+        as_of = _clamp(as_of, term.start_date, as_of_cap)
+    else:
+        as_of = as_of_cap
+
+    normalized = {
+        "term": str(term.pk),
+        "from": start.isoformat(),
+        "to": end.isoformat(),
+        "as_of": as_of.isoformat(),
+    }
+    return ReportScope(
+        term=term, term_choices=choices, start=start, end=end, as_of=as_of,
+        note=note, error=None, error_code=None,
+        query_params=MappingProxyType(normalized),
+        scope_query=urlencode(normalized),
+    )
 
 
 def status_label(status):
