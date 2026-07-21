@@ -297,7 +297,8 @@ class DenominatorTests(TestCase):
         User = get_user_model()
         self.term = AcademicTerm.objects.create(
             name="cell Term", start_date=datetime.date(2026, 1, 1),
-            end_date=datetime.date(2026, 12, 31), is_active=True,
+            end_date=datetime.date(2026, 12, 31),
+            status=AcademicTerm.Status.ACTIVE,
         )
         building = Building.objects.create(name="Cell Hall", code="CELL-BLD")
         floor = Floor.objects.create(building=building, number=1)
@@ -1221,7 +1222,7 @@ class RoomCardIsolationTests(SimpleTestCase):
 #   import datetime
 #   from scheduling.models import AcademicTerm
 #   from scheduling.reporting import room_utilization
-#   t = AcademicTerm.objects.filter(is_active=True).first()
+#   t = AcademicTerm.objects.filter(status=AcademicTerm.Status.ACTIVE).first()
 #   today = datetime.date.today()
 #   start = today - datetime.timedelta(days=today.weekday())
 #   end = start + datetime.timedelta(days=6)

@@ -38,6 +38,7 @@ from scheduling.models import (AcademicBreak, AcademicTerm, ClassSuspension,
 from scheduling.importing import reconcile
 from scheduling.schedule_ops import cancel_schedule, update_schedule
 from scheduling.suspensions import lift_suspension, suspend_classes
+from scheduling.term_scope import get_active_term
 from scheduling.report_render import build_csv, csv_safe
 from scheduling.reporting import (block_saturation, building_floor_rollup,
                                   coverage_by_building_day, dept_summary,
@@ -1430,23 +1431,24 @@ def dashboard(request):
     aggregate can blank the row.
     """
     start, end, as_of, note = _reporting_range(request)
-    # The active term, by the same inline lookup every other IFO view uses. A None
-    # term is legitimate: room_utilization absorbs it as a zero denominator.
-    term = AcademicTerm.objects.filter(is_active=True).first()
+    term = get_active_term()
     summary = safe_card(
-        dept_summary, start=start, end=end, department=None, as_of=as_of)
+        dept_summary, term=term, start=start, end=end, department=None,
+        as_of=as_of)
     occupancy = safe_card(
         room_utilization, start=start, end=end, term=term, as_of=as_of)
     rows = safe_card(
-        faculty_attendance, start=start, end=end, department=None, as_of=as_of)
+        faculty_attendance, term=term, start=start, end=end, department=None,
+        as_of=as_of)
     # A6 / D-04: verification coverage (verified / HELD by building x weekday) and
     # the explicit zero-coverage-floor list, each its OWN safe_card owner so a
     # raising coverage aggregate errors in its own section without touching the KPI
     # row, the occupancy card, or the faculty table (RPT-05). The weekday label is
     # resolved inside _coverage_card so the aggregate layer stays display-free.
-    coverage = safe_card(_coverage_card, start=start, end=end, as_of=as_of)
+    coverage = safe_card(
+        _coverage_card, term=term, start=start, end=end, as_of=as_of)
     zero_floors = safe_card(
-        zero_coverage_floors, start=start, end=end, as_of=as_of)
+        zero_coverage_floors, term=term, start=start, end=end, as_of=as_of)
     # Unscoped means every faculty member in the institution lands in one table --
     # the largest list in the product. Paged; the exports still cover the full set.
     # `or []` is load-bearing, do NOT remove it: safe_card returns (None, message)
@@ -1557,7 +1559,7 @@ def utilization(request):
     the range control re-renders the applied window and its note.
     """
     start, end, as_of, note = _reporting_range(request)
-    term = AcademicTerm.objects.filter(is_active=True).first()
+    term = get_active_term()
     scope = {"start": start, "end": end, "term": term, "as_of": as_of}
 
     grid = safe_card(_heat_grid_card, **scope)
@@ -1593,7 +1595,8 @@ def scorecard(request, faculty_id):
     faculty = get_object_or_404(get_user_model(), pk=faculty_id)
     start, end, as_of, note = _reporting_range(request)
     card = safe_card(
-        faculty_scorecard, faculty=faculty, start=start, end=end, as_of=as_of)
+        faculty_scorecard, term=get_active_term(), faculty=faculty,
+        start=start, end=end, as_of=as_of)
     modality_items = None
     if card[0] is not None:
         labels = dict(Modality.choices)
@@ -1619,7 +1622,8 @@ def scorecard_csv(request, faculty_id):
     """
     faculty = get_object_or_404(get_user_model(), pk=faculty_id)
     start, end, as_of, _note = _reporting_range(request)
-    rows = [r for r in faculty_attendance(start=start, end=end, as_of=as_of)
+    rows = [r for r in faculty_attendance(
+                term=get_active_term(), start=start, end=end, as_of=as_of)
             if r.faculty_id == faculty.id]
     resp = HttpResponse(build_csv(rows), content_type="text/csv")
     resp["Content-Disposition"] = (

@@ -385,7 +385,7 @@ def timetabled_cells(term):
     ]
 
 
-def _scoped_sessions(*, start, end, department=None, as_of=None, faculty=None):
+def _scoped_sessions(*, term, start, end, department=None, as_of=None, faculty=None):
     """The shared session queryset every aggregate slices.
 
     Filters on the local ``Session.date`` DateField (no UTC ``scheduled_start``
@@ -395,7 +395,9 @@ def _scoped_sessions(*, start, end, department=None, as_of=None, faculty=None):
     not-yet-missed session does not lower attendance %.
     """
     qs = Session.objects.filter(
-        date__range=(start, end), schedule__status=ScheduleStatus.ACTIVE,
+        date__range=(start, end),
+        schedule__term=term,
+        schedule__status=ScheduleStatus.ACTIVE,
     )
     if department is not None:
         qs = qs.filter(faculty__department=department)
@@ -492,7 +494,7 @@ def _absence_map(qs):
     return out
 
 
-def faculty_attendance(*, start, end, department=None, as_of=None):
+def faculty_attendance(*, term, start, end, department=None, as_of=None):
     """RPT-01: one FacultyRow per faculty over [start, end] on ``Session.date``.
 
     ``department=None`` aggregates all departments (IFO-09); a Department scopes to
@@ -500,7 +502,8 @@ def faculty_attendance(*, start, end, department=None, as_of=None):
     grouped conditional-aggregation query; the verified count comes from a separate
     grouped query (``_verified_map``) so it never inflates the status counts.
     """
-    qs = _scoped_sessions(start=start, end=end, department=department, as_of=as_of)
+    qs = _scoped_sessions(
+        term=term, start=start, end=end, department=department, as_of=as_of)
 
     status_rows = (
         qs.values("faculty_id", "faculty__first_name", "faculty__last_name")
@@ -540,9 +543,10 @@ def faculty_attendance(*, start, end, department=None, as_of=None):
     return rows
 
 
-def dept_summary(*, start, end, department=None, as_of=None):
+def dept_summary(*, term, start, end, department=None, as_of=None):
     """RPT-01 / DEAN-04: department-wide totals + distinct faculty_count."""
-    qs = _scoped_sessions(start=start, end=end, department=department, as_of=as_of)
+    qs = _scoped_sessions(
+        term=term, start=start, end=end, department=department, as_of=as_of)
     agg = qs.aggregate(
         scheduled=Count("id"),
         held=Count("id", filter=Q(status__in=HELD_STATUSES)),
@@ -558,7 +562,7 @@ def dept_summary(*, start, end, department=None, as_of=None):
     )
 
 
-def coverage_by_building_day(*, start, end, as_of=None):
+def coverage_by_building_day(*, term, start, end, as_of=None):
     """A6 / D-04: verification coverage = verified / HELD, by (building, weekday).
 
     "What percentage of HELD sessions were physically checker-verified?" The
@@ -574,7 +578,8 @@ def coverage_by_building_day(*, start, end, as_of=None):
     special-cased; an ABSENT/CANCELLED session is not in HELD_STATUSES and contributes
     to neither side. Grouped by ``(building, weekday)`` and ordered deterministically.
     """
-    qs = _exclude_virtual(_scoped_sessions(start=start, end=end, as_of=as_of))
+    qs = _exclude_virtual(
+        _scoped_sessions(term=term, start=start, end=end, as_of=as_of))
 
     held_rows = (
         qs.filter(status__in=HELD_STATUSES)
@@ -611,7 +616,7 @@ def coverage_by_building_day(*, start, end, as_of=None):
     return rows
 
 
-def zero_coverage_floors(*, start, end, as_of=None):
+def zero_coverage_floors(*, term, start, end, as_of=None):
     """A6 / D-04: every (building, floor) with held sessions but ZERO verification.
 
     The coverage analogue of the itemized absence list (:func:`_absence_map`): a
@@ -621,7 +626,8 @@ def zero_coverage_floors(*, start, end, as_of=None):
     :class:`ZeroCoverageFloor` for every held floor key whose verified count is 0
     (held > 0 AND verified == 0), ordered ``(building_code, floor_number)``.
     """
-    qs = _exclude_virtual(_scoped_sessions(start=start, end=end, as_of=as_of))
+    qs = _exclude_virtual(
+        _scoped_sessions(term=term, start=start, end=end, as_of=as_of))
 
     held_rows = (
         qs.filter(status__in=HELD_STATUSES)
@@ -655,7 +661,7 @@ def zero_coverage_floors(*, start, end, as_of=None):
     return out
 
 
-def faculty_scorecard(*, faculty, start, end, as_of=None):
+def faculty_scorecard(*, term, faculty, start, end, as_of=None):
     """RPT-04: a single faculty's scorecard slice of the same aggregate.
 
     Adds ``early_ends`` (count of ``ended_early`` sessions) and a
@@ -663,7 +669,8 @@ def faculty_scorecard(*, faculty, start, end, as_of=None):
     over schedule.modality -- honors approved shifts, Pitfall 5) to a held count.
     A faculty with no sessions in range returns a zeroed Scorecard (no crash).
     """
-    qs = _scoped_sessions(start=start, end=end, as_of=as_of, faculty=faculty)
+    qs = _scoped_sessions(
+        term=term, start=start, end=end, as_of=as_of, faculty=faculty)
 
     agg = qs.aggregate(
         scheduled=Count("id"),
@@ -882,7 +889,8 @@ def room_utilization(*, start, end, term, as_of=None):
     # exists to prevent are all absent here -- .values_list() pulls six scalar
     # columns and instantiates no model, the row set is bounded by the reporting
     # window, and there is no per-row query and no primary-key IN list.
-    qs = _exclude_virtual(_scoped_sessions(start=start, end=end, as_of=as_of))
+    qs = _exclude_virtual(
+        _scoped_sessions(term=term, start=start, end=end, as_of=as_of))
 
     booked_seconds = used_seconds = absent_seconds = unused_held_seconds = 0
     in_flight = absent_sessions = early_end_sessions = 0
@@ -1067,7 +1075,8 @@ def room_heat_grid(*, start, end, term, as_of=None):
     sessions = {}
     rooms_seen = {}
 
-    qs = _exclude_virtual(_scoped_sessions(start=start, end=end, as_of=as_of))
+    qs = _exclude_virtual(
+        _scoped_sessions(term=term, start=start, end=end, as_of=as_of))
     rows = qs.values_list(
         "schedule__day_of_week", "schedule__start_time", "schedule__end_time",
         "room_id", "status", "scheduled_start", "scheduled_end",
@@ -1263,7 +1272,8 @@ def room_breakdown(*, start, end, term, as_of=None):
     sessions = {}
     absents = {}
 
-    qs = _exclude_virtual(_scoped_sessions(start=start, end=end, as_of=as_of))
+    qs = _exclude_virtual(
+        _scoped_sessions(term=term, start=start, end=end, as_of=as_of))
     rows = qs.values_list(
         "room_id", "status", "scheduled_start", "scheduled_end",
         "actual_start", "actual_end",

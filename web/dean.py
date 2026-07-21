@@ -41,6 +41,7 @@ from scheduling.services import (
     apply_approval,
     reject_modality_shift,
 )
+from scheduling.term_scope import get_active_term
 from web.pagination import paginate
 from web.reporting_common import reporting_range as _reporting_range
 
@@ -168,6 +169,7 @@ def dashboard(request):
     """
     dept = request.user.department
     start, end, as_of, note = _reporting_range(request)
+    term = get_active_term()
     if dept is None:
         # NULL-department Dean: nothing is scoped in -> a zeroed, no-crash card.
         # NEVER dept_summary(department=None), which would leak ALL departments.
@@ -175,7 +177,8 @@ def dashboard(request):
         latest = None
     else:
         summary = safe_card(
-            dept_summary, start=start, end=end, department=dept, as_of=as_of)
+            dept_summary, term=term, start=start, end=end, department=dept,
+            as_of=as_of)
         latest = WeeklyReport.objects.filter(department=dept).first()
     return render(request, "dean/dashboard.html", {
         "department": dept, "summary": summary, "latest_report": latest,
@@ -195,11 +198,13 @@ def reports(request):
     """
     dept = request.user.department
     start, end, as_of, note = _reporting_range(request)
+    term = get_active_term()
     if dept is None:
         rows = ([], None)
     else:
         rows = safe_card(
-            faculty_attendance, start=start, end=end, department=dept, as_of=as_of)
+            faculty_attendance, term=term, start=start, end=end,
+            department=dept, as_of=as_of)
     # rows is (list_of_dicts, error). Paginate the list -- a large department can
     # run well past a readable page, and the CSV/PDF exports still cover the full
     # set. When there is an error, rows[0] is empty and the pager renders nothing.
@@ -231,7 +236,8 @@ def scorecard(request, faculty_id):
         get_user_model(), pk=faculty_id, department=dept)
     start, end, as_of, note = _reporting_range(request)
     card = safe_card(
-        faculty_scorecard, faculty=faculty, start=start, end=end, as_of=as_of)
+        faculty_scorecard, term=get_active_term(), faculty=faculty,
+        start=start, end=end, as_of=as_of)
     modality_items = None
     if card[0] is not None:
         labels = dict(Modality.choices)
@@ -264,7 +270,8 @@ def scorecard_export(request, faculty_id):
         get_user_model(), pk=faculty_id, department=dept)
     start, end, as_of, _note = _reporting_range(request)
     rows = [r for r in faculty_attendance(
-                start=start, end=end, department=dept, as_of=as_of)
+                term=get_active_term(), start=start, end=end, department=dept,
+                as_of=as_of)
             if r.faculty_id == faculty.id]
     resp = HttpResponse(build_csv(rows), content_type="text/csv")
     resp["Content-Disposition"] = (
@@ -287,7 +294,8 @@ def report_export(request, fmt):
     start, end, as_of, _note = _reporting_range(request)
     rows = ([] if dept is None
             else faculty_attendance(
-                start=start, end=end, department=dept, as_of=as_of))
+                term=get_active_term(), start=start, end=end, department=dept,
+                as_of=as_of))
     code = dept.code if dept is not None else "none"
     if fmt == "csv":
         data, content_type, ext = build_csv(rows), "text/csv", "csv"

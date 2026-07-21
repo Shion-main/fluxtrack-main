@@ -88,7 +88,8 @@ class LatenessAggregateTests(TestCase):
             faculty, d, status, actual_start=start, actual_end=end_dt)
 
     def _row(self, faculty):
-        rows = faculty_attendance(start=self.fx.week_start, end=self.fx.sun)
+        rows = faculty_attendance(
+            term=self.fx.term, start=self.fx.week_start, end=self.fx.sun)
         match = [r for r in rows if r.faculty_id == faculty.id]
         self.assertEqual(len(match), 1, "exactly one row per faculty")
         return match[0]
@@ -185,7 +186,8 @@ class LatenessAggregateTests(TestCase):
         self._seed_late(self.fx.faculty_a, seconds=0)
         row = self._row(self.fx.faculty_a)
         card = faculty_scorecard(
-            faculty=self.fx.faculty_a, start=self.fx.week_start, end=self.fx.sun)
+            term=self.fx.term, faculty=self.fx.faculty_a,
+            start=self.fx.week_start, end=self.fx.sun)
         self.assertIsInstance(card, Scorecard)
         self.assertEqual(card.minutes_late_avg, row.minutes_late_avg)
         self.assertEqual(card.late_sessions, row.late_sessions)
