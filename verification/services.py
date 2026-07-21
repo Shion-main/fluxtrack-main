@@ -28,11 +28,12 @@ from accounts.models import Role
 from ops.models import AuditLog
 from ops.notify import notify
 from scheduling.models import Modality, Session
+from scheduling.term_scope import get_active_term
 from verification import resolver as R
 from verification.models import Assignment, AssignmentScope, DutyRole
 
 
-def _candidate_online_sessions(target_date):
+def _candidate_online_sessions(target_date, active_term):
     """Unowned online sessions for ``target_date`` — MATERIALIZED (HY010 guard).
 
     Effective modality mirrors the resolver/sweep: ``declared_modality`` overrides
@@ -40,14 +41,18 @@ def _candidate_online_sessions(target_date):
     left alone so re-runs don't reshuffle). Ordered for a reproducible round-robin.
     """
     sessions = list(
-        Session.objects.filter(date=target_date, online_checker__isnull=True)
+        Session.objects.filter(
+            date=target_date,
+            online_checker__isnull=True,
+            schedule__term=active_term,
+        )
         .select_related("schedule")
         .order_by("scheduled_start", "id"))
     return [s for s in sessions
             if (s.declared_modality or s.schedule.modality) == Modality.ONLINE]
 
 
-def _online_duty_assignments(target_date):
+def _online_duty_assignments(target_date, active_term):
     """Active ONLINE-scope CHECKER assignments in play for ``target_date``.
 
     A standing posting (``date`` NULL) or one dated to ``target_date``. Ordered by
@@ -58,7 +63,12 @@ def _online_duty_assignments(target_date):
     """
     return list(
         Assignment.objects
-        .filter(role=DutyRole.CHECKER, scope=AssignmentScope.ONLINE, status="active")
+        .filter(
+            role=DutyRole.CHECKER,
+            scope=AssignmentScope.ONLINE,
+            status="active",
+            term=active_term,
+        )
         .filter(Q(date__isnull=True) | Q(date=target_date))
         .order_by("user_id"))
 
@@ -78,11 +88,15 @@ def assign_online_sessions(target_date):
     them unassigned. Otherwise write each owner (audited) and notify each assigned
     Checker once. Pure round-robin is delegated to ``R.distribute_online_sessions``.
     """
-    sessions = _candidate_online_sessions(target_date)   # materialized first
+    active_term = get_active_term()
+    if active_term is None:
+        return {"assigned": 0, "unassigned": 0}
+
+    sessions = _candidate_online_sessions(target_date, active_term)   # materialized first
     if not sessions:
         return {"assigned": 0, "unassigned": 0}
 
-    assignments = _online_duty_assignments(target_date)
+    assignments = _online_duty_assignments(target_date, active_term)
 
     # Per-session eligible-checker pools by shift window, then round-robin WITHIN
     # each identical pool (grouping keeps the pure distributor's determinism and

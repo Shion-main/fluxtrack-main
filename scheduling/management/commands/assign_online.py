@@ -16,6 +16,7 @@ from django.core.management.base import BaseCommand
 from django.utils import timezone
 
 from ops.policy import get_policy
+from scheduling.term_scope import get_active_term
 from verification.services import assign_online_sessions
 
 
@@ -29,6 +30,12 @@ class Command(BaseCommand):
                        help="Start date YYYY-MM-DD (default today).")
 
     def handle(self, *args, **o):
+        if get_active_term() is None:
+            self.stdout.write(
+                "assign_online: no ACTIVE academic term; no sessions assigned."
+            )
+            return
+
         start = (datetime.strptime(o["start"], "%Y-%m-%d").date()
                  if o["start"] else timezone.localdate())
         days = (o["days"] if o["days"] is not None

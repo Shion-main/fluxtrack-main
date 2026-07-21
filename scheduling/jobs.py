@@ -42,6 +42,7 @@ from ops.policy import get_policy
 from scheduling.models import Session, SessionStatus
 from scheduling.resolver import is_no_show_past_grace
 from scheduling.suspensions import excused_checker, session_is_calendar_excused
+from scheduling.term_scope import get_active_term
 
 
 def sweep_no_shows(now=None, collect=None):
@@ -67,6 +68,9 @@ def sweep_no_shows(now=None, collect=None):
     a live MSSQL 2100-parameter exposure, the 04.1-04 failure class.
     """
     now = now or timezone.now()
+    active_term = get_active_term()
+    if active_term is None:
+        return 0
     grace_min = get_policy("grace_minutes")
     # DB pre-filter derived from the SAME grace value the predicate re-affirms.
     cutoff = now - timedelta(minutes=grace_min)
@@ -75,7 +79,7 @@ def sweep_no_shows(now=None, collect=None):
     # or an active class suspension must NEVER be marked Absent. Built ONCE here
     # (two small queries) and answered from memory per candidate -- the whole point
     # is that a typhoon/holiday day does not mass-poison the record.
-    excused = excused_checker()
+    excused = excused_checker(active_term)
     # MSSQL/pyodbc allows only ONE active result set per connection (MARS off by
     # default). Streaming with .iterator() keeps the SELECT cursor open, so the
     # save()/AuditLog INSERT below would raise HY010 "Function sequence error".
@@ -83,7 +87,8 @@ def sweep_no_shows(now=None, collect=None):
     # room__floor is select_related so the excusal check reads building_id with no
     # extra query.
     candidates = list(Session.objects.filter(status=SessionStatus.SCHEDULED,
-                                             scheduled_start__lt=cutoff)
+                                             scheduled_start__lt=cutoff,
+                                             schedule__term=active_term)
                       .select_related("schedule", "room", "room__floor"))
     for s in candidates:
         # Re-affirm via the shared predicate so the ORM cutoff and the
@@ -132,11 +137,15 @@ def detect_room_conflicts(now=None, collect=None):
     alert is NOT emitted here -- the caller coalesces it once per run (D-06).
     """
     now = now or timezone.now()
+    active_term = get_active_term()
+    if active_term is None:
+        return 0
     # Current conflict set: rooms with 2+ ACTIVE sessions still holding the room.
     conflicting_room_ids = [
         row["room_id"] for row in
         (Session.objects.filter(status=SessionStatus.ACTIVE,
-                                room_released_at__isnull=True)
+                                room_released_at__isnull=True,
+                                schedule__term=active_term)
          .values("room_id").annotate(n=Count("id")).filter(n__gt=1))
     ]
     current_keys = {f"room:{rid}": rid for rid in conflicting_room_ids}
