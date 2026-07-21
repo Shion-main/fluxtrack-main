@@ -20,10 +20,11 @@ from django.test import TestCase, override_settings
 from accounts.models import Role
 from ops.models import Notification, WeeklyReport
 from ops.notifications import WEEKLY_REPORT_READY
-from ops.reports import (generate_weekly_report, notify_report_ready,
-                         report_week_bounds)
-from scheduling.models import AcademicTerm, SessionStatus
+from ops.reports import (generate_week_reports, generate_weekly_report,
+                         notify_report_ready, report_week_bounds)
+from scheduling.models import AcademicTerm, Schedule, Session, SessionStatus
 from scheduling.reporting import faculty_attendance
+from scheduling.term_scope import ArchivedTermError
 from scheduling.test_support import make_reporting_fixture
 
 # One temp MEDIA_ROOT for the whole module; every storage-touching class overrides
@@ -45,14 +46,17 @@ class IdempotencyTests(TestCase):
     def test_generate_twice_upserts_one_row_and_repopulates_paths(self):
         fx = self.fx
         r1 = generate_weekly_report(
-            week_start=fx.week_start, week_end=fx.sun, department=fx.dept_a)
+            term=fx.term, week_start=fx.week_start, week_end=fx.sun,
+            department=fx.dept_a)
         r2 = generate_weekly_report(
-            week_start=fx.week_start, week_end=fx.sun, department=fx.dept_a)
+            term=fx.term, week_start=fx.week_start, week_end=fx.sun,
+            department=fx.dept_a)
 
         self.assertEqual(r1.pk, r2.pk)
         self.assertEqual(
             WeeklyReport.objects.filter(
-                week_start=fx.week_start, department=fx.dept_a).count(), 1)
+                term=fx.term, week_start=fx.week_start,
+                department=fx.dept_a).count(), 1)
         self.assertTrue(r2.csv_path)
         self.assertTrue(r2.pdf_path)
         self.assertTrue(default_storage.exists(r2.csv_path))
@@ -61,23 +65,138 @@ class IdempotencyTests(TestCase):
     def test_all_rollup_department_none_is_idempotent(self):
         fx = self.fx
         r1 = generate_weekly_report(
-            week_start=fx.week_start, week_end=fx.sun, department=None)
+            term=fx.term, week_start=fx.week_start, week_end=fx.sun,
+            department=None)
         r2 = generate_weekly_report(
-            week_start=fx.week_start, week_end=fx.sun, department=None)
+            term=fx.term, week_start=fx.week_start, week_end=fx.sun,
+            department=None)
 
         self.assertEqual(r1.pk, r2.pk)
         self.assertEqual(
             WeeklyReport.objects.filter(
-                week_start=fx.week_start, department__isnull=True).count(), 1)
+                term=fx.term, week_start=fx.week_start,
+                department__isnull=True).count(), 1)
 
     def test_storage_name_is_server_built_from_dept_code_and_week(self):
         fx = self.fx
         report = generate_weekly_report(
-            week_start=fx.week_start, week_end=fx.sun, department=fx.dept_a)
+            term=fx.term, week_start=fx.week_start, week_end=fx.sun,
+            department=fx.dept_a)
         # Path is derived ONLY from department.code + week_start (T-06-05), never
         # from any request input, so it can never traverse out of the reports tree.
-        self.assertTrue(report.csv_path.startswith(f"reports/{fx.week_start}/"))
+        self.assertTrue(
+            report.csv_path.startswith(
+                f"reports/term-{fx.term.pk}/{fx.week_start}/"))
         self.assertIn(fx.dept_a.code, report.csv_path)
+
+
+@override_settings(MEDIA_ROOT=_MEDIA)
+class WeeklyReportTermGenerationTests(TestCase):
+    """D-12/T-12-03: stored report generation is keyed by one writable term."""
+
+    def setUp(self):
+        self.fx = make_reporting_fixture("wterm")
+        self.draft = AcademicTerm.objects.create(
+            name="wterm Draft", start_date=self.fx.week_start,
+            end_date=self.fx.sun, status=AcademicTerm.Status.DRAFT)
+
+    def _same_date_session(self, term, status, course="WTERM101"):
+        sched = Schedule.objects.create(
+            term=term, course_code=course, section="A",
+            faculty=self.fx.faculty_a, room=self.fx.room_a,
+            day_of_week=self.fx.week_start.weekday(),
+            start_time=self.fx.s_active.schedule.start_time,
+            end_time=self.fx.s_active.schedule.end_time,
+        )
+        return Session.objects.create(
+            schedule=sched, faculty=self.fx.faculty_a, room=self.fx.room_a,
+            date=self.fx.week_start,
+            scheduled_start=self.fx.s_active.scheduled_start,
+            scheduled_end=self.fx.s_active.scheduled_end,
+            status=status,
+        )
+
+    def test_same_week_department_generates_non_colliding_term_paths(self):
+        self._same_date_session(self.draft, SessionStatus.ACTIVE, "WTDRAFT1")
+
+        active = generate_weekly_report(
+            term=self.fx.term, week_start=self.fx.week_start,
+            week_end=self.fx.sun, department=self.fx.dept_a)
+        draft = generate_weekly_report(
+            term=self.draft, week_start=self.fx.week_start,
+            week_end=self.fx.sun, department=self.fx.dept_a)
+
+        self.assertNotEqual(active.pk, draft.pk)
+        self.assertIn(f"reports/term-{self.fx.term.pk}/", active.csv_path)
+        self.assertIn(f"reports/term-{self.draft.pk}/", draft.csv_path)
+        self.assertNotEqual(active.csv_path, draft.csv_path)
+        self.assertTrue(default_storage.exists(active.csv_path))
+        self.assertTrue(default_storage.exists(draft.csv_path))
+
+    def test_generated_csv_contains_selected_term_rows_only(self):
+        self._same_date_session(self.draft, SessionStatus.ACTIVE, "WTDRAFT2")
+
+        report = generate_weekly_report(
+            term=self.fx.term, week_start=self.fx.week_start,
+            week_end=self.fx.sun, department=self.fx.dept_a)
+        csv_text = default_storage.open(report.csv_path).read().decode("utf-8")
+
+        self.assertIn("Ana Alvarez", csv_text)
+        # Active term faculty_a scheduled count remains the fixture's 8, not 9.
+        self.assertIn(",8,6,1,", csv_text)
+
+    def test_rerun_is_idempotent_within_same_term_identity(self):
+        first = generate_weekly_report(
+            term=self.fx.term, week_start=self.fx.week_start,
+            week_end=self.fx.sun, department=self.fx.dept_a)
+        second = generate_weekly_report(
+            term=self.fx.term, week_start=self.fx.week_start,
+            week_end=self.fx.sun, department=self.fx.dept_a)
+
+        self.assertEqual(first.pk, second.pk)
+        self.assertEqual(
+            WeeklyReport.objects.filter(
+                term=self.fx.term, week_start=self.fx.week_start,
+                department=self.fx.dept_a).count(),
+            1,
+        )
+
+    def test_archived_generation_refuses_before_file_or_metadata_write(self):
+        archived = AcademicTerm.objects.create(
+            name="wterm Archived", start_date=self.fx.week_start,
+            end_date=self.fx.sun, status=AcademicTerm.Status.ARCHIVED)
+        existing = WeeklyReport.objects.create(
+            term=archived, week_start=self.fx.week_start,
+            department=self.fx.dept_a, csv_path="reports/old.csv",
+            pdf_path="reports/old.pdf")
+
+        with patch("ops.reports._save_overwrite") as save_overwrite:
+            with self.assertRaises(ArchivedTermError):
+                generate_weekly_report(
+                    term=archived, week_start=self.fx.week_start,
+                    week_end=self.fx.sun, department=self.fx.dept_a)
+
+        save_overwrite.assert_not_called()
+        existing.refresh_from_db()
+        self.assertEqual(existing.csv_path, "reports/old.csv")
+        self.assertEqual(existing.pdf_path, "reports/old.pdf")
+
+    def test_generate_week_reports_derives_departments_from_supplied_term(self):
+        self._same_date_session(self.draft, SessionStatus.ACTIVE, "WTDRAFT3")
+
+        active_count = generate_week_reports(
+            term=self.fx.term, week_start=self.fx.week_start,
+            week_end=self.fx.sun)
+        draft_count = generate_week_reports(
+            term=self.draft, week_start=self.fx.week_start,
+            week_end=self.fx.sun)
+
+        self.assertEqual(active_count, 3)
+        self.assertEqual(draft_count, 2)  # dept_a plus ALL roll-up.
+        self.assertEqual(
+            WeeklyReport.objects.filter(term=self.fx.term).count(), 3)
+        self.assertEqual(
+            WeeklyReport.objects.filter(term=self.draft).count(), 2)
 
 
 class WeeklyReportTermIdentityTests(TestCase):
@@ -187,7 +306,7 @@ class WeekBoundaryTests(TestCase):
         start, end = report_week_bounds(fx.week_start)
 
         base = next(r for r in faculty_attendance(
-            start=start, end=end, department=fx.dept_a)
+            term=fx.term, start=start, end=end, department=fx.dept_a)
             if r.faculty_id == fx.faculty_a.id)
         base_scheduled = base.scheduled
 
@@ -196,7 +315,7 @@ class WeekBoundaryTests(TestCase):
         fx.add_session(fx.faculty_a, fx.next_monday, SessionStatus.ACTIVE)
 
         after = next(r for r in faculty_attendance(
-            start=start, end=end, department=fx.dept_a)
+            term=fx.term, start=start, end=end, department=fx.dept_a)
             if r.faculty_id == fx.faculty_a.id)
 
         self.assertEqual(after.scheduled, base_scheduled + 1)
