@@ -5,16 +5,16 @@ milestone_name: — "Operational Trust"
 current_phase: 12
 current_phase_name: Term Lifecycle
 status: In Progress
-stopped_at: Completed 12-05-PLAN.md
-last_updated: "2026-07-21T18:25:19.860Z"
+stopped_at: Completed 12-06-PLAN.md
+last_updated: "2026-07-21T18:48:46.543Z"
 last_activity: 2026-07-20
 last_activity_desc: Phase 11 complete, transitioned to Phase 12
 progress:
   total_phases: 18
   completed_phases: 10
   total_plans: 75
-  completed_plans: 68
-  percent: 91
+  completed_plans: 69
+  percent: 92
 ---
 
 # Project State
@@ -155,6 +155,7 @@ Phase 07 and remain out of scope.
 | Phase 12 P04 | 20 min | 3 tasks | 9 files |
 | Phase 12 P08 | 10 min | 3 tasks | 13 files |
 | Phase 12 P05 | 49 min | 2 tasks | 11 files |
+| Phase 12 P06 | 19 min | 3 tasks | 11 files |
 
 ## Accumulated Context
 
@@ -255,8 +256,11 @@ Recent decisions affecting current work:
 - [Phase 12]: `reset_term` remains as a command name only, raising `CommandError` with lifecycle guidance before any ORM access.
 - [Phase 12]: Modality request writers refuse mixed-term ownership instead of guessing which term owns the request.
 - [Phase 12]: `seed_term` keeps its active-term operator flow but resolves through `require_active_term` and scopes term-owned rewrites to that term.
+- [Phase 12]: Direct archived IDs return not-found at role boundaries to stop writes before service, audit, or notification paths.
+- [Phase 12]: No ACTIVE term is a zero-effect/no-data state for live jobs and surfaces, never a fallback to historical rows.
 
 ### Pending Todos
+
 [From .planning/todos/pending/ — ideas captured during sessions]
 
 None yet.
@@ -279,12 +283,12 @@ None yet.
 
 **Resume file:** None
 
-Last session: 2026-07-21T18:25:08.876Z
+Last session: 2026-07-21T18:48:45.600Z
 Session arc + decisions: docs/sessions/2026-07-20-audit-and-phase9.md
-Stopped at: Completed 12-05-PLAN.md
+Stopped at: Completed 12-06-PLAN.md
 suite 994 green.
 
-RESUME NEXT: **Phase 12 Plan 06 - Active Term Operational Scope**. Plan 05 shipped archive write freeze across reusable service and command writers; Plan 06 should scope every live reader/writer and background job to the authoritative ACTIVE term.
+RESUME NEXT: **Phase 12 Plan 07**. Plan 06 shipped ACTIVE-term scoping for live jobs, role surfaces, and IFO mutation seams; runtime Django verification remains environment-blocked in this shell.
 
 OUTSTANDING (carry forward):
 
