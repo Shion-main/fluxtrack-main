@@ -14,7 +14,14 @@ from decimal import Decimal
 
 from django.test import SimpleTestCase, TestCase
 
-from scheduling.models import Modality, SessionStatus
+from scheduling.models import (
+    AcademicTerm,
+    Modality,
+    Schedule,
+    ScheduleStatus,
+    Session,
+    SessionStatus,
+)
 from scheduling.reporting import (
     HELD_STATUSES,
     AbsenceItem,
@@ -61,13 +68,15 @@ class AggregateTests(TestCase):
         return match[0]
 
     def test_unscoped_returns_one_row_per_faculty(self):
-        rows = faculty_attendance(start=self.fx.week_start, end=self.fx.sun)
+        rows = faculty_attendance(
+            term=self.fx.term, start=self.fx.week_start, end=self.fx.sun)
         self.assertEqual({r.faculty_id for r in rows},
                          {self.fx.faculty_a.id, self.fx.faculty_b.id})
         self.assertTrue(all(isinstance(r, FacultyRow) for r in rows))
 
     def test_faculty_a_counts_match_seeded_statuses(self):
-        rows = faculty_attendance(start=self.fx.week_start, end=self.fx.sun)
+        rows = faculty_attendance(
+            term=self.fx.term, start=self.fx.week_start, end=self.fx.sun)
         row = self._row(rows, self.fx.faculty_a)
         self.assertEqual(row.scheduled, 8)
         self.assertEqual(row.held, 6)
@@ -77,7 +86,8 @@ class AggregateTests(TestCase):
         self.assertEqual(row.attendance_pct, 75)
 
     def test_faculty_a_itemized_absences(self):
-        rows = faculty_attendance(start=self.fx.week_start, end=self.fx.sun)
+        rows = faculty_attendance(
+            term=self.fx.term, start=self.fx.week_start, end=self.fx.sun)
         row = self._row(rows, self.fx.faculty_a)
         self.assertEqual(len(row.absences), 1)
         item = row.absences[0]
@@ -86,10 +96,12 @@ class AggregateTests(TestCase):
 
     def test_department_scoping(self):
         rows_a = faculty_attendance(
-            start=self.fx.week_start, end=self.fx.sun, department=self.fx.dept_a)
+            term=self.fx.term, start=self.fx.week_start, end=self.fx.sun,
+            department=self.fx.dept_a)
         self.assertEqual({r.faculty_id for r in rows_a}, {self.fx.faculty_a.id})
         rows_b = faculty_attendance(
-            start=self.fx.week_start, end=self.fx.sun, department=self.fx.dept_b)
+            term=self.fx.term, start=self.fx.week_start, end=self.fx.sun,
+            department=self.fx.dept_b)
         self.assertEqual({r.faculty_id for r in rows_b}, {self.fx.faculty_b.id})
         row_b = rows_b[0]
         self.assertEqual(row_b.scheduled, 2)
@@ -101,6 +113,7 @@ class AggregateTests(TestCase):
         # An as_of before the whole week yields zero sessions -> no rows, no crash.
         rows = faculty_attendance(
             start=self.fx.week_start, end=self.fx.sun,
+            term=self.fx.term,
             as_of=self.fx.week_start.replace(day=1))
         self.assertEqual(rows, [])
 
@@ -109,13 +122,15 @@ class AggregateTests(TestCase):
         # SCHEDULED session from the denominator (a not-yet-missed session must not
         # lower attendance %).
         rows = faculty_attendance(
-            start=self.fx.week_start, end=self.fx.sun, as_of=self.fx.tue)
+            term=self.fx.term, start=self.fx.week_start, end=self.fx.sun,
+            as_of=self.fx.tue)
         row = self._row(rows, self.fx.faculty_a)
         self.assertEqual(row.scheduled, 7)  # 8 minus the future Wednesday SCHEDULED
 
     def test_dept_summary_totals(self):
         summary = dept_summary(
-            start=self.fx.week_start, end=self.fx.sun, department=self.fx.dept_a)
+            term=self.fx.term, start=self.fx.week_start, end=self.fx.sun,
+            department=self.fx.dept_a)
         self.assertIsInstance(summary, DeptSummary)
         self.assertEqual(summary.faculty_count, 1)
         self.assertEqual(summary.scheduled, 8)
@@ -131,7 +146,8 @@ class TruthReuseTests(TestCase):
         self.fx = make_reporting_fixture()
 
     def _row_a(self):
-        rows = faculty_attendance(start=self.fx.week_start, end=self.fx.sun)
+        rows = faculty_attendance(
+            term=self.fx.term, start=self.fx.week_start, end=self.fx.sun)
         return [r for r in rows if r.faculty_id == self.fx.faculty_a.id][0]
 
     def test_absent_session_counts_absent_not_held(self):
@@ -167,7 +183,8 @@ class MergedSiblingTests(TestCase):
         self.fx = make_reporting_fixture()
 
     def test_merged_sibling_held_but_not_verified(self):
-        rows = faculty_attendance(start=self.fx.week_start, end=self.fx.sun)
+        rows = faculty_attendance(
+            term=self.fx.term, start=self.fx.week_start, end=self.fx.sun)
         row = [r for r in rows if r.faculty_id == self.fx.faculty_a.id][0]
         # s_merged (ACTIVE, MERGED, no validation) is in held...
         self.assertEqual(row.held, 6)
@@ -210,7 +227,8 @@ class ScorecardTests(TestCase):
 
     def test_scorecard_slice_matches_faculty_attendance(self):
         card = faculty_scorecard(
-            faculty=self.fx.faculty_a, start=self.fx.week_start, end=self.fx.sun)
+            term=self.fx.term, faculty=self.fx.faculty_a,
+            start=self.fx.week_start, end=self.fx.sun)
         self.assertIsInstance(card, Scorecard)
         self.assertEqual(card.faculty_id, self.fx.faculty_a.id)
         self.assertEqual(card.scheduled, 8)
@@ -220,12 +238,14 @@ class ScorecardTests(TestCase):
 
     def test_early_ends_counted(self):
         card = faculty_scorecard(
-            faculty=self.fx.faculty_a, start=self.fx.week_start, end=self.fx.sun)
+            term=self.fx.term, faculty=self.fx.faculty_a,
+            start=self.fx.week_start, end=self.fx.sun)
         self.assertEqual(card.early_ends, 1)
 
     def test_effective_modality_breakdown_counts_declared_online(self):
         card = faculty_scorecard(
-            faculty=self.fx.faculty_a, start=self.fx.week_start, end=self.fx.sun)
+            term=self.fx.term, faculty=self.fx.faculty_a,
+            start=self.fx.week_start, end=self.fx.sun)
         # The declared-ONLINE-over-F2F session is counted ONLINE (effective wins).
         self.assertEqual(card.modality_breakdown.get(Modality.ONLINE), 1)
         # The remaining five held sessions are F2F.
@@ -235,7 +255,8 @@ class ScorecardTests(TestCase):
 
     def test_itemized_absences_present(self):
         card = faculty_scorecard(
-            faculty=self.fx.faculty_a, start=self.fx.week_start, end=self.fx.sun)
+            term=self.fx.term, faculty=self.fx.faculty_a,
+            start=self.fx.week_start, end=self.fx.sun)
         self.assertEqual(len(card.absences), 1)
         self.assertIsInstance(card.absences[0], AbsenceItem)
         self.assertEqual(card.absences[0].date, self.fx.tue)
@@ -243,7 +264,8 @@ class ScorecardTests(TestCase):
     def test_empty_range_faculty_returns_zeroed_scorecard(self):
         # The checker has no sessions -> zeroed Scorecard, no crash.
         card = faculty_scorecard(
-            faculty=self.fx.checker, start=self.fx.week_start, end=self.fx.sun)
+            term=self.fx.term, faculty=self.fx.checker,
+            start=self.fx.week_start, end=self.fx.sun)
         self.assertEqual(card.scheduled, 0)
         self.assertEqual(card.held, 0)
         self.assertEqual(card.absent, 0)
@@ -269,10 +291,12 @@ class LatenessParityTests(TestCase):
             self.fx.faculty_a, self.fx.week_start, SessionStatus.COMPLETED,
             actual_start=late, actual_end=end)
 
-        rows = faculty_attendance(start=self.fx.week_start, end=self.fx.sun)
+        rows = faculty_attendance(
+            term=self.fx.term, start=self.fx.week_start, end=self.fx.sun)
         row = [r for r in rows if r.faculty_id == self.fx.faculty_a.id][0]
         card = faculty_scorecard(
-            faculty=self.fx.faculty_a, start=self.fx.week_start, end=self.fx.sun)
+            term=self.fx.term, faculty=self.fx.faculty_a,
+            start=self.fx.week_start, end=self.fx.sun)
 
         self.assertEqual(card.minutes_late_avg, row.minutes_late_avg)
         self.assertEqual(card.late_sessions, row.late_sessions)
@@ -297,7 +321,8 @@ class WeekBoundaryTests(TestCase):
             self.fx.faculty_b, self.fx.next_monday, SessionStatus.ABSENT)
 
         rows = faculty_attendance(
-            start=self.fx.week_start, end=self.fx.sun, department=self.fx.dept_b)
+            term=self.fx.term, start=self.fx.week_start, end=self.fx.sun,
+            department=self.fx.dept_b)
         row = [r for r in rows if r.faculty_id == self.fx.faculty_b.id][0]
         # Original 2 (Mon ACTIVE + Tue ABSENT) + the Sunday ABSENT = 3; the
         # next-Monday session is out of range.
@@ -306,3 +331,90 @@ class WeekBoundaryTests(TestCase):
         absence_dates = {a.date for a in row.absences}
         self.assertIn(self.fx.sun, absence_dates)
         self.assertNotIn(self.fx.next_monday, absence_dates)
+
+
+class TermRequiredAggregateTests(TestCase):
+    """D-12: management-report aggregates cannot silently omit term identity."""
+
+    def setUp(self):
+        self.fx = make_reporting_fixture("termreq")
+
+    def test_attendance_aggregates_require_term_keyword(self):
+        kwargs = {"start": self.fx.week_start, "end": self.fx.sun}
+        with self.assertRaises(TypeError):
+            faculty_attendance(**kwargs)
+        with self.assertRaises(TypeError):
+            dept_summary(**kwargs)
+        with self.assertRaises(TypeError):
+            faculty_scorecard(
+                faculty=self.fx.faculty_a, start=self.fx.week_start,
+                end=self.fx.sun)
+
+
+class CrossTermLeakageTests(TestCase):
+    """D-09/D-12: same-date rows from other terms never contribute."""
+
+    def setUp(self):
+        self.fx = make_reporting_fixture("termleak")
+        self.draft = AcademicTerm.objects.create(
+            name="termleak Draft", start_date=self.fx.week_start,
+            end_date=self.fx.sun, status=AcademicTerm.Status.DRAFT)
+        self.archived = AcademicTerm.objects.create(
+            name="termleak Archived", start_date=self.fx.week_start,
+            end_date=self.fx.sun, status=AcademicTerm.Status.ARCHIVED)
+
+    def _other_term_session(self, term, status, course):
+        sched = Schedule.objects.create(
+            term=term, course_code=course, section="A",
+            faculty=self.fx.faculty_a, room=self.fx.room_a,
+            day_of_week=self.fx.week_start.weekday(),
+            start_time=time(8, 0), end_time=time(9, 30),
+            status=ScheduleStatus.ACTIVE,
+        )
+        return Session.objects.create(
+            schedule=sched, faculty=self.fx.faculty_a, room=self.fx.room_a,
+            date=self.fx.week_start,
+            scheduled_start=_aware(self.fx.week_start, time(8, 0)),
+            scheduled_end=_aware(self.fx.week_start, time(9, 30)),
+            status=status,
+        )
+
+    def _row_for(self, term):
+        rows = faculty_attendance(
+            term=term, start=self.fx.week_start, end=self.fx.sun)
+        return next(r for r in rows if r.faculty_id == self.fx.faculty_a.id)
+
+    def test_active_term_counts_ignore_same_date_draft_and_archived_rows(self):
+        self._other_term_session(self.draft, SessionStatus.ACTIVE, "DRAFT101")
+        self._other_term_session(self.archived, SessionStatus.ABSENT, "ARCH101")
+
+        row = self._row_for(self.fx.term)
+        self.assertEqual(row.scheduled, 8)
+        self.assertEqual(row.held, 6)
+        self.assertEqual(row.absent, 1)
+
+    def test_each_selected_term_returns_only_its_own_rows(self):
+        self._other_term_session(self.draft, SessionStatus.ACTIVE, "DRAFT201")
+        self._other_term_session(self.archived, SessionStatus.ABSENT, "ARCH201")
+
+        draft_row = self._row_for(self.draft)
+        archived_row = self._row_for(self.archived)
+        self.assertEqual((draft_row.scheduled, draft_row.held, draft_row.absent),
+                         (1, 1, 0))
+        self.assertEqual(
+            (archived_row.scheduled, archived_row.held, archived_row.absent),
+            (1, 0, 1),
+        )
+
+    def test_dept_summary_and_scorecard_are_term_scoped(self):
+        self._other_term_session(self.draft, SessionStatus.ACTIVE, "DRAFT301")
+        self._other_term_session(self.archived, SessionStatus.ABSENT, "ARCH301")
+
+        summary = dept_summary(
+            term=self.fx.term, start=self.fx.week_start, end=self.fx.sun,
+            department=self.fx.dept_a)
+        card = faculty_scorecard(
+            term=self.fx.term, faculty=self.fx.faculty_a,
+            start=self.fx.week_start, end=self.fx.sun)
+        self.assertEqual(summary.scheduled, 8)
+        self.assertEqual(card.scheduled, 8)

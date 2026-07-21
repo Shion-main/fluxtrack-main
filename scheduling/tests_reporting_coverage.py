@@ -20,9 +20,17 @@ a mutation that breaks one rule fails one named test:
 Django test runner (not pytest); reference module constants (DayOfWeek), never a
 bare weekday int literal where a name reads clearer. ASCII-only.
 """
+from datetime import time
+
 from django.test import TestCase
 
-from scheduling.models import DayOfWeek
+from scheduling.models import (
+    AcademicTerm,
+    DayOfWeek,
+    Schedule,
+    Session,
+    SessionStatus,
+)
 from scheduling.reporting import (
     CoverageRow,
     ZeroCoverageFloor,
@@ -31,6 +39,8 @@ from scheduling.reporting import (
     zero_coverage_floors,
 )
 from scheduling.test_support import (
+    _aware,
+    COV_MON,
     COV_WEEK_END,
     COV_WEEK_START,
     make_coverage_fixture,
@@ -50,7 +60,7 @@ class CoverageByBuildingDayTests(TestCase):
 
     def setUp(self):
         self.fx = make_coverage_fixture("covr")
-        self.kw = dict(start=COV_WEEK_START, end=COV_WEEK_END)
+        self.kw = dict(term=self.fx.term, start=COV_WEEK_START, end=COV_WEEK_END)
 
     def test_rows_are_coverage_rows_ordered_by_building_then_day(self):
         rows = coverage_by_building_day(**self.kw)
@@ -108,7 +118,7 @@ class ZeroCoverageFloorsTests(TestCase):
 
     def setUp(self):
         self.fx = make_coverage_fixture("covz")
-        self.kw = dict(start=COV_WEEK_START, end=COV_WEEK_END)
+        self.kw = dict(term=self.fx.term, start=COV_WEEK_START, end=COV_WEEK_END)
 
     def test_zero_coverage_floor_listed(self):
         """A floor with held > 0 AND verified == 0 must appear EXPLICITLY."""
@@ -137,3 +147,39 @@ class ZeroCoverageFloorsTests(TestCase):
         self.assertNotIn((self.fx.online_building.code, 1), keys)
         # Exactly one zero-coverage floor in the whole fixture.
         self.assertEqual(len(floors), 1)
+
+
+class CoverageTermScopeTests(TestCase):
+    """D-12: coverage aggregates require and honor one selected term."""
+
+    def setUp(self):
+        self.fx = make_coverage_fixture("covterm")
+        self.draft = AcademicTerm.objects.create(
+            name="covterm Draft", start_date=COV_WEEK_START,
+            end_date=COV_WEEK_END, status=AcademicTerm.Status.DRAFT)
+
+    def test_coverage_aggregates_require_term_keyword(self):
+        kwargs = {"start": COV_WEEK_START, "end": COV_WEEK_END}
+        with self.assertRaises(TypeError):
+            coverage_by_building_day(**kwargs)
+        with self.assertRaises(TypeError):
+            zero_coverage_floors(**kwargs)
+
+    def test_same_date_other_term_coverage_does_not_leak(self):
+        sched = Schedule.objects.create(
+            term=self.draft, course_code="COVD101", section="A",
+            faculty=self.fx.faculty, room=self.fx.rooms["b1f2"],
+            day_of_week=COV_MON.weekday(), start_time=time(8, 0),
+            end_time=time(9, 30),
+        )
+        Session.objects.create(
+            schedule=sched, faculty=self.fx.faculty, room=self.fx.rooms["b1f2"],
+            date=COV_MON, scheduled_start=_aware(COV_MON, time(8, 0)),
+            scheduled_end=_aware(COV_MON, time(9, 30)),
+            status=SessionStatus.ACTIVE,
+        )
+
+        rows = coverage_by_building_day(
+            term=self.fx.term, start=COV_WEEK_START, end=COV_WEEK_END)
+        cell = _cell(rows, self.fx.b1.code, DayOfWeek.MON)
+        self.assertEqual(cell.held, 2)
