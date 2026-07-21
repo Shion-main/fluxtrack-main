@@ -583,3 +583,125 @@ class TermCreateViewTests(_TermConsoleFixture):
         self.assertContains(response, "could not be committed", status_code=400)
         self.assertFalse(AcademicTerm.objects.exists())
         self.assertFalse(AuditLog.objects.exists())
+
+
+class TermAuthorityAndPreflightTests(_TermConsoleFixture):
+    def setUp(self):
+        super().setUp()
+        self.today = timezone.localdate()
+
+    def _term(self, name, status, start_delta, end_delta):
+        return AcademicTerm.objects.create(
+            name=name,
+            start_date=self.today + timedelta(days=start_delta),
+            end_date=self.today + timedelta(days=end_delta),
+            status=status,
+        )
+
+    def test_each_transition_has_separate_authorized_get_preflight(self):
+        draft = self._term("Action Draft", AcademicTerm.Status.DRAFT, 30, 120)
+        active = self._term("Action Active", AcademicTerm.Status.ACTIVE, -120, -1)
+        archived = self._term("Action Archive", AcademicTerm.Status.ARCHIVED, -300, -200)
+        routes = [
+            reverse("ifo_term_activate", args=[draft.pk]),
+            reverse("ifo_term_close", args=[active.pk]),
+            reverse("ifo_term_reopen", args=[archived.pk]),
+        ]
+        for user in (self.ifo, self.superuser):
+            self.client.force_login(user)
+            for route in routes:
+                with self.subTest(user=user.username, route=route):
+                    self.assertEqual(self.client.get(route).status_code, 200)
+        for user in self.denied_users:
+            self.client.force_login(user)
+            for route in routes:
+                with self.subTest(user=user.username, route=route):
+                    self.assertEqual(self.client.get(route).status_code, 403)
+        self.assertFalse(AuditLog.objects.exists())
+
+    def test_action_forms_show_blockers_warnings_confirmation_and_reason_rules(self):
+        active = self._term("Current Active", AcademicTerm.Status.ACTIVE, -120, -1)
+        draft = self._term("Empty Draft", AcademicTerm.Status.DRAFT, 30, 120)
+        archived = self._term("Old Archive", AcademicTerm.Status.ARCHIVED, -300, -200)
+        self.client.force_login(self.ifo)
+
+        activate = self.client.get(reverse("ifo_term_activate", args=[draft.pk]))
+        self.assertContains(activate, "another_active")
+        self.assertContains(activate, "empty_schedule_set")
+        self.assertContains(activate, 'name="confirmation_name"', html=False)
+        self.assertNotContains(activate, 'name="reason"', html=False)
+        self.assertContains(activate, "disabled")
+
+        close = self.client.get(reverse("ifo_term_close", args=[active.pk]))
+        self.assertContains(close, 'name="reason"', html=False)
+        self.assertContains(close, 'name="confirmation_name"', html=False)
+
+        reopen = self.client.get(reverse("ifo_term_reopen", args=[archived.pk]))
+        self.assertContains(reopen, "active_successor_exists")
+        self.assertContains(reopen, 'name="reason"', html=False)
+        self.assertContains(reopen, 'name="acknowledged_warnings"', html=False)
+
+    def test_activation_refusal_rerenders_400_then_acknowledged_success_redirects(self):
+        draft = self._term("Empty Draft", AcademicTerm.Status.DRAFT, 30, 120)
+        self.client.force_login(self.ifo)
+        route = reverse("ifo_term_activate", args=[draft.pk])
+
+        missing_confirmation = self.client.post(route, {
+            "confirmation_name": "",
+            "acknowledged_warnings": "empty_schedule_set",
+        })
+        self.assertEqual(missing_confirmation.status_code, 400)
+        draft.refresh_from_db()
+        self.assertEqual(draft.status, AcademicTerm.Status.DRAFT)
+        self.assertFalse(AuditLog.objects.exists())
+
+        missing_warning = self.client.post(route, {
+            "confirmation_name": draft.name,
+        })
+        self.assertEqual(missing_warning.status_code, 400)
+        self.assertFalse(AuditLog.objects.exists())
+
+        success = self.client.post(route, {
+            "confirmation_name": draft.name,
+            "acknowledged_warnings": "empty_schedule_set",
+        })
+        self.assertRedirects(success, reverse("ifo_term_detail", args=[draft.pk]))
+        draft.refresh_from_db()
+        self.assertEqual(draft.status, AcademicTerm.Status.ACTIVE)
+        self.assertTrue(AuditLog.objects.filter(event_type="term.activated").exists())
+
+    def test_close_and_reopen_require_reason_and_exact_name(self):
+        active = self._term("Closable Active", AcademicTerm.Status.ACTIVE, -120, -1)
+        self.client.force_login(self.ifo)
+        close_route = reverse("ifo_term_close", args=[active.pk])
+
+        for data in (
+            {"confirmation_name": "wrong", "reason": "Term complete"},
+            {"confirmation_name": active.name, "reason": ""},
+        ):
+            response = self.client.post(close_route, data)
+            self.assertEqual(response.status_code, 400)
+            active.refresh_from_db()
+            self.assertEqual(active.status, AcademicTerm.Status.ACTIVE)
+
+        closed = self.client.post(close_route, {
+            "confirmation_name": active.name,
+            "reason": "Registrar close",
+        })
+        self.assertRedirects(closed, reverse("ifo_term_detail", args=[active.pk]))
+        active.refresh_from_db()
+        self.assertEqual(active.status, AcademicTerm.Status.ARCHIVED)
+
+        reopen_route = reverse("ifo_term_reopen", args=[active.pk])
+        refused = self.client.post(reopen_route, {
+            "confirmation_name": active.name,
+            "reason": "",
+        })
+        self.assertEqual(refused.status_code, 400)
+        reopened = self.client.post(reopen_route, {
+            "confirmation_name": active.name,
+            "reason": "Correction window",
+        })
+        self.assertRedirects(reopened, reverse("ifo_term_detail", args=[active.pk]))
+        active.refresh_from_db()
+        self.assertEqual(active.status, AcademicTerm.Status.DRAFT)
