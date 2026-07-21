@@ -9,6 +9,7 @@ command`` indirection pattern in reverse: a thin CLI over the shared service.
 Usage:
     py -3.12 manage.py generate_weekly_report            # prior completed week
     py -3.12 manage.py generate_weekly_report --week 2026-07-06
+    py -3.12 manage.py generate_weekly_report --term 3
 
 ``--week`` accepts any date inside the target week (normalized to that week's
 Monday via report_week_bounds). Output is ASCII-only (Windows console is cp1252)
@@ -20,6 +21,34 @@ from django.core.management.base import BaseCommand, CommandError
 from django.utils import timezone
 
 from ops.reports import generate_week_reports, report_week_bounds
+from scheduling.models import AcademicTerm
+from scheduling.term_scope import get_active_term
+
+
+def _resolve_term(raw):
+    """Resolve the command target term from ACTIVE, pk, or exact name."""
+    if not raw:
+        term = get_active_term()
+        if term is None:
+            raise CommandError("No ACTIVE academic term exists.")
+        return term
+
+    raw = raw.strip()
+    qs = AcademicTerm.objects.all()
+    if raw.isdigit():
+        try:
+            term = qs.get(pk=int(raw))
+        except AcademicTerm.DoesNotExist:
+            raise CommandError(f"No academic term found for --term {raw}.")
+    else:
+        try:
+            term = qs.get(name=raw)
+        except AcademicTerm.DoesNotExist:
+            raise CommandError(f"No academic term found for --term {raw}.")
+
+    if term.status != AcademicTerm.Status.ACTIVE:
+        raise CommandError("Weekly report generation requires an ACTIVE term.")
+    return term
 
 
 class Command(BaseCommand):
@@ -30,8 +59,12 @@ class Command(BaseCommand):
             "--week", dest="week", default=None,
             help="A date (YYYY-MM-DD) inside the target week; "
                  "defaults to the prior completed week.")
+        parser.add_argument(
+            "--term", dest="term", default=None,
+            help="ACTIVE academic term pk or exact name; defaults to ACTIVE.")
 
     def handle(self, *args, **options):
+        term = _resolve_term(options.get("term"))
         raw = options.get("week")
         if raw:
             try:
@@ -43,8 +76,10 @@ class Command(BaseCommand):
             reference = timezone.localdate() - timedelta(days=7)
 
         week_start, week_end = report_week_bounds(reference)
-        count = generate_week_reports(week_start, week_end)
+        count = generate_week_reports(
+            term=term, week_start=week_start, week_end=week_end)
 
         self.stdout.write(self.style.SUCCESS(
-            f"Generated {count} weekly report(s) -> week of {week_start} "
+            f"Generated {count} weekly report(s) for {term.name} "
+            f"-> week of {week_start} "
             f"({week_start} to {week_end})."))

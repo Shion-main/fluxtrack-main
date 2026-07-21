@@ -33,6 +33,7 @@ from ops.policy import get_policy
 from ops.push import send_push_outbox
 from ops.reports import generate_week_reports, report_week_bounds
 from scheduling.jobs import detect_room_conflicts, sweep_no_shows
+from scheduling.term_scope import get_active_term
 
 # Materialize cadence (discretion): re-fill the session horizon every 6 hours.
 # The sweep cadence, by contrast, is policy-driven (get_policy below), not a
@@ -86,8 +87,11 @@ def _job_weekly_report():
     meaningful. This is a FILLED stub body: the job set (4 jobs) is unchanged
     (ENV-04 / SchedulerWiringTests).
     """
+    term = get_active_term()
+    if term is None:
+        return 0
     week_start, week_end = report_week_bounds(timezone.localdate() - timedelta(days=7))
-    return generate_week_reports(week_start, week_end)
+    return generate_week_reports(term=term, week_start=week_start, week_end=week_end)
 
 
 def build_scheduler():
