@@ -78,4 +78,3 @@
 - Automatic schedule cloning from the prior term.
 - Multi-term comparison reports.
 - Two-person lifecycle approval.
-
