@@ -1,6 +1,7 @@
 """Unit tests for the pure scan resolver (SCAN-01/02, §6.6)."""
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 
 from django.test import SimpleTestCase
 
@@ -191,7 +192,8 @@ def make_session(scheduled_start, scheduled_end=None):
                                qr_token="tok-dt-399", manual_code="900399")
     term = AcademicTerm.objects.create(name="TZ Term",
                                        start_date=date(2026, 1, 1),
-                                       end_date=date(2026, 12, 31), is_active=True)
+                                       end_date=date(2026, 12, 31),
+                                       status=AcademicTerm.Status.ACTIVE)
     sch = Schedule.objects.create(term=term, course_code="TZ101", section="A",
                                   faculty=fac, room=room, day_of_week=0,
                                   start_time=time(8, 0), end_time=time(9, 30))
@@ -286,7 +288,7 @@ class _JobFixtureMixin:
         self.floor = Floor.objects.create(building=self.bldg, number=1)
         self.term = AcademicTerm.objects.create(
             name="Jobs Term", start_date=date(2026, 1, 1),
-            end_date=date(2026, 12, 31), is_active=True)
+            end_date=date(2026, 12, 31), status=AcademicTerm.Status.ACTIVE)
         self._i = 0
 
     def _next(self):
@@ -1219,6 +1221,45 @@ def _approved_request(fx, target, schedule, window_start, window_end, *,
 def _materialize_future(days=1, start=_FUTURE_MONDAY):
     """Run JOB-01 for a single future date past the fixture's materialized set."""
     call_command("materialize_sessions", days=days, start=str(start))
+
+
+class MaterializeCommandTests(TestCase):
+    """JOB-01 extraction guard: command behavior stays delegated and idempotent."""
+
+    def test_command_delegates_to_materialize_term_without_inline_loop(self):
+        source = Path(
+            "scheduling/management/commands/materialize_sessions.py"
+        ).read_text(encoding="utf-8")
+
+        self.assertIn("materialize_term(", source)
+        self.assertNotIn(".filter(is_active=True).first()", source)
+        self.assertNotIn("while d < end", source)
+
+    def test_rerun_still_materializes_future_session_once(self):
+        fx = make_shift_fixture("mct")
+
+        _materialize_future()
+        _materialize_future()
+
+        self.assertEqual(
+            Session.objects.filter(
+                schedule=fx.f2f_schedule,
+                date=_FUTURE_MONDAY,
+            ).count(),
+            1,
+        )
+
+    def test_approved_online_shift_hook_survives_extraction(self):
+        fx = make_shift_fixture("mcs")
+        _approved_request(
+            fx, Modality.ONLINE, fx.f2f_schedule,
+            date(2026, 7, 6), date(2026, 7, 20))
+
+        _materialize_future()
+
+        born = Session.objects.get(schedule=fx.f2f_schedule, date=_FUTURE_MONDAY)
+        self.assertEqual(born.declared_modality, Modality.ONLINE)
+        self.assertIsNotNone(born.room_released_at)
 
 
 class BornReleasedTests(TestCase):
