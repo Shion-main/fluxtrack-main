@@ -2,11 +2,13 @@
 
 from dataclasses import dataclass, field
 
-from django.db import transaction
+from django.db import IntegrityError, transaction
 from django.utils import timezone
 
 from accounts.models import Role
 from ops.models import AuditLog
+from ops.policy import get_policy
+from scheduling.materialization import materialize_term
 from scheduling.models import AcademicTerm, Session, SessionStatus
 
 
@@ -185,6 +187,18 @@ def _action_preflight(term, *, action, today):
         ).exclude(pk=term.pk).exists()
         if active_successor_exists:
             warnings.append("active_successor_exists")
+    elif action == "activate":
+        if term.status != AcademicTerm.Status.DRAFT:
+            blockers.append("not_draft")
+        if term.end_date < term.start_date:
+            blockers.append("date_order")
+        another_active = AcademicTerm.objects.filter(
+            status=AcademicTerm.Status.ACTIVE
+        ).exclude(pk=term.pk).exists()
+        if another_active:
+            blockers.append("another_active")
+        if counts["schedule_count"] == 0:
+            warnings.append("empty_schedule_set")
     else:
         blockers.append("unknown_action")
 
@@ -229,6 +243,27 @@ def _validate_common_action_inputs(term, *, preflight, confirmation_name, reason
             preflight=preflight,
         )
     return normalized_reason, tuple(preflight.warnings)
+
+
+def _validate_activation_inputs(term, *, preflight, confirmation_name,
+                                acknowledged_warnings):
+    blockers = list(preflight.blockers)
+    if (confirmation_name or "") != term.name:
+        blockers.append("confirmation_mismatch")
+
+    acknowledged = set(acknowledged_warnings or ())
+    current = set(preflight.warnings)
+    if acknowledged != current:
+        blockers.append("warnings_unacknowledged")
+
+    if blockers:
+        raise TermLifecycleError(
+            "term activation has blockers",
+            blockers=tuple(dict.fromkeys(blockers)),
+            warnings=preflight.warnings,
+            preflight=preflight,
+        )
+    return tuple(preflight.warnings)
 
 
 def close_term(term_id, *, actor, confirmation_name, reason,
@@ -301,3 +336,70 @@ def reopen_term(term_id, *, actor, confirmation_name, reason,
             },
         )
         return term
+
+
+def activate_term(term_id, *, actor, confirmation_name,
+                  acknowledged_warnings=(), today=None):
+    today = today or timezone.localdate()
+    try:
+        with transaction.atomic():
+            _authorize(actor)
+            term = AcademicTerm.objects.select_for_update().get(pk=term_id)
+            list(
+                AcademicTerm.objects.select_for_update()
+                .filter(status=AcademicTerm.Status.ACTIVE)
+                .exclude(pk=term.pk)
+            )
+            preflight = _action_preflight(term, action="activate", today=today)
+            acknowledged = _validate_activation_inputs(
+                term,
+                preflight=preflight,
+                confirmation_name=confirmation_name,
+                acknowledged_warnings=acknowledged_warnings,
+            )
+
+            horizon_days = int(get_policy("materialization_horizon_days"))
+            materialization_start = max(today, term.start_date)
+            result = materialize_term(
+                term,
+                start=materialization_start,
+                days=horizon_days,
+                allow_draft=True,
+            )
+
+            before = term.status
+            term.status = AcademicTerm.Status.ACTIVE
+            term.save(update_fields=["status"])
+            AuditLog.objects.create(
+                actor=actor,
+                event_type="term.activated",
+                target_type="academic_term",
+                target_id=str(term.pk),
+                payload={
+                    "reason": None,
+                    "before": before,
+                    "after": AcademicTerm.Status.ACTIVE,
+                    "horizon_days": horizon_days,
+                    "materialization_start": materialization_start.isoformat(),
+                    "materialization": {
+                        "created": result.created,
+                        "existing": result.existing,
+                        "skipped": result.skipped,
+                    },
+                    "schedule_count": preflight.counts["schedule_count"],
+                    "session_count": (
+                        preflight.counts["session_count"] + result.created
+                    ),
+                    "acknowledged_warning_keys": list(acknowledged),
+                },
+            )
+            return term
+    except IntegrityError as exc:
+        if AcademicTerm.objects.filter(
+            status=AcademicTerm.Status.ACTIVE
+        ).exclude(pk=term_id).exists():
+            raise TermLifecycleError(
+                "another academic term is already active",
+                blockers=("another_active",),
+            ) from exc
+        raise

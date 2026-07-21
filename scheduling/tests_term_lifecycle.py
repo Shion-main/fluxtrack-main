@@ -125,12 +125,13 @@ def _aware(d, t):
 def _room(prefix):
     building = Building.objects.create(name=f"{prefix} Hall", code=f"{prefix}-BLD")
     floor = Floor.objects.create(building=building, number=1)
+    manual_prefix = "".join(ch for ch in prefix.upper() if ch.isalnum())[:3] or "TLC"
     return Room.objects.create(
         floor=floor,
         code=f"{prefix}-101",
         capacity=40,
         qr_token=f"{prefix}-qr",
-        manual_code=f"{prefix[:1].upper()}0001"[:6],
+        manual_code=f"{manual_prefix}001"[:6],
     )
 
 
@@ -612,6 +613,7 @@ class ActivationMaterializationTests(TestCase):
                 self.draft.pk,
                 actor=self.ifo,
                 confirmation_name=self.draft.name,
+                today=date(2026, 7, 6),
             )
 
         self.assertIn("another_active", ctx.exception.blockers)
@@ -628,6 +630,7 @@ class ActivationMaterializationTests(TestCase):
                 self.draft.pk,
                 actor=self.ifo,
                 confirmation_name=self.draft.name,
+                today=date(2026, 7, 6),
             )
 
         self.assertEqual(activated.status, AcademicTerm.Status.ACTIVE)
@@ -666,6 +669,7 @@ class ActivationMaterializationTests(TestCase):
                     self.draft.pk,
                     actor=self.ifo,
                     confirmation_name=self.draft.name,
+                    today=date(2026, 7, 6),
                 )
 
         self.draft.refresh_from_db()
@@ -682,6 +686,7 @@ class ActivationMaterializationTests(TestCase):
                 self.draft.pk,
                 actor=self.ifo,
                 confirmation_name=self.draft.name,
+                today=date(2026, 7, 6),
             )
         self.assertIn("warnings_unacknowledged", ctx.exception.blockers)
         self.assertIn("empty_schedule_set", ctx.exception.warnings)
@@ -691,6 +696,7 @@ class ActivationMaterializationTests(TestCase):
             actor=self.ifo,
             confirmation_name=self.draft.name,
             acknowledged_warnings=("empty_schedule_set",),
+            today=date(2026, 7, 6),
         )
 
         self.assertEqual(activated.status, AcademicTerm.Status.ACTIVE)
@@ -723,6 +729,7 @@ class SingleActiveTests(TransactionTestCase):
             self.first.pk,
             actor=self.ifo,
             confirmation_name=self.first.name,
+            today=date(2026, 7, 6),
         )
 
         with self.assertRaises(TermLifecycleError) as ctx:
@@ -730,6 +737,7 @@ class SingleActiveTests(TransactionTestCase):
                 self.second.pk,
                 actor=self.ifo,
                 confirmation_name=self.second.name,
+                today=date(2026, 8, 3),
             )
 
         self.assertIn("another_active", ctx.exception.blockers)
