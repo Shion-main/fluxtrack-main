@@ -17,10 +17,11 @@ and writes exactly two side effects, each through the one sanctioned path:
     (NOTIF-00 single write path); IFO gets every report, each Dean gets ONLY
     their own department's (T-06-06 information-disclosure control).
 
-Idempotency (RPT-02, T-06-12) rides ``WeeklyReport.unique_together(week_start,
-department)`` via ``get_or_create``: JOB-03 re-running the same Monday (misfire
-coalesce, manual re-run) or an on-demand regeneration overwrites the existing
-row's ``csv_path``/``pdf_path`` and never creates a second row.
+Idempotency (RPT-02, T-06-12) rides ``WeeklyReport``'s
+``(term, week_start, department)`` uniqueness via ``get_or_create``: JOB-03
+re-running the same Monday (misfire coalesce, manual re-run) or an on-demand
+regeneration overwrites the existing row's ``csv_path``/``pdf_path`` and never
+creates a second row for that exact term identity.
 
 Week boundaries are computed on LOCAL dates (Asia/Manila ``Session.date``), never
 UTC ``scheduled_start`` (Pitfall 1) -- ``report_week_bounds`` is pure (date in,
@@ -39,6 +40,7 @@ from ops.policy import get_policy
 from scheduling.models import ScheduleStatus, Session
 from scheduling.report_render import build_csv, build_pdf
 from scheduling.reporting import faculty_attendance
+from scheduling.term_scope import require_writable_term
 
 # reporting_week_start policy value -> Python weekday() index (Mon=0 .. Sun=6).
 # Only "monday" ships this milestone; the map keeps report_week_bounds honest to
@@ -76,23 +78,25 @@ def _save_overwrite(name, data):
     return default_storage.save(name, ContentFile(data))
 
 
-def generate_weekly_report(week_start, week_end, department):
+def generate_weekly_report(*, term, week_start, week_end, department):
     """Generate + store ONE department's weekly report idempotently (RPT-02).
 
     Reuses the pure aggregate (``faculty_attendance``) and render (``build_csv`` /
     ``build_pdf``) layers, upserts the ``WeeklyReport`` row on its
-    ``(week_start, department)`` uniqueness key, and writes both files via
+    ``(term, week_start, department)`` uniqueness key, and writes both files via
     ``default_storage`` under a name built ONLY from ``department.code`` (or "ALL"
     when ``department`` is ``None`` for the IFO roll-up) + ``week_start`` -- never
     from request input (T-06-05). Returns the ``WeeklyReport``.
     """
-    rows = faculty_attendance(start=week_start, end=week_end, department=department)
+    require_writable_term(term)
+    rows = faculty_attendance(
+        term=term, start=week_start, end=week_end, department=department)
     report, _ = WeeklyReport.objects.get_or_create(
-        week_start=week_start, department=department)
+        term=term, week_start=week_start, department=department)
 
     code = department.code if department is not None else "ALL"
-    csv_name = f"reports/{week_start}/{code}.csv"
-    pdf_name = f"reports/{week_start}/{code}.pdf"
+    csv_name = f"reports/term-{term.pk}/{week_start}/{code}.csv"
+    pdf_name = f"reports/term-{term.pk}/{week_start}/{code}.pdf"
 
     report.csv_path = _save_overwrite(csv_name, build_csv(rows))
     report.pdf_path = _save_overwrite(
@@ -126,7 +130,7 @@ def notify_report_ready(department, week_start, link=""):
                title=title, body=body, link=link)
 
 
-def generate_week_reports(week_start, week_end, link_base="/reports/"):
+def generate_week_reports(*, term, week_start, week_end, link_base="/reports/"):
     """Generate + notify EVERY department's report for the week + the ALL roll-up.
 
     The ONE shared code path behind both JOB-03 (auto-weekly) and the on-demand
@@ -138,9 +142,11 @@ def generate_week_reports(week_start, week_end, link_base="/reports/"):
     reports generated so the caller (JobRun.rows_affected / the CLI summary) has a
     meaningful tally.
     """
+    require_writable_term(term)
     dept_ids = (
         Session.objects.filter(
             date__range=(week_start, week_end),
+            schedule__term=term,
             schedule__status=ScheduleStatus.ACTIVE,
             faculty__department__isnull=False,
         )
@@ -149,17 +155,18 @@ def generate_week_reports(week_start, week_end, link_base="/reports/"):
     )
     departments = list(Department.objects.filter(id__in=list(dept_ids)))
 
-    link = f"{link_base}{week_start}/"
+    link = f"{link_base}term-{term.pk}/{week_start}/"
     count = 0
     for dept in departments:
         generate_weekly_report(
-            week_start=week_start, week_end=week_end, department=dept)
+            term=term, week_start=week_start, week_end=week_end,
+            department=dept)
         notify_report_ready(dept, week_start, link=link)
         count += 1
 
     # The IFO-facing ALL roll-up (department=None) always generates (A7).
     generate_weekly_report(
-        week_start=week_start, week_end=week_end, department=None)
+        term=term, week_start=week_start, week_end=week_end, department=None)
     notify_report_ready(None, week_start, link=link)
     count += 1
 

@@ -131,14 +131,16 @@ class DeanScopeTests(_DeanBase):
     def test_foreign_department_weekly_download_404s(self):
         # A stored report for the FOREIGN department (dept_b): its pk must 404.
         rep_b = generate_weekly_report(
-            self.fx.week_start, self.fx.sun, self.fx.dept_b)
+            term=self.fx.term, week_start=self.fx.week_start,
+            week_end=self.fx.sun, department=self.fx.dept_b)
         resp = self.client.get(
             reverse("dean_weekly_download", args=[rep_b.pk, "csv"]))
         self.assertEqual(resp.status_code, 404)
 
     def test_own_department_weekly_download_streams(self):
         rep_a = generate_weekly_report(
-            self.fx.week_start, self.fx.sun, self.fx.dept_a)
+            term=self.fx.term, week_start=self.fx.week_start,
+            week_end=self.fx.sun, department=self.fx.dept_a)
         resp = self.client.get(
             reverse("dean_weekly_download", args=[rep_a.pk, "csv"]))
         self.assertEqual(resp.status_code, 200)
@@ -208,7 +210,9 @@ class DeanNullDepartmentScopeTests(TestCase):
 
     def test_null_dept_dean_cannot_download_all_rollup_report(self):
         # The org-wide consolidated roll-up is stored with department=None.
-        rollup = generate_weekly_report(self.fx.week_start, self.fx.sun, None)
+        rollup = generate_weekly_report(
+            term=self.fx.term, week_start=self.fx.week_start,
+            week_end=self.fx.sun, department=None)
         resp = self.client.get(
             reverse("dean_weekly_download", args=[rollup.pk, "csv"]))
         self.assertEqual(resp.status_code, 404)

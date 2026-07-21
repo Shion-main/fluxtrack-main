@@ -165,8 +165,12 @@ class IfoWeeklyReportsTests(_IfoBase):
     (department=None) roll-up; a non-IFO is refused; bad fmt / missing file 404."""
 
     def test_index_lists_dept_and_rollup_for_the_week(self):
-        generate_weekly_report(self.fx.week_start, self.fx.sun, self.fx.dept_a)
-        generate_weekly_report(self.fx.week_start, self.fx.sun, None)
+        generate_weekly_report(
+            term=self.fx.term, week_start=self.fx.week_start,
+            week_end=self.fx.sun, department=self.fx.dept_a)
+        generate_weekly_report(
+            term=self.fx.term, week_start=self.fx.week_start,
+            week_end=self.fx.sun, department=None)
         resp = self.client.get(reverse("ifo_weekly_reports"))
         self.assertEqual(resp.status_code, 200)
         # The per-department report and the "All departments" roll-up both appear.
@@ -182,7 +186,8 @@ class IfoWeeklyReportsTests(_IfoBase):
 
     def test_ifo_downloads_per_department_report(self):
         rep = generate_weekly_report(
-            self.fx.week_start, self.fx.sun, self.fx.dept_a)
+            term=self.fx.term, week_start=self.fx.week_start,
+            week_end=self.fx.sun, department=self.fx.dept_a)
         resp = self.client.get(
             reverse("ifo_weekly_download", args=[rep.pk, "csv"]))
         self.assertEqual(resp.status_code, 200)
@@ -192,7 +197,9 @@ class IfoWeeklyReportsTests(_IfoBase):
     def test_ifo_downloads_the_none_rollup(self):
         # The org-wide roll-up (department=None) is reachable by IFO (unscoped) --
         # this is exactly what the Dean surface must NEVER resolve.
-        rollup = generate_weekly_report(self.fx.week_start, self.fx.sun, None)
+        rollup = generate_weekly_report(
+            term=self.fx.term, week_start=self.fx.week_start,
+            week_end=self.fx.sun, department=None)
         resp = self.client.get(
             reverse("ifo_weekly_download", args=[rollup.pk, "pdf"]))
         self.assertEqual(resp.status_code, 200)
@@ -201,14 +208,16 @@ class IfoWeeklyReportsTests(_IfoBase):
 
     def test_unknown_format_404s(self):
         rep = generate_weekly_report(
-            self.fx.week_start, self.fx.sun, self.fx.dept_a)
+            term=self.fx.term, week_start=self.fx.week_start,
+            week_end=self.fx.sun, department=self.fx.dept_a)
         resp = self.client.get(
             reverse("ifo_weekly_download", args=[rep.pk, "xlsx"]))
         self.assertEqual(resp.status_code, 404)
 
     def test_missing_stored_file_404s(self):
         rep = generate_weekly_report(
-            self.fx.week_start, self.fx.sun, self.fx.dept_a)
+            term=self.fx.term, week_start=self.fx.week_start,
+            week_end=self.fx.sun, department=self.fx.dept_a)
         # A row whose stored path no longer resolves must 404, never 500.
         rep.pdf_path = "reports/nope/missing.pdf"
         rep.save(update_fields=["pdf_path"])
