@@ -5,16 +5,16 @@ milestone_name: — "Operational Trust"
 current_phase: 12
 current_phase_name: Term Lifecycle
 status: In Progress
-stopped_at: Completed 12-06-PLAN.md
-last_updated: "2026-07-21T18:48:46.543Z"
+stopped_at: Completed 12-07-PLAN.md
+last_updated: "2026-07-21T19:05:24.101Z"
 last_activity: 2026-07-20
 last_activity_desc: Phase 11 complete, transitioned to Phase 12
 progress:
   total_phases: 18
   completed_phases: 10
   total_plans: 75
-  completed_plans: 69
-  percent: 92
+  completed_plans: 70
+  percent: 56
 ---
 
 # Project State
@@ -156,6 +156,7 @@ Phase 07 and remain out of scope.
 | Phase 12 P08 | 10 min | 3 tasks | 13 files |
 | Phase 12 P05 | 49 min | 2 tasks | 11 files |
 | Phase 12 P06 | 19 min | 3 tasks | 11 files |
+| Phase 12 P07 | 11 min | 3 tasks | 8 files |
 
 ## Accumulated Context
 
@@ -258,6 +259,9 @@ Recent decisions affecting current work:
 - [Phase 12]: `seed_term` keeps its active-term operator flow but resolves through `require_active_term` and scopes term-owned rewrites to that term.
 - [Phase 12]: Direct archived IDs return not-found at role boundaries to stop writes before service, audit, or notification paths.
 - [Phase 12]: No ACTIVE term is a zero-effect/no-data state for live jobs and surfaces, never a fallback to historical rows.
+- [Phase 12]: Lifecycle controllers render operator-friendly blocker and warning copy while transactional services remain the only mutation authority.
+- [Phase 12]: Creation commit failures render a generic HTTP 400 only after the service transaction rolls back; backend exception text stays hidden.
+- [Phase 12]: Displayed action blockers disable submit as presentation only; every POST still delegates raw inputs to a locking, revalidating service.
 
 ### Pending Todos
 
@@ -283,9 +287,9 @@ None yet.
 
 **Resume file:** None
 
-Last session: 2026-07-21T18:48:45.600Z
+Last session: 2026-07-21T19:05:24.058Z
 Session arc + decisions: docs/sessions/2026-07-20-audit-and-phase9.md
-Stopped at: Completed 12-06-PLAN.md
+Stopped at: Completed 12-07-PLAN.md
 suite 994 green.
 
 RESUME NEXT: **Phase 12 Plan 07**. Plan 06 shipped ACTIVE-term scoping for live jobs, role surfaces, and IFO mutation seams; runtime Django verification remains environment-blocked in this shell.
