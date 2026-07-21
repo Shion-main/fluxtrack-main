@@ -41,9 +41,8 @@ from scheduling.services import (
     apply_approval,
     reject_modality_shift,
 )
-from scheduling.term_scope import get_active_term
 from web.pagination import paginate
-from web.reporting_common import reporting_range as _reporting_range
+from web.reporting_common import reporting_range as _reporting_range, selected_report_scope
 
 
 def dean_required(view):
@@ -155,6 +154,12 @@ def reject(request, pk):
 # the same one -- the pure range logic has no role-coupling to keep apart (LO-03).
 
 
+def _dean_report_scope(request):
+    return selected_report_scope(
+        request, default_window=lambda _term: _reporting_range(request)[:2]
+    )
+
+
 @dean_required
 @require_http_methods(["GET"])
 def dashboard(request):
@@ -168,21 +173,24 @@ def dashboard(request):
     on filter Apply); never continuously polled.
     """
     dept = request.user.department
-    start, end, as_of, note = _reporting_range(request)
-    term = get_active_term()
-    if dept is None:
+    scope = _dean_report_scope(request)
+    start, end, as_of, note = scope.start, scope.end, scope.as_of, scope.note
+    if not scope.is_valid:
+        summary, latest = (None, scope.error), None
+    elif dept is None:
         # NULL-department Dean: nothing is scoped in -> a zeroed, no-crash card.
         # NEVER dept_summary(department=None), which would leak ALL departments.
         summary = (DeptSummary(0, 0, 0, 0, 0), None)
         latest = None
     else:
         summary = safe_card(
-            dept_summary, term=term, start=start, end=end, department=dept,
+            dept_summary, term=scope.term, start=start, end=end, department=dept,
             as_of=as_of)
-        latest = WeeklyReport.objects.filter(department=dept).first()
+        latest = WeeklyReport.objects.filter(term=scope.term, department=dept).first()
     return render(request, "dean/dashboard.html", {
         "department": dept, "summary": summary, "latest_report": latest,
-        "date_from": start, "date_to": end, "range_note": note,
+        "scope": scope, "scope_query": scope.scope_query,
+        "date_from": start, "date_to": end, "range_note": scope.error or note,
     })
 
 
@@ -197,21 +205,25 @@ def reports(request):
     scoped in), never an unscoped all-departments result.
     """
     dept = request.user.department
-    start, end, as_of, note = _reporting_range(request)
-    term = get_active_term()
-    if dept is None:
+    scope = _dean_report_scope(request)
+    start, end, as_of, note = scope.start, scope.end, scope.as_of, scope.note
+    if not scope.is_valid:
+        rows = ([], scope.error)
+    elif dept is None:
         rows = ([], None)
     else:
         rows = safe_card(
-            faculty_attendance, term=term, start=start, end=end,
+            faculty_attendance, term=scope.term, start=start, end=end,
             department=dept, as_of=as_of)
     # rows is (list_of_dicts, error). Paginate the list -- a large department can
     # run well past a readable page, and the CSV/PDF exports still cover the full
     # set. When there is an error, rows[0] is empty and the pager renders nothing.
     pager = paginate(request, rows[0])
+    pager["querystring"] = f"{scope.scope_query}&" if scope.scope_query else ""
     return render(request, "dean/reports.html", {
         "department": dept, "rows": rows,
-        "date_from": start, "date_to": end, "range_note": note, **pager,
+        "scope": scope, "scope_query": scope.scope_query,
+        "date_from": start, "date_to": end, "range_note": scope.error or note, **pager,
     })
 
 
@@ -234,9 +246,16 @@ def scorecard(request, faculty_id):
         raise Http404("No department.")
     faculty = get_object_or_404(
         get_user_model(), pk=faculty_id, department=dept)
-    start, end, as_of, note = _reporting_range(request)
+    scope = _dean_report_scope(request)
+    start, end, as_of, note = scope.start, scope.end, scope.as_of, scope.note
+    if not scope.is_valid:
+        return render(request, "reports/scorecard.html", {
+            "faculty": faculty, "card": (None, scope.error),
+            "date_from": start, "date_to": end, "range_note": scope.error,
+            "back_url": "/dean/reports", "export_csv_url": None,
+        })
     card = safe_card(
-        faculty_scorecard, term=get_active_term(), faculty=faculty,
+        faculty_scorecard, term=scope.term, faculty=faculty,
         start=start, end=end, as_of=as_of)
     modality_items = None
     if card[0] is not None:
@@ -247,6 +266,7 @@ def scorecard(request, faculty_id):
         "faculty": faculty, "card": card, "modality_items": modality_items,
         "date_from": start, "date_to": end, "range_note": note,
         "back_url": "/dean/reports",
+        "scope_query": scope.scope_query,
         "export_csv_url": f"/dean/scorecard/{faculty.id}/export.csv",
     })
 
@@ -268,14 +288,17 @@ def scorecard_export(request, faculty_id):
         raise Http404("No department.")
     faculty = get_object_or_404(
         get_user_model(), pk=faculty_id, department=dept)
-    start, end, as_of, _note = _reporting_range(request)
+    scope = _dean_report_scope(request)
+    if not scope.is_valid:
+        return HttpResponse(scope.error, status=400, content_type="text/plain")
+    start, end, as_of = scope.start, scope.end, scope.as_of
     rows = [r for r in faculty_attendance(
-                term=get_active_term(), start=start, end=end, department=dept,
+                term=scope.term, start=start, end=end, department=dept,
                 as_of=as_of)
             if r.faculty_id == faculty.id]
     resp = HttpResponse(build_csv(rows), content_type="text/csv")
     resp["Content-Disposition"] = (
-        f'attachment; filename="scorecard-{faculty.id}-{start}.csv"')
+        f'attachment; filename="scorecard-{faculty.id}-term-{scope.term.pk}-{start}.csv"')
     return resp
 
 
@@ -291,10 +314,13 @@ def report_export(request, fmt):
     An unknown ``fmt`` 404s.
     """
     dept = request.user.department
-    start, end, as_of, _note = _reporting_range(request)
+    scope = _dean_report_scope(request)
+    if not scope.is_valid:
+        return HttpResponse(scope.error, status=400, content_type="text/plain")
+    start, end, as_of = scope.start, scope.end, scope.as_of
     rows = ([] if dept is None
             else faculty_attendance(
-                term=get_active_term(), start=start, end=end, department=dept,
+                term=scope.term, start=start, end=end, department=dept,
                 as_of=as_of))
     code = dept.code if dept is not None else "none"
     if fmt == "csv":
@@ -306,7 +332,7 @@ def report_export(request, fmt):
         raise Http404("Unknown export format.")
     resp = HttpResponse(data, content_type=content_type)
     resp["Content-Disposition"] = (
-        f'attachment; filename="attendance-{code}-{start}.{ext}"')
+        f'attachment; filename="attendance-{code}-term-{scope.term.pk}-{start}.{ext}"')
     return resp
 
 
@@ -326,8 +352,11 @@ def weekly_download(request, pk, fmt):
         # and would match the org-wide ALL-departments roll-up report (stored
         # with department=None). Refuse -- a Dean never sees the consolidated file.
         raise Http404("No department.")
+    scope = _dean_report_scope(request)
+    if not scope.is_valid:
+        raise Http404(scope.error)
     report = get_object_or_404(
-        WeeklyReport, pk=pk, department=dept)
+        WeeklyReport, pk=pk, term=scope.term, department=dept)
     if fmt == "csv":
         path, content_type = report.csv_path, "text/csv"
     elif fmt == "pdf":

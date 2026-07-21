@@ -10,6 +10,15 @@ ASCII-only.{% endcomment %}
 {% block console %}
 <p class="uk-text-muted mb-6">Attendance summary for your department this week (DEAN-04). Read-only.</p>
 
+<form method="get" class="uk-card uk-card-body mb-6">
+  <div class="flex flex-wrap items-end gap-4">
+    {% include "reports/_term_filter.html" %}
+    <button type="submit" class="uk-btn uk-btn-primary uk-btn-sm">Apply</button>
+    <a href="/dean/dashboard{% if scope.term %}?term={{ scope.term.pk }}{% endif %}" class="uk-btn uk-btn-ghost uk-btn-sm">Reset</a>
+  </div>
+  {% if range_note %}<p class="uk-text-small mt-2" style="color:var(--amber)">{{ range_note }}</p>{% endif %}
+</form>
+
 {% if summary.1 %}
   {% include "reports/_error_card.html" %}
 {% else %}
@@ -51,19 +60,19 @@ ASCII-only.{% endcomment %}
         <div class="uk-h4 mb-0">{{ latest_report.week_start|date:'M j, Y' }}</div>
       </div>
       <div class="flex items-center gap-2">
-        <a href="{% url 'dean_weekly_download' latest_report.pk 'csv' %}" class="uk-btn uk-btn-secondary uk-btn-sm" download>
+        <a href="{% url 'dean_weekly_download' latest_report.pk 'csv' %}?{{ scope_query }}" class="uk-btn uk-btn-secondary uk-btn-sm" download>
           <uk-icon icon="download" class="size-4"></uk-icon> Export CSV</a>
-        <a href="{% url 'dean_weekly_download' latest_report.pk 'pdf' %}" class="uk-btn uk-btn-primary uk-btn-sm" download>
+        <a href="{% url 'dean_weekly_download' latest_report.pk 'pdf' %}?{{ scope_query }}" class="uk-btn uk-btn-primary uk-btn-sm" download>
           <uk-icon icon="file-text" class="size-4"></uk-icon> Download PDF</a>
       </div>
     </div>
     <p class="uk-text-small mt-4 mb-0">
-      <a href="/dean/reports" class="inline-flex items-center gap-1">View full department reporting <uk-icon icon="chevron-right" class="size-4"></uk-icon></a></p>
+      <a href="/dean/reports?{{ scope_query }}" class="inline-flex items-center gap-1">View full department reporting <uk-icon icon="chevron-right" class="size-4"></uk-icon></a></p>
   </div>
 {% else %}
   <div class="uk-card uk-card-body">
     <p class="uk-text-muted mb-1">No weekly report yet.</p>
-    <p class="uk-text-small uk-text-muted mb-0">Your department's first consolidated report will appear here once it has been generated. In the meantime, <a href="/dean/reports">view live department reporting</a>.</p>
+    <p class="uk-text-small uk-text-muted mb-0">Your department's first consolidated report will appear here once it has been generated. In the meantime, <a href="/dean/reports?{{ scope_query }}">view live department reporting</a>.</p>
   </div>
 {% endif %}
 {% endblock %}
