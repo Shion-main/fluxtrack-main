@@ -5,8 +5,8 @@ milestone_name: — "Operational Trust"
 current_phase: 12
 current_phase_name: Term Lifecycle
 status: Ready to plan
-stopped_at: Session resumed, proceeding to Phase 12 context discussion
-last_updated: "2026-07-21T08:11:58.104Z"
+stopped_at: Phase 12 context gathered
+last_updated: "2026-07-21T08:25:48.239Z"
 last_activity: 2026-07-20
 last_activity_desc: Phase 11 complete, transitioned to Phase 12
 progress:
@@ -258,9 +258,11 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-07-21T08:11:58.079Z
+**Resume file:** .planning/phases/12-term-lifecycle/12-CONTEXT.md
+
+Last session: 2026-07-21T08:25:48.200Z
 Session arc + decisions: docs/sessions/2026-07-20-audit-and-phase9.md
-Stopped at: Session resumed, proceeding to Phase 12 context discussion
+Stopped at: Phase 12 context gathered
 suite 994 green.
 
 RESUME NEXT: **Phase 11 — Metrics the Mission Promises** (A3 lateness / A6
