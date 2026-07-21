@@ -28,8 +28,9 @@ ASCII-only.
 """
 import shutil
 import tempfile
-from datetime import date
+from datetime import date, time
 from pathlib import Path
+from unittest import mock
 
 from django.conf import settings
 from django.contrib.auth import get_user_model
@@ -38,9 +39,11 @@ from django.test import TestCase, override_settings
 from django.urls import reverse
 
 from accounts.models import Role
+from campus.models import Building, Floor, Room
 from ops.import_staging import MAX_UPLOAD_BYTES
 from ops.models import AuditLog, ImportStaging
-from scheduling.models import AcademicTerm, Schedule, Session
+from scheduling.models import (AcademicTerm, DayOfWeek, Schedule, Session,
+                               ScheduleStatus)
 from web.ifo import IMPORT_SESSION_KEY
 
 _TMP_MEDIA = tempfile.mkdtemp(prefix="fluxtrack-import-web-tests-")
@@ -333,6 +336,120 @@ class StagingOwnershipTests(_ImportBase):
 
         self.assertEqual(self._commit().status_code, 200)
         self.assertGreater(Schedule.objects.count(), 0)
+
+
+class ImportTargetDriftTests(_ImportBase):
+    """Plan 12-04: commit authority is the staging row's locked Draft term."""
+
+    def test_commit_refuses_if_target_became_active_after_preview(self):
+        self._preview()
+        self.active_term.status = AcademicTerm.Status.ARCHIVED
+        self.active_term.save(update_fields=["status"])
+        self.draft_term.status = AcademicTerm.Status.ACTIVE
+        self.draft_term.save(update_fields=["status"])
+
+        resp = self._commit()
+
+        self.assertEqual(resp.status_code, 400)
+        self.assertContains(resp, "Draft term", status_code=400)
+        self.assertEqual(Schedule.objects.count(), 0)
+        staging = ImportStaging.objects.get()
+        self.assertIsNone(staging.consumed_at)
+
+    def test_commit_refuses_if_target_became_archived_after_preview(self):
+        self._preview()
+        self.draft_term.status = AcademicTerm.Status.ARCHIVED
+        self.draft_term.save(update_fields=["status"])
+
+        resp = self._commit()
+
+        self.assertEqual(resp.status_code, 400)
+        self.assertContains(resp, "Draft term", status_code=400)
+        self.assertEqual(Schedule.objects.count(), 0)
+        self.assertIsNone(ImportStaging.objects.get().consumed_at)
+
+    def test_commit_ignores_arbitrary_request_term(self):
+        self._preview()
+        other_draft = AcademicTerm.objects.create(
+            name="Attacker Supplied Draft",
+            start_date=date(2026, 11, 1),
+            end_date=date(2027, 3, 31),
+            status=AcademicTerm.Status.DRAFT,
+        )
+
+        resp = self.client.post(
+            reverse("ifo_import_commit"),
+            {"term": str(other_draft.pk)},
+        )
+
+        self.assertEqual(resp.status_code, 200)
+        self.assertGreater(Schedule.objects.filter(term=self.draft_term).count(), 0)
+        self.assertEqual(Schedule.objects.filter(term=other_draft).count(), 0)
+
+    def test_import_failure_after_write_rolls_back_and_keeps_retryable(self):
+        self._preview()
+        staging = ImportStaging.objects.get()
+
+        def fail_after_write(*args, **kwargs):
+            bldg = Building.objects.create(code="RB", name="Rollback")
+            floor = Floor.objects.create(building=bldg, number=1)
+            room = Room.objects.create(
+                floor=floor,
+                code="RB101",
+                qr_token="rb-token",
+                manual_code="991001",
+            )
+            Schedule.objects.create(
+                term=staging.term,
+                course_code="RB101",
+                section="A",
+                faculty=self.faculty,
+                room=room,
+                day_of_week=DayOfWeek.MON,
+                start_time=time(8, 0),
+                end_time=time(9, 30),
+                status=ScheduleStatus.ACTIVE,
+            )
+            raise RuntimeError("forced importer failure")
+
+        with mock.patch("web.ifo.call_command", side_effect=fail_after_write):
+            resp = self._commit()
+
+        self.assertEqual(resp.status_code, 400)
+        self.assertEqual(Schedule.objects.count(), 0)
+        staging.refresh_from_db()
+        self.assertIsNone(staging.consumed_at)
+        self.assertFalse(AuditLog.objects.filter(event_type="schedule.imported").exists())
+
+
+class ImportNoMaterializationTests(_ImportBase):
+    """Plan 12-04: successful Draft import creates recurring schedules only."""
+
+    def test_successful_draft_commit_creates_no_sessions_and_no_lifecycle_change(self):
+        self._preview()
+
+        resp = self._commit()
+
+        self.assertEqual(resp.status_code, 200)
+        self.assertGreater(Schedule.objects.filter(term=self.draft_term).count(), 0)
+        self.assertEqual(Session.objects.count(), 0)
+        self.active_term.refresh_from_db()
+        self.draft_term.refresh_from_db()
+        self.assertEqual(self.active_term.status, AcademicTerm.Status.ACTIVE)
+        self.assertEqual(self.draft_term.status, AcademicTerm.Status.DRAFT)
+
+    def test_success_audit_is_target_scoped(self):
+        self._preview()
+
+        self._commit()
+
+        log = AuditLog.objects.get(event_type="schedule.imported")
+        self.assertEqual(log.payload["term_id"], self.draft_term.pk)
+        self.assertEqual(log.payload["term_name"], self.draft_term.name)
+        self.assertEqual(
+            log.payload["schedules_created"],
+            Schedule.objects.filter(term=self.draft_term).count(),
+        )
 
 
 class ImportValidationTests(_ImportBase):
