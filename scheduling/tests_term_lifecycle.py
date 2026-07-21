@@ -11,8 +11,10 @@ from pathlib import Path
 from unittest.mock import patch
 from zoneinfo import ZoneInfo
 
+from django.contrib import admin
 from django.core.management import call_command
 from django.core.management.base import CommandError
+from django.core.exceptions import PermissionDenied
 from django.db import IntegrityError, transaction
 from django.contrib.auth import get_user_model
 from django.test import SimpleTestCase, TestCase, TransactionTestCase
@@ -20,12 +22,15 @@ from django.utils import timezone
 
 from accounts.models import Department, Role
 from campus.models import Building, Floor, Room
-from ops.models import AuditLog, Notification, RoomConflictFlag
+from ops.admin import WeeklyReportAdmin
+from ops.models import AuditLog, Notification, RoomConflictFlag, WeeklyReport
+from scheduling.admin import AcademicTermAdmin, ScheduleAdmin
 from scheduling.jobs import detect_room_conflicts, sweep_no_shows
 from scheduling.materialization import MaterializationError, materialize_term
 from scheduling.merge import propagate_merged_present
 from scheduling.models import (
     AcademicTerm,
+    AcademicBreak,
     ClassSuspension,
     Modality,
     ModalityShiftItem,
@@ -61,7 +66,13 @@ from scheduling.term_scope import (
     require_active_term,
     require_writable_term,
 )
-from verification.models import Assignment, AssignmentScope, DutyRole
+from verification.admin import AssignmentAdmin, CheckerValidationAdmin
+from verification.models import (
+    Assignment,
+    AssignmentScope,
+    CheckerValidation,
+    DutyRole,
+)
 from verification.services import assign_online_sessions
 
 
@@ -1306,3 +1317,107 @@ class ArchiveFreezeCommandTests(TestCase):
 
         self.assertIn("no active term", out.getvalue())
         self.assertEqual(self._row_counts(), before)
+
+
+class ArchiveFreezeAdminTests(TestCase):
+    """D-04: raw Django Admin mutation seams enforce the archive freeze."""
+
+    def setUp(self):
+        self.user = _user("admin_freeze_user")
+        self.archived = AcademicTerm.objects.create(
+            name="Admin Archived",
+            start_date=date(2025, 1, 1),
+            end_date=date(2025, 5, 31),
+            status=AcademicTerm.Status.ARCHIVED,
+        )
+        self.draft = AcademicTerm.objects.create(
+            name="Admin Draft",
+            start_date=date(2026, 1, 1),
+            end_date=date(2026, 5, 31),
+            status=AcademicTerm.Status.DRAFT,
+        )
+        self.archived_schedule = _schedule(self.archived, self.user, "adm-arc")
+        self.draft_schedule = _schedule(self.draft, self.user, "adm-drf")
+
+    def test_archived_schedule_save_is_refused_and_draft_save_succeeds(self):
+        model_admin = ScheduleAdmin(Schedule, admin.site)
+        self.archived_schedule.section = "REFUSED"
+        with self.assertRaises(PermissionDenied):
+            model_admin.save_model(None, self.archived_schedule, None, True)
+        self.archived_schedule.refresh_from_db()
+        self.assertNotEqual(self.archived_schedule.section, "REFUSED")
+
+        self.draft_schedule.section = "WRITABLE"
+        model_admin.save_model(None, self.draft_schedule, None, True)
+        self.draft_schedule.refresh_from_db()
+        self.assertEqual(self.draft_schedule.section, "WRITABLE")
+
+    def test_mixed_delete_queryset_refuses_before_any_delete(self):
+        model_admin = ScheduleAdmin(Schedule, admin.site)
+        queryset = Schedule.objects.filter(
+            pk__in=[self.archived_schedule.pk, self.draft_schedule.pk]
+        )
+        with self.assertRaises(PermissionDenied):
+            model_admin.delete_queryset(None, queryset)
+        self.assertEqual(queryset.count(), 2)
+
+    def test_academic_term_delete_is_always_denied(self):
+        model_admin = AcademicTermAdmin(AcademicTerm, admin.site)
+        self.assertFalse(model_admin.has_delete_permission(None, self.draft))
+        with self.assertRaises(PermissionDenied):
+            model_admin.delete_model(None, self.draft)
+        with self.assertRaises(PermissionDenied):
+            model_admin.delete_queryset(None, AcademicTerm.objects.all())
+
+    def test_verification_and_report_admin_guards_follow_owner_paths(self):
+        assignment = Assignment.objects.create(
+            user=self.user,
+            role=DutyRole.CHECKER,
+            type="shift",
+            term=self.archived,
+        )
+        with self.assertRaises(PermissionDenied):
+            AssignmentAdmin(Assignment, admin.site).delete_model(None, assignment)
+
+        session = _session(self.archived_schedule, self.user)
+        validation = CheckerValidation.objects.create(
+            session=session,
+            room=session.room,
+            checker=self.user,
+            action="verified",
+        )
+        with self.assertRaises(PermissionDenied):
+            CheckerValidationAdmin(CheckerValidation, admin.site).delete_model(
+                None, validation
+            )
+
+        report = WeeklyReport.objects.create(
+            term=self.archived,
+            week_start=self.archived.start_date,
+            csv_path="reports/original.csv",
+        )
+        report.csv_path = "reports/refused.csv"
+        with self.assertRaises(PermissionDenied):
+            WeeklyReportAdmin(WeeklyReport, admin.site).save_model(
+                None, report, None, True
+            )
+        report.refresh_from_db()
+        self.assertEqual(report.csv_path, "reports/original.csv")
+
+
+class AdminDeleteQuerysetFreezeTests(SimpleTestCase):
+    def test_every_term_owned_admin_uses_shared_bulk_guard(self):
+        for path in (
+            Path("scheduling/admin.py"),
+            Path("verification/admin.py"),
+            Path("ops/admin.py"),
+        ):
+            source = path.read_text(encoding="utf-8")
+            self.assertIn("TermOwnedAdminGuardMixin", source)
+
+        guard_source = Path("scheduling/admin_guards.py").read_text(encoding="utf-8")
+        self.assertIn("objects = list(queryset)", guard_source)
+        self.assertLess(
+            guard_source.index("for obj in objects"),
+            guard_source.index("super().delete_queryset"),
+        )
