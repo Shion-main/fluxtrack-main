@@ -81,14 +81,17 @@ def _room_board(scope="live"):
     """Build the grouped room board. Two queries regardless of room count."""
     now = timezone.now()
     grace = timedelta(minutes=int(get_policy("grace_minutes")))
+    term = get_active_term()
 
     rooms = list(Room.objects.select_related("floor__building")
                  .order_by("floor__building__code", "floor__number", "code"))
     by_room = {}
-    for s in (Session.objects.filter(date=timezone.localdate())
-              .select_related("schedule", "faculty")
-              .order_by("scheduled_start")):
-        by_room.setdefault(s.room_id, []).append(s)
+    if term is not None:
+        for s in (Session.objects.filter(date=timezone.localdate(),
+                                         schedule__term=term)
+                  .select_related("schedule", "faculty")
+                  .order_by("scheduled_start")):
+            by_room.setdefault(s.room_id, []).append(s)
 
     groups, buildings, totals = [], [], {"rooms": 0, "problems": 0, "hidden": 0}
     for room in rooms:
@@ -149,15 +152,17 @@ def room_panel(request, code):
     room = get_object_or_404(Room.objects.select_related("floor__building"), code=code)
     now = timezone.now()
     grace = timedelta(minutes=int(get_policy("grace_minutes")))
-    today = list(room.sessions.filter(date=timezone.localdate())
-                 .select_related("schedule", "faculty")
-                 .order_by("scheduled_start"))
+    term = get_active_term()
+    today = list(
+        room.sessions.filter(date=timezone.localdate(), schedule__term=term)
+        .select_related("schedule", "faculty")
+        .order_by("scheduled_start")
+        if term else [])
     tile = room_tile(room, today, now, grace)
     # Same rule as the tile: an online class is not in this physical room, so it
     # is not in its day either.
     today = [s for s in today if occupies(s, room)]
 
-    term = AcademicTerm.objects.filter(is_active=True).first()
     schedules = list(
         room.schedules.filter(status=ScheduleStatus.ACTIVE, term=term)
         .select_related("faculty").order_by("day_of_week", "start_time")
@@ -178,15 +183,17 @@ def room_panel(request, code):
 @ifo_required
 def room_detail(request, code):
     room = get_object_or_404(Room.objects.select_related("floor__building"), code=code)
-    term = AcademicTerm.objects.filter(is_active=True).first()
+    term = get_active_term()
     schedules = list(
         room.schedules.filter(status=ScheduleStatus.ACTIVE, term=term)
         .select_related("faculty").order_by("day_of_week", "start_time")
         if term else [])
-    upcoming = [s for s in room.sessions.filter(date__gte=timezone.localdate())
-                .select_related("schedule", "faculty")
-                .order_by("date", "scheduled_start")[:40]
-                if occupies(s, room)][:10]
+    upcoming = [s for s in (
+        room.sessions.filter(date__gte=timezone.localdate(), schedule__term=term)
+        .select_related("schedule", "faculty")
+        .order_by("date", "scheduled_start")[:40]
+        if term else [])
+        if occupies(s, room)][:10]
     if not room.is_virtual:
         schedules = [s for s in schedules if s.modality != Modality.ONLINE]
     return render(request, "ifo/room_detail.html", {
@@ -668,10 +675,13 @@ def _contending_sessions(room_ids):
     `room_released_at` NULL -- so the page can never disagree with the job about
     what is contending.
     """
+    term = get_active_term()
+    if term is None:
+        return {}
     out = {}
     for s in (Session.objects
               .filter(room_id__in=room_ids, status=SessionStatus.ACTIVE,
-                      room_released_at__isnull=True)
+                      room_released_at__isnull=True, schedule__term=term)
               .select_related("schedule", "faculty", "room")
               .order_by("scheduled_start")):
         out.setdefault(s.room_id, []).append(s)
@@ -726,9 +736,13 @@ def session_release(request, pk):
     session's actual state is re-read here and a session that is not currently
     holding the room is refused with a plain message at 400, never a 500.
     """
+    term = get_active_term()
+    if term is None:
+        raise Http404("No active academic term.")
     session = get_object_or_404(
         Session.objects.select_related("schedule", "faculty",
-                                       "room__floor__building"), pk=pk)
+                                       "room__floor__building"),
+        pk=pk, schedule__term=term)
 
     error = None
     if session.room_id is None:
@@ -1289,7 +1303,10 @@ def _assignment_form_ctx():
 
 
 def _active_assignments():
-    return (Assignment.objects.filter(status="active")
+    term = get_active_term()
+    if term is None:
+        return Assignment.objects.none()
+    return (Assignment.objects.filter(status="active", term=term)
             .select_related("user").prefetch_related("floors__building")
             .order_by("role", "scope", "user__last_name"))
 
@@ -1350,12 +1367,15 @@ def assignment_create(request):
     elif floor_ids and not all(f.isdigit() for f in floor_ids):
         error = "Invalid floor selection."
 
+    term = get_active_term()
+    if error is None and term is None:
+        error = "No active term. Import a term first."
+
     if error:
         ctx = {"assignments": _active_assignments(), "error": error,
                **_assignment_form_ctx()}
         return render(request, "ifo/_assignment_form.html", ctx, status=400)
 
-    term = AcademicTerm.objects.filter(is_active=True).first()
     a = Assignment.objects.create(
         user=user, role=role, type=type_, scope=scope,
         date=date_raw or None,
@@ -1666,7 +1686,7 @@ def utilization_csv(request):
     neither a path nor a response header (T-11-11). Read-only, side-effect-free.
     """
     start, end, as_of, _note = _reporting_range(request)
-    term = AcademicTerm.objects.filter(is_active=True).first()
+    term = get_active_term()
     rows = room_breakdown(start=start, end=end, term=term, as_of=as_of)
 
     buf = io.StringIO()
@@ -1855,7 +1875,10 @@ def suspension_create(request):
 @require_http_methods(["POST"])
 def suspension_lift(request, pk):
     """Lift a suspension: reinstate the sessions it (and only it) cancelled."""
-    suspension = get_object_or_404(ClassSuspension, pk=pk)
+    term = get_active_term()
+    if term is None:
+        raise Http404("No active academic term.")
+    suspension = get_object_or_404(ClassSuspension, pk=pk, term=term)
     n = lift_suspension(suspension, lifted_by=request.user)
     request.session["ifo_flash"] = (
         f"Suspension lifted. {n} session(s) reinstated to Scheduled.")
@@ -1916,7 +1939,11 @@ def break_create(request):
 @require_http_methods(["POST"])
 def break_delete(request, pk):
     """Remove a break/holiday."""
-    brk = get_object_or_404(AcademicBreak, pk=pk)
+    term = get_active_term()
+    if term is None:
+        raise Http404("No active academic term.")
+    require_writable_term(term)
+    brk = get_object_or_404(AcademicBreak, pk=pk, term=term)
     label = brk.reason
     AuditLog.objects.create(
         actor=request.user, event_type="academicbreak.deleted",
@@ -1945,9 +1972,12 @@ CORRECTIONS_WINDOW_DAYS = 30
 def corrections_list(request):
     """Recent ABSENT sessions with an optional faculty filter, each reinstatable."""
     since = timezone.localdate() - timedelta(days=CORRECTIONS_WINDOW_DAYS)
-    qs = (Session.objects.filter(status=SessionStatus.ABSENT, date__gte=since)
+    term = get_active_term()
+    qs = (Session.objects.filter(status=SessionStatus.ABSENT, date__gte=since,
+                                 schedule__term=term)
           .select_related("schedule", "faculty", "room__floor__building")
-          .order_by("-date", "scheduled_start"))
+          .order_by("-date", "scheduled_start")
+          if term else Session.objects.none())
     q = (request.GET.get("q") or "").strip()
     if q:
         qs = qs.filter(faculty__username__icontains=q)
@@ -1962,8 +1992,12 @@ def corrections_list(request):
 @require_http_methods(["POST"])
 def session_reinstate(request, pk):
     """Reinstate a wrongly-Absent session as held (COMPLETED); reason required (D3)."""
+    term = get_active_term()
+    if term is None:
+        raise Http404("No active academic term.")
     session = get_object_or_404(
-        Session.objects.select_related("schedule", "faculty"), pk=pk)
+        Session.objects.select_related("schedule", "faculty"),
+        pk=pk, schedule__term=term)
     reason = (request.POST.get("reason") or "").strip()
     if session.status != SessionStatus.ABSENT:
         request.session["ifo_flash"] = (
@@ -2261,8 +2295,12 @@ def schedule_new(request):
 def schedule_edit(request, pk):
     """Edit a schedule's instructor, room, times, or enrolment; propagate to
     future SCHEDULED sessions (scheduling.schedule_ops.update_schedule)."""
+    term = get_active_term()
+    if term is None:
+        raise Http404("No active academic term.")
     schedule = get_object_or_404(
-        Schedule.objects.select_related("faculty", "room"), pk=pk)
+        Schedule.objects.select_related("faculty", "room"),
+        pk=pk, term=term)
     if request.method == "GET":
         return render(request, "ifo/schedule_form.html",
                       _schedule_form_ctx(schedule=schedule))
@@ -2302,8 +2340,11 @@ def schedule_edit(request, pk):
 @require_http_methods(["POST"])
 def schedule_cancel(request, pk):
     """Archive a schedule and cancel its future sessions (schedule_ops.cancel_schedule)."""
+    term = get_active_term()
+    if term is None:
+        raise Http404("No active academic term.")
     schedule = get_object_or_404(
-        Schedule.objects.select_related("room"), pk=pk)
+        Schedule.objects.select_related("room"), pk=pk, term=term)
     reason = (request.POST.get("reason") or "").strip()
     room_code = schedule.room.code
     n = cancel_schedule(schedule, actor=request.user, reason=reason)
