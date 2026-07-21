@@ -13,7 +13,7 @@ service copies the bytes itself instead of stashing `temporary_file_path()`.
 """
 import shutil
 import tempfile
-from datetime import timedelta
+from datetime import date, timedelta
 from unittest import mock
 
 from django.contrib.auth import get_user_model
@@ -27,6 +27,7 @@ from ops.import_staging import (ImportStagingError, consume_staged,
                                 discard_staged, resolve_staged, staged_path,
                                 stage_upload, sweep_abandoned)
 from ops.models import ImportStaging
+from scheduling.models import AcademicTerm
 
 _TMP_MEDIA = tempfile.mkdtemp(prefix="fluxtrack-staging-tests-")
 
@@ -45,6 +46,19 @@ class ImportStagingTests(TestCase):
             username="ifo_stg", email="ifo_stg@mcm.edu.ph", role="ifo_admin")
         self.other = User.objects.create(
             username="ifo_other", email="ifo_other@mcm.edu.ph", role="ifo_admin")
+        self.term = AcademicTerm.objects.create(
+            name="Staging Draft Term",
+            start_date=date(2026, 6, 1),
+            end_date=date(2026, 10, 31),
+            status=AcademicTerm.Status.DRAFT,
+        )
+
+    def _stage(self, upload=None, user=None, term=None):
+        return stage_upload(
+            upload or self._small(),
+            user or self.ifo,
+            term=term if term is not None else self.term,
+        )
 
     def _small(self, name="offerings.csv", content=b"code,section\nX,A\n"):
         return SimpleUploadedFile(name, content)
@@ -60,9 +74,10 @@ class ImportStagingTests(TestCase):
     # --- stage_upload -----------------------------------------------------
 
     def test_stage_upload_writes_file_and_row_with_token(self):
-        staging = stage_upload(self._small(), self.ifo)
+        staging = self._stage()
         self.assertTrue(staging.token)
         self.assertEqual(staging.uploaded_by, self.ifo)
+        self.assertEqual(staging.term, self.term)
         self.assertEqual(staging.size_bytes, len(b"code,section\nX,A\n"))
         self.assertIsNone(staging.consumed_at)
         self.assertTrue(default_storage.exists(staging.stored_path))
@@ -70,7 +85,7 @@ class ImportStagingTests(TestCase):
     def test_large_upload_uses_the_temporary_file_handler_path(self):
         """The real .xlsx case: disk-backed, and its temp path is NOT reused."""
         upload = self._large()
-        staging = stage_upload(upload, self.ifo)
+        staging = self._stage(upload)
         self.assertEqual(staging.size_bytes, 3 * 1024 * 1024)
         self.assertTrue(default_storage.exists(staging.stored_path))
         # Our own copy, not Django's soon-to-be-unlinked temp file.
@@ -88,7 +103,7 @@ class ImportStagingTests(TestCase):
         below is the one that proves ours.
         """
         hostile = self._small(name="../../../../etc/passwd/evil.csv")
-        staging = stage_upload(hostile, self.ifo)
+        staging = self._stage(hostile)
         self.assertNotIn("..", staging.stored_path)
         self.assertNotIn("passwd", staging.stored_path)
         self.assertIn(staging.token, staging.stored_path)
@@ -108,7 +123,7 @@ class ImportStagingTests(TestCase):
             def chunks(self, chunk_size=None):
                 yield b"raw-evil"
 
-        staging = stage_upload(_RawUpload(), self.ifo)
+        staging = self._stage(_RawUpload())
         self.assertEqual(staging.stored_path, f"imports/staging/{staging.token}.csv")
         self.assertNotIn("..", staging.stored_path)
         # The unsanitized name is kept verbatim as DISPLAY TEXT only — it is
@@ -118,39 +133,44 @@ class ImportStagingTests(TestCase):
 
     def test_disallowed_extension_is_refused_with_a_user_safe_error(self):
         with self.assertRaises(ImportStagingError) as ctx:
-            stage_upload(self._small(name="payload.exe"), self.ifo)
+            self._stage(self._small(name="payload.exe"))
         self.assertIn(".xlsx", str(ctx.exception))
         self.assertFalse(ImportStaging.objects.exists())
 
     def test_oversize_upload_is_refused(self):
         with mock.patch("ops.import_staging.MAX_UPLOAD_BYTES", 4):
             with self.assertRaises(ImportStagingError):
-                stage_upload(self._small(), self.ifo)
+                self._stage()
+        self.assertFalse(ImportStaging.objects.exists())
+
+    def test_term_is_required(self):
+        with self.assertRaises(ImportStagingError):
+            stage_upload(self._small(), self.ifo, term=None)
         self.assertFalse(ImportStaging.objects.exists())
 
     # --- resolve / consume ------------------------------------------------
 
     def test_resolve_staged_returns_the_row_for_its_owner(self):
-        staging = stage_upload(self._small(), self.ifo)
+        staging = self._stage()
         self.assertEqual(resolve_staged(staging.token, self.ifo), staging)
 
     def test_resolve_staged_refuses_a_foreign_owner_unknown_and_consumed(self):
         """T-07-05: holding the token is not enough — ownership is re-checked."""
-        staging = stage_upload(self._small(), self.ifo)
+        staging = self._stage()
         self.assertIsNone(resolve_staged(staging.token, self.other))
         self.assertIsNone(resolve_staged("no-such-token", self.ifo))
         consume_staged(staging)
         self.assertIsNone(resolve_staged(staging.token, self.ifo))
 
     def test_consume_staged_stamps_and_is_single_use(self):
-        staging = stage_upload(self._small(), self.ifo)
+        staging = self._stage()
         consume_staged(staging)
         staging.refresh_from_db()
         self.assertIsNotNone(staging.consumed_at)
         self.assertIsNone(resolve_staged(staging.token, self.ifo))
 
     def test_discard_staged_removes_file_and_row(self):
-        staging = stage_upload(self._small(), self.ifo)
+        staging = self._stage()
         path = staging.stored_path
         discard_staged(staging)
         self.assertFalse(default_storage.exists(path))
@@ -163,9 +183,9 @@ class ImportStagingTests(TestCase):
             created_at=timezone.now() - timedelta(hours=hours))
 
     def test_sweep_removes_abandoned_rows_and_their_files_only(self):
-        abandoned = stage_upload(self._small(), self.ifo)
-        consumed = stage_upload(self._small(), self.ifo)
-        fresh = stage_upload(self._small(), self.ifo)
+        abandoned = self._stage()
+        consumed = self._stage()
+        fresh = self._stage()
         self._age(abandoned, 5)
         self._age(consumed, 5)
         consume_staged(consumed)
@@ -181,7 +201,7 @@ class ImportStagingTests(TestCase):
         self.assertTrue(default_storage.exists(fresh.stored_path))
 
     def test_sweep_tolerates_a_row_whose_file_is_already_gone(self):
-        staging = stage_upload(self._small(), self.ifo)
+        staging = self._stage()
         self._age(staging, 5)
         default_storage.delete(staging.stored_path)
         self.assertEqual(sweep_abandoned(), 1)

@@ -1016,7 +1016,7 @@ def _import_read_rows(path, sheet=None):
     return Command()._read_rows(path, sheet or DEFAULT_SHEET)
 
 
-def _import_report(path):
+def _import_report(path, term):
     """Parse + reconcile a staged file. Returns (report_ctx, error_message).
 
     `reconcile()` is called DIRECTLY for the structured numbers. The management
@@ -1055,7 +1055,8 @@ def _import_report(path):
     # The command's own narrative, as a secondary detail pane.
     buf = io.StringIO()
     try:
-        call_command("import_offerings", file=path, dry_run=True, stdout=buf)
+        call_command("import_offerings", file=path, term=str(term.pk),
+                     dry_run=True, stdout=buf)
         detail = buf.getvalue()
     except Exception as exc:                       # narrative only, never fatal
         detail = f"(dry-run detail unavailable: {exc})"
@@ -1069,12 +1070,29 @@ def _staged_for(request):
     return resolve_staged(token, request.user) if token else None
 
 
+def _draft_terms():
+    return AcademicTerm.objects.filter(
+        status=AcademicTerm.Status.DRAFT
+    ).order_by("start_date", "name")
+
+
+def _draft_term_from_post(request):
+    raw = (request.POST.get("term") or "").strip()
+    if not raw.isdigit():
+        return None
+    return AcademicTerm.objects.filter(
+        pk=int(raw), status=AcademicTerm.Status.DRAFT
+    ).first()
+
+
 def _import_ctx(request, *, staging=None, report=None, error=None,
                 committed=None, discarded=False):
     return {"staging": staging, "report": report, "error": error,
             "committed": committed, "discarded": discarded,
             "max_mb": MAX_UPLOAD_BYTES // (1024 * 1024),
-            "allowed": ", ".join(sorted(ALLOWED_EXTENSIONS))}
+            "allowed": ", ".join(sorted(ALLOWED_EXTENSIONS)),
+            "draft_terms": _draft_terms(),
+            "selected_term": staging.term if staging and staging.term_id else None}
 
 
 @ifo_required
@@ -1096,7 +1114,14 @@ def import_page(request):
     staging = _staged_for(request)
     report, error = None, None
     if staging is not None:
-        report, error = _import_report(staged_path(staging))
+        if staging.term_id is None:
+            discard_staged(staging)
+            request.session.pop(IMPORT_SESSION_KEY, None)
+            error = ("That staged upload was created before term selection was "
+                     "required. Please upload it again and choose a Draft term.")
+            staging = None
+        else:
+            report, error = _import_report(staged_path(staging), staging.term)
     return render(request, "ifo/import.html",
                   _import_ctx(request, staging=staging, report=report,
                               error=error))
@@ -1119,6 +1144,11 @@ def import_preview(request):
         return render(request, "ifo/_import_panel.html",
                       _import_ctx(request, error="Choose a file to upload."),
                       status=400)
+    term = _draft_term_from_post(request)
+    if term is None:
+        return render(request, "ifo/_import_panel.html",
+                      _import_ctx(request, error="Select a Draft term."),
+                      status=400)
 
     # An operator who uploads twice without committing would otherwise orphan
     # the first file until the TTL sweep.
@@ -1128,12 +1158,12 @@ def import_preview(request):
         request.session.pop(IMPORT_SESSION_KEY, None)
 
     try:
-        staging = stage_upload(uploaded, request.user)
+        staging = stage_upload(uploaded, request.user, term=term)
     except ImportStagingError as exc:
         return render(request, "ifo/_import_panel.html",
                       _import_ctx(request, error=str(exc)), status=400)
 
-    report, error = _import_report(staged_path(staging))
+    report, error = _import_report(staged_path(staging), staging.term)
     if error:
         # The bytes are unusable, so do not leave a row the operator cannot act
         # on and the sweeper has to collect later.
@@ -1169,12 +1199,20 @@ def import_commit(request):
                             "the file again.")), status=400)
 
     path = staged_path(staging)
-    before = Schedule.objects.count()
+    if staging.term_id is None:
+        discard_staged(staging)
+        request.session.pop(IMPORT_SESSION_KEY, None)
+        return render(request, "ifo/_import_panel.html", _import_ctx(
+            request, error=("That upload has no Draft term target. Please "
+                            "upload the file again.")), status=400)
+
+    before = Schedule.objects.filter(term=staging.term).count()
     buf = io.StringIO()
     try:
         # Same options the preview used, so preview and commit can never
         # describe different work.
-        call_command("import_offerings", file=path, dry_run=False, stdout=buf)
+        call_command("import_offerings", file=path, term=str(staging.term_id),
+                     dry_run=False, stdout=buf)
     except Exception as exc:
         # The staging row is deliberately NOT consumed: the operator should be
         # able to retry or discard rather than being stranded.
@@ -1182,7 +1220,7 @@ def import_commit(request):
             request, staging=staging,
             error=f"The import stopped partway through: {exc}"), status=400)
 
-    created = Schedule.objects.count() - before
+    created = Schedule.objects.filter(term=staging.term).count() - before
     consume_staged(staging)
     _delete_staged_file(staging)
     request.session.pop(IMPORT_SESSION_KEY, None)

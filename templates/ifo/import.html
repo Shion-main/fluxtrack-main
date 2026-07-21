@@ -63,6 +63,15 @@ Faculty/Guard shells. No border-left accent stripes. ASCII-only.
         <input id="i-file" type="file" name="file" required
                accept=".xlsx,.csv" class="uk-input h-11">
       </div>
+      <div>
+        <label class="uk-form-label" for="i-term">Draft term</label>
+        <select id="i-term" name="term" required class="uk-select h-11">
+          <option value="">Select a Draft term</option>
+          {% for term in draft_terms %}
+          <option value="{{ term.pk }}">{{ term.name }}</option>
+          {% endfor %}
+        </select>
+      </div>
       <div class="flex items-center gap-3">
         <button type="submit" class="uk-btn uk-btn-primary h-11">
           <uk-icon icon="upload" class="size-4"></uk-icon> Preview import</button>

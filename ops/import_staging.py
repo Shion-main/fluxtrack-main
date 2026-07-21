@@ -64,12 +64,15 @@ def _extension(client_name):
     return os.path.splitext(client_name or "")[1].lower()
 
 
-def stage_upload(uploaded, user):
+def stage_upload(uploaded, user, *, term):
     """Validate, copy to storage, and record an upload. Returns the ImportStaging.
 
     Raises ImportStagingError on a disallowed extension or an oversize file,
     before anything is written.
     """
+    if term is None:
+        raise ImportStagingError("Select a Draft term before previewing an import.")
+
     ext = _extension(uploaded.name)
     if ext not in ALLOWED_EXTENSIONS:
         allowed = ", ".join(sorted(ALLOWED_EXTENSIONS))
@@ -92,6 +95,7 @@ def stage_upload(uploaded, user):
     return ImportStaging.objects.create(
         token=token,
         uploaded_by=user,
+        term=term,
         original_name=uploaded.name or "",   # display text only
         stored_path=stored_path,
         size_bytes=uploaded.size,
@@ -132,6 +136,7 @@ def resolve_staged(token, user):
     field or a query parameter, which the client controls.
     """
     return (ImportStaging.objects
+            .select_related("term")
             .filter(token=token, uploaded_by=user, consumed_at__isnull=True)
             .first())
 

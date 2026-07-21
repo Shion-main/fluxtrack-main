@@ -58,13 +58,20 @@ ASCII-only.
 </div>
 
 {% elif report %}
-<div class="uk-card uk-card-body mb-4" data-preview="1">
+  <div class="uk-card uk-card-body mb-4" data-preview="1">
   <h2 class="uk-h4 mb-1">Preview of {{ staging.original_name }}</h2>
-  <p class="uk-text-small uk-text-muted mb-4">
-    <span class="inline-flex items-center gap-2">
-      <uk-icon icon="database" class="size-4"></uk-icon>
-      Nothing has been written to the database yet.</span>
-  </p>
+  <div class="uk-text-small uk-text-muted mb-4">
+    <p>
+      <span class="inline-flex items-center gap-2">
+        <uk-icon icon="database" class="size-4"></uk-icon>
+        Nothing has been written to the database yet.</span>
+    </p>
+    {% if selected_term %}
+    <p class="mt-1" data-term-id="{{ selected_term.pk }}">
+      Target Draft: <strong>{{ selected_term.name }}</strong>
+    </p>
+    {% endif %}
+  </div>
 
   <div class="table-wrap">
     <table class="tbl">
