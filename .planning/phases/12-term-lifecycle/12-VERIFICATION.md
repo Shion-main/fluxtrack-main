@@ -1,9 +1,9 @@
 ---
 phase: 12-term-lifecycle
-verified: 2026-07-22T03:35:00+08:00
+verified: 2026-07-22T14:02:59+08:00
 status: human_needed
-score: 16/16 must-haves structurally verified
-behavior_unverified: 4
+score: 16/16 must-haves structurally and locally runtime verified
+behavior_unverified: 2
 overrides_applied: 0
 ---
 
@@ -11,7 +11,7 @@ overrides_applied: 0
 
 **Phase Goal:** Close/archive a term read-only, create and activate the next term without destroying attendance history, and make every live/reporting surface explicitly term-scoped.
 
-**Verdict:** Implementation complete; runtime and migration rehearsal still require the hydrated Django/MSSQL environment.
+**Verdict:** Implementation and local MSSQL runtime verification complete; production-shaped migration rehearsal and browser acceptance remain human gates.
 
 ## Goal Achievement
 
@@ -33,18 +33,22 @@ overrides_applied: 0
 - All 12 plan summaries exist; execution manifest reports `incomplete_count: 0`.
 - `python -m compileall -q scheduling verification ops web` passed.
 - `git diff --check` passed.
+- Targeted Phase 12 suite passed on MSSQL LocalDB: 187 tests, 0 failures.
+- Full configured suite passed on MSSQL LocalDB: 1,219 tests, 0 failures, 2 intentional skips.
+- `manage.py check` passed with no issues and `makemigrations --check --dry-run` reported no changes.
+- `sqlmigrate scheduling 0008` confirmed the date CHECK, filtered single-ACTIVE unique index, and legacy `is_active` removal.
+- `sqlmigrate ops 0006` confirmed the corrected MSSQL-safe order: backfill, legacy unique removal, `term_id` NOT NULL alteration, then term-qualified uniqueness and foreign keys.
+- Migration regression tests exercised exact-one, zero-candidate, overlapping-candidate, and cross-term same-week report cases, including return-to-leaf cleanup after fail-loud cases.
 - Production coupling audit passed for legacy/default term selection and known archived writer seams.
 - Migration source inspection confirmed status backfill, fail-loud ambiguity checks, date ordering, filtered single-ACTIVE uniqueness, and term-qualified WeeklyReport uniqueness.
 - Worktree audit shows no uncommitted Phase 12 code; only pre-existing `.planning/config.json` and untracked support/graphify files remain.
 
-## Runtime Gates Still Required
+## Remaining Human Gates
 
-1. Run the targeted Phase 12 Django suites and the full configured MSSQL suite.
-2. Run `manage.py check`, `makemigrations --check --dry-run`, and inspect `sqlmigrate scheduling 0008` plus `sqlmigrate ops 0006`.
-3. Rehearse both migrations on a sanitized production-shaped MSSQL copy and compare pre/post term, schedule, session, attendance, assignment, and report counts.
-4. Browser-walk the IFO lifecycle confirmations, archived Admin refusals, and HR/IFO/Dean term selectors/exports/downloads.
+1. Rehearse both migrations on a sanitized production-shaped MSSQL copy and compare pre/post term, schedule, session, attendance, assignment, and report counts.
+2. Browser-walk the IFO lifecycle confirmations, archived Admin refusals, and HR/IFO/Dean term selectors/exports/downloads.
 
-These gates could not start locally: `py -3.12` reports no installed interpreter, and the available Python environment lacks Django. SQLite or source-only checks are not claimed as substitutes for MSSQL constraint/race acceptance.
+The local environment was hydrated with CPython 3.12 and the pinned dependencies, and all automated gates ran against SQL Server LocalDB rather than SQLite. The two remaining gates require production-shaped data and interactive browser judgment, so they are not claimed from automated tests.
 
 ## Human Verification Checklist
 
@@ -55,7 +59,7 @@ These gates could not start locally: `py -3.12` reports no installed interpreter
 
 ## Gaps Summary
 
-No structural implementation gaps found. Phase completion is held at `human_needed` solely because the required Django/MSSQL and browser gates are unavailable in this shell.
+No structural or local-runtime implementation gaps found. Phase completion remains `human_needed` solely for the production-shaped migration rehearsal and interactive browser acceptance above.
 
 ---
 _Verified: 2026-07-22_

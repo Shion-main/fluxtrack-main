@@ -5,10 +5,10 @@ milestone_name: — "Operational Trust"
 current_phase: 12
 current_phase_name: Term Lifecycle
 status: Human Verification Required
-stopped_at: Phase 12 implementation complete; Django/MSSQL and browser gates pending
-last_updated: "2026-07-22T03:35:00+08:00"
+stopped_at: Phase 12 local MSSQL verification green; production-shaped migration rehearsal and browser acceptance pending
+last_updated: "2026-07-22T14:02:59+08:00"
 last_activity: 2026-07-22
-last_activity_desc: Phase 12 executed 12/12 plans; structural verification complete
+last_activity_desc: Phase 12 executed 12/12 plans; 1,219-test MSSQL suite and migration gates green
 progress:
   total_phases: 18
   completed_phases: 10
@@ -24,7 +24,7 @@ progress:
 See: .planning/PROJECT.md (updated 2026-07-02)
 
 **Core value:** A faculty member checks in with one action, and the resulting attendance record is trustworthy — presence physically verified, lateness captured, ghost bookings detected.
-**Current focus:** Phase 12 — term lifecycle runtime and human verification
+**Current focus:** Phase 12 — production-shaped migration rehearsal and browser acceptance
 
 ## Current Position
 
