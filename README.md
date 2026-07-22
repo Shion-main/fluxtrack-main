@@ -1,13 +1,21 @@
 # FluxTrack
 
-Faculty Attendance & Facility Utilization Information System for MMCM.
-Django 6 + htmx + Franken UI (Tailwind), PWA, no React / no Node runtime,
-SQL Server database. See `FluxTrack_SRS.md`.
+Faculty Attendance & Facility Utilization Information System for MMCM. FluxTrack
+uses Django 6, htmx, shadcn design language through Franken UI, a PWA shell, and
+Microsoft SQL Server. It has no React application, Node runtime, or CDN dependency.
 
-> **Progress at a glance:** Phases 1–3 of 8 complete (SQL Server foundation +
-> correctness foundations + duty assignments & Checker verification). For the full
-> collaborator-facing status board — what's built, what's next, and how the phases
-> map to requirements — see **[`docs/PROGRESS.md`](docs/PROGRESS.md)**.
+Repository implementation through Phase 16 is complete. The remaining production
+gate is credential-dependent Entra UAT plus AWS/RDS/DNS/TLS provisioning and the
+cutover smoke test. See [`docs/PROGRESS.md`](docs/PROGRESS.md) for the status board.
+
+## Documentation
+
+- [`FluxTrack_SRS.md`](FluxTrack_SRS.md) — normative SRS v1.3 and requirement traceability
+- [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) — software architecture and design rationale
+- [`docs/IT_ARCHITECTURE.md`](docs/IT_ARCHITECTURE.md) — infrastructure and security boundaries
+- [`deploy/README.md`](deploy/README.md) — production deployment, rollback, monitoring, and recovery
+- [`docs/PROGRESS.md`](docs/PROGRESS.md) — concise current implementation/cutover status
+- [`docs/USE_CASES.md`](docs/USE_CASES.md) — superseded 2026-07-02 planning snapshot
 
 ## Requirements
 - Python 3.12 (`py -3.12` launcher on Windows)
@@ -96,6 +104,8 @@ ops/           Booking, Notification, AuditLog, SystemSetting, WeeklyReport,
                occupancy.py (release_room helper), jobrun.py (run_job wrapper), policy.py
 web/           frontend: dev-login, home, scan resolver views, Faculty + IFO surfaces, PWA shell
 templates/     Django templates (Franken UI + htmx), no separate frontend build
+static/vendor/ pinned same-origin htmx, Franken UI, and html5-qrcode runtime assets
+deploy/        Nginx, Gunicorn, systemd units, deploy script, and AWS runbook
 data/          gitignored registrar source data (raw CSVs, PII)
 docs/          PROGRESS.md (status board), use-cases/scenarios, design specs, session logs
 .planning/     GSD roadmap, per-phase context/research/plans/verification (tracked)
@@ -106,25 +116,16 @@ directory updates this section in the same session
 (see `docs/superpowers/specs/2026-07-02-deployment-and-dev-practice-design.md`).
 
 ## Status
-**Phases 1–3 of 8 complete** (all verified against real SQL Server):
-- **Phase 1 — MSSQL Environment & Data Foundation:** runs on SQL Server via
-  `mssql-django`; proven datetime2/timezone round-trip (no Asia/Manila drift) and
-  case-sensitive collation on QR/manual-code tokens.
-- **Phase 2 — Correctness Foundations:** shared `notify()` write path, JOB-02 status
-  sweep (no-show → Absent independent of any scan, backfilling + idempotent),
-  deduped room-conflict flags, and one dedicated APScheduler process with job
-  last-run status.
-- **Phase 3 — Duty Assignments & Checker Verification:** IFO assigns Checkers/Guards
-  to floors (shift/standing) and grants online duty (IFO-06); an on-duty Checker
-  scans a room (pure server-side re-gating via `verification/resolver.py`), sees the
-  room's session state + faculty photo, and records Verify / Flag-identity /
-  Flag-not-present / Confirm-empty (flags → IFO + HR). Adds the htmx floor board
-  (coverage % + oldest-unverified-first queue), online verification via the class's
-  public Teams link (a Verify activates the session — which lets online sessions
-  join the JOB-02 sweep), and an offline IndexedDB scan queue that re-validates
-  idempotently on reconnect. Full suite 103 tests green; code review clean.
 
-Foundation, IFO room/schedule surface, scan resolver, and Faculty check-in were
-built and verified end-to-end earlier. **Next up: Phase 4 — Modality Shift Approval
-& SRS v1.2.** See **[`docs/PROGRESS.md`](docs/PROGRESS.md)** for the full
-phase-by-phase board and `docs/USE_CASES.md` for the per-role feature list.
+- **Features:** all seven role surfaces, attendance/verification, import and
+  schedule operations, campus/term/suspension management, notifications, reports,
+  utilization/lateness/coverage metrics, and scheduler operations are built.
+- **Production hardening:** shared SQL Server cache, durable offline replay dedupe,
+  secure proxy/HTTPS settings, same-origin vendor assets, health/watchdog checks,
+  retention, and the EC2/RDS deployment package are built.
+- **Verification baseline:** the complete SQL Server suite passed 1,259 tests with
+  two expected skips; production `check --deploy`, migrations, and `collectstatic`
+  passed after Phase 15.
+- **Open external gate:** institutional Entra callback/UAT and AWS production
+  provisioning, restore rehearsal, DNS/TLS, and smoke testing require credentials
+  not present in this repository.

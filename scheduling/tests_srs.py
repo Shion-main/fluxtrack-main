@@ -1,4 +1,4 @@
-"""DOC-01 smoke tests: assert the SRS Markdown carries its v1.2 markers and that
+"""DOC-01 smoke tests: assert the SRS Markdown carries its v1.3 markers and that
 FluxTrack_SRS.docx regenerates cleanly from it via the management command.
 
 Concept-based assertions (requirement IDs + the policy key + a revision row),
@@ -20,8 +20,8 @@ def _srs_docx_path() -> Path:
     return Path(settings.BASE_DIR) / "FluxTrack_SRS.docx"
 
 
-class SrsV12DocTests(SimpleTestCase):
-    def test_md_has_v12_markers(self):
+class SrsV13DocTests(SimpleTestCase):
+    def test_md_has_v13_markers(self):
         text = _srs_md_path().read_text(encoding="utf-8")
 
         # New modality-shift requirement area (MOD-01..MOD-06) and the Dean dashboard row.
@@ -29,9 +29,30 @@ class SrsV12DocTests(SimpleTestCase):
         self.assertIn("MOD-06", text)
         self.assertIn("DEAN-04", text)
 
-        # Policy register key (D-14) and a v1.2 Revision History row.
+        # Policy register key (D-14) and both revision-history rows.
         self.assertIn("modality_shift_lead_days", text)
         self.assertIn("| 1.2 |", text)
+        self.assertIn("| 1.3 |", text)
+
+        # Phase-16 conformance decisions and operational-trust additions.
+        for marker in (
+            "Microsoft SQL Server",
+            "Django server-side sessions",
+            "Django filesystem storage",
+            "shadcn-via-Franken UI",
+            "ClassSuspension",
+            "IFO-12",
+            "IFO-13",
+            "IFO-14",
+            "CheckerReplayReceipt",
+        ):
+            self.assertIn(marker, text)
+
+        # Superseded architecture must not survive as a normative current claim.
+        self.assertNotIn("persistence uses MySQL 8.0", text)
+        self.assertNotIn("authenticate API calls with a backend-issued JWT", text)
+        self.assertNotIn("Report files reside in S3", text)
+        self.assertNotIn("releases rooms after the room-hold window", text)
 
         # CHK-06 auto-Absent override requirement row is removed (Absent is final).
         # The Revision History may mention "CHK-06 removed" in prose; only the table

@@ -1,13 +1,21 @@
 # FluxTrack: Use Cases, Features & Scenes
 
-**Last updated:** 2026-07-02
-**Purpose:** the single reference for what FluxTrack does, per role — every scene
+> **Superseded historical planning snapshot (2026-07-02).** The status counts,
+> gaps, and build order below describe the repository before Phases 2–16 and must
+> not be used as current implementation status. Use
+> [`FluxTrack_SRS.md`](../FluxTrack_SRS.md) v1.3 for normative requirements,
+> [`README.md`](../README.md) and [`docs/PROGRESS.md`](./PROGRESS.md) for current
+> repository status, and [`.planning/ROADMAP.md`](../.planning/ROADMAP.md) for
+> phase evidence. This file remains unchanged below this notice because it records
+> the use-case reasoning that shaped the implementation.
+
+**Snapshot date:** 2026-07-02
+**Historical purpose:** the original reference for what FluxTrack does, per role — every scene
 (screen) it needs, every user scenario that scene serves, and whether it's
-built yet. This is the working build list. When a slice starts, its
+built at that time. This was the working build list. When a slice started, its
 requirement IDs and scenario numbers are what "done" is measured against.
 Requirement IDs (`FAC-02`, `CHK-07`, etc.) trace back to `FluxTrack_SRS.md`
-§4 — that document is the source of truth for exact wording; this document
-is the source of truth for *build sequencing and current status*.
+§4. The SRS is now the source of truth for exact wording and Phase 16 traceability.
 
 ## Legend
 

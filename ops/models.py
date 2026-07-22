@@ -268,7 +268,7 @@ class SystemSetting(models.Model):
 
 
 class WeeklyReport(models.Model):
-    """Weekly per-department consolidated report; files in S3 (RPT-01/02)."""
+    """Weekly report metadata; files use configured Django storage (RPT-01/02)."""
     term = models.ForeignKey(
         "scheduling.AcademicTerm",
         on_delete=models.PROTECT,

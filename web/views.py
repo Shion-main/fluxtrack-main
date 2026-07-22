@@ -23,9 +23,8 @@ User = get_user_model()
 # reachable by typing the username directly (only the visible list is curated).
 DEMO_USERNAMES = ["cdgaray", "checker", "ifo", "hr", "guard", "dean", "sysadmin"]
 
-# Role → home-screen surface cards. Phase 4 wired the faculty modality-shift request
-# and Dean approval surfaces into the nav; remaining "#" hrefs are later-phase stubs
-# (reporting/dashboards = Phase 6).
+# Role → home-screen surface cards. Each card routes to a shipped role-scoped
+# surface; deeper navigation for IFO and Dean lives inside their console shells.
 SURFACES = {
     Role.FACULTY: [
         {"title": "My schedule", "desc": "Today and this week.", "icon": "calendar", "href": "/faculty/schedule"},

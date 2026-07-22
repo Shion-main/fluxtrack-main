@@ -2,8 +2,8 @@
 Single dedicated FluxTrack scheduler process (ENV-04; JOB-01/02/03).
 
 This command owns ALL scheduled work: materialize (JOB-01), the status sweep
-(JOB-02 = no-show marking + room-conflict detection), and the weekly report slot
-(JOB-03, body lands Phase 6). It runs ONE `BlockingScheduler` + the default
+(JOB-02 = no-show marking + room-conflict detection), weekly reports (JOB-03),
+the web-push outbox, and retention maintenance. It runs ONE `BlockingScheduler` + the default
 `MemoryJobStore`, started ONLY here — never inside a Gunicorn web worker or an
 `AppConfig.ready()`, which would start one scheduler per worker and double-fire
 every job (the exact failure ENV-04 prohibits; NoImplicitSchedulerTests guards it).
@@ -48,7 +48,7 @@ def _job_materialize():
 
 
 def _job_sweep():
-    """JOB-02: mark F2F/Blended no-shows Absent, then flag room conflicts.
+    """JOB-02: mark non-excused no-shows Absent, then flag room conflicts.
 
     Returns the combined count so JobRun.rows_affected reflects the run's impact.
 

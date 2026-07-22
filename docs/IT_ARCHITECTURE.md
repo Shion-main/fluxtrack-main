@@ -3,11 +3,18 @@
 > This document describes **where FluxTrack runs and how the pieces connect** — the hosting,
 > network, servers, processes, and security boundaries. For the *software* architecture (code
 > layers, request flows) see [`docs/ARCHITECTURE.md`](./ARCHITECTURE.md); for the database schema
-> see [`docs/db_schema.sql`](./db_schema.sql).
+> see the Django models/migrations. [`docs/db_schema.sql`](./db_schema.sql) is a
+> 2026-07-07 snapshot rather than the authoritative current schema.
 
 FluxTrack is deliberately a **"simplest possible"** deployment sized for capstone scale: a
 **single application instance** talking to a **single managed database**, with an **external
 identity provider**. No Kubernetes, no microservices, no separate frontend server.
+
+> **Cutover status (2026-07-22):** the repository contains and validates this
+> production package, but the AWS resources, institutional Entra callback, DNS,
+> certificate, restore rehearsal, and production smoke test still require external
+> credentials. The diagram is the approved target topology, not a claim that a live
+> environment has already been provisioned.
 
 ---
 
@@ -21,6 +28,8 @@ identity provider**. No Kubernetes, no microservices, no separate frontend serve
 | Database | **SQL Server 2025 LocalDB** (Windows auth) | **AWS RDS — SQL Server Express** |
 | Identity | Microsoft **Entra ID** (+ DEBUG dev-login) | Microsoft **Entra ID** (dev-login disabled) |
 | Static files | WhiteNoise (served by Django) | WhiteNoise (optionally fronted by Nginx) |
+| Media / reports | Local `MEDIA_ROOT` | Persistent EBS-backed `/srv/fluxtrack/shared/media` with separate backup |
+| Shared cache | SQL Server database cache | SQL Server database cache shared across Gunicorn workers |
 | TLS | none (http://127.0.0.1) | HTTPS at Nginx |
 
 The **same codebase** runs in both — only `.env` differs (`DB_*`, `SOCIAL_AUTH_*`, `DEBUG`,
@@ -47,7 +56,9 @@ flowchart TB
                     subgraph systemd["systemd-managed processes"]
                         Guni["Gunicorn (WSGI)<br/>Django app workers<br/>:8000 (localhost)"]
                         Sched["APScheduler process<br/>runscheduler<br/>(materialize · sweep · report)"]
+                        Watch["scheduler watchdog timer<br/>checks heartbeat every 5 min"]
                     end
+                    Media["Persistent EBS media<br/>photos · imports · reports"]
                 end
             end
             subgraph Private["Private subnet"]
@@ -64,6 +75,9 @@ flowchart TB
     Guni  -->|OAuth2 token exchange| Entra
     Guni  -->|pyodbc / ODBC 18 · TLS| RDS
     Sched -->|pyodbc / ODBC 18 · TLS| RDS
+    Guni -->|Django storage| Media
+    Sched -->|Django storage| Media
+    Watch -->|checks JobRun heartbeat| RDS
 ```
 
 **Reading the diagram:**
@@ -74,6 +88,8 @@ flowchart TB
   inside a web worker would start one scheduler per worker and double-fire every job.
 - Both processes reach the **same RDS database** over ODBC/TLS. RDS lives in a **private subnet**;
   only the EC2 instance's security group may reach port 1433.
+- The watchdog is independent of the scheduler process, so it can report a stale
+  scheduler instead of depending on that failed process to report itself.
 - **Sign-in is delegated to Entra ID** — the browser is redirected to Entra, and Gunicorn completes
   the OAuth2 Authorization-Code + PKCE exchange server-side.
 
@@ -85,14 +101,16 @@ flowchart TB
 |---|---|---|---|---|
 | Reverse proxy | EC2 | Nginx | 443 (public), 80→443 redirect | TLS termination, static files, proxy to Gunicorn |
 | Web app | EC2 | Gunicorn + Django 6 | 8000 (localhost only) | Serves all HTTP surfaces (HTML/HTMX/JSON/PWA) |
-| Scheduler | EC2 | APScheduler (`runscheduler`) | — (no listener) | materialize / status-sweep / weekly-report jobs |
-| Static assets | EC2 | WhiteNoise (in Django) | via 8000/443 | Compressed, manifest-hashed static serving |
+| Scheduler | EC2 | APScheduler (`runscheduler`) | — (no listener) | materialize, sweep, weekly report, push outbox, retention |
+| Static assets | EC2 | Nginx + WhiteNoise fallback | via 443/8000 | Compressed, manifest-hashed static serving |
+| Private/generated media | EC2/EBS | Django `FileSystemStorage` | authorized Django views | Profile photos, import staging, CSV/PDF reports |
 | Database | RDS | SQL Server Express | 1433 (private) | System of record (all app + audit data) |
 | Identity provider | External | Microsoft Entra ID | 443 | SSO authentication (MMCM tenant) |
-| Process supervisor | EC2 | systemd | — | Keeps Gunicorn + scheduler alive, restarts on failure |
+| Process supervisor | EC2 | systemd | — | Keeps Gunicorn/scheduler alive and runs the independent watchdog timer |
 
-There is **one instance of each** — no load balancer, no read replica, no cache tier, no message
-broker. That is an intentional scope decision for capstone scale, not an omission.
+There is **one instance of each** — no load balancer, no read replica, no external cache service,
+and no message broker. Shared cache entries live in SQL Server. That is an intentional scope
+decision for capstone scale, not an omission.
 
 ---
 
@@ -105,10 +123,12 @@ flowchart LR
         N["nginx.service<br/>(:443)"]
         G["fluxtrack-web.service<br/>Gunicorn → Django<br/>(N workers, :8000)"]
         S["fluxtrack-scheduler.service<br/>runscheduler → APScheduler<br/>(exactly 1 process)"]
+        W["fluxtrack-scheduler-watch.timer<br/>independent heartbeat check"]
     end
     N --> G
     G --> DB[("RDS 1433")]
     S --> DB
+    W --> DB
 ```
 
 - **`fluxtrack-web.service`** — Gunicorn with multiple worker processes (stateless; any worker can
@@ -117,6 +137,8 @@ flowchart LR
   (`BlockingScheduler`). Each job execution records a `JobRun` row and alerts System Admins on
   failure; a bad tick never crashes the process.
 - Both are **`systemd` units** on the same host so they restart automatically and start on boot.
+- A third systemd timer invokes `checkscheduler` every five minutes and raises a
+  deduplicated System Admin alert when the latest scheduler heartbeat is stale.
 
 ---
 
@@ -158,7 +180,10 @@ flowchart TB
    every 6 h, weekly report Mon 06:00) → runs directly against RDS → records a `JobRun` row. No
    user traffic involved.
 4. **Static assets** → hashed/compressed by WhiteNoise at deploy time (`collectstatic`) → served by
-   the app (optionally short-circuited by Nginx).
+   Nginx in production with WhiteNoise as the application fallback.
+5. **Private/generated files** → stored beneath the EBS-backed `MEDIA_ROOT`; profile
+   photos have a narrow Nginx alias, while import staging and report downloads stay
+   behind Django authorization checks.
 
 ---
 
@@ -171,6 +196,7 @@ flowchart TB
 | Deploy step | Pull code → `pip install -r requirements.txt` → `migrate` → `collectstatic` → restart the two units |
 | Config | Per-environment `.env` (DB, Entra creds, `DEBUG=False`, `ALLOWED_HOSTS`) |
 | DB backups | RDS automated snapshots / point-in-time restore (managed by AWS) |
+| Media backups | Daily encrypted EBS snapshot plus a versioned encrypted copy of `MEDIA_ROOT` |
 | Job monitoring | `JobRun` table = last-run status per job; failures notify System Admins in-app |
 | Audit trail | Every write records an `AuditLog` row (institutional record-of-change requirement) |
 | Prerequisite | **ODBC Driver 18 for SQL Server** installed system-wide on the instance (pyodbc dependency) |
@@ -181,12 +207,12 @@ flowchart TB
 
 These were considered and **deferred** unless a real need appears — keeping the architecture honest:
 
-- **S3** for report file storage — the weekly-report generator is a Phase-6 stub; local/instance
-  storage suffices until then.
+- **S3** for report/media storage — filesystem storage is the implemented single-instance choice;
+  move to S3 only if multi-instance hosting or stronger independent object durability requires it.
 - **Elastic Beanstalk / containers / Kubernetes** — a single instance is enough for the user base.
 - **Load balancer, read replica, CDN, Redis cache** — no scaling pressure at capstone scale.
-- **Push-notification infrastructure** — `PushSubscription`/VAPID plumbing exists in the model, but
-  a delivery service is not yet stood up.
+- **External push broker/queue** — VAPID web push is implemented directly; a separate message
+  broker is unnecessary at current volume.
 
 If any of these becomes necessary, it slots in without reshaping the core (e.g. add an ALB in front
 of a second EC2, or point report storage at S3 via Django's storage backend).
@@ -194,4 +220,4 @@ of a second EC2, or point report storage at S3 via Django's storage backend).
 ---
 
 *Companion documents: [`docs/ARCHITECTURE.md`](./ARCHITECTURE.md) (software architecture) ·
-[`docs/db_schema.sql`](./db_schema.sql) (database schema).*
+[`../deploy/README.md`](../deploy/README.md) (deployment and recovery runbook).*

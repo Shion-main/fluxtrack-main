@@ -1,5 +1,11 @@
 # FluxTrack: Scenarios by Role
 
+> **Superseded historical scenario snapshot.** The `(live today)` and `(planned)`
+> annotations below reflect the early build, not the completed repository. Use
+> [`../FluxTrack_SRS.md`](../FluxTrack_SRS.md) v1.3 for current requirements and
+> [`PROGRESS.md`](./PROGRESS.md) for current implementation status. The narratives
+> are retained as product-design history.
+
 Plain-language walkthroughs of how each person actually experiences
 FluxTrack — no requirement IDs, no field names. Written for reading, not
 building; the technical build reference with status tracking and

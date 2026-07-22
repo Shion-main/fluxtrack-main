@@ -401,7 +401,20 @@ Plans:
   2. A room can be taken out of service: scans refuse with a clear reason, it cannot be booked, and it drops from the utilization denominator.
   3. IFO can add/edit/cancel a single schedule meeting mid-term (not Django admin), and the safe mid-term re-import procedure is documented.
 
-**Plans**: TBD
+**Implementation**: Complete. Delivered directly as a repository documentation
+pass after Phase 15's code workstreams. Live cutover remains a separately stated
+external gate and is not represented as completed.
+
+Delivered:
+
+- SRS v1.3 with all nine architecture/behavior reconciliations, new IFO-12..14
+  operational-trust requirements, and an implementation-conformance matrix.
+- Restored IFO-03/04 and SYS-01..03 traceability, including explicit rationale for
+  the Django-admin-backed System Admin surfaces.
+- Current `.planning/PROJECT.md`, README, software/infrastructure architecture,
+  and collaborator progress board; historical `docs/USE_CASES.md` marked superseded.
+- Regenerated `FluxTrack_SRS.docx` from the Markdown source and extended DOC-01
+  smoke coverage for the v1.3 markers and removed normative claims.
 
 ### Phase 11: Metrics the Mission Promises
 
@@ -554,7 +567,7 @@ pulled forward but 9 still precedes any real use.
 | 13. UX Finish | 3/3 | Complete | 2026-07-22 |
 | 14. Correctness & Concurrency Hardening | 4/4 | Complete | 2026-07-22 |
 | 15. Deploy Hardening & Cutover (was Phase 8, expanded) | 5/5 code workstreams | External cutover/UAT pending | - |
-| 16. Documentation Pass | 0/TBD | Not started | - |
+| 16. Documentation Pass | Direct pass | Complete | 2026-07-22 |
 
 **Totals (≤ v1.2):** 58/59 plans complete across 11 phases (06.1-07 CSV export is a
 deliberate deferral, now folded into Phase 11).

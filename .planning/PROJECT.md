@@ -2,127 +2,111 @@
 
 ## What This Is
 
-FluxTrack is a Faculty Attendance and Facility Utilization Information
-System for Mapúa Malayan Colleges Mindanao (MMCM) — a mobile-first PWA
-backed by a Django service. It reduces a faculty member's class check-in to
-a single action (scan a room QR or enter a six-digit code) and treats an
-independent Checker's physical verification as the authoritative record of
-presence, correlating scheduled room occupancy against actual detected
-presence. It serves seven user roles (Faculty, Checker, IFO Admin, HR
-Admin, Guard, Dean, System Admin) and is a capstone project.
+FluxTrack is MMCM's Faculty Attendance and Facility Utilization Information
+System. It is a mobile-first Progressive Web Application backed by one Django
+service and Microsoft SQL Server. Faculty claim attendance with one room QR scan
+or six-digit code; an independently assigned Checker provides the authoritative
+verification. IFO, HR, Guards, Deans, and System Admins use the same system for
+campus operations, reporting, oversight, and administration.
 
 ## Core Value
 
-A faculty member checks in with one action, and the resulting attendance
-record is trustworthy — because presence is physically verified, lateness
-is captured at the room level, and ghost bookings (rooms reserved but
-unused) are detected automatically.
+A faculty member checks in with one action and the resulting attendance record is
+trustworthy: physical presence is independently verified, lateness is measured
+from the room-level event, ghost bookings become visible, and holidays or class
+suspensions never become false absences.
 
 ## Requirements
 
 ### Validated
 
-<!-- Shipped and confirmed working in the codebase (verified in-browser / by tests). -->
-
-- ✓ Django foundation: all domain models (accounts, campus, scheduling, verification, ops), env-driven settings, policy system — existing
-- ✓ Role-routed home + DEBUG dev-login stub (stands in for Entra ID) — existing
-- ✓ IFO room + schedule surface: rooms list, room detail, per-term schedule view (IFO-11), live "today" polling view (IFO-07 partial) — existing
-- ✓ QR poster + code image generation with print-safe CSS (IFO-01 partial) — existing
-- ✓ CSV schedule import + session materialization (management commands; IFO-03/JOB-01 logic, CLI-only) — existing
-- ✓ Scan resolver: pure-function core with all Faculty outcomes, 16 passing tests (SCAN-01..07, FAC-02..06/09/10) — existing
-- ✓ Faculty check-in surface: schedule view + scan page, end-to-end verified (FAC-01..06/09/10) — existing
-- ✓ Correctness foundations (JOB-02 no-show sweep → Absent, room release, conflict flags; notify() single write path; shared is_no_show_past_grace predicate) — validated in Phase 2
-- ✓ IFO-06 Checker/Guard floor + online-duty assignments: non-admin IFO UI (shift/standing), round-robin online-session pre-assignment (shift-window-aware) — validated in Phase 3
-- ✓ Checker verification surface (CHK-01..05/07/08): on-duty floor gating via pure resolver, room-state scan + faculty photo for identity match, Verify / Flag-identity / Flag-not-present / Confirm-empty → IFO+HR, htmx floor board (coverage % + oldest-unverified-first queue, Absent excluded), online Teams-link verification (Verify activates session), offline IndexedDB queue + server re-validated idempotent replay — validated in Phase 3
-- ✓ JOB-02 sweep now includes online sessions (exclusion removed in lockstep with the online-Verify-activates path) — validated in Phase 3
+- ✓ Microsoft SQL Server-only data layer, case-sensitive room credentials, and
+  timezone-safe Asia/Manila behavior.
+- ✓ Entra ID Authorization Code + PKCE integration with pre-provisioned accounts,
+  Django sessions, role/data scope, deactivation refusal, and DEBUG-only dev login.
+- ✓ Faculty day/week schedule, QR/manual check-in, Online self-start, checkout,
+  attendance history, profile photo, and modality-shift requests.
+- ✓ Checker floor/online duty, room and Online verification, coverage queue,
+  identity/not-present flags, and durable offline replay.
+- ✓ IFO schedule import and individual schedule operations; room, building, floor,
+  code, booking, assignment, conflict, suspension, break, and term management.
+- ✓ Dean modality decisions and department reporting; HR attendance/export; Guard
+  monitor, room schedule, faculty locator, and debounced floor alerts.
+- ✓ Weekly reports, scorecards, attendance/lateness/coverage/utilization metrics,
+  guarded downloads, and production scheduler jobs.
+- ✓ Operational trust: excused-day handling, reversible suspensions, corrections,
+  room service state, Draft/Active/Archived term lifecycle, transaction/concurrency
+  guards, shared database cache, and durable replay receipts.
+- ✓ Node-free, same-origin frontend assets: Django templates, htmx, shadcn design
+  language via Franken UI, html5-qrcode, PWA, and focused vanilla JavaScript.
+- ✓ AWS deployment package: Nginx, Gunicorn, exactly one locked scheduler process,
+  watchdog, HTTPS production checks, health probe, retention, backup, and rollback.
 
 ### Active
 
-<!-- Current scope. Building toward these. Grouped by the work still to do. -->
-
-**Environment & platform**
-- [ ] MSSQL migration (mssql-django + pyodbc; DB_ENGINE mssql branch) — spike Django 6.0.6 compat first
-- [ ] Entra ID SSO replacing the dev-login stub (Auth Code + PKCE); resolve session-vs-JWT divergence
-- [ ] AWS deployment: single EC2 (Nginx+Gunicorn+APScheduler) + RDS SQL Server Express
-- [ ] Tailwind standalone-CLI build replacing the Franken UI CDN before deploy
-- [ ] APScheduler as a dedicated scheduler process (JOB-01/02/03 wiring)
-
-**Core attendance loop**
-- [ ] Modality shift approval workflow (new): ModalityShiftRequest, Dean approves, IFO notified, auto room-release; removes CHK-06, amends CHK-03/FAC-07
-- [ ] Notifications: in-app list (NOTIF-01) + web push (NOTIF-02) + mute prefs (NOTIF-03)
-
-**Reporting & remaining roles**
-- [ ] Reporting engine (RPT-01..05): weekly consolidated report, faculty scorecard, pure aggregates
-- [ ] Dean dashboard (new DEAN-04) + department-scoped reporting (DEAN-01..03); RPT-02 notifies Deans
-- [ ] Guard surfaces (GRD-01..05): floor monitor, per-room schedule reuse, faculty locator
-- [ ] HR surfaces (HR-01..03): verified attendance list, filter/search, CSV export
-- [ ] IFO remaining: room CRUD UI, code rotation (IFO-02), bookings (IFO-05), manual release/conflict (IFO-08), dashboard (IFO-09), CSV-upload import UI
-- [ ] Faculty remaining: modality control + Online Verify & Start (FAC-08), attendance history (FAC-11), profile + prefs (FAC-12)
-- [ ] System Admin: job monitoring (SYS-04); user/settings/audit polish (SYS-01..03, admin-backed today)
-
-**Documentation**
-- [ ] SRS v1.2 revision (new MOD area, DEAN-04, amended FAC-07/CHK-03, removed CHK-06, RPT-02 notify Deans, modality_shift_lead_days policy)
+- [ ] Complete live Entra UAT with the institutional application registration and
+  production redirect URI.
+- [ ] Provision AWS EC2/RDS/network/DNS/TLS, restore rehearsal data, deploy the
+  reviewed commit, and execute the production smoke checklist.
+- [ ] Validate policy assumptions and report format against the official MMCM IRR
+  before institutional production use.
 
 ### Out of Scope
 
-<!-- From SRS §7 plus decisions made this session. -->
-
-- Payroll lifecycle (periods, locks, finalization) — HR exports only; explicit boundary
-- Disputes/appeals workflow — SRS §7; attendance records are read-only, no dispute
-- Same-day/emergency modality declaration — accepted gap; lead-time-gated approval only
-- Guard incident log, faculty help requests, substitute-teacher flow — SRS §7
-- Interactive booking calendar grid — SRS §7 (read-only per-room schedule is in scope)
-- Email notifications, dark-mode refinement, coverage analytics — SRS §7
-- Separate React/Node frontend, two-server split — ruled out; single Django app
-- Frontend/backend folder restructure — dropped (solo dev, cosmetic only)
+- Payroll lifecycle, disputes/appeals, student grades or performance monitoring.
+- Same-day emergency modality changes outside IFO's suspension/cancellation tools.
+- Guard incident log, faculty help requests, substitutes, and email notifications.
+- Interactive spatial floor-plan editor or calendar-first booking grid.
+- A duplicate custom System Admin UI for user/settings/audit tasks already covered
+  by guarded Django admin.
+- React/Next.js, a separate Node frontend service, WebSockets, microservices,
+  containers, Kubernetes, and multi-instance scaling for the capstone deployment.
+- S3 as the current storage backend; media stays on persistent EBS-backed instance
+  storage with a separate backup until scale or multi-instance hosting requires it.
 
 ## Context
 
-- **Solo developer.** Earlier collaboration/folder-split plans dropped.
-- **Rich prior documentation** drives this project: `FluxTrack_SRS.md`/`.docx`
-  (IEEE 830 v1.1), `docs/USE_CASES.md` (per-requirement built/not status),
-  `docs/SCENARIOS.md` (narrative per role), and 3 design specs under
-  `docs/superpowers/specs/` (deployment-and-dev-practice, modality-shift-
-  approval, dean-dashboard). `.planning/codebase/` holds the GSD map.
-- **Stack** (SRS v1.1): Django 6 + DRF, server-rendered templates + htmx +
-  Franken UI (CDN today), vanilla JS only for camera QR (html5-qrcode) and
-  the Checker offline queue (IndexedDB), PWA. No React/Node runtime.
-- **Established conventions** (see `.planning/codebase/CONVENTIONS.md`):
-  resolver stays a pure function; every write action logs `AuditLog`;
-  policy values via `get_policy()`/`SystemSetting`, never hardcoded;
-  management commands print ASCII only (Windows cp1252); per-view role
-  decorators; htmx partials named `_name.html`; signed tokens for two-step
-  confirms.
-- **Known concerns** (see `.planning/codebase/CONCERNS.md`): auth is a stub,
-  MSSQL compat unproven, JOB-02 absent-detection missing, notifications have
-  no read surface, only the resolver is tested, CDN-not-build-step, SRS
-  drift vs. the 3 new specs.
+- The repository is the implementation and planning source of truth. The formal
+  specification is `FluxTrack_SRS.md` v1.3; `.docx` is generated from it.
+- Django migrations are authoritative for schema. `docs/db_schema.sql` is a
+  2026-07-07 snapshot and does not include later operational-trust migrations.
+- The full SQL Server suite contains 1,259 tests, with two expected skips at the
+  Phase 15 repository verification point.
+- Feature work through Phase 14 and all five Phase 15 repository workstreams are
+  complete. Phase 15 remains open only for credential-dependent external cutover.
 
 ## Constraints
 
-- **Tech stack**: Django + htmx + Franken UI, no React/Node — fixed by SRS v1.1.
-- **Database**: MSSQL in production (school/registrar IT requirement), local
-  SQL Server Express dev; SQLite still works for quick local runs.
-- **Deployment**: AWS single EC2 + RDS SQL Server Express, "simplest possible"
-  for capstone scale (one campus, small user base).
-- **Identity**: Microsoft Entra ID SSO (project-owned tenant) — dev-login stub
-  until wired.
-- **Platform**: mobile-first for Faculty/Checker, desktop-first responsive for
-  admin roles; WCAG 2.1 AA; all role/data scoping enforced server-side.
-- **Live data**: polling only, no WebSockets (SRS §2.5).
-- **Environment**: Windows dev (`py -3.12`), Asia/Manila timezone.
+- **Stack:** Python 3.12, Django 6, server-rendered templates, htmx, Franken UI,
+  vanilla JavaScript, no Node runtime.
+- **Database:** Microsoft SQL Server in development, test, and production through
+  `mssql-django`, `pyodbc`, and ODBC Driver 18; no SQLite/MySQL fallback.
+- **Deployment:** one Ubuntu EC2 instance plus private-subnet RDS SQL Server
+  Express; Nginx → Gunicorn and one separate APScheduler systemd service.
+- **Identity:** single-tenant Microsoft Entra ID; users are pre-provisioned and
+  linked by institutional email/Entra object ID; no self-registration.
+- **Storage:** static assets are manifested and served locally; private/generated
+  media uses `FileSystemStorage` below a persistent, backed-up `MEDIA_ROOT`.
+- **Security:** HTTPS in production, secure sessions and CSRF, server-side role and
+  scope checks, resolver-only room credentials, and audit coupling for writes.
+- **Operations:** Asia/Manila timezone, polling rather than WebSockets, exactly one
+  scheduler, and shared state for multi-worker rate limiting/idempotency.
 
 ## Key Decisions
 
 | Decision | Rationale | Outcome |
-|----------|-----------|---------|
-| Django templates + htmx + Franken UI over Next.js/React | Single-server deploy, no Node runtime, self-hydrating web components survive htmx swaps | ✓ Good (SRS v1.1, POC validated) |
-| MSSQL via mssql-django | School/registrar IT requirement | — Pending (Django 6.0.6 compat unspiked) |
-| Single EC2 + RDS SQL Server Express | Simplest AWS surface for capstone scale | — Pending |
-| Solo dev; no folder split | Collaborator dropped; folder split was cosmetic only | ✓ Good |
-| Modality shift approval (Dean→IFO, auto room-release) | Eliminates Checker room-release burden; rooms follow schedule | — Pending (design approved) |
-| Remove CHK-06 (Absent override) | Absent becomes final; room releases on timer, no Checker action | — Pending (design approved) |
-| Build order: env → JOB-02 → IFO-06 → Checker → modality → notif → reporting → Guard/Dean/HR → auth/deploy | Dependency-driven (Checker needs assignments + trustworthy Absent) | — Pending |
+|---|---|---|
+| Django templates + htmx; no SPA | One deployable service and server-authoritative authorization | Implemented |
+| shadcn design language via Franken UI | Preserves shadcn tokens/components without React | Implemented; assets vendored |
+| Microsoft SQL Server only | School/registrar IT requirement and one tested persistence contract | Implemented locally; RDS cutover pending |
+| Django sessions, not an app-issued JWT | Server-rendered same-origin UI gains simpler revocation and CSRF protection | Implemented |
+| Filesystem media, not S3 | Small single-instance scope; lower operational surface | Implemented with EBS backup requirement |
+| No timer-based room release | Elapsed time does not prove physical vacancy | Implemented; MOD/IFO are the only release paths |
+| Semantic room board, not a spatial map | No geometry data; sorted attention states scale to the full campus | Implemented |
+| Single occurrence or next-N-week modality window | Matches recurring academic schedules and gives a bounded operator choice | Implemented |
+| Django admin satisfies SYS-01..03 | Trusted technical operator tasks already have guarded, auditable CRUD/read surfaces | Implemented; duplicate UI out of scope |
+| One EC2 + RDS; one scheduler process | Small capstone scale with a clear backup and failure model | Package complete; live cutover pending |
 
 ---
-*Last updated: 2026-07-07 after Phase 04.2 complete (Co-Scheduled Session Attendance — merged-section detection + present/absent propagation across faculty-scan and Checker-online seams; online merge key refined to faculty + exact start after live-term validation, 152/152 online groups covered). Phases 4 (Modality Shift + SRS v1.2) and 04.1 (real 2T SY2025-26 term load) also complete since the last update. Next: Phase 5 — Notifications.*
+*Last updated: 2026-07-22 during Phase 16. Repository implementation is complete;
+the remaining production gate requires institutional Entra and AWS access.*

@@ -1,5 +1,11 @@
 # FluxTrack — User Flows (by role)
 
+> **Superseded historical flow snapshot.** This file predates the completed HR,
+> Guard, Dean, IFO, notification, reporting, term, and campus-management surfaces;
+> its “stub” labels are not current. Use [`../README.md`](../README.md),
+> [`PROGRESS.md`](./PROGRESS.md), and the live routes in `web/urls.py` for current
+> navigation. The diagrams below remain as early design history.
+
 > **What this is:** how each role actually moves through the app, screen to screen — not code
 > layers (see [`docs/ARCHITECTURE.md`](./ARCHITECTURE.md)) and not infrastructure (see
 > [`docs/IT_ARCHITECTURE.md`](./IT_ARCHITECTURE.md)). Traced from `web/urls.py`, the view modules,

@@ -18,7 +18,7 @@ IEEE 830 · ISO/IEC/IEEE 29148
 | Document title | FluxTrack — Software Requirements Specification |
 | System | Faculty Attendance and Facility Utilization Information System |
 | Status | For review |
-| Version | 1.2 |
+| Version | 1.3 |
 | Standard basis | IEEE 830 / ISO/IEC/IEEE 29148 |
 
 **Revision History**
@@ -28,6 +28,7 @@ IEEE 830 · ISO/IEC/IEEE 29148
 | 1.0 | 2026-06-25 | Research Team (Mayo, Ong, Sabuero) | Initial specification. |
 | 1.1 | 2026-07-02 | Research Team (Mayo, Ong, Sabuero) | Frontend stack changed from Next.js/React SPA to server-rendered Django templates + htmx + Franken UI (Tailwind CSS). PWA, mobile-first, QR, and offline capabilities unchanged. Affects §2.1, §2.4, §3.3, §6.6, §6.7. |
 | 1.2 | 2026-07-03 | Research Team (Mayo, Ong, Sabuero) | Modality-shift approval workflow (MOD-01..06); DEAN-04 added; FAC-07 superseded by MOD approval; CHK-03 amended (Confirm absent removed, actions apply to online sessions); CHK-06 removed; RPT-02 notifies Deans; modality_shift_lead_days added to the policy register. |
+| 1.3 | 2026-07-22 | Research Team (Mayo, Ong, Sabuero) | Reconciled the specification with the completed system: Microsoft SQL Server replaces MySQL; Django sessions replace a backend JWT; instance filesystem storage replaces S3; JOB-02 no longer releases rooms on a timer; CHK-02 includes the online verification path; IFO-07 is a semantic live board rather than a spatial map; MOD-01 uses a single occurrence or next-N-week window; the shadcn design language is delivered through Franken UI; and suspension, holiday, campus-management, schedule-CRUD, and term-lifecycle capabilities are recorded. Adds implementation conformance and traceability in §10. |
 
 **Approval and Sign-off**
 
@@ -54,7 +55,7 @@ The product is a Progressive Web Application (PWA) backed by a Django service, d
 | Term | Meaning |
 | :---- | :---- |
 | API | Application Programming Interface |
-| AWS | Amazon Web Services (RDS, S3, EC2) |
+| AWS | Amazon Web Services (RDS, EC2, and EBS-backed instance storage) |
 | Claim | A faculty check-in: an assertion of presence, not yet independently confirmed |
 | Checker | A roving staff member who physically verifies presence on an assigned floor; the source of truth |
 | CSV | Comma-Separated Values file format |
@@ -80,9 +81,9 @@ The product is a Progressive Web Application (PWA) backed by a Django service, d
 | PWA | Progressive Web Application |
 | QR | Quick Response code |
 | RBAC | Role-Based Access Control |
-| RDS | AWS Relational Database Service (hosting MySQL 8.0) |
+| RDS | AWS Relational Database Service (hosting Microsoft SQL Server Express) |
 | Room hold | Configurable window a room stays reserved before it may be released |
-| S3 | AWS Simple Storage Service (object storage) |
+| SQL Server | Microsoft SQL Server, accessed through ODBC Driver 18 |
 | Schedule | A recurring class slot (faculty, room, course, day-of-week, time, modality) for a term |
 | Session | A single dated occurrence of a scheduled class |
 | SSO | Single Sign-On |
@@ -107,7 +108,7 @@ The product is a Progressive Web Application (PWA) backed by a Django service, d
 
 **1.5 Document Overview and Conventions**
 
-Section 2 gives an overall description of the product, its users, environment, and constraints. Section 3 specifies external interfaces. Section 4 specifies functional requirements by feature area. Section 5 specifies data requirements. Section 6 specifies non-functional requirements. Section 7 lists out-of-scope items, Section 8 records policy assumptions, and Section 9 lists open items.
+Section 2 gives an overall description of the product, its users, environment, and constraints. Section 3 specifies external interfaces. Section 4 specifies functional requirements by feature area. Section 5 specifies data requirements. Section 6 specifies non-functional requirements. Section 7 lists out-of-scope items, Section 8 records policy assumptions, Section 9 lists open items, and Section 10 records implementation conformance and requirement traceability.
 
 Functional requirements are stated using "shall." Each requirement carries a stable identifier of the form \`AREA-NN\` (for example, \`SCAN-01\`). Preconditions state what must hold before the requirement applies; postconditions state the resulting system state. Where a precondition or postcondition does not meaningfully apply, it is shown as "—." Configurable policy values are referenced by name (for example, the grace window) and enumerated in Section 8\.
 
@@ -115,7 +116,7 @@ Functional requirements are stated using "shall." Each requirement carries a sta
 
 **2.1 Product Perspective**
 
-FluxTrack is a new, self-contained system. It is a client–server web application in which a Django (Django REST Framework) backend is the system of record — it owns the data, the business rules, and authorization — and renders the interface for all user roles server-side using Django templates, progressively enhanced with htmx (for partial updates and live-surface polling) and the Franken UI component library (Tailwind CSS) for a consistent, accessible design system. A small, isolated amount of vanilla JavaScript provides the two genuinely interactive client-side capabilities: the camera QR scanner and the Checker offline scan queue. No separate Node.js runtime or client-side single-page-application framework is required. The backend is layered into models, serializers, services (business rules), and views; the scan resolver and reporting aggregates are implemented as pure, independently testable functions. Identity is delegated to Microsoft Entra ID; persistence uses MySQL 8.0 on AWS RDS; binary objects (profile photos, generated reports) reside in AWS S3; the application runs on AWS EC2. Live surfaces use periodic polling rather than persistent connections.
+FluxTrack is a new, self-contained system. It is a client–server web application in which Django is the system of record: it owns the data, business rules, authorization, and server-rendered interface. Django templates are progressively enhanced with htmx for partial updates and polling. Franken UI supplies a non-React implementation of the shadcn design language on Tailwind CSS tokens. Small, isolated vanilla-JavaScript modules provide camera QR scanning, the Checker offline queue, web-push subscription, and focused interface behavior. No Node.js runtime or client-side single-page-application framework is required. The backend is layered into models, pure decision functions, transactional services, and thin views. Microsoft Entra ID supplies identity; Django establishes a server-side authenticated session after the OAuth exchange. Persistence uses Microsoft SQL Server in every environment. Profile photographs, staged imports, and generated reports use Django filesystem storage; production places `MEDIA_ROOT` on backed-up EC2/EBS storage. The application runs on AWS EC2 and uses AWS RDS for SQL Server Express. Live surfaces use periodic polling rather than persistent connections.
 
 **2.2 Product Functions**
 
@@ -157,13 +158,13 @@ FluxTrack defines seven user classes. Each is authenticated through SSO and scop
 
 **2.4 Operating Environment**
 
-* **Backend:** Django with Django REST Framework (Python).
+* **Backend:** Django with Django REST Framework for the limited JSON endpoints (Python).
 
-* **Frontend:** Server-rendered Django templates enhanced with htmx and Franken UI (Tailwind CSS); PWA-enabled via a service worker; camera QR scanning and the Checker offline queue implemented in vanilla JavaScript. Runs on modern mobile and desktop browsers. No Node.js runtime is required to serve the interface; Tailwind CSS is compiled with its standalone CLI as a build step.
+* **Frontend:** Server-rendered Django templates enhanced with htmx and vendored Franken UI 2.1.2 (the shadcn design language implemented for non-React HTML on Tailwind CSS tokens); PWA-enabled via a service worker; camera QR scanning and the Checker offline queue implemented in vanilla JavaScript. Runs on modern mobile and desktop browsers. No Node.js runtime or CDN is required to serve the interface.
 
-* **Database:** MySQL 8.0 on AWS RDS, accessed via \`mysqlclient\`.
+* **Database:** Microsoft SQL Server only, accessed through \`mssql-django\`, \`pyodbc\`, and ODBC Driver 18. Local development uses LocalDB or SQL Server Express; production targets AWS RDS for SQL Server Express.
 
-* **Object storage:** AWS S3 (profile photos and generated report files).
+* **File storage:** Django \`FileSystemStorage\`. Production stores profile photos, private imports, and generated report files below an EBS-backed \`MEDIA_ROOT\`; media requires a separate backup because it is not part of RDS snapshots.
 
 * **Hosting:** AWS EC2, served over HTTPS using a managed certificate.
 
@@ -203,7 +204,7 @@ FluxTrack defines seven user classes. Each is authenticated through SSO and scop
 
 **3.1 User Interfaces**
 
-The system shall provide a mobile-first interface for Faculty and Checker that is camera-first and reachable one-handed, and a desktop-first responsive interface for IFO Admin, HR Admin, Guard, Dean, and System Admin. The interface shall meet WCAG 2.1 AA contrast, keyboard-navigation, and visible-focus requirements. Principal surfaces include: the faculty day/week and check-in screens; the checker floor view and room-state screen; the IFO live map, live calendar, dashboard, room and schedule management, and reporting; the guard floor monitor and faculty locator; the dean department oversight; and the system-admin user, settings, audit, and job-monitoring screens.
+The system shall provide a mobile-first interface for Faculty and Checker that is camera-first and reachable one-handed, and a desktop-first responsive interface for IFO Admin, HR Admin, Guard, Dean, and System Admin. The interface shall meet WCAG 2.1 AA contrast, keyboard-navigation, and visible-focus requirements. Principal surfaces include: the faculty day/week and check-in screens; the checker floor, room-state, and Online-session screens; the IFO semantic room board, today's room timeline, dashboard, campus/term/schedule management, and reporting; the guard floor monitor and faculty locator; the dean department oversight; and the system-admin user, settings, audit, and job-monitoring screens.
 
 **3.2 Hardware Interfaces**
 
@@ -211,11 +212,11 @@ The system shall use the device camera of a smartphone to scan room QR codes; no
 
 **3.3 Software Interfaces**
 
-* **Microsoft Entra ID (identity provider):** The client shall perform the OAuth 2.0 Authorization Code flow with PKCE to obtain an ID token; the backend shall verify the token against Microsoft's JWKS endpoint.
+* **Microsoft Entra ID (identity provider):** The server shall initiate and complete the OAuth 2.0 Authorization Code flow with PKCE through `python-social-auth`; Entra shall return identity claims used to associate a pre-provisioned User.
 
-* **AWS RDS (MySQL 8.0):** The backend shall persist all relational data through \`mysqlclient\`.
+* **AWS RDS (Microsoft SQL Server Express):** The backend shall persist all relational data through `mssql-django`, `pyodbc`, and ODBC Driver 18 with encrypted production connections.
 
-* **AWS S3:** The backend shall store and retrieve profile photographs and generated report files (CSV and PDF).
+* **Instance filesystem:** Django storage shall place profile photographs, private import staging, and generated CSV/PDF reports below `MEDIA_ROOT`. Production shall keep that directory on persistent EBS-backed storage and back it up separately from RDS.
 
 * **AWS EC2:** The application shall run on EC2 compute instances.
 
@@ -223,11 +224,11 @@ The system shall use the device camera of a smartphone to scan room QR codes; no
 
 * **Web Push (VAPID):** The system shall deliver push notifications to subscribed clients using the VAPID scheme.
 
-* **Browser platform services:** The PWA shall use a service worker for installability and push, and IndexedDB for the Checker offline scan queue. The interface shall be delivered as server-rendered HTML enhanced with htmx for partial updates and polling and styled with Franken UI; camera QR decoding shall use a client-side QR library (for example, html5-qrcode).
+* **Browser platform services:** The PWA shall use a service worker for installability and push, and IndexedDB for the Checker offline scan queue. The interface shall be delivered as server-rendered HTML enhanced with vendored htmx for partial updates and polling and styled with vendored Franken UI; camera QR decoding shall use vendored html5-qrcode.
 
 **3.4 Communications Interfaces**
 
-All client–server communication shall occur over HTTPS (TLS 1.2 or higher). Application data shall be exchanged as JSON over a REST API. Live surfaces shall obtain updates by polling the API at a configurable interval (default approximately 8 seconds). Push notifications shall be delivered using the web-push protocol.
+All production client–server communication shall occur over HTTPS (TLS 1.2 or higher). The application shall exchange server-rendered HTML, htmx fragments, and JSON from narrowly scoped endpoints. Live surfaces shall obtain updates by polling at a configurable interval (default approximately 8 seconds). Push notifications shall be delivered using the web-push protocol.
 
 **4\. Functional Requirements**
 
@@ -237,11 +238,11 @@ This area governs sign-in, identity mapping, authorization, and account deactiva
 
 | ID | Requirement | Preconditions | Postconditions |
 | :---- | :---- | :---- | :---- |
-| AUTH-01 | The system shall authenticate users via Microsoft Entra ID single sign-on, with the client performing the Authorization Code flow with PKCE and passing the resulting ID token to the backend. | The user holds a valid institutional Microsoft account. | An ID token is presented to the backend. |
-| AUTH-02 | The system shall verify the Microsoft ID token against Microsoft's JWKS, map the verified identity to a provisioned User, and issue its own JWT for subsequent API calls. | A valid ID token has been received. | A backend JWT is issued and bound to the session. |
+| AUTH-01 | The system shall authenticate users via Microsoft Entra ID single sign-on using the server-side Authorization Code flow with PKCE. | The user holds a valid institutional Microsoft account. | Entra returns authenticated identity claims to the application callback. |
+| AUTH-02 | The system shall validate the Entra exchange through the identity provider library, map the identity to a pre-provisioned User, and establish a Django server-side session. No application-issued bearer JWT is required. | Valid Entra identity claims have been received. | An authenticated Django session is established. |
 | AUTH-03 | The system shall prevent any identity without a provisioned User record from proceeding past sign-in. | The identity has been authenticated by Entra ID. | Unprovisioned identities receive no application access. |
-| AUTH-04 | The system shall enforce role and data scope on the server for every request. | The request carries a valid backend JWT. | Out-of-scope data and actions are denied. |
-| AUTH-05 | The system shall, upon user deactivation, block further API access and invalidate that user's issued tokens. | A System Admin deactivates the user. | The user's tokens are invalidated; access is blocked. |
+| AUTH-04 | The system shall enforce role and data scope on the server for every request. | The request carries a valid authenticated session. | Out-of-scope data and actions are denied. |
+| AUTH-05 | The system shall block login and subsequent application access for a deactivated User. Existing session authentication shall be re-checked against the user's active state. | A System Admin deactivates the user. | The user can no longer access authenticated application surfaces. |
 
 **4.2 Scan Resolver (SCAN)**
 
@@ -280,7 +281,7 @@ This area governs the request-and-approval workflow for changing a session's mod
 
 | ID | Requirement | Preconditions | Postconditions |
 | :---- | :---- | :---- | :---- |
-| MOD-01 | The system shall allow a faculty member to submit a modality-shift request (F2F/Blended to/from Online) covering a single session or a recurring, faculty-chosen date range, submitted at least `modality_shift_lead_days` (default 2 whole calendar days, Asia/Manila) before the earliest affected session date; a too-late request is refused at submission. | The user is authenticated as Faculty; the affected session(s) exist within the requested window. | A pending request is recorded, or the request is refused as too late. |
+| MOD-01 | The system shall allow a faculty member to submit a modality-shift request (F2F/Blended to/from Online) for either one selected session date or the next N weekly occurrences (1–16). The recurring option begins after the `modality_shift_lead_days` cutoff (default 2 whole calendar days, Asia/Manila); a single date that violates the cutoff is refused. | The user is authenticated as Faculty; the affected session(s) exist within the derived window. | One atomic pending request records the derived date window, or the request is refused as too late. |
 | MOD-02 | The system shall route each request to the requesting faculty member's department Dean, who shall approve or reject it with a reason; there is no dispute workflow. | A pending request exists and the faculty member has an assigned department Dean. | The Dean approves or rejects the request, recording a reason. |
 | MOD-03 | The system shall, on approval of a shift to Online, set the affected in-window session(s) to Online and release the room immediately (`room_released_at` stamped), not on a hold timer; Online sessions later materialized within the window are born released. | The Dean approves a to-Online request. | The affected sessions are Online and their rooms are released. |
 | MOD-04 | The system shall, on approval of a shift to F2F/Blended, auto-assign a free room in the same building at approval time; if no room is free, the approval fails with a clear reason and no session is changed (no silent partial apply). | The Dean approves a to-F2F/Blended request. | A room is assigned to the affected session(s), or the approval fails cleanly with a stated reason. |
@@ -292,7 +293,7 @@ This area governs the request-and-approval workflow for changing a session's mod
 | ID | Requirement | Preconditions | Postconditions |
 | :---- | :---- | :---- | :---- |
 | CHK-01 | The system shall grant verification powers only while a Checker is on duty (active shift or standing posting) on an assigned floor. | The Checker has an active assignment on the floor. | Verification actions are permitted on that floor. |
-| CHK-02 | The system shall return, on a Checker room scan, the room's current state together with the faculty member's profile photo for identity matching. | The Checker scans a room on the assigned floor. | The room state and faculty photo are presented. |
+| CHK-02 | The system shall return, on a Checker room scan, the room's current state together with the faculty member's profile photo for identity matching. For Online sessions, the assigned online-duty Checker shall receive a separate list, open the public Teams link, and apply the same Verify/Flag decision without scanning a physical room. | The Checker is on duty for the assigned floor or owns the Online session. | The room state and faculty photo, or the assigned Online session and Teams link, are presented. |
 | CHK-03 | The system shall offer room-state actions: Verify, Flag identity mismatch, Flag not present, and Confirm empty / Verified empty; these actions apply to online sessions as well as to F2F/Blended sessions. | A room or online session state has been retrieved. | The selected finding is recorded. |
 | CHK-04 | The system shall mark a session as checker-verified when a Verify finding is recorded. | A Verify finding is submitted. | The session is marked verified by checker. |
 | CHK-05 | The system shall record a Flag identity mismatch as a flag visible to IFO and HR, with no dispute workflow. | A mismatch finding is submitted. | The flag is recorded and surfaced to IFO/HR. |
@@ -305,15 +306,18 @@ This area governs the request-and-approval workflow for changing a session's mod
 | :---- | :---- | :---- | :---- |
 | IFO-01 | The system shall allow IFO to create, read, update, and delete rooms and to generate a printable QR poster per room (QR, six-digit code, instructions). | The user is an IFO Admin. | Room records and posters are maintained. |
 | IFO-02 | The system shall allow IFO to rotate a room's codes (regenerating its QR token and six-digit code, audit-logged), immediately invalidating prior posters. | A room exists. | New codes are issued; old codes stop resolving. |
-| IFO-03 | The system shall allow IFO to import schedules via CSV with validation and conflict detection, and to add, edit, move, or archive individual schedules. | A valid CSV or edit request is provided. | Schedules are created or modified; conflicts are reported. |
-| IFO-04 | The system shall allow IFO to manage course offerings and sections (as schedule entries), academic terms (including setting the active term), and academic breaks (skipped by materialization). | The user is an IFO Admin. | Offerings, terms, and breaks are maintained. |
+| IFO-03 | The system shall allow IFO to stage and import schedule files with validation, reconciliation, and conflict detection, and to add, edit, move, or cancel/archive individual recurring schedules. | A valid staged import or schedule edit request is provided. | Schedules are created or modified; conflicts are refused or reported; affected future sessions remain consistent. |
+| IFO-04 | The system shall allow IFO to manage course offerings and sections as schedule entries, create and transition academic terms through Draft/Active/Archived states, and manage academic breaks and holidays that suppress materialization and absence marking. | The user is an IFO Admin. | Schedules, terms, and breaks are maintained without Django-admin access. |
 | IFO-05 | The system shall allow IFO to create and cancel ad-hoc room bookings, conflict-checked against reserved sessions and other bookings. | The requested window is specified. | Bookings are created or cancelled; conflicts are prevented. |
 | IFO-06 | The system shall allow IFO to assign Checkers and Guards to floors by shift and/or standing posting. | The target users and floors exist. | Assignments are recorded. |
-| IFO-07 | The system shall present a live map of room status and a live calendar of today's sessions (with check-in-method icons, verified badges, and status), updated by polling. | The user is an IFO Admin. | Current room and session status is displayed. |
+| IFO-07 | The system shall present a polled semantic room-status board grouped by building and floor. Each room panel shall show today's session timeline, Checker verification state, session status, and recurring schedule. A spatial floor-plan map is not required because the system stores no room geometry and must remain usable across 200+ rooms. | The user is an IFO Admin. | Current room and session status is displayed in an operationally sortable board. |
 | IFO-08 | The system shall allow IFO to manually release a held room and to resolve room-conflict notifications. | A held room or conflict exists. | The room is released or the conflict is resolved. |
 | IFO-09 | The system shall present a dashboard of summary cards (Faculty, Room Occupancy in session-hours, Sessions, Absences) over a selectable range (default the active term) with a faculty-scorecard drill-down. | The user is an IFO Admin. | Summary metrics and drill-downs are displayed. |
 | IFO-10 | The system shall produce the Weekly Consolidated Faculty Attendance Report, per department (see Section 4.10). | Attendance data exist for the period. | The report is available and exportable. |
 | IFO-11 | The system shall allow IFO to view a selected room's fixed per-term schedule — its recurring classes (faculty, course/section, day-of-week, time, modality) for the active term — together with the room's current and upcoming sessions and any ad-hoc bookings, read-only. The same per-room schedule view is available to Guards (GRD-02) and, scoped to their department(s), to Deans. | A room and active term exist. | The room's per-term schedule is displayed. |
+| IFO-12 | The system shall allow IFO to declare and lift campus-wide or building-scoped class suspensions. Covered materialized sessions shall become Cancelled, faculty shall be notified, and reporting shall exclude those sessions from held/absent denominators. | An Active term exists and the user is an IFO Admin. | Covered sessions are cancelled or restored consistently and the action is audited. |
+| IFO-13 | The system shall allow IFO to manage buildings, floors, rooms, and a room's in-service/out-of-service state with dependency-aware deletion refusals. | The user is an IFO Admin. | Campus structure is maintained without deleting referenced operational records. |
+| IFO-14 | The system shall provide an explicit Draft → Active → Archived academic-term lifecycle with preflight blockers, warnings, typed confirmation, and auditable close/reopen reasons. | The user is an IFO Admin. | Exactly one term is Active and lifecycle changes are atomic and audited. |
 
 **4.7 HR Admin (HR)**
 
@@ -374,13 +378,13 @@ This area governs the request-and-approval workflow for changing a session's mod
 
 | ID | Requirement | Preconditions | Postconditions |
 | :---- | :---- | :---- | :---- |
-| JOB-01 | The system shall materialize sessions daily, N days ahead, from schedules, skipping academic breaks. | Active schedules and term exist. | Future session rows are created. |
-| JOB-02 | The system shall run a frequent status sweep that marks no-show sessions Absent after grace, releases rooms after the room-hold window (unless a checker-present override applies), and raises room-conflict flags. | Sessions and rooms exist. | Session and room statuses are maintained. |
+| JOB-01 | The system shall materialize sessions daily, N days ahead, from schedules, skipping academic breaks and active class suspensions. | Active schedules and an Active term exist. | Future session rows are created or suppressed by the academic calendar. |
+| JOB-02 | The system shall run a frequent status sweep that marks non-excused no-show sessions Absent after grace and raises deduplicated room-conflict flags. It shall never release a room on a timer; rooms are released only by an approved shift to Online or an explicit IFO action. | Sessions and rooms exist. | Session statuses and conflict flags are maintained without inferring physical vacancy from elapsed time. |
 | JOB-03 | The system shall generate and store per-department reports weekly and notify IFO. | The reporting week has elapsed. | Reports are stored; IFO is notified. |
 
 **5\. Data Requirements**
 
-The system shall persist the following principal entities in MySQL 8.0. Attributes shown are notable, not exhaustive; relationships are described where relevant.
+The system shall persist the following principal entities in Microsoft SQL Server. Attributes shown are notable, not exhaustive; Django migrations are the authoritative schema definition and relationships are described where relevant.
 
 **Identity and organization**
 
@@ -388,9 +392,11 @@ The system shall persist the following principal entities in MySQL 8.0. Attribut
 
 * **Department** — name, code.
 
-* **AcademicTerm** — name, start\_date, end\_date, is\_active. Exactly one term is active at a time.
+* **AcademicTerm** — name, start\_date, end\_date, status (Draft/Active/Archived). Exactly one term is Active at a time.
 
-* **AcademicBreak** — term, start\_date, end\_date, reason. Breaks suppress session materialization.
+* **AcademicBreak** — term, start\_date, end\_date, reason. Breaks suppress session materialization and absence marking.
+
+* **ClassSuspension** — term, inclusive date range, optional building scope, reason, declaring/lifting actors and timestamps. Active suspensions cancel covered materialized sessions and suppress later materialization/absence marking.
 
 **Spaces**
 
@@ -398,13 +404,13 @@ The system shall persist the following principal entities in MySQL 8.0. Attribut
 
 * **Floor** — building, number. A Floor belongs to one Building.
 
-* **Room** — floor, code, name, capacity, qr\_token (opaque, unique), manual\_code (six-digit, unique), code\_rotated\_at, code\_rotated\_by. A Room belongs to one Floor.
+* **Room** — floor, code, name, capacity, qr\_token (opaque, unique), manual\_code (six-digit, unique), code\_rotated\_at, code\_rotated\_by, out\_of\_service. A Room belongs to one Floor.
 
 **Academics**
 
 * **Schedule** — term, course\_code, section, enrolled\_count, faculty, room, day\_of\_week, start\_time, end\_time, modality, status. Created via CSV import; sections are captured as fields (no separate Section entity).
 
-* **Session** — schedule, faculty, room, date, scheduled\_start, scheduled\_end, status (scheduled/active/completed/absent), actual\_start, actual\_end, checkin\_method (qr\_scan/manual\_code/online\_manual/force\_handover), declared\_modality, modality\_changed\_at, modality\_changed\_by, handover\_from\_session\_id, teams\_link, ended\_early, early\_end\_reason, room\_released\_at. A Session derives from one Schedule.
+* **Session** — schedule, faculty, room, date, scheduled\_start, scheduled\_end, status (scheduled/active/completed/absent/cancelled), actual\_start, actual\_end, checkin\_method, declared\_modality, modality\_changed\_at, modality\_changed\_by, handover\_from\_session\_id, teams\_link, online\_checker, ended\_early, early\_end\_reason, room\_released\_at, cancelled\_reason. A Session derives from one Schedule.
 
 **Verification and duty**
 
@@ -424,7 +430,11 @@ The system shall persist the following principal entities in MySQL 8.0. Attribut
 
 * **SystemSetting** — key, value, description. Stores configurable policy values (Section 8).
 
-* **WeeklyReport** — week\_start, department, generated\_at, csv\_path, pdf\_path. Report files reside in S3.
+* **WeeklyReport** — term, week\_start, department, generated\_at, csv\_path, pdf\_path. Report files reside below Django's configured `MEDIA_ROOT` and are downloaded only through authorized views.
+
+* **SharedCacheEntry** — cache\_key, serialized value, expiry. Backs Django's database cache so rate limits and idempotency work across Gunicorn workers.
+
+* **CheckerReplayReceipt** — Checker, client UUID, terminal replay status/reason, created timestamp. Provides durable exactly-once handling when the shared cache is cleared or workers restart.
 
 Personal data shall be limited to presence-level records and the single profile photograph; retention shall follow Section 6.8.
 
@@ -438,7 +448,7 @@ The system shall refresh live surfaces within the configured poll interval (defa
 
 **6.2 Security**
 
-All traffic shall use HTTPS (TLS 1.2 or higher). The system shall enforce role and data scoping on the server for every endpoint and shall authenticate API calls with a backend-issued JWT. The manual-code path shall be rate-limited (default five per minute per user). QR tokens and manual codes shall be resolver-only and never client-readable. All write events shall be audit-logged. User credentials shall be delegated to Microsoft Entra ID; the system shall not store passwords.
+All production traffic shall use HTTPS (TLS 1.2 or higher). The system shall enforce role and data scoping on the server for every endpoint and authenticate requests with secure Django session cookies after Entra sign-in. CSRF protection shall apply to state-changing requests. The manual-code path shall be rate-limited (default five per minute per user) through a shared database cache. QR tokens and manual codes shall be resolver-only and never client-readable. All domain write events shall be audit-logged. User credentials shall be delegated to Microsoft Entra ID; the system shall not store institutional passwords. A separately controlled Django superuser is retained only as a production break-glass account.
 
 **6.3 Reliability and Availability**
 
@@ -454,11 +464,11 @@ The interface shall meet WCAG 2.1 AA contrast, keyboard-navigation, and visible-
 
 **6.6 Maintainability**
 
-The interface shall be delivered as server-rendered Django templates with progressive enhancement (htmx for partial updates, Franken UI for styling), keeping client-side JavaScript limited to two isolated, independently testable modules: the QR scanner and the Checker offline queue. The backend shall be layered (models, serializers, services, views), with the scan resolver and reporting aggregates implemented as pure functions covered by unit tests, and with API tests per endpoint.
+The interface shall be delivered as server-rendered Django templates with progressive enhancement (htmx for partial updates and Franken UI for shadcn-compatible styling). Client-side JavaScript shall remain limited to focused modules such as QR scanning, offline replay, web-push subscription, board interaction, and modality forms. The backend shall be layered into models, pure decision functions, transactional services, and thin views; resolver and reporting aggregates shall remain independently testable, with request tests for HTTP boundaries.
 
 **6.7 Portability and Deployment**
 
-The system shall be deployed as a single Django application that serves the server-rendered interface, the REST API, and compiled static assets — there is no separate Node.js frontend service to build or host. It shall run on AWS EC2 over HTTPS, with MySQL 8.0 on AWS RDS and AWS S3 for object storage. TLS shall be terminated either at an AWS load balancer (managed certificate) or on the instance (for example, Let's Encrypt). Scheduled jobs shall be executed by APScheduler in a single dedicated scheduler process, separate from the web workers, to prevent duplicate job execution.
+The system shall be deployed as a single Django application that serves the server-rendered interface, limited JSON endpoints, and vendored/manifested static assets; there is no separate Node.js frontend service to build or host. It shall run on one AWS EC2 instance over HTTPS behind Nginx and Gunicorn, with Microsoft SQL Server Express on private-subnet AWS RDS and EBS-backed filesystem media. TLS shall terminate at Nginx. Scheduled jobs shall run through APScheduler in exactly one lock-protected systemd process, separate from web workers, with an independent heartbeat watchdog. Shared database cache state shall keep rate limits and idempotency correct across Gunicorn workers.
 
 **6.8 Privacy and Compliance**
 
@@ -476,7 +486,7 @@ The official MMCM IRR / attendance policy is not currently available. Every valu
 | :---- | :---- | :---- |
 | Attendance grace (grace\_minutes) | 15 minutes | Assumption — cited in the expert FGD as MMCM practice; no written source on hand |
 | Attendance model \= Present/Absent only (no tardy category) | — | Assumption — the IRR may define a tardy category; must verify |
-| Room hold before release (room\_hold\_minutes) | 30 minutes (≥ grace) | Placeholder — operational estimate, no policy source |
+| Room hold before release (room\_hold\_minutes) | 30 minutes (deprecated, no runtime effect) | Retained for migration/configuration compatibility; JOB-02 does not infer vacancy or auto-release rooms |
 | Early check-out threshold | 15 minutes before end | Assumption — carried from prior practice |
 | Manual-code rate limit | 5 per minute per user | Operational (technical), not policy |
 | Session materialization horizon | e.g., 14 days | Operational, not policy |
@@ -496,3 +506,46 @@ Before any production use, all assumption and placeholder values shall be valida
 * Confirm the exact department report column template (interim columns are used until provided).
 
 * Confirm the provisional performance targets in Section 6 during system testing.
+
+**10\. Implementation Conformance and Traceability**
+
+**10.1 Reconciled Architecture Decisions**
+
+Version 1.3 records the implemented repository and approved deployment design rather than preserving superseded implementation assumptions. Live production cutover remains subject to the external gate in Section 10.4.
+
+| Earlier specification | Version 1.3 conformance decision | Implementation evidence |
+| :---- | :---- | :---- |
+| MySQL 8.0 / `mysqlclient` | Replaced by Microsoft SQL Server only. Local development and tests use LocalDB/Express; production targets RDS SQL Server Express through ODBC Driver 18. | `config/settings.py`, `requirements.txt`, `campus/migrations/0002_cs_collation_tokens.py` |
+| Application-issued JWT | Replaced by Django server-side sessions after the Entra Authorization Code + PKCE exchange. This matches the server-rendered architecture and preserves CSRF protection. | `config/settings.py`, `accounts/backends.py`, `accounts/pipeline.py` |
+| S3 object storage | Replaced for current scope by Django filesystem storage. Production media lives on persistent EBS-backed storage and has a separate backup/restore requirement. | `config/settings.py`, `ops/reports.py`, `deploy/README.md` |
+| Timer-based room release in JOB-02 | Removed. Elapsed time does not prove that a room is physically vacant. Only an approved Online shift or explicit IFO release stamps `room_released_at`. | `scheduling/jobs.py`, `ops/occupancy.py`, `scheduling/services.py`, `web/ifo.py` |
+| CHK-02 described physical room scans only | Extended with an assigned-online-session queue. The Checker opens the public Teams link and Verify activates the Online session; the same Flag actions remain available. | `web/checker.py`, `templates/checker/online_open.html`, `verification/tests.py` |
+| IFO-07 spatial live map | Implemented as a polled semantic board grouped by building/floor, with attention sorting and a room panel containing today's timeline and recurring schedule. No geometry is stored. | `web/ifo.py`, `web/room_state.py`, `templates/ifo/_board.html` |
+| MOD-01 arbitrary recurring date range | Implemented as either one selected occurrence or the next 1–16 weekly occurrences after the lead-time cutoff. The persisted request still records the exact inclusive window. | `web/faculty.py`, `scheduling/services.py`, `templates/faculty/_modality_form.html` |
+| “shadcn” and “Franken UI” treated as alternatives | Reconciled as shadcn-via-Franken UI: Franken UI carries the shadcn design language and tokens into server-rendered, non-React HTML. Runtime assets are vendored and require no CDN. | `static/vendor/franken-ui/2.1.2/`, `static/css/tokens.css`, `templates/base.html` |
+
+**10.2 Restored Requirement Traceability**
+
+| Requirement | Conformance | User-facing surface / evidence |
+| :---- | :---- | :---- |
+| IFO-03 schedule import | Built. IFO stages a file, reviews validation/reconciliation, and explicitly applies it; private staged bytes are stored below `MEDIA_ROOT`. | `/ifo/import`; `web/ifo.py`; `ops/import_staging.py` |
+| IFO-03 individual schedule CRUD | Built. IFO can add, edit/move, and cancel/archive a recurring class. Conflict checks cover materialized and not-yet-materialized occurrences, and future Session rows are updated atomically. | `/ifo/schedules/new`; `/ifo/schedules/<id>/edit`; `/ifo/schedules/<id>/cancel`; `scheduling/schedule_ops.py` |
+| IFO-04 offerings, terms, breaks | Built without a separate CourseOffering or Section table: course/section fields belong to Schedule. IFO manages Draft/Active/Archived terms and academic breaks/holidays directly. | `/ifo/terms`; `/ifo/breaks`; `web/ifo_terms.py`; `web/ifo.py` |
+| SYS-01 user provisioning | Built as a trusted-operator Django-admin workflow plus `link_entra`. System Admins create pre-provisioned users, map Entra identity, assign role/department, and deactivate access. A second custom user-management UI is out of scope because it would duplicate Django admin without changing authority or capability. | `/admin/accounts/user/`; `accounts/admin.py`; `accounts/management/commands/link_entra.py` |
+| SYS-02 system settings | Built through Django admin. Every supported policy key is editable in `SystemSetting` and read through the single `get_policy()` path. A duplicate custom settings editor is out of scope. | `/admin/ops/systemsetting/`; `ops/admin.py`; `ops/policy.py` |
+| SYS-03 audit log | Built as a read-only Django-admin record browser. Add/delete operations are disabled, while filtering by event type remains available. | `/admin/ops/auditlog/`; `ops/admin.py` |
+
+**10.3 Operational-Trust Additions**
+
+The completed system adds requirements that were absent from versions 1.0–1.2:
+
+* **Suspensions and holidays (IFO-12):** campus-wide or building-scoped suspension declarations cancel covered sessions, notify faculty, and prevent false Absent records. Academic breaks also suppress both materialization and the no-show sweep.
+* **Campus management (IFO-13):** IFO manages buildings, floors, rooms, code rotation, and service state through role-scoped screens with dependency-aware delete refusals.
+* **Term lifecycle (IFO-14):** terms use Draft, Active, and Archived states with one Active term, preflight blockers/warnings, typed confirmation, audit coupling, and term ownership on reports and operational queries.
+* **Production correctness:** the shared SQL Server cache and durable Checker replay receipts preserve rate limits and exactly-once replay across multiple Gunicorn workers and restarts.
+
+The authoritative executable evidence is the Django model/migration history and automated test suite. `docs/db_schema.sql` is retained as a 2026-07-07 schema snapshot and is not authoritative for later migrations.
+
+**10.4 External Production Gate**
+
+The code and deployment package are complete, but this SRS does not claim that a live institutional environment has been provisioned. Production acceptance still requires the institutional Entra application registration and user UAT, AWS EC2/RDS/network/DNS/TLS provisioning, an RDS-and-media restore rehearsal, and the production smoke checklist in `deploy/README.md`.
