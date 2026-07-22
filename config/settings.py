@@ -8,7 +8,9 @@ difference is purely DB_ODBC_EXTRA in each .env.
 """
 from pathlib import Path
 import os
+from urllib.parse import urlparse
 
+from django.core.exceptions import ImproperlyConfigured
 from dotenv import load_dotenv
 
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -23,6 +25,10 @@ def env_bool(key, default=False):
     return env(key, str(default)).lower() in ("1", "true", "yes", "on")
 
 
+def env_list(key, default=""):
+    return [item.strip() for item in env(key, default).split(",") if item.strip()]
+
+
 # --- Web push (VAPID, NOTIF-02) ---
 # Self-signed application server key: the private PEM signs every push and is a
 # secret (threat T-05-03) — kept out of git via *.pem/keys/ and referenced by
@@ -33,9 +39,25 @@ VAPID_PRIVATE_KEY_PATH = env("VAPID_PRIVATE_KEY_PATH", "")
 VAPID_SUB = env("VAPID_SUB", "")
 
 # --- Core ---
+FLUXTRACK_ENV = env("FLUXTRACK_ENV", "development").strip().lower()
+IS_PRODUCTION = FLUXTRACK_ENV in {"production", "prod"}
 SECRET_KEY = env("SECRET_KEY", "dev-insecure-change-me")
-DEBUG = env_bool("DEBUG", True)
-ALLOWED_HOSTS = env("ALLOWED_HOSTS", "*").split(",")
+DEBUG = env_bool("DEBUG", False)
+ALLOWED_HOSTS = env_list("ALLOWED_HOSTS", "localhost,127.0.0.1")
+CSRF_TRUSTED_ORIGINS = env_list("CSRF_TRUSTED_ORIGINS")
+
+# Nginx terminates TLS and supplies X-Forwarded-Proto. Django must understand
+# that boundary before it constructs absolute OAuth URLs or enforces HTTPS.
+SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
+USE_X_FORWARDED_HOST = True
+SECURE_SSL_REDIRECT = IS_PRODUCTION
+SESSION_COOKIE_SECURE = IS_PRODUCTION
+CSRF_COOKIE_SECURE = IS_PRODUCTION
+SECURE_HSTS_SECONDS = int(env(
+    "SECURE_HSTS_SECONDS", "31536000" if IS_PRODUCTION else "0"))
+SECURE_HSTS_INCLUDE_SUBDOMAINS = IS_PRODUCTION
+SECURE_HSTS_PRELOAD = IS_PRODUCTION
+SECURE_REFERRER_POLICY = "same-origin"
 
 # Shared across every Gunicorn worker. The table is migration-managed by
 # ops.SharedCacheEntry, so a normal ``migrate`` makes the cache deploy-ready.
@@ -164,7 +186,10 @@ SOCIAL_AUTH_AZUREAD_TENANT_OAUTH2_USE_PKCE = True   # D-02 (honored by the subcl
 # Pin to the exact registered redirect URI to avoid host-derivation drift
 # (localhost, not 127.0.0.1; trailing slash) — else AADSTS50011 (Pitfall 3).
 SOCIAL_AUTH_AZUREAD_TENANT_OAUTH2_REDIRECT_URI = (
-    "http://localhost:8000/auth/complete/azuread-tenant-oauth2/"
+    env(
+        "SOCIAL_AUTH_AZUREAD_TENANT_OAUTH2_REDIRECT_URI",
+        "http://localhost:8000/auth/complete/azuread-tenant-oauth2/",
+    )
 )
 
 # A refused login (AuthForbidden from deny_unprovisioned) must be intercepted by
@@ -230,7 +255,7 @@ STORAGES = {
     },
 }
 MEDIA_URL = "/media/"
-MEDIA_ROOT = BASE_DIR / "media"
+MEDIA_ROOT = Path(env("MEDIA_ROOT", str(BASE_DIR / "media")))
 
 # Send X-Content-Type-Options: nosniff (SecurityMiddleware is already installed).
 # Written down rather than inherited: MEDIA_ROOT holds user-uploaded content --
@@ -265,3 +290,64 @@ FLUXTRACK_POLICY = {
     "modality_shift_lead_days": 2,  # MOD-01/D-02: modality-shift lead-time gate in whole calendar days (Asia/Manila)
     "push_outbox_interval_seconds": 15,  # D-09/NOTIF-02: scheduler cadence draining the push outbox (policy-driven, never hardcoded)
 }
+
+
+def _validate_production_settings():
+    """Refuse to boot a production process with an unsafe deployment boundary."""
+    if not IS_PRODUCTION:
+        return
+
+    violations = []
+    if SECRET_KEY == "dev-insecure-change-me" or len(SECRET_KEY) < 50:
+        violations.append("SECRET_KEY must be a unique secret of at least 50 characters")
+    if DEBUG:
+        violations.append("DEBUG must be False")
+    if not ALLOWED_HOSTS or "*" in ALLOWED_HOSTS:
+        violations.append("ALLOWED_HOSTS must contain explicit production hosts")
+
+    redirect = SOCIAL_AUTH_AZUREAD_TENANT_OAUTH2_REDIRECT_URI
+    parsed_redirect = urlparse(redirect)
+    if parsed_redirect.scheme != "https" or not parsed_redirect.netloc:
+        violations.append(
+            "SOCIAL_AUTH_AZUREAD_TENANT_OAUTH2_REDIRECT_URI must be an HTTPS URL")
+    redirect_host = (parsed_redirect.hostname or "").lower()
+    redirect_host_allowed = any(
+        redirect_host == allowed.lower()
+        or (allowed.startswith(".") and (
+            redirect_host == allowed[1:].lower()
+            or redirect_host.endswith(allowed.lower())
+        ))
+        for allowed in ALLOWED_HOSTS
+    )
+    if redirect_host and not redirect_host_allowed:
+        violations.append(
+            "SOCIAL_AUTH_AZUREAD_TENANT_OAUTH2_REDIRECT_URI host must be in "
+            "ALLOWED_HOSTS")
+
+    required = {
+        "SOCIAL_AUTH_AZUREAD_TENANT_OAUTH2_KEY": (
+            SOCIAL_AUTH_AZUREAD_TENANT_OAUTH2_KEY),
+        "SOCIAL_AUTH_AZUREAD_TENANT_OAUTH2_SECRET": (
+            SOCIAL_AUTH_AZUREAD_TENANT_OAUTH2_SECRET),
+        "SOCIAL_AUTH_AZUREAD_TENANT_OAUTH2_TENANT_ID": (
+            SOCIAL_AUTH_AZUREAD_TENANT_OAUTH2_TENANT_ID),
+        "DB_NAME": DATABASES["default"]["NAME"],
+        "DB_USER": DATABASES["default"]["USER"],
+        "DB_PASSWORD": DATABASES["default"]["PASSWORD"],
+        "DB_HOST": DATABASES["default"]["HOST"],
+    }
+    for name, value in required.items():
+        if not value:
+            violations.append(f"{name} must be set")
+
+    db_extra = DATABASES["default"]["OPTIONS"]["extra_params"].lower()
+    if "encrypt=yes" not in db_extra or "trustservercertificate=yes" in db_extra:
+        violations.append(
+            "DB_ODBC_EXTRA must enforce Encrypt=yes without trusting the server certificate")
+
+    if violations:
+        raise ImproperlyConfigured(
+            "Invalid production configuration: " + "; ".join(violations))
+
+
+_validate_production_settings()

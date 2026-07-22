@@ -4,11 +4,14 @@ from django.conf.urls.static import static
 from django.contrib import admin
 from django.urls import include, path
 
+from config.health import health
+
 handler403 = "web.views.error_403"
 handler404 = "web.views.error_404"
 handler500 = "web.views.error_500"
 
 urlpatterns = [
+    path("healthz/", health, name="health"),
     path("admin/", admin.site.urls),
     # python-social-auth: /auth/login/<backend>/ + /auth/complete/<backend>/
     # (namespace 'social'; TRAILING_SLASH=True matches the registered Entra
