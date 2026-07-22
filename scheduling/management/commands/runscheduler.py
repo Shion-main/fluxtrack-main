@@ -94,6 +94,18 @@ def _job_weekly_report():
     return generate_week_reports(term=term, week_start=week_start, week_end=week_end)
 
 
+def _job_maintenance():
+    """Bound telemetry growth and remove expired database-backed sessions."""
+    call_command("prune_operational_data")
+    call_command("clearsessions")
+    return 0
+
+
+def _run_startup_backfill():
+    """Idempotently fill the prior report week after scheduler downtime."""
+    return run_job("weekly_report_startup", _job_weekly_report)
+
+
 def build_scheduler():
     """Return a configured, UNSTARTED BlockingScheduler with exactly 4 jobs (ENV-04).
 
@@ -135,6 +147,12 @@ def build_scheduler():
         id="push_outbox", max_instances=1, coalesce=True,
         misfire_grace_time=60, replace_existing=True)
 
+    sched.add_job(
+        lambda: run_job("maintenance", _job_maintenance),
+        CronTrigger(hour=3, minute=15),
+        id="maintenance", max_instances=1, coalesce=True,
+        misfire_grace_time=3600, replace_existing=True)
+
     return sched
 
 
@@ -142,13 +160,14 @@ class Command(BaseCommand):
     help = "Run the single dedicated FluxTrack scheduler (JOB-01/02/03) (ENV-04)."
 
     def handle(self, *args, **o):
+        _run_startup_backfill()
         sched = build_scheduler()
         interval = get_policy("sweep_interval_minutes")
         push_interval = get_policy("push_outbox_interval_seconds")
         self.stdout.write(self.style.SUCCESS(
             f"Scheduler started -> materialize (every {_MATERIALIZE_INTERVAL_HOURS}h), "
             f"sweep (every {interval} min), weekly_report (Mon 06:00), "
-            f"push_outbox (every {push_interval} s). "
+            f"push_outbox (every {push_interval} s), maintenance (03:15). "
             "Ctrl-C to stop."))
         try:
             sched.start()  # blocks the process

@@ -37,6 +37,8 @@ def env_list(key, default=""):
 VAPID_PUBLIC_KEY = env("VAPID_PUBLIC_KEY", "")
 VAPID_PRIVATE_KEY_PATH = env("VAPID_PRIVATE_KEY_PATH", "")
 VAPID_SUB = env("VAPID_SUB", "")
+JOB_RUN_RETENTION_DAYS = int(env("JOB_RUN_RETENTION_DAYS", "30"))
+SCHEDULER_STALE_MINUTES = int(env("SCHEDULER_STALE_MINUTES", "5"))
 
 # --- Core ---
 FLUXTRACK_ENV = env("FLUXTRACK_ENV", "development").strip().lower()

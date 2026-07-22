@@ -2,6 +2,7 @@
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from unittest.mock import call, patch
 
 from django.test import SimpleTestCase
 
@@ -542,19 +543,36 @@ class RoomConflictTests(_JobFixtureMixin, TestCase):
 # exists (Task 3).
 # ---------------------------------------------------------------------------
 class SchedulerWiringTests(TestCase):
-    """ENV-04: build_scheduler() wires exactly 4 jobs and returns them unstarted."""
+    """ENV-04: build_scheduler() wires one job set and returns it unstarted."""
 
-    def test_build_scheduler_registers_exactly_four_jobs_unstarted(self):
+    def test_build_scheduler_registers_exactly_five_jobs_unstarted(self):
         from scheduling.management.commands.runscheduler import build_scheduler
         sched = build_scheduler()
         try:
             self.assertFalse(sched.running)  # never started by build_scheduler()
             self.assertEqual(
                 {j.id for j in sched.get_jobs()},
-                {"materialize", "sweep", "weekly_report", "push_outbox"})
+                {"materialize", "sweep", "weekly_report", "push_outbox",
+                 "maintenance"})
         finally:
             if getattr(sched, "running", False):
                 sched.shutdown(wait=False)
+
+    @patch("scheduling.management.commands.runscheduler.run_job")
+    def test_startup_backfills_the_previous_week_idempotently(self, run_job):
+        from scheduling.management.commands import runscheduler
+        runscheduler._run_startup_backfill()
+        run_job.assert_called_once_with(
+            "weekly_report_startup", runscheduler._job_weekly_report)
+
+    @patch("scheduling.management.commands.runscheduler.call_command")
+    def test_maintenance_prunes_job_runs_and_expired_sessions(self, command):
+        from scheduling.management.commands.runscheduler import _job_maintenance
+        _job_maintenance()
+        self.assertEqual(
+            command.call_args_list,
+            [call("prune_operational_data"), call("clearsessions")],
+        )
 
 
 # ---------------------------------------------------------------------------

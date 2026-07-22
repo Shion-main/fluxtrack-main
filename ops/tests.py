@@ -17,6 +17,7 @@ JOB-02c — the room-release single write path `ops.occupancy.release_room`:
 """
 from datetime import datetime, timezone as dt_timezone
 from pathlib import Path
+from unittest.mock import patch
 
 from django.conf import settings
 from django.contrib.auth import get_user_model
@@ -300,6 +301,12 @@ class JobRunTests(TestCase):
     """
 
     def setUp(self):
+        # TestCase owns one outer transaction connection; production scheduler
+        # processes do not. Keep that harness connection open, while the
+        # dedicated test below still asserts both recycling calls.
+        self._connection_recycler = patch("ops.jobrun.close_old_connections")
+        self._connection_recycler.start()
+        self.addCleanup(self._connection_recycler.stop)
         User = get_user_model()
         self.admin = User.objects.create(
             username="sysadmin1", email="sa1@mcm.edu.ph",
@@ -354,6 +361,12 @@ class JobRunTests(TestCase):
         # If run_job re-raised, this call would error the test out.
         run = run_job("demo", lambda: (_ for _ in ()).throw(RuntimeError("x")))
         self.assertEqual(run.status, "failed")
+
+    @patch("ops.jobrun.close_old_connections")
+    def test_recycles_stale_connections_before_and_after_each_job(self, close):
+        from ops.jobrun import run_job
+        run_job("demo", lambda: 1)
+        self.assertEqual(close.call_count, 2)
 
 
 class NoImplicitSchedulerTests(SimpleTestCase):
