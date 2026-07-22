@@ -246,6 +246,17 @@ class JobRun(models.Model):
         return f"{self.job_name} {self.status} @ {self.started_at:%Y-%m-%d %H:%M}"
 
 
+class SharedCacheEntry(models.Model):
+    """Migration-managed table consumed by Django's DatabaseCache backend."""
+
+    cache_key = models.CharField(max_length=255, primary_key=True)
+    value = models.TextField()
+    expires = models.DateTimeField(db_index=True)
+
+    class Meta:
+        db_table = "fluxtrack_cache"
+
+
 class SystemSetting(models.Model):
     """Configurable policy values (SRS §8). Seeded from FLUXTRACK_POLICY."""
     key = models.CharField(max_length=60, unique=True)

@@ -26,6 +26,14 @@ from accounts.models import Role
 from ops.models import AuditLog, Notification
 
 
+class SharedCacheConfigurationTests(SimpleTestCase):
+    def test_default_cache_is_database_backed_for_multi_worker_deploys(self):
+        default = settings.CACHES["default"]
+        self.assertEqual(
+            default["BACKEND"], "django.core.cache.backends.db.DatabaseCache")
+        self.assertEqual(default["LOCATION"], "fluxtrack_cache")
+
+
 class NotifyTests(TestCase):
     """notify(role=...) fans out to ACTIVE users of that role only; notify(users=...)
     targets an explicit iterable; neither target creates nothing (NOTIF-00).

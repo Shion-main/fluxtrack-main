@@ -16,12 +16,13 @@ import json
 import re
 from functools import wraps
 from urllib.parse import parse_qs, urlparse
+from uuid import UUID
 
 from django.conf import settings
 from django.contrib.auth.decorators import login_required
 from django.core.cache import cache
 from django.core.exceptions import PermissionDenied
-from django.db import transaction
+from django.db import IntegrityError, transaction
 from django.http import Http404, JsonResponse
 from django.shortcuts import render
 from django.utils import timezone
@@ -38,7 +39,8 @@ from scheduling.merge import (propagate_merged_absent,
 from scheduling.models import CheckinMethod, Modality, Session, SessionStatus
 from scheduling.term_scope import get_active_term
 from verification import resolver as R
-from verification.models import (Assignment, AssignmentScope, CheckerValidation,
+from verification.models import (Assignment, AssignmentScope,
+                                 CheckerReplayReceipt, CheckerValidation,
                                  DutyRole, ValidationAction)
 
 _FLAG_ACTIONS = {ValidationAction.FLAG_IDENTITY_MISMATCH,
@@ -470,6 +472,23 @@ def action(request):
 
 
 # --- offline replay (CHK-08) ------------------------------------------------
+def _claim_replay_receipt(user, client_uuid, status, reason=""):
+    """Durably claim one terminal replay result inside the caller's transaction."""
+    try:
+        # Nested atomic gives a savepoint: a concurrent unique-key loser can be
+        # handled as a duplicate without breaking the caller's outer transaction.
+        with transaction.atomic():
+            CheckerReplayReceipt.objects.create(
+                client_uuid=client_uuid,
+                checker=user,
+                status=status,
+                reason=reason,
+            )
+    except IntegrityError:
+        return False
+    return True
+
+
 @checker_required
 @require_http_methods(["POST"])
 def replay(request):
@@ -483,9 +502,9 @@ def replay(request):
     (offline_queued=True, the ORIGINAL scanned_at preserved); anything else
     (off-duty/wrong-floor/absent/already-verified/bad-payload/empty-note flag)
     is recorded via AuditLog(checker.replay_conflict) and flags IFO via
-    notify(), never applied. Idempotent per `client_uuid` via the Django cache
-    (mirrors web/scan.py's scan-idem idiom, T-03-21) so a double-replay never
-    double-applies.
+    notify(), never applied. A unique durable CheckerReplayReceipt is committed
+    in the same transaction as each terminal result, so a cache flush, process
+    restart, or second worker can never reapply the same ``client_uuid``.
     """
     try:
         payload = json.loads(request.body.decode("utf-8") or "{}")
@@ -497,17 +516,19 @@ def replay(request):
     results = []
 
     for item in items:
-        client_uuid = str(item.get("client_uuid") or "")
+        client_uuid_raw = str(item.get("client_uuid") or "")
         # Reject items with a missing/empty client_uuid outright (WR-03): without
         # it the per-uuid idempotency guard cannot key the item, so a re-post
         # would re-apply the same queued scan with the double-apply protection
         # bypassed. Flagged, never applied (the shipped client always sends one).
-        if not client_uuid:
+        try:
+            client_uuid = UUID(client_uuid_raw)
+        except (ValueError, AttributeError):
             results.append({"uuid": "", "status": "flagged", "reason": "bad-payload"})
             continue
-        idem_key = f"checker-replay:{client_uuid}"
-        if cache.get(idem_key):
-            results.append({"uuid": client_uuid, "status": "duplicate"})
+        client_uuid_text = str(client_uuid)
+        if CheckerReplayReceipt.objects.filter(client_uuid=client_uuid).exists():
+            results.append({"uuid": client_uuid_text, "status": "duplicate"})
             continue
 
         # Rate-limit manual-code (6-digit) lookups per checker per minute (WR-02)
@@ -516,12 +537,19 @@ def replay(request):
         token_raw = str(item.get("token") or "").strip()
         if re.fullmatch(r"\d{6}", token_raw) and \
                 not _replay_manual_code_allowed(request.user, now):
-            AuditLog.objects.create(
-                actor=request.user, event_type="checker.rate_limited",
-                target_type="session", target_id="",
-                payload={"uuid": client_uuid, "context": "replay"})
-            results.append({"uuid": client_uuid, "status": "flagged",
-                            "reason": "rate-limited"})
+            with transaction.atomic():
+                claimed = _claim_replay_receipt(
+                    request.user, client_uuid, "flagged", "rate-limited")
+                if claimed:
+                    AuditLog.objects.create(
+                        actor=request.user, event_type="checker.rate_limited",
+                        target_type="session", target_id="",
+                        payload={"uuid": client_uuid_text, "context": "replay"})
+            results.append({
+                "uuid": client_uuid_text,
+                "status": "flagged" if claimed else "duplicate",
+                **({"reason": "rate-limited"} if claimed else {}),
+            })
             continue
 
         room = _room_from_replay_token(token_raw)
@@ -579,28 +607,37 @@ def replay(request):
                 identity_match = False
             elif action_val == ValidationAction.VERIFIED:
                 identity_match = True
-            # Atomically claim this uuid BEFORE applying (WR-01): a concurrent
-            # replay of the same item loses the add() race and is reported a
-            # duplicate, closing the TOCTOU double-apply/double-notify window the
-            # separate get/set left open.
-            if not cache.add(idem_key, True, timeout=None):
-                results.append({"uuid": client_uuid, "status": "duplicate"})
-                continue
-            _apply_action(request, session, room, action_val, note=note,
-                          identity_match=identity_match, scanned_at=scanned_at,
-                          offline=True)
-            results.append({"uuid": client_uuid, "status": "applied"})
+            with transaction.atomic():
+                claimed = _claim_replay_receipt(
+                    request.user, client_uuid, "applied")
+                if claimed:
+                    _apply_action(
+                        request, session, room, action_val, note=note,
+                        identity_match=identity_match, scanned_at=scanned_at,
+                        offline=True)
+            results.append({"uuid": client_uuid_text,
+                            "status": "applied" if claimed else "duplicate"})
         else:
-            AuditLog.objects.create(
-                actor=request.user, event_type="checker.replay_conflict",
-                target_type="session", target_id=str(session.pk if session else ""),
-                payload={"outcome": reason, "uuid": client_uuid, "action": action_val})
-            room_label = room.code if room else "an unknown room"
-            notify(role=Role.IFO_ADMIN, type="checker_replay_conflict",
-                   title="Offline scan needs review",
-                   body=f"A queued checker scan for {room_label} no longer applies "
-                        f"({reason}); please resolve.")
-            results.append({"uuid": client_uuid, "status": "flagged", "reason": reason})
+            with transaction.atomic():
+                claimed = _claim_replay_receipt(
+                    request.user, client_uuid, "flagged", reason)
+                if claimed:
+                    AuditLog.objects.create(
+                        actor=request.user, event_type="checker.replay_conflict",
+                        target_type="session",
+                        target_id=str(session.pk if session else ""),
+                        payload={"outcome": reason, "uuid": client_uuid_text,
+                                 "action": action_val})
+                    room_label = room.code if room else "an unknown room"
+                    notify(role=Role.IFO_ADMIN, type="checker_replay_conflict",
+                           title="Offline scan needs review",
+                           body=(f"A queued checker scan for {room_label} no longer "
+                                 f"applies ({reason}); please resolve."))
+            results.append({
+                "uuid": client_uuid_text,
+                "status": "flagged" if claimed else "duplicate",
+                **({"reason": reason} if claimed else {}),
+            })
 
     return JsonResponse({"results": results})
 

@@ -54,6 +54,24 @@ class ValidationAction(models.TextChoices):
     VERIFIED_EMPTY = "verified_empty", "Verified empty"
 
 
+class CheckerReplayReceipt(models.Model):
+    """Durable exactly-once receipt for a terminal offline replay item."""
+
+    client_uuid = models.UUIDField(unique=True)
+    checker = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.PROTECT,
+        related_name="checker_replay_receipts",
+    )
+    status = models.CharField(max_length=10)  # applied | flagged
+    reason = models.CharField(max_length=40, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        indexes = [models.Index(fields=["checker", "-created_at"])]
+
+
 class CheckerValidation(models.Model):
     """A Checker's recorded confirmation/contradiction — the source of truth (§1.2, CHK)."""
     session = models.ForeignKey(

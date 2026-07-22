@@ -37,6 +37,17 @@ SECRET_KEY = env("SECRET_KEY", "dev-insecure-change-me")
 DEBUG = env_bool("DEBUG", True)
 ALLOWED_HOSTS = env("ALLOWED_HOSTS", "*").split(",")
 
+# Shared across every Gunicorn worker. The table is migration-managed by
+# ops.SharedCacheEntry, so a normal ``migrate`` makes the cache deploy-ready.
+CACHES = {
+    "default": {
+        "BACKEND": "django.core.cache.backends.db.DatabaseCache",
+        "LOCATION": env("CACHE_TABLE", "fluxtrack_cache"),
+        "TIMEOUT": 300,
+        "OPTIONS": {"MAX_ENTRIES": 100000},
+    }
+}
+
 INSTALLED_APPS = [
     "django.contrib.admin",
     "django.contrib.auth",

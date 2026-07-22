@@ -113,6 +113,7 @@ class OfflineQueueIdentityTests(SimpleTestCase):
 from datetime import date, time, timedelta  # noqa: E402
 
 from django.contrib.auth import get_user_model  # noqa: E402
+from django.core.cache import cache  # noqa: E402
 from django.test import TestCase  # noqa: E402
 from django.utils import timezone  # noqa: E402
 
@@ -964,6 +965,28 @@ class ReplayTests(_CheckerFixtureMixin, TestCase):
         self.assertEqual(r1.json()["results"][0]["status"], "applied")
         self.assertEqual(r2.json()["results"][0]["status"], "duplicate")
 
+        self.assertEqual(CheckerValidation.objects.filter(
+            session=session, action="verified").count(), 1)
+
+    def test_replay_dedupe_survives_shared_cache_loss(self):
+        """A worker/cache restart cannot reclassify an already-applied replay."""
+        checker = self._checker()
+        self._active_floor_assignment(checker, self.floor)
+        room = self._room()
+        session = self._session(room)
+        self.client.force_login(checker)
+
+        item = {
+            "client_uuid": str(uuid.uuid4()), "token": room.qr_token,
+            "session_id": session.pk, "action": "verified", "note": "",
+            "scanned_at": timezone.now().isoformat(),
+        }
+        first = self._post_replay([item])
+        cache.clear()  # simulate a shared-cache flush/restart between requests
+        second = self._post_replay([item])
+
+        self.assertEqual(first.json()["results"][0]["status"], "applied")
+        self.assertEqual(second.json()["results"][0]["status"], "duplicate")
         self.assertEqual(CheckerValidation.objects.filter(
             session=session, action="verified").count(), 1)
 
