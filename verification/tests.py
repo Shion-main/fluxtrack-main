@@ -4,6 +4,7 @@ The gating core and the round-robin distributor are pure: no ORM, no
 timezone.now(). Both suites are SimpleTestCase, so any accidental database
 access or timezone.now() call inside the cores would error the test.
 """
+from pathlib import Path
 from types import SimpleNamespace
 
 from django.test import SimpleTestCase
@@ -87,6 +88,18 @@ class ModelExtensionTests(SimpleTestCase):
         self.assertEqual(
             Assignment._meta.get_field("scope").default, AssignmentScope.FLOOR
         )
+
+
+class OfflineQueueIdentityTests(SimpleTestCase):
+    def test_browser_queue_persists_and_replays_session_identity(self):
+        queue_source = Path("static/checker/offline_queue.js").read_text(
+            encoding="utf-8")
+        scan_source = Path("templates/checker/scan.html").read_text(
+            encoding="utf-8")
+
+        self.assertIn("session_id: item.session_id || null", queue_source)
+        self.assertIn("session_id: r.session_id", queue_source)
+        self.assertIn("session_id: pendingSessionId", scan_source)
 
 
 # ---------------------------------------------------------------------------
@@ -843,7 +856,7 @@ class ReplayTests(_CheckerFixtureMixin, TestCase):
         client_uuid = str(uuid.uuid4())
         r = self._post_replay([{
             "client_uuid": client_uuid, "token": room.qr_token,
-            "action": "verified", "note": "",
+            "session_id": session.pk, "action": "verified", "note": "",
             "scanned_at": original_scanned_at.isoformat()}])
         self.assertEqual(r.status_code, 200)
         self.assertEqual(r.json()["results"][0]["status"], "applied")
@@ -854,6 +867,34 @@ class ReplayTests(_CheckerFixtureMixin, TestCase):
         self.assertEqual(cv.scanned_at, original_scanned_at)
         session.refresh_from_db()
         self.assertTrue(session.verified_by_checker)
+
+    def test_replay_never_applies_to_replacement_session_in_same_room(self):
+        """A queued morning scan cannot verify the room's current class.
+
+        The checker saw ``original`` while offline, but by replay time a new
+        active session occupies the same room. The queued session identity must
+        force a conflict instead of applying the action to ``replacement``.
+        """
+        checker = self._checker()
+        self._active_floor_assignment(checker, self.floor)
+        room = self._room()
+        original = self._session(
+            room, status=SessionStatus.COMPLETED, start_delta_min=-120)
+        replacement = self._session(
+            room, status=SessionStatus.ACTIVE, start_delta_min=-10)
+        self.client.force_login(checker)
+
+        r = self._post_replay([{
+            "client_uuid": str(uuid.uuid4()), "token": room.qr_token,
+            "session_id": original.pk, "action": "verified", "note": "",
+            "scanned_at": (timezone.now() - timedelta(minutes=60)).isoformat(),
+        }])
+
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(r.json()["results"][0]["status"], "flagged")
+        self.assertEqual(r.json()["results"][0]["reason"], "session-changed")
+        self.assertFalse(CheckerValidation.objects.filter(
+            session__in=[original, replacement], action="verified").exists())
 
     def test_stale_replay_flags_ifo(self):
         # The session is currently ABSENT (ended/handed-over/already resolved

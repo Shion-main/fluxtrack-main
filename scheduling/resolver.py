@@ -77,14 +77,18 @@ def resolve_faculty_scan(sessions_today, scanned_room_id, occupying_session_id,
                 return Resolution(CHECKED_OUT, s.id)
             return Resolution(WRONG_ROOM, s.id)
 
-    # Otherwise find a scheduled session whose window contains now.
-    candidate = None
-    for s in sessions_today:
-        if s.status != "scheduled":
-            continue
-        if s.scheduled_start - open_lead <= now <= s.scheduled_end:
-            candidate = s
-            break
+    # Otherwise find a scheduled session whose window contains now. At a
+    # back-to-back boundary two windows can contain ``now``; prefer the one in
+    # the scanned room before falling back to the first scheduled candidate.
+    window_candidates = [
+        s for s in sessions_today
+        if (s.status == "scheduled"
+            and s.scheduled_start - open_lead <= now <= s.scheduled_end)
+    ]
+    candidate = next(
+        (s for s in window_candidates if s.room_id == scanned_room_id),
+        window_candidates[0] if window_candidates else None,
+    )
 
     if candidate is None:
         # Upcoming session later today in the scanned room -> too early.

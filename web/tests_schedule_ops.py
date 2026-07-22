@@ -90,6 +90,27 @@ class UpdateScheduleTests(TestCase):
             event_type="schedule.updated",
             target_id=str(self.fx.schedule.pk)).exists())
 
+    def test_room_move_refuses_conflict_without_partial_update(self):
+        moving = self.fx.session(3)
+        conflict_schedule = Schedule.objects.create(
+            term=self.fx.term, course_code="CS10", section="B",
+            faculty=self.fx.faculty2, room=self.fx.room2,
+            day_of_week=self.fx.schedule.day_of_week, start_time=time(10, 0),
+            end_time=time(11, 30), enrolled_count=20)
+        self.assertFalse(Session.objects.filter(
+            schedule=conflict_schedule).exists())
+
+        with self.assertRaisesMessage(ValueError, "room is occupied"):
+            update_schedule(
+                self.fx.schedule, room=self.fx.room2,
+                start_time=time(10, 0), end_time=time(11, 30),
+                actor=None, today=self.fx.today)
+
+        self.fx.schedule.refresh_from_db()
+        moving.refresh_from_db()
+        self.assertEqual(self.fx.schedule.room_id, self.fx.room1.pk)
+        self.assertEqual(moving.room_id, self.fx.room1.pk)
+
 
 class CancelScheduleTests(TestCase):
     def setUp(self):
@@ -139,6 +160,24 @@ class ScheduleConsoleTests(TestCase):
         self.assertEqual(resp.status_code, 302)
         self.fx.schedule.refresh_from_db()
         self.assertEqual(self.fx.schedule.faculty_id, self.fx.faculty2.id)
+
+    def test_edit_conflict_returns_friendly_400(self):
+        Schedule.objects.create(
+            term=self.fx.term, course_code="CS10", section="B",
+            faculty=self.fx.faculty2, room=self.fx.room2,
+            day_of_week=self.fx.schedule.day_of_week,
+            start_time=time(10, 0), end_time=time(11, 30))
+        self.client.force_login(self.ifo)
+
+        resp = self.client.post(f"/ifo/schedules/{self.fx.schedule.pk}/edit", {
+            "faculty": str(self.fx.faculty2.pk), "room": str(self.fx.room2.pk),
+            "start_time": "10:00", "end_time": "11:30",
+            "enrolled_count": "25"})
+
+        self.assertEqual(resp.status_code, 400)
+        self.assertContains(resp, "room is occupied", status_code=400)
+        self.fx.schedule.refresh_from_db()
+        self.assertEqual(self.fx.schedule.room_id, self.fx.room1.pk)
 
     def test_edit_bad_time_is_400(self):
         self.client.force_login(self.ifo)

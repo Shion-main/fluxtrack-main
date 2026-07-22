@@ -118,6 +118,23 @@ class FacultyResolverTests(SimpleTestCase):
         self.assertEqual(r.outcome, R.CHECKED_IN)
         self.assertEqual(r.session_id, 2)
 
+    def test_overlapping_windows_prefer_session_in_scanned_room(self):
+        """At a back-to-back handoff both scheduled windows include ``now``.
+
+        The earlier row belongs to another room and ends exactly when the next
+        class starts in the scanned room.  Room affinity must break the tie so
+        the scan checks into the class the faculty is physically standing in.
+        """
+        earlier_other_room = sess(
+            id=1, room_id=20,
+            scheduled_start=T0 - timedelta(minutes=90), scheduled_end=T0)
+        starting_here = sess(id=2, room_id=10)
+
+        r = resolve([earlier_other_room, starting_here], room_id=10, now=T0)
+
+        self.assertEqual(r.outcome, R.CHECKED_IN)
+        self.assertEqual(r.session_id, 2)
+
 
 class NoShowPredicateTests(SimpleTestCase):
     """JOB-02a boundary math for the single shared no-show predicate.
@@ -572,6 +589,8 @@ class FixtureSmokeTests(TestCase):
 # (earliest_affected_date - lead_days); routing resolves the requester's active
 # department Dean or a safe None on the D-09 edge cases.
 # ---------------------------------------------------------------------------
+import inspect  # noqa: E402
+
 from scheduling import services  # noqa: E402
 from scheduling.services import ModalityShiftError  # noqa: E402
 
@@ -865,6 +884,21 @@ class WithdrawTests(TestCase):
             services.reject_modality_shift(req, fx.dean, "too late")
         req.refresh_from_db()
         self.assertEqual(req.status, ModalityShiftStatus.WITHDRAWN)
+
+
+class TransitionLockingTests(SimpleTestCase):
+    """Every competing PENDING transition must lock its request row first."""
+
+    def test_withdraw_reject_and_approve_select_request_for_update(self):
+        for transition in (
+            services.withdraw_modality_shift,
+            services.reject_modality_shift,
+            services.apply_approval,
+        ):
+            with self.subTest(transition=transition.__name__):
+                source = inspect.getsource(transition)
+                self.assertIn(
+                    "ModalityShiftRequest.objects.select_for_update()", source)
 
 
 # ---------------------------------------------------------------------------

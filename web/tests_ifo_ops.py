@@ -341,6 +341,26 @@ class BookingCreateTests(_BookingBase):
         self.assertContains(resp, "not free", status_code=400)
         self.assertEqual(Booking.objects.count(), 0)
 
+    def test_future_schedule_occurrence_blocks_booking_before_materialization(self):
+        """A recurring class owns its future slot before JOB-01 creates Session.
+
+        Booking availability must consult the active Schedule as well as dated
+        Session rows or a booking accepted outside the materialization horizon
+        will collide when the class is eventually materialized.
+        """
+        self.schedule.day_of_week = self.free_day.weekday()
+        self.schedule.start_time = timezone.datetime.min.time().replace(hour=13)
+        self.schedule.end_time = timezone.datetime.min.time().replace(hour=15)
+        self.schedule.save(update_fields=["day_of_week", "start_time", "end_time"])
+        self.assertFalse(Session.objects.filter(
+            schedule=self.schedule, date=self.free_day).exists())
+
+        resp = self._create(start_time="13:30", end_time="14:00")
+
+        self.assertEqual(resp.status_code, 400)
+        self.assertContains(resp, "not free", status_code=400)
+        self.assertEqual(Booking.objects.count(), 0)
+
     def test_a_booking_over_an_active_booking_is_refused(self):
         self._booking(start_hour=13, end_hour=15)
         resp = self._create(start_time="14:00", end_time="16:00")

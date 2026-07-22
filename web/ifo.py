@@ -36,7 +36,8 @@ from scheduling.models import (AcademicBreak, AcademicTerm, ClassSuspension,
                                 DayOfWeek, Modality, Schedule, ScheduleStatus,
                                 Session, SessionStatus)
 from scheduling.importing import reconcile
-from scheduling.schedule_ops import cancel_schedule, update_schedule
+from scheduling.schedule_ops import (ScheduleConflictError, cancel_schedule,
+                                     update_schedule)
 from scheduling.suspensions import lift_suspension, suspend_classes
 from scheduling.term_scope import ArchivedTermError, get_active_term, require_writable_term
 from scheduling.report_render import build_csv, csv_safe
@@ -2389,9 +2390,12 @@ def schedule_edit(request, pk):
     if end <= start:
         return fail("The end time must be after the start time.")
 
-    n = update_schedule(
-        schedule, faculty=faculty, room=room, start_time=start, end_time=end,
-        enrolled_count=int(fields["enrolled_count"] or 0), actor=request.user)
+    try:
+        n = update_schedule(
+            schedule, faculty=faculty, room=room, start_time=start, end_time=end,
+            enrolled_count=int(fields["enrolled_count"] or 0), actor=request.user)
+    except ScheduleConflictError as exc:
+        return fail(str(exc))
     request.session["ifo_flash"] = (
         f"{schedule.course_code}-{schedule.section} updated; {n} upcoming "
         f"session(s) moved to match.")

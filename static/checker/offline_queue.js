@@ -3,7 +3,7 @@
  *
  * Vanilla JS, no wrapper library (project constraint) — a small IndexedDB
  * object store keyed by a client-generated `client_uuid`, holding
- * `{client_uuid, token, action, note, scanned_at}` for each scan a Checker
+ * `{client_uuid, token, session_id, action, note, scanned_at}` for each scan a Checker
  * records while offline. On reconnect the whole queue is POSTed as a batch to
  * `/checker/replay`, which RE-VALIDATES every item against CURRENT state
  * through the same pure gating core the live scan uses — never blindly
@@ -120,6 +120,7 @@
     var record = {
       client_uuid: randomUUID(),
       token: token,
+      session_id: item.session_id || null,
       action: item.action,
       note: item.note || "",
       scanned_at: item.scanned_at || new Date().toISOString(),
@@ -146,7 +147,7 @@
         items: items.map(function (r) {
           return {
             client_uuid: r.client_uuid, token: r.token, action: r.action,
-            note: r.note, scanned_at: r.scanned_at,
+            session_id: r.session_id, note: r.note, scanned_at: r.scanned_at,
           };
         }),
       });

@@ -13,27 +13,73 @@ schedule edit never rewrites history. Past attendance stands exactly as it was.
 Cancellation reuses the Phase 9 ``CANCELLED`` status so a dropped class reads the
 same as a suspended one (not Absent, not held, not booked).
 
-KNOWN LIMITATION (documented, deferred to Phase 14): a room move does NOT run an
-occupancy conflict check, so it can place a class into a room another class also
-uses -- the same latent double-booking the importer can already produce, which
-JOB-02c surfaces as a room-conflict flag. The conflict-checked version is Phase
-14 (M3). ``day_of_week`` is intentionally NOT editable here: changing the meeting
-day would strand every already-materialized session on the old weekday, which is
-a delete-and-rematerialize operation, not an edit.
+Room/time moves are checked across every remaining weekly occurrence before any
+write, including dates beyond the materialization horizon. ``day_of_week`` is
+intentionally NOT editable here: changing the meeting day would strand every
+already-materialized session on the old weekday, which is a delete-and-
+rematerialize operation, not an edit.
 
 ASCII-only by convention (Windows cp1252).
 """
+from datetime import timedelta
+
 from django.db import transaction
 from django.utils import timezone
 
+from ops.availability import room_is_free
 from ops.models import AuditLog
-from scheduling.models import Schedule, ScheduleStatus, Session, SessionStatus
+from scheduling.models import (Modality, Schedule, ScheduleStatus, Session,
+                               SessionStatus)
+from scheduling.suspensions import excused_checker
 from scheduling.term_scope import require_writable_term
+
+
+class ScheduleConflictError(ValueError):
+    """The proposed room/time would collide with another room occupant."""
 
 
 def _future_scheduled(schedule, today):
     return Session.objects.filter(schedule=schedule, status=SessionStatus.SCHEDULED,
                                   date__gte=today)
+
+
+def _assert_occurrences_free(schedule, room, start_time, end_time, today):
+    """Refuse a room/time edit that collides on any remaining weekly date."""
+    if schedule.modality == Modality.ONLINE:
+        return
+    existing = {
+        session.date: session
+        for session in list(Session.objects.filter(
+            schedule=schedule, date__gte=today).order_by("date"))
+    }
+    excused = excused_checker(schedule.term)
+    offset = (schedule.day_of_week - today.weekday()) % 7
+    occurrence_date = today + timedelta(days=offset)
+    occurrence_dates = {
+        session.date for session in existing.values()
+        if session.status == SessionStatus.SCHEDULED
+    }
+    while occurrence_date <= schedule.term.end_date:
+        occurrence_dates.add(occurrence_date)
+        occurrence_date += timedelta(days=7)
+
+    for occurrence_date in sorted(occurrence_dates):
+        own_session = existing.get(occurrence_date)
+        if own_session is not None and own_session.status != SessionStatus.SCHEDULED:
+            continue
+        if excused(occurrence_date, room.floor.building_id):
+            continue
+        at_start = timezone.make_aware(
+            timezone.datetime.combine(occurrence_date, start_time))
+        at_end = timezone.make_aware(
+            timezone.datetime.combine(occurrence_date, end_time))
+        if not room_is_free(
+            room, at_start, at_end,
+            exclude_session_id=(own_session.pk if own_session else None),
+            exclude_schedule_id=schedule.pk,
+        ):
+            raise ScheduleConflictError(
+                f"The room is occupied on {occurrence_date} during that time.")
 
 
 @transaction.atomic
@@ -58,6 +104,14 @@ def update_schedule(schedule, *, faculty=None, room=None, start_time=None,
               "start_time": str(schedule.start_time),
               "end_time": str(schedule.end_time),
               "enrolled_count": schedule.enrolled_count}
+    target_room = room or schedule.room
+    target_start = start_time or schedule.start_time
+    target_end = end_time or schedule.end_time
+    if (target_room.pk != schedule.room_id
+            or target_start != schedule.start_time
+            or target_end != schedule.end_time):
+        _assert_occurrences_free(
+            schedule, target_room, target_start, target_end, today)
     if faculty is not None:
         schedule.faculty = faculty
     if room is not None:

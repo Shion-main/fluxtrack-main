@@ -57,9 +57,9 @@ standalone Phase 8 (deploy) becomes the **expanded Phase 15**.
 - [x] **Phase 9: Attendance Trust Under Real Operations** (CRITICAL) - CANCELLED status, IFO class-suspension + holiday/break entry, sweep honors them, real Absent-correction path (A1/A2/A5) — completed 2026-07-20; 5/5 criteria, 30 new tests, suite 965 green
 - [x] **Phase 10: Campus Structure Management** - Building/Floor CRUD, room out-of-service, single-schedule edit (A7/A9 + building gap) — completed 2026-07-20; 3/3 criteria, 29 tests, suite 994 green
 - [x] **Phase 11: Metrics the Mission Promises** - Lateness, verification-coverage, utilization depth + deferred CSV export (A3/A6/A8) (completed 2026-07-20)
-- [ ] **Phase 12: Term Lifecycle** - Close/archive a term + create/activate the next without destroying history (A4)
-- [ ] **Phase 13: UX Finish** - Custom error pages, phone shell-jump fix, profile reachability, login navy, global htmx errors, PWA theme (B1-B6)
-- [ ] **Phase 14: Correctness & Concurrency Hardening** - Booking/schedule oracle, room-preferring resolver, select_for_update, offline-replay retargeting (M3/M5/M6/H3)
+- [x] **Phase 12: Term Lifecycle** - Close/archive a term + create/activate the next without destroying history (A4) (completed 2026-07-22)
+- [x] **Phase 13: UX Finish** - Custom error pages, phone shell-jump fix, profile reachability, login navy, global htmx errors, PWA theme (B1-B6) (completed 2026-07-22)
+- [x] **Phase 14: Correctness & Concurrency Hardening** - Booking/schedule oracle, room-preferring resolver, select_for_update, offline-replay retargeting (M3/M5/M6/H3) (completed 2026-07-22; 4/4 criteria, suite 1236 green)
 - [ ] **Phase 15: Deploy Hardening & Cutover** (was Phase 8, expanded) - Entra SSO + EC2/RDS + Tailwind build, PLUS shared cache, HTTPS/proxy config, media split, CDN vendoring, scheduler resilience, logging, retention/backups
 - [ ] **Phase 16: Documentation Pass** - SRS v1.3 (incl. shadcn-via-Franken), traceability restore, PROJECT.md refresh
 
@@ -483,7 +483,11 @@ desktop/mobile browser verification.
   3. Modality withdraw/approve/reject use `select_for_update` (M6).
   4. Offline replay applies a queued verification to the session the checker actually saw, not whatever is in the room now (H3).
 
-**Plans**: TBD
+**Delivered directly**: Shared unmaterialized schedule-occurrence availability
+oracle used by bookings and conflict-safe schedule moves; scanned-room candidate
+preference; locked modality decisions; session-pinned offline queue/replay with
+timestamp fallback for legacy/offline-first records. Full SQL Server suite: 1,236
+tests green, 2 expected skips.
 
 ### Phase 15: Deploy Hardening & Cutover  *(was Phase 8, expanded)*
 
@@ -538,9 +542,9 @@ pulled forward but 9 still precedes any real use.
 | 9. Attendance Trust Under Real Operations (CRITICAL) | Complete | 5/5 criteria, 30 tests | 2026-07-20 |
 | 10. Campus Structure Management | Complete | 3/3 criteria, 29 tests | 2026-07-20 |
 | 11. Metrics the Mission Promises | 4/4 | Complete    | 2026-07-20 |
-| 12. Term Lifecycle | 12/12 | Human verification required |  |
-| 13. UX Finish | 0/TBD | Not started | - |
-| 14. Correctness & Concurrency Hardening | 0/TBD | Not started | - |
+| 12. Term Lifecycle | 12/12 | Complete | 2026-07-22 |
+| 13. UX Finish | 3/3 | Complete | 2026-07-22 |
+| 14. Correctness & Concurrency Hardening | 4/4 | Complete | 2026-07-22 |
 | 15. Deploy Hardening & Cutover (was Phase 8, expanded) | 0/TBD | Not started | - |
 | 16. Documentation Pass | 0/TBD | Not started | - |
 

@@ -347,7 +347,7 @@ def withdraw_modality_shift(request, actor):
     Notification is written: decision notices are Dean actions (D-11).
     """
     with transaction.atomic():
-        req = ModalityShiftRequest.objects.get(pk=request.pk)
+        req = ModalityShiftRequest.objects.select_for_update().get(pk=request.pk)
         _lock_writable_term(_single_term_id_for_request(req))
         if req.requester_id != actor.pk:
             raise ModalityShiftError("only the requester may withdraw this request")
@@ -373,7 +373,7 @@ def reject_modality_shift(request, dean, reason):
     """
     now = timezone.now()
     with transaction.atomic():
-        req = ModalityShiftRequest.objects.get(pk=request.pk)
+        req = ModalityShiftRequest.objects.select_for_update().get(pk=request.pk)
         _lock_writable_term(_single_term_id_for_request(req))
         if dean.role != Role.DEAN or req.department_id != dean.department_id:
             raise ModalityShiftError(
@@ -534,7 +534,7 @@ def apply_approval(request, dean, *, now=None):
     """
     now = now or timezone.now()
     with transaction.atomic():
-        req = ModalityShiftRequest.objects.get(pk=request.pk)
+        req = ModalityShiftRequest.objects.select_for_update().get(pk=request.pk)
         _lock_writable_term(_single_term_id_for_request(req))
         if dean.role != Role.DEAN or req.department_id != dean.department_id:
             raise ModalityShiftError(

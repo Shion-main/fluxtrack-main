@@ -271,6 +271,34 @@ def _room_session_state(room, now):
                                   session.verified_by_checker)
 
 
+def _room_session_at_scan(room, scanned_at):
+    """Best historical identity for a legacy/offline-first queued room scan.
+
+    New queue records carry ``session_id`` explicitly. Older records cannot, so
+    infer the session whose room window contained the original scan time. An
+    ambiguous timestamp fails closed instead of being attached to a later class.
+    """
+    if timezone.is_naive(scanned_at):
+        scanned_at = timezone.make_aware(scanned_at)
+    active_term = get_active_term()
+    if active_term is None:
+        return None
+    candidates = list(
+        Session.objects.filter(
+            room=room,
+            date=timezone.localdate(scanned_at),
+            schedule__term=active_term,
+            scheduled_start__lte=scanned_at,
+            scheduled_end__gte=scanned_at,
+        )
+        .select_related("schedule")
+        .order_by("scheduled_start")
+    )
+    return next((s for s in candidates
+                 if (s.declared_modality or s.schedule.modality) != Modality.ONLINE),
+                None)
+
+
 # --- apply layer -----------------------------------------------------------
 def _apply_action(request, session, room, action, *, note="", identity_match=None,
                   scanned_at=None, offline=False, online=False):
@@ -448,7 +476,7 @@ def replay(request):
     """Re-validate every offline-queued scan against CURRENT state through the
     SAME pure gating core `action` uses above — the offline snapshot's
     room/session/on-duty decision is NEVER trusted (T-03-19/20). A batch POST
-    `{"items": [{client_uuid, token, action, note, scanned_at}, ...]}` from the
+    `{"items": [{client_uuid, token, session_id, action, note, scanned_at}, ...]}` from the
     client's IndexedDB queue. Per item: re-derive the checker's CURRENT
     on-duty floors and the room's CURRENT session state server-side and
     re-run `R.resolve_checker_scan`; a still-actionable item applies
@@ -500,6 +528,9 @@ def replay(request):
         action_val = item.get("action", "")
         note = item.get("note", "") or ""
         scanned_at = parse_datetime(item.get("scanned_at") or "") or now
+        claimed_session_id = item.get("session_id")
+        claimed_session_valid = claimed_session_id in (None, "") or str(
+            claimed_session_id).isdigit()
 
         if room is None:
             reason = "bad-room"
@@ -510,7 +541,24 @@ def replay(request):
             session, state = _room_session_state(room, now)
             resolution = R.resolve_checker_scan(
                 _active_floor_ids(request.user, now), room.floor_id, state, now)
-            if not resolution.actionable:
+            if not claimed_session_valid:
+                reason = "bad-payload"
+            else:
+                historical = None
+                if claimed_session_id in (None, ""):
+                    historical = _room_session_at_scan(room, scanned_at)
+                expected_session_id = (
+                    int(claimed_session_id)
+                    if claimed_session_id not in (None, "")
+                    else (historical.pk if historical is not None else None)
+                )
+                current_session_id = session.pk if session is not None else None
+                reason = ("session-changed"
+                          if expected_session_id != current_session_id else None)
+
+            if reason is not None:
+                pass
+            elif not resolution.actionable:
                 reason = resolution.outcome
             elif action_val not in _VALID_ACTIONS:
                 reason = "bad-payload"

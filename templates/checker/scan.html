@@ -93,6 +93,12 @@
   const CSRF = "{{ csrf_token }}";
   let scanner = null;
   let pendingPayload = null;
+  let pendingSessionId = null;
+
+  function captureResolvedSession() {
+    const input = document.querySelector('#outcome input[name="session_id"]');
+    pendingSessionId = input ? input.value : null;
+  }
 
   async function postPayload(payload) {
     pendingPayload = payload;
@@ -109,6 +115,7 @@
       const el = document.getElementById("outcome");
       el.innerHTML = await r.text();
       if (window.htmx) window.htmx.process(el);
+      captureResolvedSession();
       el.scrollIntoView({behavior: "smooth", block: "nearest"});
     } catch (e) {
       // Network failed mid-scan (not just navigator.onLine=false) — queue too.
@@ -143,6 +150,11 @@
       }
     }
   });
+  document.body.addEventListener("htmx:afterSwap", (ev) => {
+    if (ev.detail && ev.detail.target && ev.detail.target.id === "outcome") {
+      captureResolvedSession();
+    }
+  });
   document.body.addEventListener("htmx:sendError", () => { showOfflineCapture(); });
 
   document.addEventListener("click", async (ev) => {
@@ -157,7 +169,8 @@
     }
     try {
       await window.FluxTrackOfflineQueue.enqueue({
-        payload: pendingPayload, action: action, note: note,
+        payload: pendingPayload, session_id: pendingSessionId,
+        action: action, note: note,
         scanned_at: new Date().toISOString(),
       });
     } catch (e) {
@@ -168,6 +181,7 @@
     document.getElementById("offline-note").value = "";
     document.getElementById("offline-capture").classList.add("hidden");
     pendingPayload = null;
+    pendingSessionId = null;
   });
 
   function startCamera() {
