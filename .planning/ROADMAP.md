@@ -60,7 +60,7 @@ standalone Phase 8 (deploy) becomes the **expanded Phase 15**.
 - [x] **Phase 12: Term Lifecycle** - Close/archive a term + create/activate the next without destroying history (A4) (completed 2026-07-22)
 - [x] **Phase 13: UX Finish** - Custom error pages, phone shell-jump fix, profile reachability, login navy, global htmx errors, PWA theme (B1-B6) (completed 2026-07-22)
 - [x] **Phase 14: Correctness & Concurrency Hardening** - Booking/schedule oracle, room-preferring resolver, select_for_update, offline-replay retargeting (M3/M5/M6/H3) (completed 2026-07-22; 4/4 criteria, suite 1236 green)
-- [ ] **Phase 15: Deploy Hardening & Cutover** (was Phase 8, expanded) - Entra SSO + EC2/RDS + Tailwind build, PLUS shared cache, HTTPS/proxy config, media split, CDN vendoring, scheduler resilience, logging, retention/backups
+- [ ] **Phase 15: Deploy Hardening & Cutover** (was Phase 8, expanded) - Repository implementation complete 2026-07-22; live Entra/AWS cutover remains pending institutional credentials, DNS, and cloud access (suite 1,259 green)
 - [ ] **Phase 16: Documentation Pass** - SRS v1.3 (incl. shadcn-via-Franken), traceability restore, PROJECT.md refresh
 
 ## Phase Details
@@ -501,7 +501,15 @@ tests green, 2 expected skips.
   3. HTTPS/proxy config complete: `CSRF_TRUSTED_ORIGINS`, `SECURE_PROXY_SSL_HEADER`, secure cookies + HSTS, fail-fast placeholder `SECRET_KEY`/`DEBUG`, env-driven SSO redirect URI, media public/private split.
   4. Operational baseline: htmx + Franken JS + html5-qrcode vendored (not just Tailwind); scheduler resilience (`close_old_connections`, staleness alert, weekly-report backfill); LOGGING + error reporting; retention jobs (JobRun/session) + a written backup story incl. media; gunicorn + lock file; health endpoint.
 
-**Plans**: TBD. **Carried in:** the 03.1-05 live Entra UAT (blocked on redirect-URI registration + the sandbox-vs-MMCM-tenant question).
+**Implementation**: 5/5 repository workstreams complete. **External cutover gate remains open:** the 03.1-05 live Entra UAT, institutional redirect-URI registration, AWS provisioning/DNS/TLS, RDS restore rehearsal, and the production smoke test require institutional credentials and cloud access.
+
+Delivered directly:
+
+- Shared SQL Server cache plus durable, transaction-coupled offline replay receipts (`bb90cea`).
+- Fail-fast production settings, HTTPS/proxy/cookie/HSTS controls, env-driven Entra callback, public/private media boundary, and `/healthz/` (`e5b843c`).
+- Scheduler connection recovery, startup report backfill, retention, expired-session cleanup, and independent staleness watchdog (`e7c0cb6`, `026da7d`).
+- Gunicorn/Nginx/systemd deployment package, single-scheduler lock, structured journald logging, deploy checks, and backup/restore runbook (`8ae59fc`).
+- Same-origin, licensed, SHA-256-pinned htmx 2.0.6, Franken UI 2.1.2, and html5-qrcode 2.3.8 assets with production-manifest and scanner fallback coverage (`8cf422e`).
 
 ### Phase 16: Documentation Pass
 
@@ -545,7 +553,7 @@ pulled forward but 9 still precedes any real use.
 | 12. Term Lifecycle | 12/12 | Complete | 2026-07-22 |
 | 13. UX Finish | 3/3 | Complete | 2026-07-22 |
 | 14. Correctness & Concurrency Hardening | 4/4 | Complete | 2026-07-22 |
-| 15. Deploy Hardening & Cutover (was Phase 8, expanded) | 0/TBD | Not started | - |
+| 15. Deploy Hardening & Cutover (was Phase 8, expanded) | 5/5 code workstreams | External cutover/UAT pending | - |
 | 16. Documentation Pass | 0/TBD | Not started | - |
 
 **Totals (≤ v1.2):** 58/59 plans complete across 11 phases (06.1-07 CSV export is a
