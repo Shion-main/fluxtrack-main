@@ -4,7 +4,7 @@
 {% load static %}
 {% block title %}Scan a room · FluxTrack{% endblock %}
 {% block head %}
-<script src="https://cdn.jsdelivr.net/npm/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+<script src="{% static 'vendor/html5-qrcode/2.3.8/html5-qrcode.min.js' %}"></script>
 <script src="{% static 'checker/offline_queue.js' %}" defer></script>
 {% endblock %}
 {% block content %}
@@ -186,6 +186,11 @@
 
   function startCamera() {
     if (scanner) return;
+    if (!window.Html5Qrcode) {
+      document.getElementById("cam-status").textContent =
+        "Scanner library unavailable. Use the six-digit code instead.";
+      return;
+    }
     scanner = new Html5Qrcode("qr-reader");
     scanner.start({facingMode: "environment"}, {fps: 10, qrbox: 220},
       (text) => { scanner.stop().then(() => { scanner = null; }); postPayload(text); },

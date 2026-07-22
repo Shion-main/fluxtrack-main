@@ -1,4 +1,5 @@
 """Deployment-boundary tests for FluxTrack's production runtime."""
+import hashlib
 import json
 import os
 import subprocess
@@ -153,3 +154,45 @@ class DeploymentArtifactTests(SimpleTestCase):
         for token in ("automated backups", "point-in-time", "media",
                       "restore drill", "break-glass"):
             self.assertIn(token, runbook)
+
+
+class VendoredFrontendTests(SimpleTestCase):
+    root = Path(__file__).resolve().parent.parent
+    expected_sha256 = {
+        "static/vendor/htmx/2.0.6/htmx.min.js": (
+            "b6768eed4f3af85b73a75054701bd60e17cac718aef2b7f6b254e5e0e2045616"),
+        "static/vendor/html5-qrcode/2.3.8/html5-qrcode.min.js": (
+            "660b12437b1d747e3e68b8be0685c08cb728140110ad213f167b14b66f8b1d8e"),
+        "static/vendor/franken-ui/2.1.2/core.min.css": (
+            "9577607f8fc992f1346cae12cce05c5214f5b2ea3828a8d7f29b9bac420909fe"),
+        "static/vendor/franken-ui/2.1.2/utilities.min.css": (
+            "afbcb1eae0928cc0a75baab551885179337b5d21f89dcfc26e861ce69d2e04bb"),
+        "static/vendor/franken-ui/2.1.2/core.iife.js": (
+            "d2c3cae2e4b2b9d8116112124a8e8ef0a492efd3dd3afff13fa585050be07ba4"),
+        "static/vendor/franken-ui/2.1.2/icon.iife.js": (
+            "a91efff599704b6b27ca2d664b87b813b41804de5b5def646f0a0934200ea636"),
+    }
+
+    def test_vendored_runtime_files_match_reviewed_package_hashes(self):
+        for relative, expected in self.expected_sha256.items():
+            content = (self.root / relative).read_bytes()
+            self.assertEqual(hashlib.sha256(content).hexdigest(), expected, relative)
+
+    def test_templates_do_not_load_frontend_runtime_from_a_cdn(self):
+        for relative in (
+            "templates/base.html",
+            "templates/faculty/scan.html",
+            "templates/checker/scan.html",
+        ):
+            source = (self.root / relative).read_text(encoding="utf-8")
+            self.assertNotIn("cdn.jsdelivr.net", source, relative)
+            self.assertNotIn("src=\"https://htmx.org", source, relative)
+
+    def test_scanners_expose_manual_fallback_if_camera_library_cannot_load(self):
+        for relative in (
+            "templates/faculty/scan.html",
+            "templates/checker/scan.html",
+        ):
+            source = (self.root / relative).read_text(encoding="utf-8")
+            self.assertIn("if (!window.Html5Qrcode)", source, relative)
+            self.assertIn("Scanner library unavailable", source, relative)

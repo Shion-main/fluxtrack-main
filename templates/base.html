@@ -10,16 +10,16 @@
   <link rel="icon" type="image/png" sizes="32x32" href="/icon-32.png">
   <link rel="icon" type="image/png" sizes="192x192" href="/icon-192.png">
   <link rel="apple-touch-icon" href="/icon-192.png">
-  <!-- Franken UI (Tailwind) — CDN for dev; standalone-CLI build wired later (SRS §2.4) -->
-  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/franken-ui@2.1.2/dist/css/core.min.css"/>
-  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/franken-ui@2.1.2/dist/css/utilities.min.css"/>
+  <!-- Reviewed, pinned frontend runtime is vendored for deterministic/offline deploys. -->
+  <link rel="stylesheet" href="{% static 'vendor/franken-ui/2.1.2/core.min.css' %}"/>
+  <link rel="stylesheet" href="{% static 'vendor/franken-ui/2.1.2/utilities.min.css' %}"/>
   <!-- Design tokens: single source of truth for both families; must load AFTER
        Franken (to win the admin override) and BEFORE faculty.css (which reads it). -->
   <link rel="stylesheet" href="{% static 'css/tokens.css' %}"/>
   <link rel="stylesheet" href="{% static 'css/app.css' %}"/>
   <link rel="stylesheet" href="{% static 'faculty/faculty.css' %}"/>
-  <script src="https://cdn.jsdelivr.net/npm/franken-ui@2.1.2/dist/js/core.iife.js" defer></script>
-  <script src="https://cdn.jsdelivr.net/npm/franken-ui@2.1.2/dist/js/icon.iife.js" defer></script>
+  <script src="{% static 'vendor/franken-ui/2.1.2/core.iife.js' %}" defer></script>
+  <script src="{% static 'vendor/franken-ui/2.1.2/icon.iife.js' %}" defer></script>
   {% comment %}htmx 2 does NOT swap non-2xx responses by default, so every
   surface that renders its form partial back at status=400 for inline validation
   -- faculty modality new/withdraw, dean approve/reject, ifo assignment create --
@@ -34,7 +34,7 @@
   parsed before htmx initialises, hence in <head> above the deferred script.
   {% endcomment %}
   <meta name="htmx-config" content='{"responseHandling":[{"code":"204","swap":false},{"code":"[23]..","swap":true},{"code":"400","swap":true,"error":false},{"code":"[45]..","swap":false,"error":true}]}'>
-  <script src="https://cdn.jsdelivr.net/npm/htmx.org@2.0.6/dist/htmx.min.js" defer></script>
+  <script src="{% static 'vendor/htmx/2.0.6/htmx.min.js' %}" defer></script>
   <script>
     if ('serviceWorker' in navigator) {
       window.addEventListener('load', () => navigator.serviceWorker.register('/sw.js'));

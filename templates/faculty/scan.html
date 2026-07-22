@@ -1,9 +1,10 @@
 {% extends "base.html" %}
+{% load static %}
 {% comment %}Owns its chrome (see base.html global_header).{% endcomment %}
 {% block global_header %}{% endblock %}
 {% block title %}Check in · FluxTrack{% endblock %}
 {% block head %}
-<script src="https://cdn.jsdelivr.net/npm/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+<script src="{% static 'vendor/html5-qrcode/2.3.8/html5-qrcode.min.js' %}"></script>
 {% endblock %}
 {% block content %}
 <div class="ft-app">
@@ -104,7 +105,11 @@
   // --- Camera -------------------------------------------------------------
   function startCamera() {
     if (scanner) return;
-    if (!window.Html5Qrcode) return;
+    if (!window.Html5Qrcode) {
+      document.getElementById("cam-status").textContent =
+        "Scanner library unavailable. Use Input Room Code instead.";
+      return;
+    }
     scanner = new Html5Qrcode("qr-reader");
     scanner.start({facingMode: "environment"}, {fps: 10},
       (text) => { stopCamera(); postPayload(text); },
