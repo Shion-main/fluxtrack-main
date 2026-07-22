@@ -456,6 +456,7 @@ Plans:
 
 ### Phase 13: UX Finish
 
+**Status**: Complete (2026-07-22)
 **Goal**: The app reads as finished — no bare error pages, no shell jumps, one brand.
 **Depends on**: Nothing; can overlap Phases 10–12.
 **Requirements**: B1–B6 (audit addendum).
@@ -465,7 +466,10 @@ Plans:
   2. Floor roles never jump into a desktop-family page (navy notifications variant / correct routing).
   3. Profile reachable from every faculty screen; login uses the brand-navy token; a global htmx error listener shows failures on every surface; PWA theme_color matches the shell.
 
-**Plans**: TBD
+**Delivered directly**: Branded production error handlers; floor-role notification
+shells; faculty Profile reachability coverage; shared brand navy across login,
+manifest, and icon fallback; global accessible htmx failure feedback; responsive
+desktop/mobile browser verification.
 
 ### Phase 14: Correctness & Concurrency Hardening
 

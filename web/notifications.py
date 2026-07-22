@@ -17,6 +17,7 @@ from django.http import HttpResponseBadRequest
 from django.shortcuts import redirect, render
 from django.views.decorators.http import require_http_methods
 
+from accounts.models import Role
 from ops.models import NotificationMute
 from ops.notifications import (NotificationCategory, _mark_read, unread_count,
                                visible_qs)
@@ -26,6 +27,22 @@ from ops.notifications import (NotificationCategory, _mark_read, unread_count,
 # so they live as module constants (Convention #Constants), not SystemSetting.
 PREVIEW_LIMIT = 5
 LIST_LIMIT = 50
+
+_FLOOR_HOME_BY_ROLE = {
+    Role.FACULTY: "/faculty/home",
+    Role.CHECKER: "/checker/floor",
+    Role.GUARD: "/guard/monitor",
+}
+
+
+def _page_context(user, **context):
+    """Add role-aware chrome data to full-page notification surfaces."""
+    floor_home_url = _FLOOR_HOME_BY_ROLE.get(user.role)
+    return {
+        **context,
+        "floor_shell": floor_home_url is not None,
+        "floor_home_url": floor_home_url,
+    }
 
 
 @login_required
@@ -58,7 +75,11 @@ def dropdown(request):
 def list_page(request):
     """Full-page history over the recent visible rows, THEN mark read (D-03)."""
     rows = list(visible_qs(request.user)[:LIST_LIMIT])
-    response = render(request, "notifications/list.html", {"rows": rows})
+    response = render(
+        request,
+        "notifications/list.html",
+        _page_context(request.user, rows=rows),
+    )
     _mark_read(request.user.notifications.filter(id__in=[n.id for n in rows]))
     return response
 
@@ -75,8 +96,11 @@ def _settings_groups(user):
 @login_required
 def settings_page(request):
     """Mute settings: the three category groups + whether each is muted (NOTIF-03)."""
-    return render(request, "notifications/settings.html",
-                  {"groups": _settings_groups(request.user)})
+    return render(
+        request,
+        "notifications/settings.html",
+        _page_context(request.user, groups=_settings_groups(request.user)),
+    )
 
 
 @login_required

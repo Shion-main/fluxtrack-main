@@ -1,0 +1,84 @@
+{% load static %}<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#001c43">
+  <title>{% block title %}FluxTrack{% endblock %}</title>
+  <link rel="icon" type="image/png" sizes="32x32" href="/icon-32.png">
+  <style>
+    :root {
+      --brand-navy: #001c43; --brand-red: #ec1f28;
+      --ink: #0b1b3a; --body: #35415a; --muted: #9fb0cf;
+      --line: #e6e9f1; --panel: #f3f5fb;
+    }
+    html, body { margin: 0; min-height: 100%; }
+    .ft-error {
+      box-sizing: border-box; min-height: 100dvh; padding: 24px;
+      display: grid; grid-template-rows: auto 1fr auto; gap: 28px;
+      background: var(--brand-navy); color: #fff;
+      font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+    }
+    .ft-error *, .ft-error *::before, .ft-error *::after { box-sizing: border-box; }
+    .ft-error__brand {
+      width: fit-content; display: inline-flex; align-items: center; gap: 10px;
+      color: #fff; text-decoration: none; font-size: 1.05rem; font-weight: 750;
+    }
+    .ft-error__brand img { width: 32px; height: 32px; object-fit: contain; }
+    .ft-error__panel {
+      align-self: center; width: min(100%, 34rem); margin: 0 auto; padding: 30px;
+      background: #fff; color: var(--body); border-radius: 16px;
+      box-shadow: 0 22px 54px -28px rgba(0,0,0,.72);
+    }
+    .ft-error__code {
+      margin: 0 0 8px; color: var(--brand-red);
+      font-size: .78rem; font-weight: 750; letter-spacing: .08em;
+    }
+    .ft-error__panel h1 {
+      max-width: 20ch; margin: 0 0 12px; color: var(--ink);
+      font-size: clamp(1.7rem, 6vw, 2.35rem); line-height: 1.1;
+      letter-spacing: -.025em; text-wrap: balance;
+    }
+    .ft-error__copy { max-width: 65ch; margin: 0; font-size: .96rem; line-height: 1.6; }
+    .ft-error__actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 24px; }
+    .ft-error__primary, .ft-error__secondary {
+      min-height: 46px; padding: 0 17px; border-radius: 12px;
+      display: inline-flex; align-items: center; justify-content: center;
+      font: inherit; font-size: .9rem; font-weight: 650; text-decoration: none; cursor: pointer;
+    }
+    .ft-error__primary { background: var(--brand-navy); color: #fff; border: 1px solid var(--brand-navy); }
+    .ft-error__secondary { background: #fff; color: var(--ink); border: 1px solid var(--line); }
+    .ft-error__primary:hover { background: #002a63; }
+    .ft-error__secondary:hover { background: var(--panel); }
+    .ft-error__primary:focus-visible, .ft-error__secondary:focus-visible,
+    .ft-error__brand:focus-visible { outline: 2px solid currentColor; outline-offset: 3px; }
+    .ft-error__help {
+      max-width: 65ch; margin: 0 auto; text-align: center;
+      color: var(--muted); font-size: .8rem; line-height: 1.5;
+    }
+    @media (max-width: 480px) {
+      .ft-error { padding: 18px; gap: 20px; }
+      .ft-error__panel { padding: 24px 20px; }
+      .ft-error__actions { flex-direction: column; }
+    }
+  </style>
+</head>
+<body>
+  <main class="ft-error">
+    <a class="ft-error__brand" href="{{ orientation_href }}">
+      <img src="{% static 'brand/mmcm-crest.png' %}" alt="">
+      <span>FluxTrack</span>
+    </a>
+    <section class="ft-error__panel" aria-labelledby="error-title">
+      <p class="ft-error__code">{% block error_code %}{% endblock %}</p>
+      <h1 id="error-title">{% block error_heading %}{% endblock %}</h1>
+      <p class="ft-error__copy">{% block error_copy %}{% endblock %}</p>
+      <div class="ft-error__actions">
+        <a class="ft-error__primary" href="{{ orientation_href }}">Back to FluxTrack</a>
+        <button class="ft-error__secondary" type="button" onclick="history.back()">Go back</button>
+      </div>
+    </section>
+    <p class="ft-error__help">If this keeps happening, contact the IFO and include error {% block error_reference %}{% endblock %}.</p>
+  </main>
+</body>
+</html>

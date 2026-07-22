@@ -82,6 +82,31 @@
 
   <main id="main">{% block content %}{% endblock %}</main>
 
+  {% comment %}One failure surface for every htmx-powered action. Validation
+  responses (400) deliberately swap inline and do not reach this listener; real
+  transport/server failures stay out of target content and are announced here.{% endcomment %}
+  <div id="htmx-failure" class="system-alert" role="alert" aria-live="assertive" hidden>
+    <uk-icon icon="circle-alert" aria-hidden="true"></uk-icon>
+    <div>
+      <strong>Action not completed</strong>
+      <span>The server did not complete your request. Check your connection, then try again.</span>
+    </div>
+    <button type="button" aria-label="Dismiss error">Dismiss</button>
+  </div>
+  <script>
+    (function () {
+      var alertBox = document.getElementById('htmx-failure');
+      if (!alertBox) return;
+      function showHtmxFailure() { alertBox.hidden = false; }
+      ['htmx:responseError', 'htmx:sendError', 'htmx:timeout'].forEach(function (name) {
+        document.addEventListener(name, showHtmxFailure);
+      });
+      alertBox.querySelector('button').addEventListener('click', function () {
+        alertBox.hidden = true;
+      });
+    })();
+  </script>
+
   {% if un == "faculty_home" or un == "faculty_schedule" or un == "faculty_online" or un == "faculty_history" or un == "faculty_modality_mine" %}
   {% comment %}Bottom tab bar shows on the three primary tabs, not on the
   full-screen scan / sub-flow screens. Scan is reached from Home's check-in

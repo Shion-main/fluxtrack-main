@@ -119,12 +119,40 @@ def home(request):
     return render(request, "web/home.html", {"surfaces": SURFACES.get(request.user.role, [])})
 
 
+# --- Branded production errors ----------------------------------------------
+def _error_context(request):
+    user = getattr(request, "user", None)
+    return {
+        "orientation_href": "/" if getattr(user, "is_authenticated", False) else "/login",
+    }
+
+
+def error_403(request, exception=None):
+    return render(
+        request, "errors/403.html", _error_context(request), status=403
+    )
+
+
+def error_404(request, exception=None):
+    return render(
+        request, "errors/404.html", _error_context(request), status=404
+    )
+
+
+def error_500(request):
+    # Keep the 500 path independent of request.user: resolving the lazy user can
+    # touch the session database, which may be the component that just failed.
+    return render(
+        request, "errors/500.html", {"orientation_href": "/"}, status=500
+    )
+
+
 # --- PWA shell ---------------------------------------------------------------
 def manifest(request):
     return JsonResponse({
         "name": "FluxTrack", "short_name": "FluxTrack",
         "start_url": "/", "scope": "/", "display": "standalone", "orientation": "portrait",
-        "background_color": "#ffffff", "theme_color": "#0a0a0a",
+        "background_color": "#ffffff", "theme_color": "#001c43",
         "icons": [
             {"src": "/icon-192.png", "sizes": "192x192", "type": "image/png"},
             {"src": "/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable"},
@@ -246,7 +274,7 @@ def icon(request, size):
         pass
     # Fallback: procedural placeholder keeps the endpoint alive (navy on-brand).
     from PIL import ImageDraw
-    img = Image.new("RGB", (s, s), "#0f2554")
+    img = Image.new("RGB", (s, s), "#001c43")
     d = ImageDraw.Draw(img)
     pad = s // 4
     d.rounded_rectangle([pad, pad, s - pad, s - pad], radius=s // 12,

@@ -3,17 +3,30 @@
 shown rows read server-side (D-03, list_page view); the rows themselves are
 rendered through the shared _rows partial with Django auto-escaping (T-05-10).{% endcomment %}
 {% block title %}Notifications - FluxTrack{% endblock %}
+{% block global_header %}{% if not floor_shell %}{{ block.super }}{% endif %}{% endblock %}
 {% block content %}
-<div class="uk-container max-w-2xl pt-8 pb-16">
+{% if floor_shell %}<div class="ft-app">{% include "notifications/_floor_header.html" %}{% endif %}
+<div class="{% if floor_shell %}ft-page{% else %}uk-container max-w-2xl pt-8 pb-16{% endif %}">
+  {% if floor_shell %}
+  <div class="ft-greet ft-notif-heading ft-notif-heading--list">
+    <div class="ft-greet__hi">Notifications</div>
+    <div class="ft-greet__date">Your recent updates and alerts.</div>
+    <a href="/notifications/settings" class="ft-chip">
+      <uk-icon icon="settings"></uk-icon> Settings
+    </a>
+  </div>
+  {% else %}
   <div class="flex items-center gap-2 mb-1">
     <h1 class="uk-h2">Notifications</h1>
     <a href="/notifications/settings" class="uk-btn uk-btn-ghost uk-btn-sm ml-auto">
       <uk-icon icon="settings" class="size-4 mr-1"></uk-icon>Settings</a>
   </div>
   <p class="uk-text-muted mb-6">Your recent notifications.</p>
+  {% endif %}
 
-  <div class="uk-card uk-card-body p-0">
+  <div class="{% if floor_shell %}ft-card ft-card--neutral ft-notif-list{% else %}uk-card uk-card-body p-0{% endif %}">
     {% include "notifications/_rows.html" %}
   </div>
 </div>
+{% if floor_shell %}</div>{% endif %}
 {% endblock %}

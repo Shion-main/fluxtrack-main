@@ -6,10 +6,10 @@
 <style>
   /* ── FluxTrack login — MMCM institutional entry screen ──────────────────
      Scoped to .ft-login so the rest of the app keeps its neutral theme.
-     Brand color lives here and nowhere else (PRODUCT.md: identity at entry). */
+     Brand color is consumed from tokens.css, the product-wide source of truth. */
   .ft-login {
-    --mmcm-navy: #0f2554;
-    --mmcm-red:  #ec1f28;
+    --mmcm-navy: var(--brand-navy);
+    --mmcm-red:  var(--brand-red);
     --navy-hi:   color-mix(in oklch, var(--mmcm-navy) 90%, white);
     --navy-lo:   color-mix(in oklch, var(--mmcm-navy) 88%, black);
     --ink:       #16202e;
@@ -25,6 +25,9 @@
     grid-template-columns: 1fr;
     background: var(--surface);
     color: var(--ink);
+  }
+  .ft-login, .ft-login *, .ft-login *::before, .ft-login *::after {
+    box-sizing: border-box;
   }
   @media (min-width: 1024px) {
     .ft-login { grid-template-columns: 1.05fr 1fr; }

@@ -48,6 +48,33 @@
 .skip-link:focus { transform: translateY(0); outline: none; }
 @media (prefers-reduced-motion: reduce) { .skip-link { transition: none; } }
 
+/* --- Global htmx failure --------------------------------------------------
+   One accessible recovery message for transport and server failures. It sits
+   above both shell families and remains until dismissed so a polling request
+   cannot erase evidence of a failed write. */
+.system-alert {
+  position: fixed; z-index: 100; top: max(16px, env(safe-area-inset-top));
+  left: 50%; transform: translateX(-50%);
+  width: min(calc(100% - 32px), 30rem); padding: 12px;
+  display: flex; align-items: flex-start; gap: 10px;
+  background: var(--red-wash); color: var(--red);
+  border: 1px solid var(--red-tint); border-radius: 14px;
+}
+.system-alert[hidden] { display: none; }
+.system-alert > uk-icon, .system-alert > svg {
+  flex: none; width: 19px; height: 19px; margin-top: 2px;
+}
+.system-alert > div { flex: 1; min-width: 0; }
+.system-alert strong { display: block; font-size: .9rem; }
+.system-alert span { display: block; margin-top: 2px; font-size: .82rem; line-height: 1.45; }
+.system-alert button {
+  flex: none; min-height: 44px; padding: 0 10px;
+  border: 0; border-radius: 10px; background: transparent; color: inherit;
+  cursor: pointer; font: inherit; font-size: .82rem; font-weight: 650;
+}
+.system-alert button:hover { background: var(--red-tint); }
+.system-alert button:focus-visible { outline: 2px solid currentColor; outline-offset: 2px; }
+
 /* --- Responsive table wrapper ----------------------------------------------
    Dense admin tables scroll horizontally inside their card instead of forcing
    the whole page to overflow on narrow viewports. */

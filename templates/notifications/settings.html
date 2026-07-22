@@ -5,38 +5,52 @@ muted, D-05). POST to /notifications/mute is CSRF-protected via {% csrf_token %}
 (and the global hx-headers X-CSRFToken on <body>) and is POST-only (T-05-11). The
 #push-controls div is an inert placeholder the 05-05 push client populates.{% endcomment %}
 {% block title %}Notification settings - FluxTrack{% endblock %}
+{% block global_header %}{% if not floor_shell %}{{ block.super }}{% endif %}{% endblock %}
 {% block content %}
-<div class="uk-container max-w-2xl pt-8 pb-16">
+{% if floor_shell %}<div class="ft-app">{% include "notifications/_floor_header.html" %}{% endif %}
+<div class="{% if floor_shell %}ft-page{% else %}uk-container max-w-2xl pt-8 pb-16{% endif %}">
+  {% if floor_shell %}
+  <div class="ft-greet ft-notif-heading ft-notif-heading--settings">
+    <a href="/notifications" class="ft-appbar__back" aria-label="Back to notifications">
+      <uk-icon icon="arrow-left"></uk-icon>
+    </a>
+    <div>
+      <div class="ft-greet__hi">Notification settings</div>
+      <div class="ft-greet__date">Choose which notification groups to mute.</div>
+    </div>
+  </div>
+  {% else %}
   <div class="flex items-center gap-2 mb-1">
     <a href="/notifications" class="uk-btn uk-btn-ghost uk-btn-icon" aria-label="Back">
       <uk-icon icon="arrow-left" class="size-5"></uk-icon></a>
     <h1 class="uk-h2">Notification settings</h1>
   </div>
   <p class="uk-text-muted mb-6">Choose which notification groups to mute.</p>
+  {% endif %}
 
-  <div id="mute-controls" class="uk-card uk-card-body">
+  <div id="mute-controls" class="{% if floor_shell %}ft-card ft-card--neutral ft-settings{% else %}uk-card uk-card-body{% endif %}">
     {% for g in groups %}
     <form method="post" action="/notifications/mute"
           hx-post="/notifications/mute" hx-target="#mute-controls"
           hx-select="#mute-controls" hx-swap="outerHTML"
-          class="flex items-center justify-between py-3 border-b border-border last:border-0">
+          class="{% if floor_shell %}ft-setting-row{% else %}flex items-center justify-between py-3 border-b border-border last:border-0{% endif %}">
       {% csrf_token %}
       <input type="hidden" name="category" value="{{ g.value }}">
       <div>
-        <div class="font-medium">{{ g.label }}</div>
-        <div class="uk-text-muted uk-text-small">{% if g.muted %}Muted{% else %}On{% endif %}</div>
+        <div class="{% if floor_shell %}ft-setting-row__title{% else %}font-medium{% endif %}">{{ g.label }}</div>
+        <div class="{% if floor_shell %}ft-help{% else %}uk-text-muted uk-text-small{% endif %}">{% if g.muted %}Muted{% else %}On{% endif %}</div>
       </div>
       <button type="submit"
-              class="uk-btn uk-btn-sm {% if g.muted %}uk-btn-default{% else %}uk-btn-primary{% endif %}">
+              class="{% if floor_shell %}ft-setting-action{% if not g.muted %} is-on{% endif %}{% else %}uk-btn uk-btn-sm {% if g.muted %}uk-btn-default{% else %}uk-btn-primary{% endif %}{% endif %}">
         {% if g.muted %}Unmute{% else %}Mute{% endif %}
       </button>
     </form>
     {% endfor %}
   </div>
 
-  <div class="uk-card uk-card-body mt-4">
-    <div class="font-medium mb-1">Push notifications</div>
-    <p class="uk-text-muted uk-text-small mb-3">Enable browser push for key alerts.</p>
+  <div class="{% if floor_shell %}ft-card ft-card--neutral ft-push-settings{% else %}uk-card uk-card-body mt-4{% endif %}">
+    <div class="{% if floor_shell %}ft-setting-row__title{% else %}font-medium mb-1{% endif %}">Push notifications</div>
+    <p class="{% if floor_shell %}ft-help{% else %}uk-text-muted uk-text-small mb-3{% endif %}">Enable browser push for key alerts.</p>
     {% comment %}push.js (05-05) populates this with the state-driven control:
     Enable / Turn off / a passive "blocked" note. The VAPID key + CSRF token are
     read from these data attributes so the settings control works on its own.{% endcomment %}
@@ -44,4 +58,5 @@ muted, D-05). POST to /notifications/mute is CSRF-protected via {% csrf_token %}
          data-vapid-key="{{ vapid_public_key }}" data-csrftoken="{{ csrf_token }}"></div>
   </div>
 </div>
+{% if floor_shell %}</div>{% endif %}
 {% endblock %}
