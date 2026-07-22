@@ -3,7 +3,9 @@ import json
 import os
 import subprocess
 import sys
+from pathlib import Path
 
+from django.conf import settings
 from django.test import SimpleTestCase
 
 
@@ -104,3 +106,50 @@ class HealthEndpointTests(SimpleTestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json(), {"status": "ok"})
         self.assertEqual(response.headers["Cache-Control"], "max-age=0, no-cache, no-store, must-revalidate, private")
+
+
+class DeploymentArtifactTests(SimpleTestCase):
+    root = Path(__file__).resolve().parent.parent
+
+    def _read(self, relative):
+        return (self.root / relative).read_text(encoding="utf-8")
+
+    def test_gunicorn_and_systemd_define_multi_worker_single_scheduler_runtime(self):
+        self.assertIn("gunicorn", self._read("requirements.txt").lower())
+        gunicorn = self._read("deploy/gunicorn.conf.py")
+        web = self._read("deploy/systemd/fluxtrack-web.service")
+        scheduler = self._read("deploy/systemd/fluxtrack-scheduler.service")
+        self.assertIn("workers", gunicorn)
+        self.assertIn("config.wsgi", web)
+        self.assertIn("gunicorn", web)
+        self.assertIn("/usr/bin/flock", scheduler)
+        self.assertIn("scheduler.lock", scheduler)
+        self.assertIn("manage.py runscheduler", scheduler)
+
+    def test_watchdog_and_deploy_script_cover_cutover_checks(self):
+        watchdog = self._read(
+            "deploy/systemd/fluxtrack-scheduler-watch.service")
+        timer = self._read("deploy/systemd/fluxtrack-scheduler-watch.timer")
+        script = self._read("deploy/deploy.sh")
+        self.assertIn("manage.py checkscheduler", watchdog)
+        self.assertIn("OnUnitActiveSec=5min", timer)
+        for token in ("check --deploy", "migrate", "collectstatic", "nginx -t"):
+            self.assertIn(token, script)
+
+    def test_nginx_terminates_tls_and_exposes_only_public_profile_media(self):
+        nginx = self._read("deploy/nginx/fluxtrack.conf")
+        for token in ("listen 443 ssl", "X-Forwarded-Proto", "proxy_pass",
+                      "location /media/profile_photos/"):
+            self.assertIn(token, nginx)
+        self.assertNotIn("location /media/ {", nginx)
+
+    def test_production_logging_emits_request_errors_to_process_stderr(self):
+        request_logger = settings.LOGGING["loggers"]["django.request"]
+        self.assertIn("console", request_logger["handlers"])
+        self.assertEqual(request_logger["level"], "ERROR")
+
+    def test_runbook_has_backup_restore_and_media_recovery_procedures(self):
+        runbook = self._read("deploy/README.md").lower()
+        for token in ("automated backups", "point-in-time", "media",
+                      "restore drill", "break-glass"):
+            self.assertIn(token, runbook)

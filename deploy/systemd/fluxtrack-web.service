@@ -1,0 +1,25 @@
+[Unit]
+Description=FluxTrack Gunicorn web application
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=notify
+User=fluxtrack
+Group=www-data
+WorkingDirectory=/srv/fluxtrack/current
+EnvironmentFile=/etc/fluxtrack/fluxtrack.env
+ExecStart=/srv/fluxtrack/venv/bin/gunicorn --config deploy/gunicorn.conf.py config.wsgi
+ExecReload=/bin/kill -s HUP $MAINPID
+KillSignal=SIGQUIT
+TimeoutStopSec=45
+Restart=on-failure
+RestartSec=5
+PrivateTmp=true
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/srv/fluxtrack/shared/media
+
+[Install]
+WantedBy=multi-user.target

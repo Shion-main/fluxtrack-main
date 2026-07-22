@@ -293,6 +293,42 @@ FLUXTRACK_POLICY = {
     "push_outbox_interval_seconds": 15,  # D-09/NOTIF-02: scheduler cadence draining the push outbox (policy-driven, never hardcoded)
 }
 
+# Console output is captured by systemd/journald in production. Request errors
+# retain logger, process, and timestamp context without writing append-forever
+# files on the EC2 volume.
+LOGGING = {
+    "version": 1,
+    "disable_existing_loggers": False,
+    "formatters": {
+        "verbose": {
+            "format": "{asctime} {levelname} {name} pid={process:d} {message}",
+            "style": "{",
+        },
+    },
+    "handlers": {
+        "console": {
+            "class": "logging.StreamHandler",
+            "formatter": "verbose",
+        },
+    },
+    "root": {
+        "handlers": ["console"],
+        "level": env("LOG_LEVEL", "INFO"),
+    },
+    "loggers": {
+        "django.request": {
+            "handlers": ["console"],
+            "level": "ERROR",
+            "propagate": False,
+        },
+        "apscheduler": {
+            "handlers": ["console"],
+            "level": env("SCHEDULER_LOG_LEVEL", "INFO"),
+            "propagate": False,
+        },
+    },
+}
+
 
 def _validate_production_settings():
     """Refuse to boot a production process with an unsafe deployment boundary."""

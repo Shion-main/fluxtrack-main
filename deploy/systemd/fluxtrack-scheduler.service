@@ -1,0 +1,24 @@
+[Unit]
+Description=FluxTrack single APScheduler process
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=fluxtrack
+Group=www-data
+WorkingDirectory=/srv/fluxtrack/current
+EnvironmentFile=/etc/fluxtrack/fluxtrack.env
+RuntimeDirectory=fluxtrack
+RuntimeDirectoryMode=0750
+ExecStart=/usr/bin/flock --nonblock /run/fluxtrack/scheduler.lock /srv/fluxtrack/venv/bin/python manage.py runscheduler
+Restart=on-failure
+RestartSec=10
+PrivateTmp=true
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/srv/fluxtrack/shared/media /run/fluxtrack
+
+[Install]
+WantedBy=multi-user.target

@@ -5,6 +5,7 @@ mssql-django==1.7.3          # pulls pyodbc; needs ODBC Driver 18 installed syst
 djangorestframework>=3.15
 python-dotenv>=1.0
 whitenoise>=6.6              # static file serving on EC2
+gunicorn>=22,<24             # production WSGI server behind Nginx
 
 # Media / reports
 qrcode[pil]>=7.4            # room QR posters (IFO-01)

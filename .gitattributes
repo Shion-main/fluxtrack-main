@@ -1,0 +1,4 @@
+# Linux deployment entrypoints must not acquire Windows CRLF line endings.
+*.sh text eol=lf
+deploy/systemd/* text eol=lf
+deploy/nginx/* text eol=lf

@@ -1,0 +1,12 @@
+[Unit]
+Description=Run the FluxTrack scheduler heartbeat watchdog
+
+[Timer]
+OnBootSec=10min
+OnUnitActiveSec=5min
+AccuracySec=30s
+Persistent=true
+Unit=fluxtrack-scheduler-watch.service
+
+[Install]
+WantedBy=timers.target
