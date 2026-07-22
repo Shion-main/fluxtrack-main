@@ -24,7 +24,7 @@ User = get_user_model()
 def _term():
     return AcademicTerm.objects.create(
         name="IFO9 Term", start_date=date(2026, 1, 1),
-        end_date=date(2026, 12, 31), is_active=True)
+        end_date=date(2026, 12, 31), status=AcademicTerm.Status.ACTIVE)
 
 
 def _session(term, faculty, on_date, *, status=SessionStatus.SCHEDULED, seq=1,

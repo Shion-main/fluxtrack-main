@@ -6,7 +6,8 @@ JOB-02c — `release_room()` stamps `Session.room_released_at` and writes the
 TWO legitimate callers, and only two:
 
   1. MOD-03 (Phase 4) — an approved ->Online modality shift frees the room the
-     class no longer needs (`scheduling/services.py`, `materialize_sessions`).
+     class no longer needs (`scheduling/services.py`,
+     `scheduling/materialization.py`).
   2. IFO-08 (Phase 7) — an IFO admin manually releases a room a session is
      still holding, from the console (`web/ifo.py session_release`). This is
      the human counterpart of (1): a room the system cannot know is free

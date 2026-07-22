@@ -85,7 +85,8 @@ class HrPaginationTests(TestCase):
         today = timezone.localdate()
         self.term = AcademicTerm.objects.create(
             name="T", start_date=today - timedelta(days=60),
-            end_date=today + timedelta(days=60), is_active=True)
+            end_date=today + timedelta(days=60),
+            status=AcademicTerm.Status.ACTIVE)
         self.dept = Department.objects.create(name="Computing", code="CCS")
         building = Building.objects.create(name="Academic", code="ACAD")
         floor = Floor.objects.create(building=building, number=1)

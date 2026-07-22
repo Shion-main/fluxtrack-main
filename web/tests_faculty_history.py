@@ -38,7 +38,8 @@ def _term(name="FAC11 Term", active=True):
     return AcademicTerm.objects.get_or_create(
         name=name, defaults={"start_date": date(2026, 1, 1),
                              "end_date": date(2026, 12, 31),
-                             "is_active": active})[0]
+                             "status": (AcademicTerm.Status.ACTIVE if active
+                                        else AcademicTerm.Status.ARCHIVED)})[0]
 
 
 _SEQ = {"n": 0}

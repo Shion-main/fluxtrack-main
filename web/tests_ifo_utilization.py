@@ -391,11 +391,13 @@ class UtilizationNavTests(UtilizationPageTestCase):
             {"from": RUTIL_WEEK_START.isoformat(),
              "to": RUTIL_WEEK_END.isoformat()},
         ).content.decode()
-        # A literal & in template text, matching the scorecard link two rows
-        # below it -- the local convention, not an accident.
+        # Phase 12 carries the authoritative term and as-of cutoff through every
+        # reporting drill-down as well as the visible date range.
         self.assertIn(
-            f"/ifo/utilization?from={RUTIL_WEEK_START.isoformat()}"
-            f"&to={RUTIL_WEEK_END.isoformat()}", dash)
+            f"/ifo/utilization?term={self.fx.term.pk}&amp;"
+            f"from={RUTIL_WEEK_START.isoformat()}&amp;"
+            f"to={RUTIL_WEEK_END.isoformat()}&amp;"
+            f"as_of={RUTIL_WEEK_END.isoformat()}", dash)
 
     def test_the_range_is_applied_to_every_section_not_only_the_first(self):
         resp = self._get(**{
@@ -572,7 +574,8 @@ class UtilizationCsvTests(UtilizationCsvTestCase):
         resp = self._csv()
         self.assertEqual(
             resp["Content-Disposition"],
-            f'attachment; filename="utilization-{RUTIL_WEEK_START}.csv"')
+            f'attachment; filename="utilization-term-{self.fx.term.pk}-'
+            f'{RUTIL_WEEK_START}.csv"')
 
     def test_a_narrower_range_is_honoured_by_the_export(self):
         wide = len(self._rows(self._csv())) - 1

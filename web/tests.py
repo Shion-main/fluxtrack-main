@@ -31,7 +31,7 @@ class ScanNotifyTests(TestCase):
         User = get_user_model()
         self.term = AcademicTerm.objects.create(
             name="T", start_date=date(2026, 1, 1),
-            end_date=date(2026, 12, 31), is_active=True)
+            end_date=date(2026, 12, 31), status=AcademicTerm.Status.ACTIVE)
         self.bldg = Building.objects.create(name="R", code="R")
         self.floor = Floor.objects.create(building=self.bldg, number=3)
         self.faculty = User.objects.create(username="fac_scan", role=Role.FACULTY)
@@ -634,7 +634,7 @@ class GuardSurfaceTests(TestCase):
         User = get_user_model()
         self.term = AcademicTerm.objects.create(
             name="GT", start_date=date(2026, 1, 1),
-            end_date=date(2026, 12, 31), is_active=True)
+            end_date=date(2026, 12, 31), status=AcademicTerm.Status.ACTIVE)
         self.bldg = Building.objects.create(name="G", code="G")
         self.floor1 = Floor.objects.create(building=self.bldg, number=1)
         self.floor2 = Floor.objects.create(building=self.bldg, number=2)
@@ -660,7 +660,7 @@ class GuardSurfaceTests(TestCase):
                                          AssignmentType, DutyRole)
         a = Assignment.objects.create(
             user=self.guard, role=DutyRole.GUARD, type=AssignmentType.STANDING,
-            scope=AssignmentScope.FLOOR, status="active")
+            scope=AssignmentScope.FLOOR, term=self.term, status="active")
         a.floors.set(floors)
         return a
 
@@ -719,6 +719,9 @@ class GuardReadOnlyTests(TestCase):
 
     def setUp(self):
         User = get_user_model()
+        self.term = AcademicTerm.objects.create(
+            name="RO Term", start_date=date(2026, 1, 1),
+            end_date=date(2026, 12, 31), status=AcademicTerm.Status.ACTIVE)
         self.bldg = Building.objects.create(name="RO", code="RO")
         self.floor = Floor.objects.create(building=self.bldg, number=1)
         self.room = Room.objects.create(floor=self.floor, code="RO101",
@@ -732,7 +735,7 @@ class GuardReadOnlyTests(TestCase):
                                          AssignmentType, DutyRole)
         a = Assignment.objects.create(
             user=self.guard, role=DutyRole.GUARD, type=AssignmentType.STANDING,
-            scope=AssignmentScope.FLOOR, status="active")
+            scope=AssignmentScope.FLOOR, term=self.term, status="active")
         a.floors.set([self.floor])
 
     def test_post_is_refused_on_every_guard_url(self):
@@ -771,7 +774,7 @@ class GuardRoomScheduleTests(TestCase):
         User = get_user_model()
         self.term = AcademicTerm.objects.create(
             name="RT", start_date=date(2026, 1, 1),
-            end_date=date(2026, 12, 31), is_active=True)
+            end_date=date(2026, 12, 31), status=AcademicTerm.Status.ACTIVE)
         self.bldg = Building.objects.create(name="RM", code="RM")
         self.floor1 = Floor.objects.create(building=self.bldg, number=1)
         self.floor2 = Floor.objects.create(building=self.bldg, number=2)
@@ -816,7 +819,7 @@ class GuardRoomScheduleTests(TestCase):
         a = Assignment.objects.create(
             user=self.guard, role=DutyRole.GUARD,
             type=kwargs.pop("type", AssignmentType.STANDING),
-            scope=AssignmentScope.FLOOR, status="active", **kwargs)
+            scope=AssignmentScope.FLOOR, term=self.term, status="active", **kwargs)
         a.floors.set(floors)
         return a
 

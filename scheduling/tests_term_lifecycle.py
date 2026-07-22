@@ -162,13 +162,18 @@ def _aware(d, t):
 def _room(prefix):
     building = Building.objects.create(name=f"{prefix} Hall", code=f"{prefix}-BLD")
     floor = Floor.objects.create(building=building, number=1)
-    manual_prefix = "".join(ch for ch in prefix.upper() if ch.isalnum())[:3] or "TLC"
+    token = "".join(ch for ch in prefix.upper() if ch.isalnum()) or "TLC"
+    # MSSQL enforces the six-character manual-code key case-insensitively. Keep
+    # both ends of the fixture prefix so related names such as ``cmd``/``cmdr``
+    # and ``frzmrg``/``frzmrs`` remain distinct instead of all collapsing to
+    # CMD001/FRZ001.
+    manual_code = (token[:3] + token[-3:]).ljust(6, "0")[:6]
     return Room.objects.create(
         floor=floor,
         code=f"{prefix}-101",
         capacity=40,
         qr_token=f"{prefix}-qr",
-        manual_code=f"{manual_prefix}001"[:6],
+        manual_code=manual_code,
     )
 
 

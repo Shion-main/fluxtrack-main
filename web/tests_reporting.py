@@ -147,7 +147,7 @@ class FilterValidationTests(_IfoBase):
             reverse("ifo_dashboard"),
             {"from": "not-a-date", "to": "also-bad"})
         self.assertEqual(resp.status_code, 200)
-        self.assertContains(resp, "current week")
+        self.assertContains(resp, "safe default was used")
 
     def test_reversed_range_falls_back_with_note(self):
         resp = self.client.get(
@@ -155,7 +155,7 @@ class FilterValidationTests(_IfoBase):
             {"from": self.fx.sun.isoformat(),
              "to": self.fx.week_start.isoformat()})
         self.assertEqual(resp.status_code, 200)
-        self.assertContains(resp, "current week")
+        self.assertContains(resp, "default range")
 
 
 @override_settings(MEDIA_ROOT=_TMP_MEDIA)

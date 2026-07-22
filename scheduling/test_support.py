@@ -83,10 +83,15 @@ def make_shift_fixture(prefix="msf"):
         qr_token=f"{prefix}-qr-b", manual_code=f"{prefix[:2]}B002"[:6],
     )
 
-    term = AcademicTerm.objects.create(
-        name=f"{prefix} Term", start_date=date(2026, 1, 1),
-        end_date=date(2026, 12, 31), status=AcademicTerm.Status.ACTIVE,
-    )
+    # Phase 12 enforces one authoritative ACTIVE term. A test may compose two
+    # independently namespaced fixture graphs (for example, cross-department
+    # authorization), so reuse that term instead of creating another.
+    term = AcademicTerm.objects.filter(status=AcademicTerm.Status.ACTIVE).first()
+    if term is None:
+        term = AcademicTerm.objects.create(
+            name=f"{prefix} Term", start_date=date(2026, 1, 1),
+            end_date=date(2026, 12, 31), status=AcademicTerm.Status.ACTIVE,
+        )
 
     # F2F schedule in room A: a Monday 08:00-09:30 slot with one in-window session.
     f2f_start = time(8, 0)

@@ -78,13 +78,6 @@ class Migration(migrations.Migration):
             name="weeklyreport",
             unique_together=set(),
         ),
-        migrations.AddConstraint(
-            model_name="weeklyreport",
-            constraint=models.UniqueConstraint(
-                fields=("term", "week_start", "department"),
-                name="uniq_weekly_report_term_week_department",
-            ),
-        ),
         migrations.AlterField(
             model_name="weeklyreport",
             name="term",
@@ -92,6 +85,15 @@ class Migration(migrations.Migration):
                 on_delete=django.db.models.deletion.PROTECT,
                 related_name="weekly_reports",
                 to="scheduling.academicterm",
+            ),
+        ),
+        # SQL Server cannot ALTER a column while a unique constraint depends on
+        # it. Make the backfilled FK required first, then add its final identity.
+        migrations.AddConstraint(
+            model_name="weeklyreport",
+            constraint=models.UniqueConstraint(
+                fields=("term", "week_start", "department"),
+                name="uniq_weekly_report_term_week_department",
             ),
         ),
     ]

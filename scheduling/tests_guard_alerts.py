@@ -102,7 +102,7 @@ class GuardAlertBase(TestCase):
         a = Assignment.objects.create(
             user=guard, role=DutyRole.GUARD,
             type=AssignmentType.STANDING if standing else AssignmentType.SHIFT,
-            scope=AssignmentScope.FLOOR, status="active",
+            scope=AssignmentScope.FLOOR, term=self.schedule.term, status="active",
             date=on_date, start_time=start, end_time=end)
         a.floors.set(floors)
         return a

@@ -41,7 +41,7 @@ def _term():
     return AcademicTerm.objects.get_or_create(
         name="FAC08 Term", defaults={"start_date": date(2026, 1, 1),
                                      "end_date": date(2026, 12, 31),
-                                     "is_active": True})[0]
+                                     "status": AcademicTerm.Status.ACTIVE})[0]
 
 
 def _room(code, seq):

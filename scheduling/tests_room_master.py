@@ -3,7 +3,7 @@
 * ``load_room_master`` — materializes the 114 named master rooms with real
   capacities (D3), keying the tab-skip rule SOLELY on ``classify_room`` so only
   the two summary tabs are excluded.
-* ``reset_term`` — a reversible, ``--yes``-guarded clean-load precondition (D10).
+* ``reset_term`` — a retired destructive command that now fails loudly.
 
 The DB-backed tests use MSSQL LocalDB (the project's only DB). The
 ``LoadRoomMasterTests`` are ``skipUnless`` the gitignored room-master ``.xlsx``
@@ -18,13 +18,13 @@ from datetime import time, timedelta
 
 from django.contrib.auth import get_user_model
 from django.core.management import call_command
+from django.core.management.base import CommandError
 from django.test import SimpleTestCase, TransactionTestCase
 from django.utils import timezone
 
 from accounts.models import Role
 from campus.models import Building, Floor, Room
-from scheduling.models import (AcademicTerm, ModalityShiftItem,
-                               ModalityShiftRequest, Schedule, Session)
+from scheduling.models import AcademicTerm, Schedule, Session
 
 User = get_user_model()
 
@@ -113,18 +113,17 @@ class LoadRoomMasterTests(TransactionTestCase):
         self.assertIn("Per building", out)
 
 # ---------------------------------------------------------------------------
-# DB-backed: reset_term reversible clean-load guard (D10).
+# DB-backed: reset_term is retired by the Phase 12 lifecycle.
 # ---------------------------------------------------------------------------
 class ResetTermTests(TransactionTestCase):
-    """reset_term clears a term's Schedule/Session behind a --yes guard while
-    preserving reusable User/Room/Building rows."""
+    """The legacy destructive reset cannot erase official term history."""
 
     def _make_term_with_schedule(self, term_name="Reset Test Term"):
         term = AcademicTerm.objects.create(
             name=term_name,
             start_date=timezone.now().date() - timedelta(days=7),
             end_date=timezone.now().date() + timedelta(days=90),
-            is_active=True)
+            status=AcademicTerm.Status.ACTIVE)
         faculty = User.objects.create(username="reset-fac", role=Role.FACULTY)
         bldg = Building.objects.create(code="ACAD", name="Academic Building")
         floor = Floor.objects.create(building=bldg, number=4)
@@ -142,59 +141,17 @@ class ResetTermTests(TransactionTestCase):
             scheduled_end=start + timedelta(minutes=90))
         return term, faculty, room, sched
 
-    def _run(self, **kwargs):
-        out = StringIO()
-        call_command("reset_term", stdout=out, **kwargs)
-        return out.getvalue()
-
-    def test_yes_clears_schedule_and_session_keeps_users_rooms(self):
+    def test_reset_term_is_retired_and_preserves_rows(self):
         term, faculty, room, sched = self._make_term_with_schedule()
         users_before = User.objects.count()
         rooms_before = Room.objects.count()
         buildings_before = Building.objects.count()
 
-        self._run(term_name=term.name, yes=True)
+        with self.assertRaisesMessage(CommandError, "reset_term is retired"):
+            call_command("reset_term", yes=True)
 
-        self.assertEqual(Schedule.objects.filter(term=term).count(), 0)
-        self.assertEqual(Session.objects.filter(schedule__term=term).count(), 0)
-        # Reusable rows are untouched.
+        self.assertEqual(Schedule.objects.filter(term=term).count(), 1)
+        self.assertEqual(Session.objects.filter(schedule__term=term).count(), 1)
         self.assertEqual(User.objects.count(), users_before)
         self.assertEqual(Room.objects.count(), rooms_before)
         self.assertEqual(Building.objects.count(), buildings_before)
-
-    def test_without_yes_deletes_nothing_and_previews(self):
-        term, _f, _r, _s = self._make_term_with_schedule()
-        out = self._run(term_name=term.name)  # no yes
-        # Nothing deleted.
-        self.assertEqual(Schedule.objects.filter(term=term).count(), 1)
-        self.assertEqual(Session.objects.filter(schedule__term=term).count(), 1)
-        # Preview reports the counts and the guard hint.
-        self.assertIn("1", out)
-        self.assertIn("--yes", out)
-
-    def test_empty_term_reports_zero_and_exits(self):
-        term = AcademicTerm.objects.create(
-            name="Empty Term",
-            start_date=timezone.now().date(),
-            end_date=timezone.now().date() + timedelta(days=1))
-        out = self._run(term_name=term.name, yes=True)
-        self.assertEqual(Schedule.objects.filter(term=term).count(), 0)
-        self.assertIn("0", out)
-
-    def test_missing_term_does_not_raise(self):
-        out = self._run(term_name="No Such Term", yes=True)
-        self.assertIn("No Such Term", out)
-
-    def test_schedule_protected_by_modality_item_is_reported_not_crashed(self):
-        term, faculty, room, sched = self._make_term_with_schedule()
-        req = ModalityShiftRequest.objects.create(
-            requester=faculty, target_modality="online",
-            window_start=timezone.now().date(),
-            window_end=timezone.now().date())
-        ModalityShiftItem.objects.create(request=req, schedule=sched)
-
-        # Must not raise ProtectedError; the blocked schedule is reported and
-        # skipped, so its row survives.
-        out = self._run(term_name=term.name, yes=True)
-        self.assertTrue(Schedule.objects.filter(pk=sched.pk).exists())
-        self.assertIn(str(sched.pk), out)

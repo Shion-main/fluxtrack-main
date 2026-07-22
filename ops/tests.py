@@ -219,7 +219,7 @@ class ReleaseRoomCallerGuardTests(SimpleTestCase):
     ALLOWED_CALLERS = {
         # MOD-03 (Phase 4): approved ->Online shift frees the room.
         "scheduling/services.py",
-        "scheduling/management/commands/materialize_sessions.py",
+        "scheduling/materialization.py",
         # IFO-08 (Phase 7): IFO manual release from the console.
         "web/ifo.py",
     }

@@ -46,7 +46,8 @@ class _BoardBase(TestCase):
         self.today = timezone.localdate()
         self.term = AcademicTerm.objects.create(
             name="T", start_date=self.today - timedelta(days=30),
-            end_date=self.today + timedelta(days=30), is_active=True)
+            end_date=self.today + timedelta(days=30),
+            status=AcademicTerm.Status.ACTIVE)
         self.building = Building.objects.create(name="Academic", code="ACAD")
         self.floor = Floor.objects.create(building=self.building, number=3)
         self.faculty = User.objects.create(
@@ -345,7 +346,7 @@ class RoomTimetableTests(_BoardBase):
         self.assertEqual(sum(1 for c in tt["rows"][0]["cells"] if c is None), 6)
 
     def test_no_active_term_yields_no_timetable(self):
-        AcademicTerm.objects.update(is_active=False)
+        AcademicTerm.objects.update(status=AcademicTerm.Status.ARCHIVED)
         self.assertIsNone(_room_timetable(self._room(), None))
 
     def test_page_renders_the_grid_and_a_print_masthead(self):

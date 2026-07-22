@@ -92,11 +92,16 @@ class WeeklyReportTermBackfillTests(_OpsTermMigrationTestCase):
         )
         legacy = self._create_report(date(2026, 7, 13), department=dept)
 
-        with self.assertRaisesMessage(
-            RuntimeError,
-            f"WeeklyReport {legacy.pk} week 2026-07-13 has 2 candidate terms",
-        ):
-            self._migrate_forward()
+        try:
+            with self.assertRaisesMessage(
+                RuntimeError,
+                f"WeeklyReport {legacy.pk} week 2026-07-13 has 2 candidate terms",
+            ):
+                self._migrate_forward()
+        finally:
+            # The fail-loud row must not make tearDown's return-to-leaf retry
+            # the same intentionally invalid migration fixture.
+            type(legacy).objects.filter(pk=legacy.pk).delete()
 
     def test_no_candidate_term_aborts_without_active_fallback(self):
         dept = self._create_department()
@@ -106,11 +111,16 @@ class WeeklyReportTermBackfillTests(_OpsTermMigrationTestCase):
         )
         legacy = self._create_report(date(2026, 7, 6), department=dept)
 
-        with self.assertRaisesMessage(
-            RuntimeError,
-            f"WeeklyReport {legacy.pk} week 2026-07-06 has 0 candidate terms",
-        ):
-            self._migrate_forward()
+        try:
+            with self.assertRaisesMessage(
+                RuntimeError,
+                f"WeeklyReport {legacy.pk} week 2026-07-06 has 0 candidate terms",
+            ):
+                self._migrate_forward()
+        finally:
+            # See the overlapping-candidate case above: cleanup is part of the
+            # migration-test harness, not production fallback behavior.
+            type(legacy).objects.filter(pk=legacy.pk).delete()
 
     def test_same_week_department_can_coexist_for_different_terms(self):
         dept = self._create_department()

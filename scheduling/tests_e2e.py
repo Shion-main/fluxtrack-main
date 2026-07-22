@@ -51,7 +51,7 @@ TERM_BUILDINGS = {"ACAD", "ADMIN", "GYM", "ONLINE", "UNASSIGNED"}
 
 def _active_term():
     from scheduling.models import AcademicTerm
-    return AcademicTerm.objects.filter(is_active=True).first()
+    return AcademicTerm.objects.filter(status=AcademicTerm.Status.ACTIVE).first()
 
 
 def _term_is_loaded():

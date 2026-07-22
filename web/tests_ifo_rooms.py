@@ -52,7 +52,8 @@ class _RoomCrudBase(TestCase):
         self.other_floor = Floor.objects.create(building=self.building, number=4)
         self.term = AcademicTerm.objects.create(
             name="T1", start_date=self.today - timedelta(days=30),
-            end_date=self.today + timedelta(days=30), is_active=True)
+            end_date=self.today + timedelta(days=30),
+            status=AcademicTerm.Status.ACTIVE)
         self.ifo = User.objects.create(
             username="ifo_rooms", email="ifo_rooms@mcm.edu.ph",
             role=Role.IFO_ADMIN, is_active=True)

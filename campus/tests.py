@@ -134,7 +134,7 @@ class RoomDeleteBlockerTests(TestCase):
         from scheduling.models import AcademicTerm
         return AcademicTerm.objects.create(
             name="Blocker Term", start_date=date(2026, 1, 1),
-            end_date=date(2026, 12, 31), is_active=True)
+            end_date=date(2026, 12, 31), status=AcademicTerm.Status.ACTIVE)
 
     def _schedule(self, room, faculty=None, course="BLK101"):
         from datetime import time

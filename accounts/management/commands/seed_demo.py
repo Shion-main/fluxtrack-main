@@ -51,7 +51,7 @@ class Command(BaseCommand):
         term, _ = AcademicTerm.objects.get_or_create(name="AY 2026 Term 1", defaults={
             "start_date": timezone.now().date() - timedelta(days=30),
             "end_date": timezone.now().date() + timedelta(days=90),
-            "is_active": True,
+            "status": AcademicTerm.Status.ACTIVE,
         })
 
         bldg, _ = Building.objects.get_or_create(code="IT", defaults={"name": "IT Building"})

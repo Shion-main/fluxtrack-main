@@ -40,7 +40,9 @@ class AcademicTerm(models.Model):
             ),
             models.UniqueConstraint(
                 fields=["status"],
-                condition=models.Q(status=Status.ACTIVE),
+                # Model.Meta is a separate class body and cannot resolve the
+                # enclosing model's nested Status enum during model creation.
+                condition=models.Q(status="active"),
                 name="uniq_active_academic_term",
             ),
         ]
