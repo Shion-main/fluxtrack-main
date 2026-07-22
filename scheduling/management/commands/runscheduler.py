@@ -59,8 +59,8 @@ def _job_sweep():
     `last_alerted_at` column, no new policy knob. Emitting inside either sweep
     loop instead would be one push per event, the spam D-06 forbids.
 
-    Deliberately NOT a fifth scheduler job: `SchedulerWiringTests` asserts the
-    four-job count and `NoImplicitSchedulerTests` the build-only-in-build_scheduler
+    Deliberately NOT a separate scheduler job: `SchedulerWiringTests` asserts the
+    job set and `NoImplicitSchedulerTests` the build-only-in-build_scheduler
     rule, and the coalescing belongs inside the sweep it summarizes. Delivery is
     already handled -- `send_push_outbox` runs in the separate `push_outbox` job,
     never in a web worker, so the whole GRD-04 path stays out of any request.
@@ -84,8 +84,7 @@ def _job_weekly_report():
     UTC boundary (Pitfall 1) -- and delegates to the shared ``generate_week_reports``
     service the on-demand command also uses, so auto-weekly and on-demand can never
     diverge. Returns the count of reports generated so JobRun.rows_affected is
-    meaningful. This is a FILLED stub body: the job set (4 jobs) is unchanged
-    (ENV-04 / SchedulerWiringTests).
+    meaningful. The registered job set is pinned by SchedulerWiringTests.
     """
     term = get_active_term()
     if term is None:
@@ -107,7 +106,7 @@ def _run_startup_backfill():
 
 
 def build_scheduler():
-    """Return a configured, UNSTARTED BlockingScheduler with exactly 4 jobs (ENV-04).
+    """Return the configured, unstarted five-job scheduler (ENV-04).
 
     Constructing (not starting) here keeps wiring unit-testable and guarantees the
     scheduler exists in exactly one place. Each job is wrapped in run_job so every

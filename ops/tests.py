@@ -365,7 +365,10 @@ class JobRunTests(TestCase):
     @patch("ops.jobrun.close_old_connections")
     def test_recycles_stale_connections_before_and_after_each_job(self, close):
         from ops.jobrun import run_job
-        run_job("demo", lambda: 1)
+        with patch("ops.jobrun.connections.all") as all_connections:
+            connection = type("Connection", (), {"in_atomic_block": False})()
+            all_connections.return_value = [connection]
+            run_job("demo", lambda: 1)
         self.assertEqual(close.call_count, 2)
 
 

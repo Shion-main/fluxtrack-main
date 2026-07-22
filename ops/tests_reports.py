@@ -401,13 +401,14 @@ class JobFillTests(TestCase):
         self.assertEqual(self._run_job_for_fixture_week(fx), 0)
         self.assertFalse(WeeklyReport.objects.exists())
 
-    def test_scheduler_still_registers_exactly_four_jobs(self):
+    def test_scheduler_registers_reporting_and_maintenance_jobs(self):
         from scheduling.management.commands.runscheduler import build_scheduler
         sched = build_scheduler()
         try:
             self.assertEqual(
                 {j.id for j in sched.get_jobs()},
-                {"materialize", "sweep", "weekly_report", "push_outbox"})
+                {"materialize", "sweep", "weekly_report", "push_outbox",
+                 "maintenance"})
         finally:
             if getattr(sched, "running", False):
                 sched.shutdown(wait=False)

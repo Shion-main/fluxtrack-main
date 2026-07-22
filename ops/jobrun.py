@@ -1,10 +1,23 @@
 """Observability and connection hygiene for every scheduled job."""
-from django.db import close_old_connections
+from django.db import close_old_connections, connections
 from django.utils import timezone
 
 from accounts.models import Role
 from ops.models import JobRun
 from ops.notify import notify
+
+
+def _recycle_old_connections():
+    """Recycle only when no caller owns an atomic transaction.
+
+    A real scheduler tick is never inside ``atomic()``. Skipping there protects
+    callers that deliberately wrap ``run_job`` in a transaction (including
+    Django's TestCase harness), because closing that connection would destroy
+    the caller-owned transaction rather than merely refresh an idle one.
+    """
+    if any(connection.in_atomic_block for connection in connections.all()):
+        return
+    close_old_connections()
 
 
 def run_job(job_name, fn):
@@ -14,7 +27,7 @@ def run_job(job_name, fn):
     expired ODBC connections at both boundaries of every job. This makes an RDS
     failover or idle connection recover on the next tick.
     """
-    close_old_connections()
+    _recycle_old_connections()
     try:
         run = JobRun.objects.create(
             job_name=job_name, status="running", started_at=timezone.now())
@@ -34,4 +47,4 @@ def run_job(job_name, fn):
             run.save()
         return run
     finally:
-        close_old_connections()
+        _recycle_old_connections()

@@ -534,8 +534,8 @@ class RoomConflictTests(_JobFixtureMixin, TestCase):
 
 
 # ---------------------------------------------------------------------------
-# ENV-04 scheduler wiring: `runscheduler.build_scheduler()` registers EXACTLY the
-# 4 jobs (materialize / sweep / weekly_report / push_outbox) on one BlockingScheduler
+# ENV-04 scheduler wiring: `runscheduler.build_scheduler()` registers exactly
+# five jobs on one BlockingScheduler, including daily retention maintenance,
 # and hands it back UNSTARTED, so a single dedicated `manage.py runscheduler`
 # process owns all jobs and nothing double-fires across web workers. push_outbox
 # (05-03, NOTIF-02/D-09) runs the web-push send/prune pass here, never in a web

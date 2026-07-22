@@ -422,12 +422,12 @@ class CallerWiringTests(GuardAlertBase):
         self.assertTrue(text.isascii())          # Conventions section 4
         self.assertEqual(self._alerts(self.guard).count(), 1)
 
-    def test_scheduler_still_wires_exactly_four_jobs(self):
-        # ENV-04: the coalescing went INSIDE the existing sweep job, not beside
-        # it as a fifth job.
+    def test_guard_alerts_do_not_add_a_sixth_scheduler_job(self):
+        # ENV-04: guard coalescing stays INSIDE sweep and does not add a sixth
+        # job beside the five-job production set.
         from scheduling.management.commands.runscheduler import build_scheduler
 
-        self.assertEqual(len(build_scheduler().get_jobs()), 4)
+        self.assertEqual(len(build_scheduler().get_jobs()), 5)
 
 
 class SummaryHelperTests(TestCase):
