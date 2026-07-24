@@ -14,7 +14,7 @@ are the client-side filter index. ASCII-only.
       <strong style="color:var(--red)">{{ totals.problems }}</strong> room{{ totals.problems|pluralize }} need{{ totals.problems|pluralize:"s," }} attention
       &middot; {{ totals.rooms }} shown
     {% else %}
-      All {{ totals.rooms }} room{{ totals.rooms|pluralize }} running clean
+      No rooms need attention &middot; {{ totals.rooms }} room{{ totals.rooms|pluralize }} shown
     {% endif %}
     {% if scope == "live" and totals.hidden %}
       &middot; {{ totals.hidden }} idle room{{ totals.hidden|pluralize }} hidden

@@ -255,6 +255,8 @@ class IfoBoardViewTests(_BoardBase):
         self.assertEqual(resp.status_code, 200)
         self.assertContains(resp, room.code)
         self.assertContains(resp, "In session")
+        self.assertContains(resp, "No rooms need attention")
+        self.assertNotContains(resp, "running clean")
 
     def test_live_url_redirects_to_the_merged_board(self):
         """/ifo/live is gone as a surface; bookmarks and the cached PWA shell
