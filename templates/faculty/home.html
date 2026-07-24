@@ -21,7 +21,7 @@
           <b>{{ user.get_full_name|default:user.username }}</b>
           <span>{{ user.get_role_display }}{% if user.department %} · {{ user.department.name }}{% endif %}</span>
         </div>
-        <a class="ft-acct__item" href="{% url 'faculty_profile' %}"><uk-icon icon="user"></uk-icon> Profile</a>
+        <a class="ft-acct__item" href="{% url 'profile' %}"><uk-icon icon="user"></uk-icon> Profile</a>
         <a class="ft-acct__item" href="/logout"><uk-icon icon="log-out"></uk-icon> Sign out</a>
       </div>
     </details>
@@ -76,7 +76,7 @@
           <span class="ft-seg__opt is-active" aria-current="true">
             <uk-icon icon="{% if value == 'f2f' %}presentation{% elif value == 'blended' %}video{% else %}monitor{% endif %}"></uk-icon> {{ label }}</span>
           {% else %}
-          <a class="ft-seg__opt" href="/faculty/modality/new" title="Request to switch to {{ label }}">
+          <a class="ft-seg__opt" href="/faculty/modality/new?schedule={{ hero.rep.schedule_id }}&amp;target={{ value }}" title="Request to switch to {{ label }}">
             <uk-icon icon="{% if value == 'f2f' %}presentation{% elif value == 'blended' %}video{% else %}monitor{% endif %}"></uk-icon> {{ label }}</a>
           {% endif %}
         {% endfor %}
@@ -92,6 +92,10 @@
           </div>
         </div>
         <p class="ft-hero__hint">Online sessions are verified by a roving checker through Teams. Keep the link current so students can join.</p>
+        <a class="ft-cta" href="/faculty/online">
+          <uk-icon icon="{% if hero_live %}square{% else %}play{% endif %}"></uk-icon>
+          {% if hero_live %}Checkout online session{% else %}Verify &amp; Start{% endif %}
+        </a>
         <a class="ft-hero__link" href="/faculty/modality/new">Request a modality change</a>
       </div>
       {% elif hero_is_today %}
@@ -109,7 +113,11 @@
     {% else %}
     <section class="ft-hero">
       <div class="ft-hero__top"><span class="ft-eyebrow">Check-in</span></div>
+      {% if not term_available %}
+      <h1 class="ft-hero__title">No active academic term<span class="sub">Your schedule is unavailable until the IFO activates a term.</span></h1>
+      {% else %}
       <h1 class="ft-hero__title">No classes ahead<span class="sub">You have nothing scheduled in the next 7 days.</span></h1>
+      {% endif %}
       <a class="ft-hero__link" href="/faculty/schedule">View schedule</a>
     </section>
     {% endif %}

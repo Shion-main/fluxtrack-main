@@ -1,0 +1,55 @@
+Found 1315 test(s).
+Cache table 'fluxtrack_cache' already exists.
+System check identified no issues (0 silenced).
+Linked mayo -> jane.mayo@mcm.edu.ph
+No change -> mayo already jane.mayo@mcm.edu.ph
+Linked mayo -> jane.mayo@mcm.edu.ph
+Materialized 2026-07-13: 3 new sessions (0 already existed, 0 skipped) from 3 active schedules in term 'msf Term'.
+Materialized 2026-07-13: 3 new sessions (0 already existed, 0 skipped) from 3 active schedules in term 'msf Term'.
+Materialized 2026-07-13: 3 new sessions (0 already existed, 0 skipped) from 3 active schedules in term 'msf Term'.
+Materialized 2026-07-13: 3 new sessions (0 already existed, 0 skipped) from 3 active schedules in term 'msf Term'.
+Materialized 2026-07-13: 3 new sessions (0 already existed, 0 skipped) from 3 active schedules in term 'msf Term'.
+Materialized 2026-07-13: 3 new sessions (0 already existed, 0 skipped) from 3 active schedules in term 'msf Term'.
+Materialized 2026-07-13: 0 new sessions (3 already existed, 0 skipped) from 3 active schedules in term 'msf Term'.
+Materialized 2026-07-13: 3 new sessions (0 already existed, 0 skipped) from 3 active schedules in term 'mcs Term'.
+Materialized 2026-07-13: 3 new sessions (0 already existed, 0 skipped) from 3 active schedules in term 'mct Term'.
+Materialized 2026-07-13: 0 new sessions (3 already existed, 0 skipped) from 3 active schedules in term 'mct Term'.
+Materialized 2026-07-06: 1 new sessions (0 already existed, 0 skipped) from 1 active schedules in term 'Job Active'.
+Materialized 2026-07-06: 0 new sessions (1 already existed, 0 skipped) from 1 active schedules in term 'Job Active'.
+Seeded: 1 dept, 3 rooms, 9 users, 1 schedules, 1 sessions.
+Dev users (password 'devpass123'): faculty, checker, ifo, hr, guard, dean, sysadmin
+Materialized 2026-07-25: 2 new sessions (0 already existed, 0 skipped) from 2 active schedules in term 'A9 Term'.
+Generated 3 weekly report(s) for rpt Term -> week of 2026-07-06 (2026-07-06 to 2026-07-12).
+Generated 3 weekly report(s) for rpt Term -> week of 2026-07-06 (2026-07-06 to 2026-07-12).
+Generated 3 weekly report(s) for rpt Term -> week of 2026-07-06 (2026-07-06 to 2026-07-12).
+
+Import complete
+  Filter: building=R floor=3
+  Loaded:
+    Sections imported : 2
+    Rooms             : 2
+    Faculty           : 2
+    Schedule rows     : 3
+    Roomless -> TBA rows  : 0
+    Online (no room) rows : 0
+    Skipped — off-filter  : 0
+    Skipped — bad time/day: 0
+  Reconciliation (every offering row lands in exactly one bucket):
+    intact (real room)    : 2
+    roomless -> TBA       : 0
+    online (no room)      : 0
+    no schedule string    : 0
+    IDENTITY: 2 + 0 + 0 + 0 = 2 == total_rows (2)  [OK]
+    Total meetings (real) : 3  (target 2021)
+    Distinct rooms        : 2
+    Distinct instructors  : 2
+  Flagged (D4/D7 — never silently dropped):
+    ! Typo rooms (no building prefix): none
+    ! Unassigned rooms (P/U/unknown): none
+    ! Email-less instructors: 0 (cannot authenticate via Entra until an email is supplied)
+  Live DB counts (eyeball parity vs. targets above):
+    Schedules (this term) : 3
+    Rooms                 : 2
+    Faculty               : 2
+Materialized 2026-07-25: 3 new sessions (0 already existed, 0 skipped) from 3 active schedules in term 'Synthetic Import Term'.
+Regenerated C:\Users\joshu_mnu8z3u\Downloads\fluxtrack-main\FluxTrack_SRS.docx from C:\Users\joshu_mnu8z3u\Downloads\fluxtrack-main\FluxTrack_SRS.md (pandoc 3.9).

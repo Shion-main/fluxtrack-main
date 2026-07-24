@@ -69,7 +69,8 @@ header (03-02 parse-error lesson). ASCII-only.
         <input type="checkbox" name="schedules" value="{{ row.schedule.id }}"
                {% if row.picked %}checked{% endif %} data-pick
                data-label="{{ row.schedule.course_code }}-{{ row.schedule.section }}"
-               data-when="{{ row.schedule.get_day_of_week_display }} {{ row.schedule.start_time|time:'g:i A' }}">
+               data-when="{{ row.schedule.get_day_of_week_display }} {{ row.schedule.start_time|time:'g:i A' }}"
+               data-occurrences="{{ row.occurrences|join:',' }}">
         <span class="ft-pick__body">
           <span class="ft-pick__title">{{ row.schedule.course_code }}-{{ row.schedule.section }}</span>
           {% comment %}Room codes carry a hyphen (A408-B) and browsers break at
@@ -80,7 +81,7 @@ header (03-02 parse-error lesson). ASCII-only.
             <span style="white-space:nowrap">{{ row.schedule.start_time|time:"g:i A" }}&ndash;{{ row.schedule.end_time|time:"g:i A" }}</span>
             &middot; {% include "_room_code.html" with room=row.schedule.room %}</span>
         </span>
-        <span class="ft-pill ft-pill--{{ row.schedule.modality }}">{{ row.schedule.get_modality_display }}</span>
+        {% include "_modality_badge.html" with modality=row.schedule.modality %}
       </label>
       {% endfor %}
     </div>
@@ -139,6 +140,15 @@ header (03-02 parse-error lesson). ASCII-only.
       </div>
     </fieldset>
 
+    <div class="ft-form__group">
+      <label class="ft-label" for="m-request-reason">Why is this change needed?</label>
+      <textarea id="m-request-reason" name="request_reason" class="ft-control"
+                rows="3" maxlength="500" required
+                placeholder="Give your Dean the context needed to decide.">{{ form.request_reason }}</textarea>
+      <p class="ft-help">Include the operational reason and how the class will
+        continue for students.</p>
+    </div>
+
     {% comment %}Room + time only exist for a room-based target, and only for the
     classes actually picked in step 1. modality.js hides this whole block for an
     Online target and hides the per-class blocks of unpicked classes. Hidden
@@ -191,7 +201,7 @@ header (03-02 parse-error lesson). ASCII-only.
   {% comment %}---------------------------------------------- STEP 3: review{% endcomment %}
   <section class="ft-step" data-step="3" aria-label="Step 3: review and submit">
     <h2 class="ft-step__h">Check this is right</h2>
-    <p class="ft-step__sub">Your Dean sees exactly this.</p>
+    <p class="ft-step__sub">Review the exact details that will be sent to your Dean.</p>
 
     <div class="ft-summary">
       <p class="ft-summary__line" data-summary>&nbsp;</p>

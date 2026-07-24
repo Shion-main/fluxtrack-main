@@ -123,7 +123,7 @@ class FacultyProfileReachabilityTests(TestCase):
             with self.subTest(route=route_name):
                 response = self.client.get(reverse(route_name))
                 self.assertEqual(response.status_code, 200)
-                self.assertContains(response, 'href="/faculty/profile"')
+                self.assertContains(response, 'href="/profile"')
 
 
 class SharedBrandAndFailureFeedbackTests(TestCase):
@@ -157,3 +157,85 @@ class SharedBrandAndFailureFeedbackTests(TestCase):
             "htmx:timeout",
         ):
             self.assertIn(event_name, body)
+
+    def test_service_worker_refreshes_static_assets_instead_of_freezing_old_css(self):
+        response = self.client.get("/sw.js")
+        body = response.content.decode()
+
+        self.assertEqual(response["Cache-Control"], "no-cache, no-store, must-revalidate")
+        self.assertIn("fluxtrack-shell-v6", body)
+        self.assertIn("fetch(req)", body)
+        self.assertIn("caches.match(req)", body)
+        self.assertLess(body.index("fetch(req)"), body.index("caches.match(req)"))
+
+    @override_settings(IS_PRODUCTION=True)
+    def test_production_base_requests_fresh_service_worker_updates(self):
+        body = self.client.get(reverse("login")).content.decode()
+
+        self.assertIn("updateViaCache: 'none'", body)
+        self.assertIn("controllerchange", body)
+        self.assertIn("window.location.reload()", body)
+
+    @override_settings(DEBUG=False, IS_PRODUCTION=False)
+    def test_nonproduction_shell_removes_the_production_asset_worker(self):
+        body = self.client.get(reverse("login")).content.decode()
+
+        self.assertNotIn("serviceWorker.register('/sw.js'", body)
+        self.assertIn("serviceWorker.getRegistrations()", body)
+        self.assertIn("caches.keys()", body)
+        self.assertIn("window.location.reload()", body)
+
+    @override_settings(DEBUG=False, IS_PRODUCTION=False)
+    def test_nonproduction_shell_fingerprints_live_static_assets(self):
+        """Local DEBUG=False must not reuse a browser's prior source asset URL."""
+        body = self.client.get(reverse("login")).content.decode()
+
+        self.assertRegex(
+            body,
+            r'href="/static/faculty/faculty\.css\?v=[0-9a-f]+"',
+        )
+
+    def test_html_pages_are_never_reused_from_the_browser_http_cache(self):
+        response = self.client.get(reverse("login"))
+
+        cache_control = response.headers.get("Cache-Control", "")
+        self.assertIn("no-store", cache_control)
+        self.assertIn("no-cache", cache_control)
+        self.assertIn("must-revalidate", cache_control)
+
+
+class ResponsiveRoleShellTests(TestCase):
+    root = Path(__file__).resolve().parent.parent
+
+    def test_role_navigation_has_desktop_labels_without_replacing_mobile_icons(self):
+        source = (self.root / "templates/base.html").read_text(encoding="utf-8")
+
+        for role in ("Faculty", "Checker", "Guard"):
+            self.assertIn(
+                f'<span class="ft-tabbar__role">{role}</span>',
+                source,
+            )
+        for label in (
+            "Home",
+            "Schedule",
+            "Online classes",
+            "My attendance",
+            "Requests",
+            "Floor board",
+            "Scan",
+            "Online",
+            "Floor monitor",
+            "Locate",
+        ):
+            self.assertIn(f'<span class="ft-tab__label">{label}</span>', source)
+
+    def test_shared_role_css_is_mobile_first_with_tablet_and_desktop_layouts(self):
+        source = (
+            self.root / "static/faculty/faculty.css"
+        ).read_text(encoding="utf-8")
+
+        self.assertIn(".ft-tab__label { display: none; }", source)
+        self.assertIn("@media (min-width: 48rem)", source)
+        self.assertIn("@media (min-width: 64rem)", source)
+        self.assertIn("body:has(.ft-tabbar) .ft-page", source)
+        self.assertIn("max-width: 72rem", source)

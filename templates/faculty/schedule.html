@@ -21,7 +21,7 @@
           <b>{{ user.get_full_name|default:user.username }}</b>
           <span>{{ user.get_role_display }}{% if user.department %} · {{ user.department.name }}{% endif %}</span>
         </div>
-        <a class="ft-acct__item" href="{% url 'faculty_profile' %}"><uk-icon icon="user"></uk-icon> Profile</a>
+        <a class="ft-acct__item" href="{% url 'profile' %}"><uk-icon icon="user"></uk-icon> Profile</a>
         <a class="ft-acct__item" href="/logout"><uk-icon icon="log-out"></uk-icon> Sign out</a>
       </div>
     </details>
@@ -44,9 +44,8 @@
           {% if c.rep.status == "active" %}<span class="ft-pill ft-pill--active" style="margin-left:auto"><span class="ft-dot"></span> In session</span>
           {% elif c.rep.status == "completed" %}<span class="ft-pill ft-pill--done" style="margin-left:auto">Done</span>
           {% elif c.rep.status == "absent" %}<span class="ft-pill ft-pill--absent" style="margin-left:auto">Absent</span>
-          {% elif c.modality == "f2f" %}<span class="ft-pill ft-pill--f2f" style="margin-left:auto">F2F</span>
-          {% elif c.modality == "blended" %}<span class="ft-pill ft-pill--blended" style="margin-left:auto">Blended</span>
-          {% else %}<span class="ft-pill ft-pill--online" style="margin-left:auto">Online</span>{% endif %}
+          {% elif c.rep.status == "cancelled" %}<span class="ft-pill ft-pill--absent" style="margin-left:auto">Cancelled</span>
+          {% else %}{% include "_modality_badge.html" with modality=c.modality %}{% endif %}
         </div>
 
         {% if c.merged %}
@@ -63,25 +62,26 @@
         <div class="ft-row__title">{{ c.rep.schedule.course_code }} · {{ c.rep.schedule.section }}</div>
         <div class="ft-row__meta"><uk-icon icon="map-pin"></uk-icon> {{ c.rooms_label }} <span>·</span> {{ c.students }} students</div>
         {% endif %}
+        {% if c.rep.status == "cancelled" and c.rep.cancelled_reason %}
+        <div class="ft-row__meta"><uk-icon icon="circle-alert"></uk-icon> {{ c.rep.cancelled_reason }}</div>
+        {% endif %}
       </div>
       {% empty %}
-      <div class="ft-row"><div class="ft-row__meta" style="margin:0"><uk-icon icon="coffee"></uk-icon> No classes today.</div></div>
+      <div class="ft-row"><div class="ft-row__meta" style="margin:0"><uk-icon icon="coffee"></uk-icon> {% if term_available %}No classes today.{% else %}No active academic term. Contact the IFO if your schedule should be available.{% endif %}</div></div>
       {% endfor %}
     </div>
 
-    {% if week_cards %}
     <div class="ft-sec">
-      <div class="ft-sec__title">This week</div>
+      <div class="ft-sec__title">Next 7 days</div>
     </div>
     <div class="ft-list">
       {% for c in week_cards %}
       <div class="ft-row">
         <div class="ft-row__top">
           <span class="ft-row__time">{{ c.rep.date|date:"D, M j" }} · {{ c.rep.scheduled_start|time:"g:i" }} - {{ c.rep.scheduled_end|time:"g:i A" }}</span>
-          {% if c.merged %}<span class="ft-pill ft-pill--merged" style="margin-left:auto"><uk-icon icon="layers"></uk-icon> Merged · {{ c.count }}</span>
-          {% elif c.modality == "f2f" %}<span class="ft-pill ft-pill--f2f" style="margin-left:auto">F2F</span>
-          {% elif c.modality == "blended" %}<span class="ft-pill ft-pill--blended" style="margin-left:auto">Blended</span>
-          {% else %}<span class="ft-pill ft-pill--online" style="margin-left:auto">Online</span>{% endif %}
+          {% if c.rep.status == "cancelled" %}<span class="ft-pill ft-pill--absent" style="margin-left:auto">Cancelled</span>
+          {% elif c.merged %}<span class="ft-pill ft-pill--merged" style="margin-left:auto"><uk-icon icon="layers"></uk-icon> Merged · {{ c.count }}</span>
+          {% else %}{% include "_modality_badge.html" with modality=c.modality %}{% endif %}
         </div>
         {% if c.merged %}
         <div class="ft-row__title">{% for s in c.sessions %}{{ s.schedule.course_code }} · {{ s.schedule.section }}{% if not forloop.last %} + {% endif %}{% endfor %}</div>
@@ -90,10 +90,14 @@
         <div class="ft-row__title">{{ c.rep.schedule.course_code }} · {{ c.rep.schedule.section }}</div>
         <div class="ft-row__meta"><uk-icon icon="map-pin"></uk-icon> {{ c.rooms_label }}</div>
         {% endif %}
+        {% if c.rep.status == "cancelled" and c.rep.cancelled_reason %}
+        <div class="ft-row__meta"><uk-icon icon="circle-alert"></uk-icon> {{ c.rep.cancelled_reason }}</div>
+        {% endif %}
       </div>
+      {% empty %}
+      <div class="ft-row"><div class="ft-row__meta" style="margin:0"><uk-icon icon="calendar"></uk-icon> No additional classes in the next 7 days.</div></div>
       {% endfor %}
     </div>
-    {% endif %}
   </div>
 </div>
 {% endblock %}

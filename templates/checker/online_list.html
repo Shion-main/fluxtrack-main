@@ -26,6 +26,7 @@ swappable rows live in _online_list.html.
           <b>{{ user.get_full_name|default:user.username }}</b>
           <span>{{ user.get_role_display }}</span>
         </div>
+        <a class="ft-acct__item" href="{% url 'profile' %}"><uk-icon icon="user"></uk-icon> Profile</a>
         <a class="ft-acct__item" href="/logout"><uk-icon icon="log-out"></uk-icon> Sign out</a>
       </div>
     </details>

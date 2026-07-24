@@ -297,7 +297,12 @@ def free_rooms_in_building(building, start, end, *, exclude_session_id=None, pre
     Candidates are ordered by ``code``; ``prefer_room`` (when free) is floated to
     the front so the picker/approval can offer the original room first (D-06/D-15).
     """
-    candidates = list(Room.objects.filter(floor__building=building).order_by("code"))
+    candidates = list(
+        Room.objects.filter(
+            floor__building=building,
+            out_of_service=False,
+        ).order_by("code")
+    )
     free = [
         r for r in candidates
         if room_is_free(r, start, end, exclude_session_id=exclude_session_id)

@@ -256,6 +256,15 @@ class ModalityShiftRequest(models.Model):
     target_modality = models.CharField(max_length=10, choices=Modality.choices)
     window_start = models.DateField()  # single-session request => same date both (D-01)
     window_end = models.DateField()
+    request_reason = models.CharField(
+        max_length=500,
+        blank=True,
+        help_text="Faculty-provided rationale shown to the deciding Dean.",
+    )
+    is_dean_override = models.BooleanField(
+        default=False,
+        help_text="True when the Dean directly changed a session without a faculty request.",
+    )
     is_time_move = models.BooleanField(default=False)  # bundled reschedule (D-16)
     status = models.CharField(
         max_length=10, choices=ModalityShiftStatus.choices,

@@ -7,6 +7,12 @@ urlpatterns = [
     path("", views.home, name="home"),
     path("login", views.login_view, name="login"),
     path("logout", views.logout_view, name="logout"),
+    # Shared self-profile for every authenticated role.
+    path("profile", faculty.profile, name="profile"),
+    path("profile/photo", faculty.profile_photo_upload,
+         name="profile_photo_upload"),
+    path("profile/photo/<int:user_id>", faculty.profile_photo_file,
+         name="profile_photo"),
     # Scan resolver (SCAN)
     path("scan", scan.deep_link, name="scan_deep_link"),
     path("scan/resolve", scan.resolve, name="scan_resolve"),
@@ -27,6 +33,8 @@ urlpatterns = [
     path("faculty/online", faculty.online_list, name="faculty_online"),
     path("faculty/online/<int:pk>/start", faculty.online_start,
          name="faculty_online_start"),
+    path("faculty/online/<int:pk>/checkout", faculty.online_checkout,
+         name="faculty_online_checkout"),
     # FAC-11 own attendance history: read-only, hard-scoped to request.user,
     # Checker flags visible with no dispute control (D-15).
     path("faculty/history", faculty.history, name="faculty_history"),
@@ -37,12 +45,19 @@ urlpatterns = [
     path("faculty/profile", faculty.profile, name="faculty_profile"),
     path("faculty/profile/photo", faculty.profile_photo_upload,
          name="faculty_profile_photo"),
+    path("faculty/photo/<int:user_id>", faculty.profile_photo_file,
+         name="faculty_photo"),
     # --- end Faculty profile photo (FAC-12) ---
     # --- end Faculty self-service ---
     # Dean modality-shift approval surface (MOD-02, D-12)
     path("dean/requests", dean.queue, name="dean_queue"),
     path("dean/requests/<int:pk>/approve", dean.approve, name="dean_approve"),
     path("dean/requests/<int:pk>/reject", dean.reject, name="dean_reject"),
+    path("dean/faculty", dean.faculty_list, name="dean_faculty"),
+    path("dean/faculty/<int:faculty_id>", dean.faculty_detail,
+         name="dean_faculty_detail"),
+    path("dean/modality/override", dean.modality_override,
+         name="dean_modality_override"),
     # Dean reporting surface (DEAN-01..04, RPT-03) -- read-only, dept-scoped
     path("dean/dashboard", dean.dashboard, name="dean_dashboard"),
     path("dean/reports", dean.reports, name="dean_reports"),
@@ -162,6 +177,8 @@ urlpatterns = [
     path("guard/monitor", guard.monitor, name="guard_monitor"),
     path("guard/monitor/rows", guard.monitor_rows, name="guard_monitor_rows"),
     path("guard/locate", guard.locate, name="guard_locate"),
+    path("guard/faculty/<int:faculty_id>", guard.faculty_day,
+         name="guard_faculty_day"),
     # --- Guard room detail (GRD-02) ---
     # Keyed by room code like every other room route. Floor authorization is
     # re-derived server-side per request; an off-floor code 404s.

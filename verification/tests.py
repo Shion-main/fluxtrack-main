@@ -282,7 +282,7 @@ class CheckerScanDBTests(_CheckerFixtureMixin, TestCase):
         r = self.client.post("/checker/resolve", {"payload": self._qr(room)})
         self.assertContains(r, 'data-outcome="active-unverified"')
         # The scheduled faculty's photo reference is surfaced for identity match.
-        self.assertContains(r, "profile_photos/x.jpg")
+        self.assertContains(r, f"/faculty/photo/{faculty.pk}")
 
     def test_verify_marks_verified(self):
         checker = self._checker()

@@ -1,0 +1,52 @@
+{% extends "dean/_console.html" %}
+{% block title %}Faculty - FluxTrack{% endblock %}
+{% block console_title %}Faculty{% endblock %}
+{% block console %}
+<div class="dn-pagehead">
+  <div>
+    <h1 class="dn-pagehead__title">Department faculty</h1>
+    <p class="dn-pagehead__copy">
+      Open a faculty profile to review their schedule and manage exceptional
+      modality changes.
+    </p>
+  </div>
+  <span class="uk-label uk-label-secondary">
+    {{ faculty_members|length }} active
+  </span>
+</div>
+
+{% if faculty_members %}
+<div class="dn-faculty-grid">
+  {% for faculty in faculty_members %}
+  <a class="dn-faculty-card" href="{% url 'dean_faculty_detail' faculty.pk %}">
+    {% if faculty.profile_photo %}
+    <img class="dn-faculty-card__photo"
+         src="{% url 'profile_photo' user_id=faculty.pk %}"
+         alt="Profile photo of {{ faculty.get_full_name|default:faculty.username }}">
+    {% else %}
+    <span class="dn-faculty-card__photo dn-faculty-card__photo--empty"
+          aria-hidden="true">
+      {{ faculty.first_name|default:faculty.username|slice:":1"|upper }}{{ faculty.last_name|slice:":1"|upper }}
+    </span>
+    {% endif %}
+    <span class="dn-faculty-card__body">
+      <strong>{{ faculty.get_full_name|default:faculty.username }}</strong>
+      <span>{{ faculty.email|default:faculty.username }}</span>
+      <span class="dn-faculty-card__action">View profile and schedule</span>
+    </span>
+    <uk-icon icon="chevron-right" class="dn-faculty-card__chevron"></uk-icon>
+  </a>
+  {% endfor %}
+</div>
+{% else %}
+<div class="dn-empty">
+  <uk-icon icon="users"></uk-icon>
+  <div>
+    <p class="font-semibold">No faculty assigned</p>
+    <p class="uk-text-small uk-text-muted">
+    No active faculty members are assigned to your department.
+    </p>
+  </div>
+</div>
+{% endif %}
+{% endblock %}

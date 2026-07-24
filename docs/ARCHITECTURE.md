@@ -151,7 +151,7 @@ own surface set (`SURFACES` map), and every view module has its own role-guard d
 | **Faculty** | `/faculty/schedule`, `/faculty/scan`, `/faculty/modality/*` |
 | **Checker** | `/checker/scan`, `/checker/floor`, `/checker/online`, `/checker/replay` |
 | **IFO Admin** | `/ifo/rooms`, `/ifo/buildings`, `/ifo/terms`, `/ifo/import`, `/ifo/suspensions`, `/ifo/breaks`, bookings, duties, reporting |
-| **Dean** | `/dean/requests`, department dashboard, reports, and scorecards |
+| **Dean** | `/dean/requests`, `/dean/faculty`, department dashboard, reports, and scorecards |
 | **HR Admin** | `/hr/attendance` and CSV export |
 | **Guard** | `/guard/monitor`, `/guard/rooms/<code>`, `/guard/locate` |
 | **System Admin** | Django `/admin/` for SYS-01..03 and `/sys/jobs` for scheduler monitoring |
@@ -246,12 +246,13 @@ sequenceDiagram
     participant Avail as ops/availability.py
     participant DB as SQL Server
 
-    Fac->>Svc: submit_modality_shift(...)
-    Svc->>Svc: lead-time gate, route_to_dean, scope in-window, no-double-request
+    Fac->>Svc: submit_modality_shift(..., request_reason)
+    Svc->>Svc: active-term + lead-time gates, route_to_dean, scope in-window
+    Svc->>Svc: serialize and re-check no-double-request
     Svc->>DB: create PENDING ModalityShiftRequest + Items, audit
     Svc->>Dean: notify (Dean fan-out)
-    Dean->>Svc: apply_approval(request)  (transaction.atomic)
-    Svc->>Svc: re-gate (Dean + still PENDING)
+    Dean->>Svc: confirm + apply_approval(request)  (transaction.atomic)
+    Svc->>Svc: re-gate (Dean + still PENDING + actionable sessions)
     alt target = Online
         Svc->>DB: _apply_online → release rooms, stamp reservations
     else target = F2F / Blended
@@ -325,6 +326,9 @@ reconciliation proof that nothing is silently dropped), and `regenerate_srs_docx
 - **HTMX** for partial updates: scan outcomes, floor board rows, live-room polling, and Dean/IFO
   queues return HTML fragments (`templates/**/_partial.html`). CSRF is injected globally via
   `hx-headers` in `base.html`.
+- **Canonical modality badges** render through `templates/_modality_badge.html`
+  and the global `static/css/app.css`. Every role uses the same Face-to-face,
+  Blended, and Online wording, colors, typography, and spacing.
 - **PWA**: `/manifest.webmanifest`, a service worker (`/sw.js`, network-first navigations with a
   `/login` offline fallback, cache-first static assets), and dynamically-resized MMCM-crest icons.
 - **Offline queue**: checkers on the floor may be offline; scans are queued client-side and later

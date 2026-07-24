@@ -18,7 +18,7 @@ GET render.
 
 ASCII-only.
 """
-from datetime import timedelta
+from datetime import datetime, time, timedelta
 
 from django.contrib.auth import get_user_model
 from django.test import TestCase
@@ -27,7 +27,15 @@ from django.utils import timezone
 
 from accounts.models import Department, Role
 from campus.models import Building, Floor, Room
-from scheduling.models import (AcademicTerm, Modality, Schedule, ScheduleStatus)
+from scheduling.models import (
+    AcademicTerm,
+    Modality,
+    ModalityShiftRequest,
+    Schedule,
+    ScheduleStatus,
+    Session,
+    SessionStatus,
+)
 from web.faculty import _error_step, _friendly_error
 
 
@@ -96,6 +104,8 @@ class FormRenderTests(ModalityFormBase):
         self.assertContains(resp, 'name="target_modality"')
         self.assertContains(resp, 'name="window_mode"')
         self.assertContains(resp, 'type="submit"')
+        self.assertContains(resp, "modality-badge--f2f")
+        self.assertContains(resp, ">Face-to-face<")
 
     def test_classes_come_before_the_change_in_document_order(self):
         """The whole point of the rework: pick classes first, then the change."""
@@ -105,7 +115,7 @@ class FormRenderTests(ModalityFormBase):
     def test_room_picker_is_not_rendered_up_front(self):
         """Availability cost 6.5s and 5488 queries when computed for every class
         on load. The page must not pay that to ask "which classes?"."""
-        with self.assertNumQueries(7):
+        with self.assertNumQueries(8):
             resp = self.client.get(reverse("faculty_modality_new"))
         self.assertNotContains(resp, f'name="preferred_room_{self.a.pk}"')
         self.assertContains(resp, 'data-room-picker')
@@ -147,6 +157,17 @@ class FormRenderTests(ModalityFormBase):
         self.assertContains(resp, "no active classes to shift")
         self.assertNotContains(resp, 'data-step="2"')
 
+    def test_home_deep_link_prefills_class_and_target_modality(self):
+        response = self.client.get(
+            reverse("faculty_modality_new"),
+            {"schedule": self.a.pk, "target": Modality.ONLINE},
+        )
+        html = response.content.decode()
+        picked = html.index(f'value="{self.a.pk}"')
+        target = html.index('value="online"')
+        self.assertIn("checked", html[picked:picked + 180])
+        self.assertIn("checked", html[target:target + 180])
+
 
 class FormPreservationTests(ModalityFormBase):
     """A rejected submit must hand back what was typed, not a blank form."""
@@ -155,6 +176,7 @@ class FormPreservationTests(ModalityFormBase):
         data = {
             "target_modality": "blended", "window_mode": "weeks", "weeks": "4",
             "schedules": [str(self.a.pk), str(self.b.pk)],
+            "request_reason": "The class needs a temporary delivery change.",
         }
         data.update(over)
         return self.client.post(reverse("faculty_modality_new"), data)
@@ -202,3 +224,73 @@ class FormPreservationTests(ModalityFormBase):
         resp = self._post(schedules=[str(foreign.pk)])
         self.assertEqual(resp.status_code, 400)
         self.assertContains(resp, 'data-error-step="1"', status_code=400)
+
+    def test_end_time_must_be_after_start_time(self):
+        response = self._post(
+            new_start_time="15:00",
+            new_end_time="14:00",
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertContains(
+            response,
+            "end time must be after the new start time",
+            status_code=400,
+        )
+
+
+class ActiveTermSubmissionTests(ModalityFormBase):
+    def test_post_cannot_target_owned_schedule_from_planning_term(self):
+        planning = AcademicTerm.objects.create(
+            name="Next Term",
+            start_date=timezone.localdate() + timedelta(days=20),
+            end_date=timezone.localdate() + timedelta(days=120),
+            status=AcademicTerm.Status.DRAFT,
+        )
+        session_date = timezone.localdate() + timedelta(days=30)
+        schedule = Schedule.objects.create(
+            term=planning,
+            course_code="NEXT101",
+            section="A",
+            faculty=self.faculty,
+            room=self.room,
+            day_of_week=session_date.weekday(),
+            start_time="10:00",
+            end_time="11:00",
+            modality=Modality.F2F,
+            status=ScheduleStatus.ACTIVE,
+        )
+        Session.objects.create(
+            schedule=schedule,
+            faculty=self.faculty,
+            room=self.room,
+            date=session_date,
+            scheduled_start=timezone.make_aware(
+                datetime.combine(session_date, time(10, 0))
+            ),
+            scheduled_end=timezone.make_aware(
+                datetime.combine(session_date, time(11, 0))
+            ),
+            status=SessionStatus.SCHEDULED,
+        )
+
+        response = self.client.post(reverse("faculty_modality_new"), {
+            "target_modality": Modality.ONLINE,
+            "window_mode": "single",
+            "on_date": session_date.isoformat(),
+            "schedules": [str(schedule.pk)],
+            "request_reason": "Preparing next term delivery.",
+        })
+
+        self.assertEqual(response.status_code, 400)
+        self.assertContains(
+            response,
+            "active academic term",
+            status_code=400,
+        )
+        self.assertFalse(
+            ModalityShiftRequest.objects.filter(
+                requester=self.faculty,
+                items__schedule=schedule,
+            ).exists()
+        )

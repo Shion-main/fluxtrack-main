@@ -36,7 +36,7 @@ No border-left accent stripes. ASCII-only.
 <div class="ft-app">
 
   <header class="ft-top">
-    <a href="/faculty/home" class="ft-top__brand">
+    <a href="/" class="ft-top__brand">
       <img class="ft-top__crest" src="{% static 'brand/mmcm-crest.png' %}" alt="">
       <span class="ft-top__mark">FluxTrack</span>
     </a>
@@ -48,7 +48,7 @@ No border-left accent stripes. ASCII-only.
           <b>{{ user.get_full_name|default:user.username }}</b>
           <span>{{ user.get_role_display }}{% if user.department %} &middot; {{ user.department.name }}{% endif %}</span>
         </div>
-        <a class="ft-acct__item" href="{% url 'faculty_profile' %}"><uk-icon icon="user"></uk-icon> Profile</a>
+        <a class="ft-acct__item" href="{% url 'profile' %}"><uk-icon icon="user"></uk-icon> Profile</a>
         <a class="ft-acct__item" href="/logout"><uk-icon icon="log-out"></uk-icon> Sign out</a>
       </div>
     </details>
@@ -61,24 +61,50 @@ No border-left accent stripes. ASCII-only.
     </div>
 
     <div class="ft-sec">
+      <div class="ft-sec__title">Account information</div>
+    </div>
+    <div class="ft-card ft-card--neutral">
+      <div class="ft-list">
+        <div class="ft-row">
+          <div class="ft-row__title">{{ user.get_full_name|default:user.username }}</div>
+          <div class="ft-row__meta"><uk-icon icon="at-sign"></uk-icon>{{ user.username }}</div>
+        </div>
+        <div class="ft-row">
+          <div class="ft-row__title">{{ user.get_role_display }}</div>
+          <div class="ft-row__meta"><uk-icon icon="building-2"></uk-icon>
+            {{ user.department.name|default:"No department assigned" }}</div>
+        </div>
+        <div class="ft-row">
+          <div class="ft-row__title">{{ user.email|default:"No email address recorded" }}</div>
+          <div class="ft-row__meta"><uk-icon icon="mail"></uk-icon>Account email</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="ft-sec">
       <div class="ft-sec__title">Identity photo</div>
     </div>
 
     <div class="ft-card ft-card--neutral">
       <p class="ft-help" style="margin-bottom:14px">
+        {% if user.role == "faculty" %}
         Checkers compare this photo to the person teaching in the room. A clear,
         current head-and-shoulders photo makes that check quick; a missing or
         unrecognisable one turns it into an interruption of your class.
+        {% else %}
+        Add a clear, current head-and-shoulders picture so your FluxTrack account
+        is easy to recognize.
+        {% endif %}
       </p>
 
       {% comment %}The small region the upload targets. Rendered server-side on
       first load so the page is complete without htmx.{% endcomment %}
-      <div id="photo-status">
+      <div id="photo-status" role="status" aria-live="polite">
         {% include "faculty/_photo_status.html" %}
       </div>
 
       {% comment %}hx-encoding is load-bearing -- see the header comment.{% endcomment %}
-      <form class="ft-form" hx-post="{% url 'faculty_profile_photo' %}"
+      <form class="ft-form" hx-post="{% url 'profile_photo_upload' %}"
             hx-encoding="multipart/form-data"
             hx-target="#photo-status" hx-swap="innerHTML"
             hx-indicator="#photo-spinner">
@@ -102,6 +128,42 @@ No border-left accent stripes. ASCII-only.
         </div>
       </form>
     </div>
+
+    {% if user.role == "faculty" %}
+    <div class="ft-sec">
+      <div class="ft-sec__title">Teaching schedule</div>
+      <span class="ft-chip" style="pointer-events:none">
+        {{ teaching_schedules|length }} class{{ teaching_schedules|length|pluralize:"es" }}
+      </span>
+    </div>
+    <div class="ft-list">
+      {% for schedule in teaching_schedules %}
+      <div class="ft-row">
+        <div class="ft-row__top">
+          <span class="ft-row__time">
+            {{ schedule.get_day_of_week_display }} ·
+            {{ schedule.start_time|time:"g:i A" }}-{{ schedule.end_time|time:"g:i A" }}
+          </span>
+          {% include "_modality_badge.html" with modality=schedule.modality %}
+        </div>
+        <div class="ft-row__title">
+          {{ schedule.course_code }}-{{ schedule.section }}
+        </div>
+        <div class="ft-row__meta">
+          <uk-icon icon="map-pin"></uk-icon>
+          {{ schedule.room.floor.building.code }} · Floor {{ schedule.room.floor.number }} ·
+          {{ schedule.room.code }}
+        </div>
+      </div>
+      {% empty %}
+      <div class="ft-row">
+        <div class="ft-row__meta" style="margin:0">
+          <uk-icon icon="calendar-x"></uk-icon>No active teaching schedules.
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+    {% endif %}
 
     <div class="ft-sec">
       <div class="ft-sec__title">Notifications</div>

@@ -19,7 +19,7 @@ from accounts.models import Role
 from campus.models import Building, Floor, Room
 from web import views
 from ops.models import Notification
-from scheduling.models import AcademicTerm, Schedule, Session, SessionStatus
+from scheduling.models import AcademicTerm, Modality, Schedule, Session, SessionStatus
 
 
 class ScanNotifyTests(TestCase):
@@ -346,7 +346,8 @@ class FacultyModalityAuthzTests(TestCase):
         resp = self.client.post("/faculty/modality/new", {
             "target_modality": "online",
             "schedules": [str(self.fx.f2f_schedule.pk)],
-            "window_mode": "single", "on_date": d.isoformat()})
+            "window_mode": "single", "on_date": d.isoformat(),
+            "request_reason": "Temporary medical accommodation."})
         self.assertRedirects(resp, "/faculty/modality/mine")
         reqs = ModalityShiftRequest.objects.filter(requester=self.fx.faculty)
         self.assertEqual(reqs.count(), 1)
@@ -375,7 +376,8 @@ class FacultyModalityAuthzTests(TestCase):
         resp = self.client.post("/faculty/modality/new", {
             "target_modality": "online",
             "schedules": [str(self.fx.f2f_schedule.pk)],
-            "window_mode": "single", "on_date": d.isoformat()})
+            "window_mode": "single", "on_date": d.isoformat(),
+            "request_reason": "Temporary medical accommodation."})
         self.assertEqual(resp.status_code, 400)
         self.assertEqual(
             ModalityShiftRequest.objects.filter(requester=self.fx.faculty).count(), 1)
@@ -389,7 +391,8 @@ class FacultyModalityAuthzTests(TestCase):
         resp = self.client.post("/faculty/modality/new", {
             "target_modality": "online",
             "schedules": [str(self.fx.f2f_schedule.pk)],
-            "window_mode": "single", "on_date": d.isoformat()})
+            "window_mode": "single", "on_date": d.isoformat(),
+            "request_reason": "Temporary medical accommodation."})
         self.assertEqual(resp.status_code, 400)
 
     def test_withdrawn_allows_immediate_rerequest(self):
@@ -401,7 +404,8 @@ class FacultyModalityAuthzTests(TestCase):
         resp = self.client.post("/faculty/modality/new", {
             "target_modality": "online",
             "schedules": [str(self.fx.f2f_schedule.pk)],
-            "window_mode": "single", "on_date": d.isoformat()})
+            "window_mode": "single", "on_date": d.isoformat(),
+            "request_reason": "Temporary medical accommodation."})
         self.assertRedirects(resp, "/faculty/modality/mine")
         self.assertEqual(
             ModalityShiftRequest.objects.filter(
@@ -416,7 +420,8 @@ class FacultyModalityAuthzTests(TestCase):
         resp = self.client.post("/faculty/modality/new", {
             "target_modality": "online",
             "schedules": [str(self.fx.f2f_schedule.pk)],
-            "window_mode": "weeks", "weeks": "2"})
+            "window_mode": "weeks", "weeks": "2",
+            "request_reason": "Temporary medical accommodation."})
         self.assertRedirects(resp, "/faculty/modality/mine")
         req = ModalityShiftRequest.objects.get(requester=self.fx.faculty)
         self.assertEqual((req.window_end - req.window_start).days + 1, 14)
@@ -646,13 +651,16 @@ class GuardSurfaceTests(TestCase):
             username="g_fac", first_name="Ana", last_name="Reyes", role=Role.FACULTY)
         self.guard = User.objects.create(username="g_guard", role=Role.GUARD)
 
-    def _session(self, room, status=SessionStatus.SCHEDULED):
+    def _session(self, room, status=SessionStatus.SCHEDULED, *,
+                 faculty=None, course="GG101", date_=None):
         now = timezone.now()
+        faculty = faculty or self.faculty
         sch = Schedule.objects.create(
-            term=self.term, course_code="GG101", section="A", faculty=self.faculty,
+            term=self.term, course_code=course, section="A", faculty=faculty,
             room=room, day_of_week=0, start_time=time(8, 0), end_time=time(9, 30))
         return Session.objects.create(
-            schedule=sch, faculty=self.faculty, room=room, date=timezone.localdate(),
+            schedule=sch, faculty=faculty, room=room,
+            date=date_ or timezone.localdate(),
             scheduled_start=now, scheduled_end=now + timedelta(minutes=90), status=status)
 
     def _post_guard_to(self, *floors):
@@ -693,6 +701,92 @@ class GuardSurfaceTests(TestCase):
         self.assertContains(resp, "In session now")
         self.assertContains(resp, "G101")
 
+    def test_monitor_lists_each_faculty_once_and_links_their_day(self):
+        self._session(self.room1, course="GG101")
+        self._session(self.room1, course="GG102")
+        off_floor = get_user_model().objects.create(
+            username="off_floor_fac", first_name="Bea", last_name="Santos",
+            role=Role.FACULTY)
+        self._session(self.room2, faculty=off_floor, course="GG201")
+        self._post_guard_to(self.floor1)
+        self.client.force_login(self.guard)
+
+        resp = self.client.get(reverse("guard_monitor_rows"))
+
+        self.assertEqual(resp.status_code, 200)
+        faculty_url = reverse("guard_faculty_day", args=(self.faculty.pk,))
+        self.assertContains(resp, faculty_url, count=1)
+        self.assertContains(
+            resp, '<span class="ft-row__title">Ana Reyes</span>', count=1,
+            html=True)
+        self.assertNotContains(
+            resp, reverse("guard_faculty_day", args=(off_floor.pk,)))
+
+    def test_online_faculty_is_not_listed_as_physically_on_the_floor(self):
+        virtual_room = Room.objects.create(
+            floor=self.floor1, code="VG101", qr_token="gvq",
+            manual_code="900301")
+        now = timezone.now()
+        schedule = Schedule.objects.create(
+            term=self.term, course_code="GGONLINE", section="A",
+            faculty=self.faculty, room=virtual_room, day_of_week=0,
+            start_time=time(8, 0), end_time=time(9, 30),
+            modality=Modality.ONLINE)
+        Session.objects.create(
+            schedule=schedule, faculty=self.faculty, room=virtual_room,
+            date=timezone.localdate(), scheduled_start=now,
+            scheduled_end=now + timedelta(minutes=90))
+        self._post_guard_to(self.floor1)
+        self.client.force_login(self.guard)
+
+        resp = self.client.get(reverse("guard_monitor_rows"))
+
+        self.assertNotContains(
+            resp, reverse("guard_faculty_day", args=(self.faculty.pk,)))
+
+    def test_locator_results_link_to_the_faculty_day(self):
+        second = get_user_model().objects.create(
+            username="g_fac_two", first_name="Ana", last_name="Santos",
+            role=Role.FACULTY)
+        self.client.force_login(self.guard)
+
+        resp = self.client.get(reverse("guard_locate"), {"q": "Ana"})
+
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(
+            resp, reverse("guard_faculty_day", args=(self.faculty.pk,)))
+        self.assertContains(resp, reverse("guard_faculty_day", args=(second.pk,)))
+
+    def test_faculty_day_shows_today_across_all_floors_only(self):
+        self._session(self.room1, course="ONFLOOR")
+        self._session(self.room2, course="OTHERFLOOR")
+        self._session(
+            self.room2, course="TOMORROW",
+            date_=timezone.localdate() + timedelta(days=1))
+        self._post_guard_to(self.floor1)
+        self.client.force_login(self.guard)
+
+        resp = self.client.get(
+            reverse("guard_faculty_day", args=(self.faculty.pk,)))
+
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, "Ana Reyes")
+        self.assertContains(resp, "ONFLOOR")
+        self.assertContains(resp, "G101")
+        self.assertContains(resp, "Floor 1")
+        self.assertContains(resp, "OTHERFLOOR")
+        self.assertContains(resp, "G201")
+        self.assertContains(resp, "Floor 2")
+        self.assertContains(resp, "modality-badge--f2f")
+        self.assertContains(resp, ">Face-to-face<")
+        self.assertNotContains(resp, "TOMORROW")
+
+    def test_faculty_day_refuses_a_non_faculty_profile(self):
+        self.client.force_login(self.guard)
+        resp = self.client.get(
+            reverse("guard_faculty_day", args=(self.guard.pk,)))
+        self.assertEqual(resp.status_code, 404)
+
 
 class GuardReadOnlyTests(TestCase):
     """GRD-05 -- "a Guard has no write access anywhere" -- as an enforced
@@ -728,6 +822,9 @@ class GuardReadOnlyTests(TestCase):
                                         qr_token="roq1", manual_code="910101")
         self.guard = User.objects.create(username="ro_guard", role=Role.GUARD)
         self.faculty = User.objects.create(username="ro_fac", role=Role.FACULTY)
+        self.guard_urls = self.GUARD_URLS + (
+            ("guard_faculty_day", (self.faculty.pk,)),
+        )
         # guard_room is floor-authorized, so the GET-still-works case needs the
         # guard actually posted to this room's floor; the method and role gates
         # are what this class is asserting, not the floor scope.
@@ -740,7 +837,7 @@ class GuardReadOnlyTests(TestCase):
 
     def test_post_is_refused_on_every_guard_url(self):
         self.client.force_login(self.guard)
-        for name, args in self.GUARD_URLS:
+        for name, args in self.guard_urls:
             with self.subTest(url=name):
                 self.assertEqual(
                     self.client.post(reverse(name, args=args)).status_code, 405)
@@ -748,14 +845,14 @@ class GuardReadOnlyTests(TestCase):
     def test_get_still_works_on_every_guard_url(self):
         # The decorator refuses the method; it must not break the surface.
         self.client.force_login(self.guard)
-        for name, args in self.GUARD_URLS:
+        for name, args in self.guard_urls:
             with self.subTest(url=name):
                 self.assertEqual(
                     self.client.get(reverse(name, args=args)).status_code, 200)
 
     def test_role_gate_still_outermost_for_non_guard(self):
         self.client.force_login(self.faculty)
-        for name, args in self.GUARD_URLS:
+        for name, args in self.guard_urls:
             with self.subTest(url=name):
                 self.assertEqual(
                     self.client.get(reverse(name, args=args)).status_code, 403)

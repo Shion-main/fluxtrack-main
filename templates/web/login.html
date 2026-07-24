@@ -338,6 +338,7 @@
 
       <form method="post" action="{% url 'social:begin' 'azuread-tenant-oauth2' %}" data-loading-form>
         {% csrf_token %}
+        {% if next_url %}<input type="hidden" name="next" value="{{ next_url }}">{% endif %}
         <button type="submit" class="ft-btn ft-btn--primary" data-loading-btn>
           <svg class="ft-btn__ms" viewBox="0 0 21 21" width="18" height="18" aria-hidden="true">
             <rect x="1" y="1" width="9" height="9" fill="#f25022"/>
@@ -367,6 +368,7 @@
             <form method="post" action="/login">
               {% csrf_token %}
               <input type="hidden" name="username" value="{{ u.username }}">
+              {% if next_url %}<input type="hidden" name="next" value="{{ next_url }}">{% endif %}
               <button type="submit" class="ft-role">
                 <span>{{ u.get_full_name|default:u.username }}</span>
                 <span class="ft-role__role">{{ u.get_role_display }}</span>

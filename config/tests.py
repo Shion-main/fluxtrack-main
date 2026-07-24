@@ -101,6 +101,40 @@ class ProductionSettingsTests(SimpleTestCase):
         self.assertIn("ALLOWED_HOSTS", result.stderr)
 
 
+class DevelopmentStaticSettingsTests(SimpleTestCase):
+    def test_debug_false_development_still_serves_live_source_assets(self):
+        environment = os.environ.copy()
+        environment.update({
+            "FLUXTRACK_ENV": "development",
+            "DEBUG": "False",
+        })
+        script = (
+            "import json; import config.settings as s; "
+            "print(json.dumps({"
+            "'backend': s.STORAGES['staticfiles']['BACKEND'], "
+            "'autorefresh': s.WHITENOISE_AUTOREFRESH, "
+            "'finders': s.WHITENOISE_USE_FINDERS, "
+            "'template_debug': s.TEMPLATES[0]['OPTIONS']['debug']"
+            "}))"
+        )
+        result = subprocess.run(
+            [sys.executable, "-c", script],
+            cwd=str(os.path.dirname(os.path.dirname(__file__))),
+            env=environment,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(json.loads(result.stdout.strip()), {
+            "backend": "config.staticfiles.LiveStaticFilesStorage",
+            "autorefresh": True,
+            "finders": True,
+            "template_debug": True,
+        })
+
+
 class HealthEndpointTests(SimpleTestCase):
     def test_health_endpoint_is_anonymous_and_cache_disabled(self):
         response = self.client.get("/healthz/")
@@ -137,11 +171,15 @@ class DeploymentArtifactTests(SimpleTestCase):
         for token in ("check --deploy", "migrate", "collectstatic", "nginx -t"):
             self.assertIn(token, script)
 
-    def test_nginx_terminates_tls_and_exposes_only_public_profile_media(self):
+    def test_nginx_terminates_tls_and_blocks_direct_profile_media(self):
         nginx = self._read("deploy/nginx/fluxtrack.conf")
         for token in ("listen 443 ssl", "X-Forwarded-Proto", "proxy_pass",
-                      "location /media/profile_photos/"):
+                      "location ^~ /media/profile_photos/", "return 404"):
             self.assertIn(token, nginx)
+        self.assertNotIn(
+            "alias /srv/fluxtrack/shared/media/profile_photos/",
+            nginx,
+        )
         self.assertNotIn("location /media/ {", nginx)
 
     def test_production_logging_emits_request_errors_to_process_stderr(self):

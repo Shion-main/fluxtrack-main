@@ -190,3 +190,58 @@ class MergeScanIdempotencyTests(TestCase):
             ).count(),
             1,
         )
+
+
+class MergeScanCompletionTests(TestCase):
+    """One merged presence event must also have one completion event."""
+
+    def setUp(self):
+        self.fx = make_merge_fixture()
+        checkin = R.Resolution(R.CHECKED_IN, self.fx.anchor.pk)
+        _apply(
+            _req(self.fx.faculty),
+            checkin,
+            self.fx.anchor.room,
+            CheckinMethod.QR_SCAN,
+        )
+
+    def test_checkout_completes_active_merged_sibling(self):
+        checkout = R.Resolution(R.CHECKED_OUT, self.fx.anchor.pk)
+
+        _apply(
+            _req(self.fx.faculty),
+            checkout,
+            self.fx.anchor.room,
+            CheckinMethod.QR_SCAN,
+        )
+
+        anchor = Session.objects.get(pk=self.fx.anchor.pk)
+        sibling = Session.objects.get(pk=self.fx.sibling.pk)
+        control = Session.objects.get(pk=self.fx.control.pk)
+        self.assertEqual(anchor.status, SessionStatus.COMPLETED)
+        self.assertEqual(sibling.status, SessionStatus.COMPLETED)
+        self.assertEqual(sibling.actual_end, anchor.actual_end)
+        self.assertEqual(control.status, SessionStatus.SCHEDULED)
+        self.assertEqual(
+            AuditLog.objects.filter(
+                event_type="session.merged_completed",
+                target_id=str(self.fx.sibling.pk),
+            ).count(),
+            1,
+        )
+
+    def test_early_end_reason_propagates_to_active_merged_sibling(self):
+        early_end = R.Resolution(R.EARLY_END, self.fx.anchor.pk)
+
+        _apply(
+            _req(self.fx.faculty),
+            early_end,
+            self.fx.anchor.room,
+            CheckinMethod.QR_SCAN,
+            reason="Faculty emergency",
+        )
+
+        sibling = Session.objects.get(pk=self.fx.sibling.pk)
+        self.assertEqual(sibling.status, SessionStatus.COMPLETED)
+        self.assertTrue(sibling.ended_early)
+        self.assertEqual(sibling.early_end_reason, "Faculty emergency")

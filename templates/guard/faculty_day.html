@@ -1,0 +1,64 @@
+{% extends "base.html" %}
+{% load static %}
+{% block global_header %}{% endblock %}
+{% block title %}Faculty schedule · FluxTrack{% endblock %}
+{% block content %}
+<div class="ft-app">
+  <header class="ft-appbar">
+    <a href="{% url 'guard_locate' %}" class="ft-appbar__back"
+       aria-label="Back to faculty search"><uk-icon icon="arrow-left"></uk-icon></a>
+    <div class="ft-appbar__title">Today's schedule</div>
+  </header>
+
+  <main class="ft-page">
+    <div class="ft-greet">
+      <div class="ft-greet__hi">{{ faculty.get_full_name|default:faculty.username }}</div>
+      <div class="ft-greet__date">{{ today|date:"l, F j, Y" }}</div>
+    </div>
+
+    {% if sessions %}
+    <div class="ft-sec">
+      <div class="ft-sec__title">Classes today</div>
+      <span class="ft-chip" style="pointer-events:none">
+        {{ sessions|length }} class{{ sessions|length|pluralize:"es" }}
+      </span>
+    </div>
+    <div class="ft-list">
+      {% for session in sessions %}
+      <article class="ft-row">
+        <div class="ft-row__top">
+          <span class="ft-row__time">
+            {{ session.scheduled_start|time:"g:i A" }}-{{ session.scheduled_end|time:"g:i A" }}
+          </span>
+          <span class="ft-pill ft-pill--upcoming" style="margin-left:auto">
+            {{ session.get_status_display }}
+          </span>
+        </div>
+        <div class="ft-row__title">
+          {{ session.schedule.course_code }}-{{ session.schedule.section }}
+        </div>
+        <div class="ft-row__meta">
+          <span><uk-icon icon="map-pin"></uk-icon>
+            {{ session.room.floor.building.code }} · Floor {{ session.room.floor.number }} ·
+            {% include "_room_code.html" with room=session.room %}
+          </span>
+          {% include "_modality_badge.html" with modality=session.effective_modality %}
+          {% if session.is_outside_guard_floor %}
+          <span class="ft-pill ft-pill--late">Outside your floor</span>
+          {% endif %}
+        </div>
+      </article>
+      {% endfor %}
+    </div>
+    {% else %}
+    <div class="ft-outcome ft-outcome--neutral">
+      <div class="ft-outcome__head">
+        <span class="ft-outcome__icon"><uk-icon icon="calendar-x"></uk-icon></span>
+        <div class="ft-outcome__title">No classes today</div>
+      </div>
+      <p class="ft-outcome__body">This professor has no sessions scheduled for today.</p>
+    </div>
+    {% endif %}
+  </main>
+</div>
+{% endblock %}

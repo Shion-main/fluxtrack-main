@@ -44,7 +44,7 @@ Confirm forms reuse .ft-control + .ft-btn-navy. ASCII-only (no em dash).
   </div>
   <p class="ft-outcome__body">
     Check-in is past the grace window, so this session is recorded as Absent and
-    cannot be started. A Checker can correct this if you are physically present.</p>
+    cannot be started. If you held the class, ask the IFO office to reinstate the record.</p>
 </div>
 
 {% elif resolution.outcome == "too-early" %}
@@ -91,7 +91,9 @@ Confirm forms reuse .ft-control + .ft-btn-navy. ASCII-only (no em dash).
   <form class="ft-outcome__form" hx-post="/scan/confirm" hx-target="#outcome" hx-swap="innerHTML">
     {% csrf_token %}
     <input type="hidden" name="token" value="{{ confirm_token }}">
-    <input name="reason" class="ft-control" placeholder="Reason for ending early" required maxlength="255">
+    <label class="ft-label" for="early-end-reason">Reason for ending early</label>
+    <input id="early-end-reason" name="reason" class="ft-control"
+           placeholder="For example: emergency evacuation" required maxlength="255">
     <button class="ft-btn-navy" type="submit">Confirm early end</button>
   </form>
 </div>

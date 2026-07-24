@@ -29,6 +29,7 @@ from django.test import TestCase, override_settings
 from PIL import Image
 
 from accounts import photos
+from accounts.models import Department
 from ops.models import AuditLog
 
 PROFILE_URL = "/faculty/profile"
@@ -270,7 +271,70 @@ class ProfilePageTests(_MediaTempMixin, TestCase):
         self.client.post(UPLOAD_URL, {"photo": _image_upload()})
         body = self.client.get(PROFILE_URL).content.decode()
         self.assertIn("Current photo", body)
-        self.assertIn("profile_photos/", body)
+        self.assertIn(f"/profile/photo/{self.me.pk}", body)
+        self.assertNotIn("/media/profile_photos/", body)
+
+
+class ProtectedProfilePhotoTests(_MediaTempMixin, TestCase):
+    def setUp(self):
+        self.faculty = _user("fac12_private")
+        self.checker = _user("fac12_private_checker", role="checker")
+        self.other = _user("fac12_private_other")
+        self.client.force_login(self.faculty)
+        self.client.post(UPLOAD_URL, {"photo": _image_upload()})
+        self.faculty.refresh_from_db()
+        self.url = f"/faculty/photo/{self.faculty.pk}"
+
+    def test_owner_can_read_photo_through_protected_endpoint(self):
+        response = self.client.get(self.url)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response["Content-Type"], "image/jpeg")
+        self.assertEqual(response["Cache-Control"], "private, max-age=3600")
+
+    def test_checker_can_read_photo_for_identity_verification(self):
+        self.client.force_login(self.checker)
+
+        response = self.client.get(self.url)
+
+        self.assertEqual(response.status_code, 200)
+
+    def test_dean_can_read_only_own_department_faculty_photos(self):
+        department = Department.objects.create(
+            name="Photo Department", code="PHOTO")
+        other_department = Department.objects.create(
+            name="Other Photo Department", code="PHOTO-OTHER")
+        self.faculty.department = department
+        self.faculty.save(update_fields=["department"])
+        dean = _user("fac12_private_dean", role="dean")
+        dean.department = department
+        dean.save(update_fields=["department"])
+        foreign_dean = _user("fac12_private_foreign_dean", role="dean")
+        foreign_dean.department = other_department
+        foreign_dean.save(update_fields=["department"])
+
+        self.client.force_login(dean)
+        allowed = self.client.get(self.url)
+        self.client.force_login(foreign_dean)
+        refused = self.client.get(self.url)
+
+        self.assertEqual(allowed.status_code, 200)
+        self.assertEqual(refused.status_code, 403)
+
+    def test_other_faculty_cannot_read_photo(self):
+        self.client.force_login(self.other)
+
+        response = self.client.get(self.url)
+
+        self.assertEqual(response.status_code, 403)
+
+    def test_anonymous_is_sent_to_login(self):
+        self.client.logout()
+
+        response = self.client.get(self.url)
+
+        self.assertEqual(response.status_code, 302)
+        self.assertIn("/login", response["Location"])
 
 
 class ProfileAuthzTests(_MediaTempMixin, TestCase):
@@ -283,14 +347,14 @@ class ProfileAuthzTests(_MediaTempMixin, TestCase):
         self.client.force_login(self.me)
         self.assertEqual(self.client.get(PROFILE_URL).status_code, 200)
 
-    def test_non_faculty_authenticated_denied(self):
+    def test_non_faculty_authenticated_allowed(self):
         self.client.force_login(_user("fac12_dean", role="dean"))
-        self.assertEqual(self.client.get(PROFILE_URL).status_code, 403)
+        self.assertEqual(self.client.get(PROFILE_URL).status_code, 200)
 
-    def test_non_faculty_cannot_upload(self):
+    def test_non_faculty_can_upload_their_own_photo(self):
         self.client.force_login(_user("fac12_guard", role="guard"))
-        resp = self.client.post(UPLOAD_URL, {"photo": _image_upload()})
-        self.assertEqual(resp.status_code, 403)
+        resp = self.client.post("/profile/photo", {"photo": _image_upload()})
+        self.assertEqual(resp.status_code, 200)
 
     def test_anonymous_redirected_to_login(self):
         resp = self.client.get(PROFILE_URL)

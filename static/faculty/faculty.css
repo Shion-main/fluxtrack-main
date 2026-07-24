@@ -40,7 +40,7 @@
 .ft-top__mark { font-size: 1.15rem; font-weight: 750; letter-spacing: -.02em; color: var(--ink); }
 .ft-top__avatar {
   margin-left: auto;
-  width: 38px; height: 38px; border-radius: 50%;
+  width: 44px; height: 44px; border-radius: 50%;
   display: grid; place-items: center;
   background: var(--nv-hero); color: #fff;
   font-size: .82rem; font-weight: 650; letter-spacing: .01em;
@@ -155,7 +155,8 @@
 
 /* Teams-link input (Online modality) */
 .ft-field { margin-top: 4px; }
-.ft-field__label { display: block; font-size: .82rem; font-weight: 600; color: #fff; margin-bottom: 8px; }
+.ft-field__label { display: block; font-size: .82rem; font-weight: 600; color: var(--ink); margin-bottom: 8px; }
+.ft-hero .ft-field__label { color: #fff; }
 .ft-input-nv {
   display: flex; align-items: center; gap: 10px;
   background: #fff; border-radius: var(--r-btn); padding: 0 14px; min-height: 52px;
@@ -180,6 +181,7 @@
 a.ft-row:hover { border-color: #cdd5e6; }
 a.ft-row:active { transform: translateY(1px); }
 .ft-row__top { display: flex; align-items: center; gap: 10px; margin-bottom: 4px; }
+.ft-row__top > .modality-badge { margin-left: auto; }
 .ft-row__time { font-size: .82rem; font-weight: 600; color: var(--ft-muted); }
 .ft-row__title { font-size: .98rem; font-weight: 650; color: var(--ink); }
 .ft-row__meta { margin-top: 5px; font-size: .82rem; color: var(--ft-muted); display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
@@ -195,10 +197,7 @@ a.ft-row:active { transform: translateY(1px); }
 }
 .ft-pill uk-icon, .ft-pill svg { width: 13px; height: 13px; }
 .ft-pill .ft-dot { width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
-.ft-pill--f2f      { background: var(--nv-hero); color: #fff; }
 .ft-pill--online   { background: var(--info-bg); color: var(--info-ink); }
-.ft-pill--hybrid,
-.ft-pill--blended  { background: var(--purple-tint); color: var(--purple); }
 .ft-pill--active   { background: var(--green-tint); color: var(--green); }
 .ft-pill--upcoming { background: var(--panel-2); color: var(--ft-muted); }
 .ft-pill--late     { background: var(--amber-tint); color: var(--amber); }
@@ -243,6 +242,8 @@ a.ft-row:active { transform: translateY(1px); }
   transition: background-color .16s ease, color .16s ease;
 }
 .ft-tab uk-icon, .ft-tab svg { width: 23px; height: 23px; }
+.ft-tab__label { display: none; }
+.ft-tabbar__role { display: none; }
 .ft-tab:hover { color: var(--nv-hero); }
 .ft-tab:active { background: rgba(0,28,67,.05); }
 .ft-tab:focus-visible { outline: none; box-shadow: 0 0 0 2px var(--nv-hero); }
@@ -284,7 +285,7 @@ a.ft-row:active { transform: translateY(1px); }
 }
 .ft-scan__close {
   position: absolute; top: 18px; left: 18px; z-index: 3;
-  width: 40px; height: 40px; border-radius: 50%;
+  width: 44px; height: 44px; border-radius: 50%;
   display: grid; place-items: center;
   background: #fff; color: var(--ink);
   border: 1px solid var(--line); box-shadow: 0 2px 8px -3px rgba(11,27,58,.25);
@@ -350,7 +351,7 @@ a.ft-row:active { transform: translateY(1px); }
   padding: 8px 12px; border-bottom: 1px solid var(--line);
 }
 .ft-appbar__back {
-  width: 40px; height: 40px; border-radius: 12px;
+  width: 44px; height: 44px; border-radius: 12px;
   display: grid; place-items: center; color: var(--ink);
   background: transparent; border: 0; cursor: pointer; text-decoration: none;
 }
@@ -477,6 +478,74 @@ textarea.ft-control { min-height: 88px; padding: 10px 13px; resize: vertical; }
 .ft-control::placeholder { color: #6b7288; }  /* 4.79:1 on white (AA) */
 .ft-num { width: 76px; text-align: center; }
 
+/* Faculty attendance filters. The page is intentionally narrow and phone-first:
+   term owns a full row while the two date bounds pair when there is room. */
+.ft-history-filter { margin-bottom: 18px; gap: 12px; }
+.ft-history-filter__fields {
+  display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px;
+  padding: 14px; border: 1px solid var(--line);
+  border-radius: var(--r-card); background: var(--neutral-wash);
+}
+.ft-history-filter .ft-field { min-width: 0; margin-top: 0; }
+.ft-history-filter .ft-control { min-width: 0; }
+.ft-history-filter__actions { display: flex; align-items: stretch; gap: 10px; }
+.ft-history-filter__actions .ft-btn-navy { flex: 1 1 auto; min-height: 48px; }
+.ft-history-filter__actions .ft-btn-soft {
+  flex: 0 0 auto; width: auto; min-width: 88px; min-height: 48px;
+}
+
+@media (min-width: 23rem) {
+  .ft-history-filter__fields { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .ft-history-filter__term { grid-column: 1 / -1; }
+}
+
+/* Mobile attendance records. These are real article cards in the template,
+   separate from the desktop table, so phone reading order stays intentional. */
+.ft-history-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 20rem), 1fr));
+  gap: 10px;
+}
+.ft-history-card {
+  padding: 14px; background: #fff;
+  border: 1px solid var(--line); border-radius: var(--r-card);
+}
+.ft-history-card__top {
+  display: grid; grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start; gap: 12px;
+}
+.ft-history-card__identity { min-width: 0; }
+.ft-history-card__course {
+  color: var(--ink); font-size: 1rem; font-weight: 700;
+  line-height: 1.25; letter-spacing: -.01em; overflow-wrap: anywhere;
+}
+.ft-history-card__date {
+  display: flex; align-items: center; gap: 6px;
+  margin-top: 5px; color: var(--ft-muted);
+  font-size: .8rem; line-height: 1.35;
+}
+.ft-history-card__date uk-icon,
+.ft-history-card__date svg { width: 14px; height: 14px; flex: none; }
+.ft-history-card__status { flex: none; }
+.ft-history-card__facts {
+  display: grid; grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px; margin-top: 14px; padding-top: 13px;
+  border-top: 1px solid var(--line);
+}
+.ft-history-card__facts > div { min-width: 0; }
+.ft-history-card__facts dt {
+  color: var(--ft-muted); font-size: .72rem; font-weight: 650;
+  line-height: 1.35;
+}
+.ft-history-card__facts dd {
+  margin-top: 4px; color: var(--body);
+  font-size: .88rem; font-weight: 600; line-height: 1.4;
+}
+.ft-history-card__review { grid-column: 1 / -1; }
+.ft-history-card__review dd { font-weight: 400; }
+.ft-history-card__review .ft-pill {
+  max-width: 100%; white-space: normal; overflow-wrap: anywhere;
+}
 .ft-form input[type="radio"], .ft-form input[type="checkbox"] {
   width: 18px; height: 18px; accent-color: var(--nv-hero); flex: none;
 }
@@ -705,6 +774,7 @@ a.ft-card:active { transform: translateY(1px); }
 .ft-pick__title { font-weight: 650; color: var(--ink); font-size: .94rem; }
 .ft-pick__meta { display: block; margin-top: 3px; font-size: .82rem; color: var(--ft-muted); }
 .ft-pick__count { margin-top: 12px; font-size: .82rem; color: var(--ft-muted); }
+.ft-pick__card > .modality-badge { flex: none; }
 
 /* --- Light segmented control (step 2) --------------------------------------
    .ft-seg is navy-on-navy for the hero; the request form is a white sheet, so
@@ -785,7 +855,6 @@ input[type="file"].ft-control::file-selector-button {
 input[type="file"].ft-control::file-selector-button:hover { border-color: var(--nv-hero); }
 /* --- end Faculty profile photo (FAC-12) --- */
 
-=======
 /* --- Guard room detail (GRD-02) --------------------------------------------
    Appended as one contiguous block; touches no rule above. Two additions only:
    (1) the monitor's room card becomes a link to that room's schedule, and an
@@ -811,3 +880,148 @@ input[type="file"].ft-control::file-selector-button:hover { border-color: var(--
 .gd-room__grid { margin-top: 2px; }
 .gd-room__note { margin-top: 10px; font-size: .8rem; color: var(--ft-muted); }
 /* --- end Guard room detail (GRD-02) --------------------------------------- */
+
+/* ==========================================================================
+   Responsive floor-role shell
+   --------------------------------------------------------------------------
+   The phone layout above remains the source of truth. These min-width layers
+   only add room when a device has room to give: tablet cards become a working
+   grid, then the floating mobile tabs become a labelled campus-workspace rail
+   on desktop. Faculty, Checker, and Guard share this shell deliberately.
+   ========================================================================== */
+@media (min-width: 48rem) {
+  .ft-top,
+  .ft-page,
+  .ft-appbar {
+    max-width: 60rem;
+  }
+
+  .ft-top { padding: 18px 28px 12px; }
+  .ft-page {
+    padding: 24px 28px calc(108px + env(safe-area-inset-bottom, 0px));
+  }
+  .ft-appbar { margin-inline: auto; }
+
+  .ft-greet { margin-bottom: 22px; }
+  .ft-greet__hi { font-size: 1.75rem; }
+  .ft-sec { margin-top: 28px; }
+
+  .ft-list {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 20rem), 1fr));
+    align-items: start;
+    gap: 12px;
+  }
+  .ft-row,
+  .ft-card { height: 100%; }
+
+  .ft-hero { padding: 28px; }
+  .ft-hero__title { font-size: 2rem; }
+
+  .ft-history-filter {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: end;
+  }
+  .ft-history-filter__fields {
+    grid-template-columns: minmax(12rem, 1.2fr) repeat(2, minmax(10rem, 1fr));
+    padding: 16px;
+  }
+  .ft-history-filter__term { grid-column: auto; }
+  .ft-history-filter__actions { min-height: 100%; }
+  .ft-history-filter__actions .ft-btn-navy { min-width: 10rem; }
+
+  .ft-tabbar {
+    padding-inline: 16px;
+    padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 16px);
+  }
+  .ft-tabbar__row {
+    max-width: 46rem;
+    justify-content: center;
+    gap: 6px;
+    padding: 9px 12px;
+  }
+  .ft-tab {
+    display: inline-flex;
+    width: auto;
+    min-width: 7rem;
+    padding: 0 14px;
+    gap: 8px;
+  }
+  .ft-tab__label {
+    display: inline;
+    font-size: .78rem;
+    font-weight: 650;
+    white-space: nowrap;
+  }
+
+  .ft-manual__body { max-width: 36rem; }
+  .ft-scan { padding: 28px; }
+  .ft-scan__sheet {
+    width: 100%;
+    max-width: 48rem;
+    margin: auto;
+    border-radius: 28px;
+  }
+  .ft-viewfinder { width: 280px; }
+}
+
+@media (min-width: 64rem) {
+  .ft-top,
+  .ft-page,
+  .ft-appbar {
+    max-width: 72rem;
+  }
+
+  .ft-top { padding: 22px 32px 14px; }
+  .ft-page { padding: 28px 32px 56px; }
+
+  body:has(.ft-tabbar) .ft-page {
+    padding-left: 15rem;
+  }
+
+  .ft-tabbar {
+    left: max(24px, calc(50% - 36rem + 32px));
+    right: auto;
+    top: 92px;
+    bottom: auto;
+    width: 11.5rem;
+    padding: 0;
+  }
+  .ft-tabbar__row {
+    width: 100%;
+    max-width: none;
+    margin: 0;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 4px;
+    padding: 12px;
+    background: #fff;
+    border-radius: 18px;
+  }
+  .ft-tabbar__role {
+    display: block;
+    padding: 7px 12px 10px;
+    color: var(--ft-muted);
+    font-size: .7rem;
+    font-weight: 750;
+    letter-spacing: .12em;
+    text-transform: uppercase;
+  }
+  .ft-tab {
+    width: 100%;
+    min-width: 0;
+    height: 46px;
+    justify-content: flex-start;
+    padding: 0 12px;
+    border-radius: 11px;
+  }
+  .ft-tab uk-icon,
+  .ft-tab svg { width: 20px; height: 20px; }
+  .ft-tab__label { font-size: .84rem; }
+
+  .ft-history-cards,
+  .ft-list {
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 19rem), 1fr));
+  }
+}

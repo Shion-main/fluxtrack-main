@@ -6,6 +6,7 @@ from django.contrib.auth import get_user_model, login, logout
 from django.contrib.auth.decorators import login_required
 from django.http import HttpResponse, JsonResponse
 from django.shortcuts import redirect, render
+from django.utils.http import url_has_allowed_host_and_scheme
 from django.views.decorators.http import require_http_methods
 
 from accounts.models import Role
@@ -67,28 +68,53 @@ def login_view(request):
     via social-auth (see config/settings.py AUTHENTICATION_BACKENDS). In DEBUG,
     a passwordless dev-login also lets you sign in as any seeded user by username;
     it stays gated behind settings.DEBUG (D-08) and is never reachable in prod."""
+    next_url = _safe_next(request)
     if request.user.is_authenticated:
-        return redirect("/")
+        return redirect(next_url or "/")
 
     if request.method == "POST" and settings.DEBUG:
         username = request.POST.get("username", "")
         try:
             user = User.objects.get(username=username, is_active=True)
         except User.DoesNotExist:
-            return render(request, "web/login.html", _login_ctx(error="Unknown user."))
+            return render(
+                request,
+                "web/login.html",
+                _login_ctx(request, error="Unknown user."),
+            )
         # Two AUTHENTICATION_BACKENDS are configured (Entra PKCE + ModelBackend),
         # so login() cannot infer the backend and would raise ValueError — name
         # ModelBackend explicitly for the dev-login path (RESEARCH Pitfall 2, D-09#3).
         login(request, user, backend="django.contrib.auth.backends.ModelBackend")
-        return redirect("/")
+        return redirect(next_url or "/")
 
-    return render(request, "web/login.html", _login_ctx())
+    return render(request, "web/login.html", _login_ctx(request))
 
 
-def _login_ctx(error=None):
+def _safe_next(request):
+    candidate = (
+        request.POST.get("next")
+        or request.GET.get("next")
+        or ""
+    ).strip()
+    if candidate and url_has_allowed_host_and_scheme(
+        candidate,
+        allowed_hosts={request.get_host()},
+        require_https=request.is_secure(),
+    ):
+        return candidate
+    return ""
+
+
+def _login_ctx(request, error=None):
     dev_users = (list(User.objects.filter(username__in=DEMO_USERNAMES, is_active=True)
                       .order_by("role")) if settings.DEBUG else [])
-    return {"dev_mode": settings.DEBUG, "dev_users": dev_users, "error": error}
+    return {
+        "dev_mode": settings.DEBUG,
+        "dev_users": dev_users,
+        "error": error,
+        "next_url": _safe_next(request),
+    }
 
 
 def logout_view(request):
@@ -160,7 +186,7 @@ def manifest(request):
 
 
 SW_JS = r"""
-const CACHE = 'fluxtrack-shell-v5';
+const CACHE = 'fluxtrack-shell-v6';
 // Precache only stable, non-redirecting assets. '/' redirects when anonymous,
 // so caching it (and replaying the redirect) breaks navigation — never precache it.
 const SHELL = ['/login', '/icon-192.png'];
@@ -188,17 +214,16 @@ self.addEventListener('fetch', (e) => {
     return;
   }
 
-  // Static assets: cache-first, and only cache clean 200 same-origin responses.
+  // Static assets: network-first so a deployment can never combine fresh HTML
+  // with stale CSS/JS. The last clean response remains available offline.
   e.respondWith(
-    caches.match(req).then((hit) =>
-      hit || fetch(req).then((resp) => {
+    fetch(req).then((resp) => {
         if (resp.ok && resp.type === 'basic') {
           const copy = resp.clone();
           caches.open(CACHE).then((c) => c.put(req, copy));
         }
         return resp;
-      })
-    )
+      }).catch(() => caches.match(req))
   );
 });
 
@@ -243,7 +268,12 @@ self.addEventListener('notificationclick', (e) => {
 
 
 def service_worker(request):
-    return HttpResponse(SW_JS, content_type="text/javascript")
+    response = HttpResponse(SW_JS, content_type="text/javascript")
+    # The browser must revalidate the worker itself before the worker can evict
+    # an old shell cache. Caching /sw.js would make every asset fix depend on a
+    # user manually clearing site data.
+    response["Cache-Control"] = "no-cache, no-store, must-revalidate"
+    return response
 
 
 def icon(request, size):

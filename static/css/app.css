@@ -170,6 +170,25 @@
 .pill--info    { background: var(--navy-tint);   color: var(--navy); }
 .pill--neutral { background: var(--panel-2);     color: var(--ft-muted); }
 
+/* Structured modality badge, shared by every role and layout family. */
+.modality-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 24px;
+  padding: 3px 9px;
+  border-radius: 999px;
+  font-size: .74rem;
+  font-weight: 650;
+  line-height: 1.2;
+  white-space: nowrap;
+  vertical-align: middle;
+}
+.modality-badge--f2f     { background: var(--navy-tint); color: var(--navy); }
+.modality-badge--blended { background: var(--purple-tint); color: var(--purple); }
+.modality-badge--online  { background: var(--info-bg); color: var(--info-ink); }
+.modality-badge--unknown { background: var(--panel-2); color: var(--ft-muted); }
+
 /* --- Room code + virtual marker ---------------------------------------------
    Rendered by templates/_room_code.html. A V-prefixed code only reads as
    "virtual" to someone who already knows MMCM's naming rule, so the badge states

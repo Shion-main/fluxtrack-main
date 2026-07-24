@@ -34,7 +34,7 @@ text label. ASCII-only (no em dash).
           <b>{{ user.get_full_name|default:user.username }}</b>
           <span>{{ user.get_role_display }}{% if user.department %} · {{ user.department.name }}{% endif %}</span>
         </div>
-        <a class="ft-acct__item" href="{% url 'faculty_profile' %}"><uk-icon icon="user"></uk-icon> Profile</a>
+        <a class="ft-acct__item" href="{% url 'profile' %}"><uk-icon icon="user"></uk-icon> Profile</a>
         <a class="ft-acct__item" href="/logout"><uk-icon icon="log-out"></uk-icon> Sign out</a>
       </div>
     </details>
@@ -46,10 +46,10 @@ text label. ASCII-only (no em dash).
       <div class="ft-greet__date">Your own session records. Read-only.</div>
     </div>
 
-    <form class="ft-form" method="get" action="{% url 'faculty_history' %}"
-          style="margin-bottom:16px">
-      <div class="ft-fieldset">
-        <div class="ft-field">
+    <form class="ft-form ft-history-filter" method="get"
+          action="{% url 'faculty_history' %}">
+      <div class="ft-history-filter__fields">
+        <div class="ft-field ft-history-filter__term">
           <label class="ft-field__label" for="hist-term">Term</label>
           <select class="ft-control" id="hist-term" name="term">
             <option value="">All terms</option>
@@ -69,9 +69,11 @@ text label. ASCII-only (no em dash).
                  value="{{ filters.date_to }}">
         </div>
       </div>
-      <button class="ft-btn-navy" type="submit">
-        <uk-icon icon="filter"></uk-icon> Apply</button>
-      <a class="ft-btn-soft" href="{% url 'faculty_history' %}">Reset</a>
+      <div class="ft-history-filter__actions">
+        <button class="ft-btn-navy" type="submit">
+          <uk-icon icon="filter"></uk-icon> Apply filters</button>
+        <a class="ft-btn-soft" href="{% url 'faculty_history' %}">Reset</a>
+      </div>
       {% if filters.note %}
       <p class="ft-help" role="status" data-note="filter">
         <uk-icon icon="alert-triangle"></uk-icon> {{ filters.note }}</p>
@@ -79,37 +81,42 @@ text label. ASCII-only (no em dash).
     </form>
 
     {% if sessions %}
-    <div class="table-wrap">
-      <table class="tbl">
-        <thead>
-          <tr>
-            <th scope="col">Date</th>
-            <th scope="col">Course</th>
-            <th scope="col">Scheduled</th>
-            <th scope="col">Actual</th>
-            <th scope="col">Status</th>
-            <th scope="col">Checker</th>
-          </tr>
-        </thead>
-        <tbody>
-          {% for s in sessions %}
-          <tr data-session="{{ s.pk }}">
-            <td>{{ s.date|date:"M j, Y" }}</td>
-            <td>{{ s.schedule.course_code }} · {{ s.schedule.section }}</td>
-            <td>{{ s.scheduled_start|time:"g:i A" }}</td>
-            <td>{% if s.actual_start %}{{ s.actual_start|time:"g:i A" }}{% else %}<span aria-label="No actual start recorded">-</span>{% endif %}</td>
-            <td>
-              {% if s.present_label == "Present" %}
-              <span class="ft-pill ft-pill--active"><uk-icon icon="check"></uk-icon> Present</span>
-              {% elif s.present_label == "Absent" %}
-              <span class="ft-pill ft-pill--absent"><uk-icon icon="x"></uk-icon> Absent</span>
-              {% else %}
-              <span class="ft-pill ft-pill--upcoming"><uk-icon icon="clock"></uk-icon> Scheduled</span>
-              {% endif %}
-            </td>
-            <td>
+    <div class="ft-history-cards" aria-label="Attendance records">
+      {% for s in sessions %}
+      <article class="ft-history-card" data-history-session="{{ s.pk }}"
+               aria-label="{{ s.schedule.course_code }} {{ s.schedule.section }} attendance on {{ s.date|date:'F j, Y' }}">
+        <div class="ft-history-card__top">
+          <div class="ft-history-card__identity">
+            <h2 class="ft-history-card__course">{{ s.schedule.course_code }} · {{ s.schedule.section }}</h2>
+            <time class="ft-history-card__date" datetime="{{ s.date|date:'Y-m-d' }}">
+              <uk-icon icon="calendar-days"></uk-icon>
+              {{ s.date|date:"D, M j, Y" }}
+            </time>
+          </div>
+          <div class="ft-history-card__status">
+            {% if s.present_label == "Present" %}
+            <span class="ft-pill ft-pill--active"><uk-icon icon="check"></uk-icon> Present</span>
+            {% elif s.present_label == "Absent" %}
+            <span class="ft-pill ft-pill--absent"><uk-icon icon="x"></uk-icon> Absent</span>
+            {% else %}
+            <span class="ft-pill ft-pill--upcoming"><uk-icon icon="clock"></uk-icon> Scheduled</span>
+            {% endif %}
+          </div>
+        </div>
+
+        <dl class="ft-history-card__facts">
+          <div>
+            <dt>Scheduled</dt>
+            <dd>{{ s.scheduled_start|time:"g:i A" }}</dd>
+          </div>
+          <div>
+            <dt>Actual start</dt>
+            <dd>{% if s.actual_start %}{{ s.actual_start|time:"g:i A" }}{% else %}<span aria-label="No actual start recorded">Not recorded</span>{% endif %}</dd>
+          </div>
+          <div class="ft-history-card__review">
+            <dt>Checker review</dt>
+            <dd>
               {% if s.is_flagged %}
-              {% comment %}A chip, never a control: no href, no button, no form.{% endcomment %}
               <span class="ft-pill ft-pill--absent" data-flag="1">
                 <uk-icon icon="flag"></uk-icon> {{ s.flag_reason|default:"Flagged" }}</span>
               {% elif s.is_verified %}
@@ -117,12 +124,13 @@ text label. ASCII-only (no em dash).
               {% else %}
               <span class="ft-pill ft-pill--upcoming"><uk-icon icon="circle"></uk-icon> Not checked</span>
               {% endif %}
-            </td>
-          </tr>
-          {% endfor %}
-        </tbody>
-      </table>
+            </dd>
+          </div>
+        </dl>
+      </article>
+      {% endfor %}
     </div>
+
     {% include "_pager.html" %}
 
     <p class="ft-help" style="margin-top:12px">

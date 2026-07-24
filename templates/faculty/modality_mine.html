@@ -28,7 +28,7 @@ ASCII-only.
           <b>{{ user.get_full_name|default:user.username }}</b>
           <span>{{ user.get_role_display }}{% if user.department %} · {{ user.department.name }}{% endif %}</span>
         </div>
-        <a class="ft-acct__item" href="{% url 'faculty_profile' %}"><uk-icon icon="user"></uk-icon> Profile</a>
+        <a class="ft-acct__item" href="{% url 'profile' %}"><uk-icon icon="user"></uk-icon> Profile</a>
         <a class="ft-acct__item" href="/logout"><uk-icon icon="log-out"></uk-icon> Sign out</a>
       </div>
     </details>
@@ -54,12 +54,18 @@ ASCII-only.
       {% for r in requests %}
       <div class="ft-row">
         <div class="ft-row__top">
-          <span class="ft-row__title">Shift to {{ r.get_target_modality_display }}</span>
+          <span class="ft-row__title">
+            {% if r.is_dean_override %}Dean override{% else %}Modality shift{% endif %}
+          </span>
           {% if r.status == "pending" %}<span class="ft-pill ft-pill--pending" style="margin-left:auto">Pending</span>
           {% elif r.status == "approved" %}<span class="ft-pill ft-pill--approved" style="margin-left:auto"><uk-icon icon="check"></uk-icon> Approved</span>
           {% elif r.status == "rejected" %}<span class="ft-pill ft-pill--absent" style="margin-left:auto">Rejected</span>
           {% elif r.status == "denied" %}<span class="ft-pill ft-pill--absent" style="margin-left:auto">Denied</span>
           {% else %}<span class="ft-pill ft-pill--done" style="margin-left:auto">Withdrawn</span>{% endif %}
+        </div>
+
+        <div class="ft-row__meta">
+          {% include "_modality_badge.html" with modality=r.target_modality %}
         </div>
 
         <div class="ft-row__meta">
@@ -73,12 +79,47 @@ ASCII-only.
           {% for item in r.items.all %}{{ item.schedule.course_code }}-{{ item.schedule.section }}{% if not forloop.last %}, {% endif %}{% empty %}(no classes){% endfor %}
         </div>
 
+        <div class="ft-row__meta" style="margin-top:6px">
+          <uk-icon icon="message-square"></uk-icon>
+          {{ r.request_reason|default:"No rationale recorded." }}
+        </div>
+
+        {% for item in r.items.all %}
+          {% if item.new_start_time and item.new_end_time %}
+          <div class="ft-row__meta" style="margin-top:2px">
+            <uk-icon icon="clock"></uk-icon>
+            {{ item.schedule.course_code }}-{{ item.schedule.section }}:
+            {{ item.new_start_time|time:"g:i A" }}-{{ item.new_end_time|time:"g:i A" }}
+          </div>
+          {% endif %}
+          {% if item.preferred_room %}
+          <div class="ft-row__meta" style="margin-top:2px">
+            <uk-icon icon="map-pin"></uk-icon> Preferred: {{ item.preferred_room.code }}
+          </div>
+          {% endif %}
+          {% if item.assigned_room %}
+          <div class="ft-row__meta" style="margin-top:2px">
+            <uk-icon icon="map-pin"></uk-icon> Assigned: {{ item.assigned_room.code }}
+          </div>
+          {% endif %}
+        {% endfor %}
+
+        {% if r.decided_by and r.decided_at %}
+        <div class="ft-row__meta" style="margin-top:2px">
+          <uk-icon icon="user-check"></uk-icon>
+          Decided by {{ r.decided_by.get_full_name|default:r.decided_by.username }}
+          on {{ r.decided_at|date:"M j, Y g:i A" }}
+        </div>
+        {% endif %}
+
         {% if r.decision_reason and r.status == "rejected" or r.decision_reason and r.status == "denied" %}
         <div class="ft-row__meta" style="margin-top:2px"><uk-icon icon="message-square"></uk-icon> {{ r.decision_reason }}</div>
         {% endif %}
 
         {% if r.status == "pending" %}
-        <form method="post" action="/faculty/modality/{{ r.pk }}/withdraw" style="margin-top:12px">
+        <form method="post" action="/faculty/modality/{{ r.pk }}/withdraw"
+              onsubmit="return window.confirm('Withdraw this pending request?');"
+              style="margin-top:12px">
           {% csrf_token %}
           <button type="submit" class="ft-btn-ghost-sm"><uk-icon icon="x"></uk-icon> Withdraw</button>
         </form>

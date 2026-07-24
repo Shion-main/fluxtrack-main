@@ -68,7 +68,10 @@ def make_history_session(faculty, *, days_ago=1, status=SessionStatus.COMPLETED,
 
 
 def _rendered_session_ids(resp):
-    return set(re.findall(r'data-session="(\d+)"', resp.content.decode()))
+    return set(re.findall(
+        r'data-history-session="(\d+)"',
+        resp.content.decode(),
+    ))
 
 
 class FacultyHistoryScopeTests(TestCase):
@@ -116,6 +119,34 @@ class FacultyHistoryScopeTests(TestCase):
         # Every page link must still carry the active filter.
         for link in re.findall(r'href="(\?[^"]*page=\d+)"', body):
             self.assertIn("from=2020-01-01", link)
+
+    def test_history_shows_five_cards_per_page(self):
+        for i in range(6):
+            make_history_session(self.me, days_ago=i + 2)
+
+        first = _rendered_session_ids(self.client.get("/faculty/history"))
+        second = _rendered_session_ids(
+            self.client.get("/faculty/history?page=2"),
+        )
+
+        self.assertEqual(len(first), 5)
+        self.assertEqual(len(second), 2)
+        self.assertTrue(first.isdisjoint(second))
+
+    def test_history_renders_real_session_cards_without_a_table_fallback(self):
+        """Every viewport gets purpose-built cards; width must not revive a table."""
+        body = self.client.get("/faculty/history").content.decode()
+
+        self.assertIn('class="ft-history-cards"', body)
+        self.assertNotIn("<table", body)
+        self.assertNotIn("ft-history-wrap", body)
+        self.assertEqual(
+            set(re.findall(r'data-history-session="(\d+)"', body)),
+            {str(self.mine.pk)},
+        )
+        self.assertIn('class="ft-history-card__course"', body)
+        for label in ("Scheduled", "Actual start", "Checker review"):
+            self.assertIn(f"<dt>{label}</dt>", body)
 
 
 class FacultyHistoryFlagTests(TestCase):

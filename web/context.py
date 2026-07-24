@@ -25,6 +25,7 @@ def notifications(request):
     user = getattr(request, "user", None)
     unread = unread_count(user) if user is not None and user.is_authenticated else 0
     return {
+        "app_is_production": settings.IS_PRODUCTION,
         "poll_ms": get_policy("poll_interval_seconds") * 1000,
         "unread": unread,
         "vapid_public_key": getattr(settings, "VAPID_PUBLIC_KEY", ""),

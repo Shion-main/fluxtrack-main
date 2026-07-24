@@ -1,0 +1,190 @@
+{% extends "dean/_console.html" %}
+{% block title %}{{ faculty.get_full_name|default:faculty.username }} - FluxTrack{% endblock %}
+{% block console_title %}Faculty profile{% endblock %}
+{% block console %}
+<a class="dn-back" href="{% url 'dean_faculty' %}">
+  <uk-icon icon="arrow-left"></uk-icon> All faculty
+</a>
+
+{% if error %}
+<div class="uk-alert uk-alert-destructive mb-4" role="alert">
+  <p class="uk-text-small">{{ error }}</p>
+</div>
+{% endif %}
+{% if message %}
+<div class="uk-alert mb-4" role="status">
+  <p class="uk-text-small">{{ message }}</p>
+</div>
+{% endif %}
+
+<section class="dn-profile">
+  {% if faculty.profile_photo %}
+  <img class="dn-profile__photo"
+       src="{% url 'profile_photo' user_id=faculty.pk %}"
+       alt="Profile photo of {{ faculty.get_full_name|default:faculty.username }}">
+  {% else %}
+  <span class="dn-profile__photo dn-profile__photo--empty" aria-hidden="true">
+    {{ faculty.first_name|default:faculty.username|slice:":1"|upper }}{{ faculty.last_name|slice:":1"|upper }}
+  </span>
+  {% endif %}
+  <div class="dn-profile__identity">
+    <h1>{{ faculty.get_full_name|default:faculty.username }}</h1>
+    <p>{{ faculty.email|default:"No email address recorded" }}</p>
+    <span>{{ faculty.department.name }}</span>
+  </div>
+  <a class="uk-btn uk-btn-default dn-profile__scorecard"
+     href="{% url 'dean_scorecard' faculty.pk %}">
+    <uk-icon icon="clipboard-check" class="size-4"></uk-icon>
+    Attendance scorecard
+  </a>
+</section>
+
+<section class="dn-section">
+  <div class="dn-section__head">
+    <div>
+      <h2>Recurring schedule</h2>
+      <p>The faculty member's active teaching assignments for the current term.</p>
+    </div>
+    <span class="uk-label uk-label-secondary">
+      {{ recurring_schedules|length }} class{{ recurring_schedules|length|pluralize:"es" }}
+    </span>
+  </div>
+  {% if recurring_schedules %}
+  <div class="dn-schedule-list">
+    {% for schedule in recurring_schedules %}
+    <article class="dn-schedule">
+      <div>
+        <strong>{{ schedule.course_code }}-{{ schedule.section }}</strong>
+        <span>
+          {{ schedule.get_day_of_week_display }} &middot;
+          {{ schedule.start_time|time:"g:i A" }}-{{ schedule.end_time|time:"g:i A" }}
+        </span>
+      </div>
+      <div class="dn-schedule__place">
+        <uk-icon icon="map-pin"></uk-icon>
+        {{ schedule.room.floor.building.code }} &middot;
+        Floor {{ schedule.room.floor.number }} &middot; {{ schedule.room.code }}
+      </div>
+      {% include "_modality_badge.html" with modality=schedule.modality %}
+    </article>
+    {% endfor %}
+  </div>
+  {% else %}
+  <div class="dn-empty dn-empty--compact">
+    <uk-icon icon="calendar-x"></uk-icon>
+    <p class="uk-text-small uk-text-muted">No active teaching schedules.</p>
+  </div>
+  {% endif %}
+</section>
+
+<section class="dn-section">
+  <div class="dn-section__head">
+    <div>
+      <h2>Upcoming sessions</h2>
+      <p>Select one or more sessions to change their modality.</p>
+    </div>
+    <span class="uk-label uk-label-secondary">
+      {{ sessions|length }} session{{ sessions|length|pluralize }}
+    </span>
+  </div>
+
+  {% if sessions %}
+  <form method="post" class="dn-change-flow"
+        onsubmit="return window.confirm('Apply this modality change to the selected sessions now?');">
+    {% csrf_token %}
+    <input type="hidden" name="action" value="bulk_override">
+
+    <section class="dn-change-panel" aria-labelledby="change-modality-heading">
+      <div class="dn-change-panel__head">
+        <div>
+          <h3 id="change-modality-heading">Choose the new modality</h3>
+          <p>The same modality and reason will apply to every selected session.</p>
+        </div>
+        <span class="dn-change-panel__count" aria-live="polite">
+          <b data-bulk-count>0</b> selected
+        </span>
+      </div>
+
+      <fieldset class="dn-modality-picker">
+        <legend>New modality</legend>
+        <div class="dn-modality-options">
+        {% for value, label in modality_choices %}
+          <label class="dn-modality-option">
+            <input type="radio" name="target_modality" value="{{ value }}" required>
+            {% include "_modality_badge.html" with modality=value %}
+          </label>
+        {% endfor %}
+        </div>
+      </fieldset>
+
+      <div class="dn-change-panel__reason">
+        <label class="uk-form-label" for="change-reason">Reason for change</label>
+        <input class="uk-input" id="change-reason" name="reason" maxlength="500"
+               required placeholder="Why is this change needed?">
+      </div>
+
+      <button class="uk-btn uk-btn-primary" type="submit" data-bulk-submit>
+        <uk-icon icon="repeat-2" class="size-4"></uk-icon>
+        <span data-bulk-submit-label>Change selected sessions</span>
+      </button>
+    </section>
+
+    <div class="dn-session-grid">
+      {% for session in sessions %}
+      <article class="dn-session">
+        <div class="dn-session__top">
+          <div class="dn-session__controls">
+            <label class="dn-session__select">
+              <input type="checkbox" name="sessions" value="{{ session.pk }}"
+                     data-bulk-session>
+              Select session
+            </label>
+            {% include "_modality_badge.html" with modality=session.effective_modality %}
+          </div>
+          <strong>{{ session.schedule.course_code }}-{{ session.schedule.section }}</strong>
+          <span>
+            {{ session.date|date:"l, M j, Y" }} &middot;
+            {{ session.scheduled_start|time:"g:i A" }}-{{ session.scheduled_end|time:"g:i A" }}
+          </span>
+        </div>
+        <p class="dn-session__place">
+          <uk-icon icon="map-pin"></uk-icon>
+          {{ session.room.floor.building.code }} &middot;
+          Floor {{ session.room.floor.number }} &middot; {{ session.room.code }}
+        </p>
+      </article>
+      {% endfor %}
+    </div>
+  </form>
+  {% else %}
+  <div class="dn-empty dn-empty--compact">
+    <uk-icon icon="calendar-check"></uk-icon>
+    <p class="uk-text-small uk-text-muted">
+      No upcoming scheduled sessions are available to override.
+    </p>
+  </div>
+  {% endif %}
+</section>
+{% if sessions %}
+<script>
+  (function () {
+    var boxes = Array.from(document.querySelectorAll("[data-bulk-session]"));
+    var count = document.querySelector("[data-bulk-count]");
+    var submit = document.querySelector("[data-bulk-submit]");
+    var submitLabel = document.querySelector("[data-bulk-submit-label]");
+    function updateBulkState() {
+      var selected = boxes.filter(function (box) { return box.checked; }).length;
+      count.textContent = selected;
+      submit.disabled = selected === 0;
+      if (selected === 1) submitLabel.textContent = "Change 1 session";
+      else if (selected > 1) submitLabel.textContent = "Change " + selected + " sessions";
+      else submitLabel.textContent = "Change selected sessions";
+    }
+    boxes.forEach(function (box) {
+      box.addEventListener("change", updateBulkState);
+    });
+    updateBulkState();
+  })();
+</script>
+{% endif %}
+{% endblock %}

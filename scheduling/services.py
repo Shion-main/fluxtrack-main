@@ -68,6 +68,17 @@ class ModalityShiftError(Exception):
     """
 
 
+def _has_recent_modality_request(faculty, schedule, cooldown_cutoff):
+    """Return whether ``schedule`` is already covered by a live/cooling ticket."""
+    return ModalityShiftRequest.objects.filter(
+        requester=faculty,
+        items__schedule=schedule,
+    ).filter(
+        Q(status=ModalityShiftStatus.PENDING)
+        | Q(decided_at__gte=cooldown_cutoff)
+    ).exists()
+
+
 def _single_term_id_for_schedules(schedules):
     term_ids = {sch.term_id for sch in schedules}
     if len(term_ids) != 1:
@@ -172,6 +183,118 @@ def affected_sessions(request):
     return result
 
 
+def dean_override_modality(session, dean, target_modality, reason, *, now=None):
+    """Directly change one upcoming department session on a Dean's authority.
+
+    The override deliberately reuses the normal approval consequence so room
+    release, conflict-safe room assignment, audit, and IFO notification cannot
+    drift from faculty-requested changes. It bypasses request lead time because
+    this is the exceptional path, but never bypasses department scope, active
+    term locking, session status, or room availability.
+    """
+    now = now or timezone.now()
+    reason = (reason or "").strip()
+    if not reason:
+        raise ModalityShiftError("a reason is required for a Dean override")
+    if len(reason) > 500:
+        raise ModalityShiftError(
+            "the override reason must be 500 characters or fewer")
+    if target_modality not in Modality.values:
+        raise ModalityShiftError("invalid target modality")
+
+    with transaction.atomic():
+        locked = (
+            Session.objects.select_for_update()
+            .select_related("faculty", "schedule")
+            .get(pk=session.pk)
+        )
+        if (dean.role != Role.DEAN or dean.department_id is None
+                or locked.faculty.department_id != dean.department_id):
+            raise ModalityShiftError(
+                "a Dean may override only faculty in their own department")
+        if locked.status != SessionStatus.SCHEDULED:
+            raise ModalityShiftError(
+                "only a scheduled class can have its modality overridden")
+        if locked.scheduled_end <= now:
+            raise ModalityShiftError(
+                "a past class can no longer have its modality overridden")
+
+        effective = locked.declared_modality or locked.schedule.modality
+        if effective == target_modality:
+            raise ModalityShiftError(
+                "the class already uses the selected modality")
+
+        _lock_writable_term(locked.schedule.term_id)
+        request = ModalityShiftRequest.objects.create(
+            requester=locked.faculty,
+            dean=dean,
+            department=dean.department,
+            target_modality=target_modality,
+            window_start=locked.date,
+            window_end=locked.date,
+            request_reason=reason,
+            is_dean_override=True,
+            status=ModalityShiftStatus.PENDING,
+        )
+        ModalityShiftItem.objects.create(
+            request=request,
+            schedule=locked.schedule,
+        )
+        result = apply_approval(request, dean, now=now)
+        AuditLog.objects.create(
+            actor=dean,
+            event_type="modality_shift.dean_override",
+            target_type="modality_shift_request",
+            target_id=str(result.pk),
+            payload={
+                "session": locked.pk,
+                "target_modality": target_modality,
+                "reason": reason,
+                "result": result.status,
+            },
+        )
+        return result
+
+
+def dean_bulk_override_modality(sessions, dean, target_modality, reason, *, now=None):
+    """Atomically apply one Dean-authorized modality to selected sessions.
+
+    Each selected occurrence keeps its own audit/request record so the history
+    remains exact. The outer transaction makes the group all-or-nothing: if any
+    session is invalid or cannot be changed, earlier changes are rolled back.
+    """
+    unique_sessions = []
+    seen = set()
+    for session in sessions:
+        if session.pk not in seen:
+            unique_sessions.append(session)
+            seen.add(session.pk)
+    if not unique_sessions:
+        raise ModalityShiftError("select at least one session to change")
+    faculty_ids = {session.faculty_id for session in unique_sessions}
+    if len(faculty_ids) != 1:
+        raise ModalityShiftError(
+            "bulk overrides must belong to one faculty member")
+
+    now = now or timezone.now()
+    with transaction.atomic():
+        results = []
+        for session in unique_sessions:
+            result = dean_override_modality(
+                session=session,
+                dean=dean,
+                target_modality=target_modality,
+                reason=reason,
+                now=now,
+            )
+            if result.status == ModalityShiftStatus.DENIED:
+                raise ModalityShiftError(
+                    result.decision_reason or
+                    "one selected session could not be changed")
+            results.append(result)
+        return results
+
+
 def weeks_window(n_weeks, *, now=None):
     """Date window covering the next ``n_weeks`` eligible weekly occurrences (D-01).
 
@@ -191,7 +314,7 @@ def weeks_window(n_weeks, *, now=None):
 
 def submit_modality_shift(faculty, schedules, target_modality, window_start,
                           window_end, *, preferred_rooms=None, time_move=None,
-                          now=None):
+                          request_reason="", now=None):
     """Create ONE atomic modality-shift ticket (D-19), gated + routed + audited.
 
     Validates and, on success, persists a ``ModalityShiftRequest`` (status
@@ -221,30 +344,24 @@ def submit_modality_shift(faculty, schedules, target_modality, window_start,
     if window_start > window_end:
         raise ModalityShiftError("window start is after window end")
 
-    # No-double-request guard (UAT 2026-07-05): refuse any selected schedule that
-    # already has a PENDING request, or one decided within the cooldown. WITHDRAWN is
-    # exempt (decided_at stays NULL), so a self-cancelled request can be re-raised now.
     cooldown_cutoff = now - timedelta(days=_REREQUEST_COOLDOWN_DAYS)
-    for sch in schedules:
-        if ModalityShiftRequest.objects.filter(
-            requester=faculty, items__schedule=sch,
-        ).filter(
-            Q(status=ModalityShiftStatus.PENDING)
-            | Q(decided_at__gte=cooldown_cutoff)
-        ).exists():
-            raise ModalityShiftError(
-                f"You already have a recent request for {sch.course_code} "
-                f"{sch.section}. Withdraw the pending one, or wait "
-                f"{_REREQUEST_COOLDOWN_DAYS} days after a decision.")
 
     is_move = time_move is not None
     new_start_time = new_end_time = None
     if is_move:
+        if len(schedules) != 1:
+            raise ModalityShiftError(
+                "a time change can apply to only one class per request"
+            )
         if target_modality not in (Modality.F2F, Modality.BLENDED):
             # D-16: a time-move is only ever bundled with a F2F/Blended shift.
             raise ModalityShiftError(
                 "a time-move must be bundled with a F2F or Blended shift")
         new_start_time, new_end_time = time_move
+        if new_end_time <= new_start_time:
+            raise ModalityShiftError(
+                "the new end time must be after the new start time"
+            )
 
     # Normalize preferred_rooms to {schedule_pk: Room}.
     pref = {}
@@ -300,10 +417,25 @@ def submit_modality_shift(faculty, schedules, target_modality, window_start,
 
     with transaction.atomic():
         _lock_writable_term(term_id)
+        # Serialize submissions for a term before checking for a duplicate.
+        # Without this in-lock recheck, two simultaneous POSTs can both pass an
+        # earlier snapshot and create two PENDING tickets for the same class.
+        for sch in schedules:
+            if _has_recent_modality_request(
+                faculty,
+                sch,
+                cooldown_cutoff,
+            ):
+                raise ModalityShiftError(
+                    f"You already have a recent request for {sch.course_code} "
+                    f"{sch.section}. Withdraw the pending one, or wait "
+                    f"{_REREQUEST_COOLDOWN_DAYS} days after a decision."
+                )
         request = ModalityShiftRequest.objects.create(
             requester=faculty, dean=dean, department=faculty.department,
             target_modality=target_modality,
             window_start=window_start, window_end=window_end,
+            request_reason=request_reason,
             is_time_move=is_move, status=ModalityShiftStatus.PENDING,
         )
         for sch in schedules:
@@ -319,6 +451,7 @@ def submit_modality_shift(faculty, schedules, target_modality, window_start,
                 "target_modality": target_modality,
                 "window_start": str(window_start),
                 "window_end": str(window_end),
+                "request_reason": request_reason,
                 "is_time_move": is_move,
                 "schedules": [sch.pk for sch in schedules],
             },
@@ -489,8 +622,10 @@ def _apply_f2f(request, sessions, dean, now):
             session.declared_modality = request.target_modality
             session.modality_changed_at = now
             session.modality_changed_by = dean
+            session.room_released_at = None
             fields = ["room", "declared_modality",
-                      "modality_changed_at", "modality_changed_by"]
+                      "modality_changed_at", "modality_changed_by",
+                      "room_released_at"]
             if is_move:
                 session.scheduled_start = at_start
                 session.scheduled_end = at_end
@@ -547,14 +682,17 @@ def apply_approval(request, dean, *, now=None):
         # Apply the consequence inside a SAVEPOINT so a no-room / double-book
         # aborts ALL session + item writes (all-or-nothing, D-07 REVISED / D-19).
         deny_reason = None
-        try:
-            with transaction.atomic():
-                if req.target_modality == Modality.ONLINE:
-                    _apply_online(req, sessions, dean, now)
-                else:
-                    _apply_f2f(req, sessions, dean, now)
-        except _NoRoomAvailable as exc:
-            deny_reason = exc.reason  # savepoint rolled back -> sessions untouched
+        if not sessions:
+            deny_reason = "No sessions remain eligible for this request."
+        else:
+            try:
+                with transaction.atomic():
+                    if req.target_modality == Modality.ONLINE:
+                        _apply_online(req, sessions, dean, now)
+                    else:
+                        _apply_f2f(req, sessions, dean, now)
+            except _NoRoomAvailable as exc:
+                deny_reason = exc.reason  # savepoint rolled back -> sessions untouched
 
         if deny_reason is not None:
             # D-07 REVISED: terminal DENIED (never left pending), nothing changed.
@@ -588,13 +726,23 @@ def apply_approval(request, dean, *, now=None):
         )
 
         # Decision -> requester; applied -> IFO informational (D-11, not a gate).
-        notify(
-            users=[req.requester], type="modality_shift_approved",
-            title="Modality shift approved",
-            body=(f"Your {req.target_modality} shift for {req.window_start} to "
-                  f"{req.window_end} was approved."),
-            link="/faculty/modality/mine",
-        )
+        if req.is_dean_override:
+            notify(
+                users=[req.requester], type="modality_overridden",
+                title="Modality changed by your Dean",
+                body=(f"Your Dean changed your class modality to "
+                      f"{req.get_target_modality_display()} for "
+                      f"{req.window_start}. Reason: {req.request_reason}"),
+                link="/faculty/modality/mine",
+            )
+        else:
+            notify(
+                users=[req.requester], type="modality_shift_approved",
+                title="Modality shift approved",
+                body=(f"Your {req.target_modality} shift for "
+                      f"{req.window_start} to {req.window_end} was approved."),
+                link="/faculty/modality/mine",
+            )
         if req.target_modality == Modality.ONLINE:
             ifo_body = (f"{len(sessions)} session(s) moved online for "
                         f"{req.window_start} to {req.window_end}.")

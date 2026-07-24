@@ -31,8 +31,10 @@ missed every page added after it was written.{% endcomment %}
     </nav>
 
     <div class="cns__foot">
-      <span class="cns__avatar">{{ user.first_name|default:user.username|slice:":1"|upper }}{{ user.last_name|slice:":1"|upper }}</span>
-      <span class="cns__who"><b>{{ user.get_full_name|default:user.username }}</b><span>{% if user.department %}{{ user.department.name }}{% else %}All departments{% endif %}</span></span>
+      <a href="{% url 'profile' %}" class="cns__identity" aria-label="View profile">
+        <span class="cns__avatar">{{ user.first_name|default:user.username|slice:":1"|upper }}{{ user.last_name|slice:":1"|upper }}</span>
+        <span class="cns__who"><b>{{ user.get_full_name|default:user.username }}</b><span>{% if user.department %}{{ user.department.name }}{% else %}All departments{% endif %}</span></span>
+      </a>
       <a href="/logout" class="cns__signout" aria-label="Sign out" title="Sign out"><uk-icon icon="log-out"></uk-icon></a>
     </div>
   </aside>

@@ -88,15 +88,46 @@ def monitor_rows(request):
     now = timezone.now()
     active_term = get_active_term()
     floor_ids = _guard_floor_ids(request.user, now)
-    sessions = None
+    sessions = []
+    faculty_today = []
     if floor_ids and active_term is not None:
-        sessions = (Session.objects
-                    .filter(date=timezone.localdate(), room__floor_id__in=floor_ids,
-                            schedule__term=active_term)
-                    .select_related("room", "schedule", "faculty")
-                    .order_by("scheduled_start"))
+        sessions = list(
+            Session.objects
+            .filter(date=timezone.localdate(), room__floor_id__in=floor_ids,
+                    schedule__term=active_term)
+            .select_related("room", "room__floor", "schedule", "faculty")
+            .order_by("scheduled_start")
+        )
+        # One tap target per professor, even when they teach several classes on
+        # the posted floor. Online classes in a physical room and cancelled
+        # sessions do not mean the professor will be on that floor.
+        by_faculty = {}
+        for session in sessions:
+            effective_modality = (
+                session.declared_modality or session.schedule.modality
+            )
+            if (session.status == SessionStatus.CANCELLED
+                    or effective_modality == Modality.ONLINE
+                    or not occupies(session, session.room)):
+                continue
+            row = by_faculty.get(session.faculty_id)
+            if row is None:
+                row = {
+                    "faculty": session.faculty,
+                    "first_start": session.scheduled_start,
+                    "last_end": session.scheduled_end,
+                    "session_count": 0,
+                }
+                by_faculty[session.faculty_id] = row
+                faculty_today.append(row)
+            row["session_count"] += 1
+            if session.scheduled_start < row["first_start"]:
+                row["first_start"] = session.scheduled_start
+            if session.scheduled_end > row["last_end"]:
+                row["last_end"] = session.scheduled_end
     return render(request, "guard/_monitor_rows.html",
-                  {"sessions": sessions, "on_duty": bool(floor_ids),
+                  {"sessions": sessions, "faculty_today": faculty_today,
+                   "on_duty": bool(floor_ids),
                    "now": timezone.localtime(now)})
 
 
@@ -210,3 +241,51 @@ def locate(request):
     return render(request, "guard/locate.html", {
         "q": q, "faculty": faculty, "matches": matches,
         "current": current, "next": nxt, "online_now": online_now})
+
+
+@guard_required
+@require_http_methods(["GET"])
+def faculty_day(request, faculty_id):
+    """A Guard's read-only view of one professor's complete schedule today.
+
+    This intentionally is not floor-scoped: a guard may arrive here from a
+    campus-wide search, and the requested workflow needs to show where the
+    professor teaches next even when that room is outside the guard's post.
+    Floor membership is still derived server-side and only used to label those
+    off-post sessions. No attendance history, validation flags, or write
+    controls are exposed.
+    """
+    faculty = get_object_or_404(
+        get_user_model().objects.filter(role=Role.FACULTY, is_active=True),
+        pk=faculty_id,
+    )
+    now = timezone.now()
+    today = timezone.localdate()
+    term = get_active_term()
+    sessions = []
+    if term is not None:
+        sessions = list(
+            Session.objects
+            .filter(faculty=faculty, date=today, schedule__term=term)
+            .select_related("schedule", "room__floor__building")
+            .order_by("scheduled_start")
+        )
+
+    guard_floor_ids = _guard_floor_ids(request.user, now)
+    modality_labels = dict(Modality.choices)
+    for session in sessions:
+        effective_modality = (
+            session.declared_modality or session.schedule.modality
+        )
+        session.effective_modality = effective_modality
+        session.effective_modality_label = modality_labels[effective_modality]
+        session.is_outside_guard_floor = (
+            session.room.floor_id not in guard_floor_ids
+        )
+
+    return render(request, "guard/faculty_day.html", {
+        "faculty": faculty,
+        "sessions": sessions,
+        "today": today,
+        "on_duty": bool(guard_floor_ids),
+    })

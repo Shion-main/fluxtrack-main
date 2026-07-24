@@ -93,6 +93,7 @@ INSTALLED_APPS = [
 
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
+    "web.middleware.NoStoreHTMLMiddleware",
     "whitenoise.middleware.WhiteNoiseMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
@@ -115,6 +116,9 @@ TEMPLATES = [
         "DIRS": [BASE_DIR / "templates"],
         "APP_DIRS": True,
         "OPTIONS": {
+            # Freshness follows the deployment environment, not DEBUG. A local
+            # DEBUG=False run must still read template edits from source.
+            "debug": not IS_PRODUCTION,
             "context_processors": [
                 "django.template.context_processors.request",
                 "django.contrib.auth.context_processors.auth",
@@ -230,8 +234,8 @@ USE_TZ = True
 STATIC_URL = "/static/"
 STATIC_ROOT = BASE_DIR / "staticfiles"
 STATICFILES_DIRS = [BASE_DIR / "static"]
-# Manifest (hashed, far-future-cacheable) storage in production; plain storage in
-# development.
+# Manifest (hashed, far-future-cacheable) storage in production; source-aware,
+# automatically fingerprinted storage everywhere else.
 #
 # The manifest backend is right for prod and actively hostile in dev: {% static %}
 # resolves through staticfiles.json, WhiteNoise loads that manifest ONCE at process
@@ -240,22 +244,23 @@ STATICFILES_DIRS = [BASE_DIR / "static"]
 # the server -- and a stale manifest fails silently by serving the previous build,
 # which reads as "my CSS didn't apply" rather than as a build-step problem.
 #
-# In DEBUG the staticfiles app serves straight from STATICFILES_DIRS, so an edit is
-# live on reload with no build step.
-#
-# NOTE: the test runner forces DEBUG=False, so tests still resolve through the
-# manifest and still need `manage.py collectstatic` after adding a NEW static file
-# (a missing entry raises ValueError). That is a real packaging signal, so it is
-# left in place on purpose.
+# Static behavior follows FLUXTRACK_ENV rather than DEBUG. This matters when a
+# developer temporarily runs DEBUG=False: that must not silently switch the app
+# to an old STATIC_ROOT build. Production alone uses the collected manifest.
 STORAGES = {
     "default": {"BACKEND": "django.core.files.storage.FileSystemStorage"},
     "staticfiles": {
         "BACKEND": (
-            "django.contrib.staticfiles.storage.StaticFilesStorage" if DEBUG
-            else "whitenoise.storage.CompressedManifestStaticFilesStorage"
+            "whitenoise.storage.CompressedManifestStaticFilesStorage"
+            if IS_PRODUCTION
+            else "config.staticfiles.LiveStaticFilesStorage"
         ),
     },
 }
+# WhiteNoise can serve source files in a non-production DEBUG=False run.
+# Production remains collectstatic-only and immutable.
+WHITENOISE_AUTOREFRESH = not IS_PRODUCTION
+WHITENOISE_USE_FINDERS = not IS_PRODUCTION
 MEDIA_URL = "/media/"
 MEDIA_ROOT = Path(env("MEDIA_ROOT", str(BASE_DIR / "media")))
 

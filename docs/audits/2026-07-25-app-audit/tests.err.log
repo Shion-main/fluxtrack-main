@@ -1,0 +1,259 @@
+Using existing test database for alias 'default'...
+........................................................................2026-07-25 01:23:00,957 INFO apscheduler.scheduler pid=22924 Adding job tentatively -- it will be properly scheduled when the scheduler starts
+2026-07-25 01:23:00,975 INFO apscheduler.scheduler pid=22924 Adding job tentatively -- it will be properly scheduled when the scheduler starts
+2026-07-25 01:23:00,977 INFO apscheduler.scheduler pid=22924 Adding job tentatively -- it will be properly scheduled when the scheduler starts
+2026-07-25 01:23:00,985 INFO apscheduler.scheduler pid=22924 Adding job tentatively -- it will be properly scheduled when the scheduler starts
+2026-07-25 01:23:00,987 INFO apscheduler.scheduler pid=22924 Adding job tentatively -- it will be properly scheduled when the scheduler starts
+.................................ss2026-07-25 01:23:07,993 INFO apscheduler.scheduler pid=22924 Adding job tentatively -- it will be properly scheduled when the scheduler starts
+2026-07-25 01:23:07,996 INFO apscheduler.scheduler pid=22924 Adding job tentatively -- it will be properly scheduled when the scheduler starts
+2026-07-25 01:23:07,997 INFO apscheduler.scheduler pid=22924 Adding job tentatively -- it will be properly scheduled when the scheduler starts
+2026-07-25 01:23:07,999 INFO apscheduler.scheduler pid=22924 Adding job tentatively -- it will be properly scheduled when the scheduler starts
+2026-07-25 01:23:08,000 INFO apscheduler.scheduler pid=22924 Adding job tentatively -- it will be properly scheduled when the scheduler starts
+.........................................................2026-07-25 01:23:16,821 ERROR scheduling.reporting pid=22924 Reporting card failed: boom
+Traceback (most recent call last):
+  File "C:\Users\joshu_mnu8z3u\Downloads\fluxtrack-main\scheduling\reporting.py", line 1432, in safe_card
+    return fn(*args, **kwargs), None
+           ^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\joshu_mnu8z3u\Downloads\fluxtrack-main\scheduling\tests_reporting.py", line 208, in boom
+    raise RuntimeError(secret)
+RuntimeError: raw-internal-detail-should-not-leak
+.....................................................................................................................................................................................................................................................................................................................................................................................................................................................................2026-07-25 01:25:25,159 ERROR scheduling.reporting pid=22924 Reporting card failed: _coverage_card
+Traceback (most recent call last):
+  File "C:\Users\joshu_mnu8z3u\Downloads\fluxtrack-main\scheduling\reporting.py", line 1432, in safe_card
+    return fn(*args, **kwargs), None
+           ^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\joshu_mnu8z3u\Downloads\fluxtrack-main\web\ifo.py", line 1431, in _coverage_card
+    rows = coverage_by_building_day(**kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\joshu_mnu8z3u\AppData\Local\Programs\Python\Python312\Lib\unittest\mock.py", line 1139, in __call__
+    return self._mock_call(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\joshu_mnu8z3u\AppData\Local\Programs\Python\Python312\Lib\unittest\mock.py", line 1143, in _mock_call
+    return self._execute_mock_call(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\joshu_mnu8z3u\AppData\Local\Programs\Python\Python312\Lib\unittest\mock.py", line 1198, in _execute_mock_call
+    raise effect
+RuntimeError: coverage aggregate exploded
+.2026-07-25 01:25:25,704 ERROR scheduling.reporting pid=22924 Reporting card failed: _coverage_card
+Traceback (most recent call last):
+  File "C:\Users\joshu_mnu8z3u\Downloads\fluxtrack-main\scheduling\reporting.py", line 1432, in safe_card
+    return fn(*args, **kwargs), None
+           ^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\joshu_mnu8z3u\Downloads\fluxtrack-main\web\ifo.py", line 1431, in _coverage_card
+    rows = coverage_by_building_day(**kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\joshu_mnu8z3u\AppData\Local\Programs\Python\Python312\Lib\unittest\mock.py", line 1139, in __call__
+    return self._mock_call(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\joshu_mnu8z3u\AppData\Local\Programs\Python\Python312\Lib\unittest\mock.py", line 1143, in _mock_call
+    return self._execute_mock_call(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\joshu_mnu8z3u\AppData\Local\Programs\Python\Python312\Lib\unittest\mock.py", line 1198, in _execute_mock_call
+    raise effect
+  File "C:\Users\joshu_mnu8z3u\Downloads\fluxtrack-main\scheduling\reporting.py", line 1432, in safe_card
+    return fn(*args, **kwargs), None
+           ^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\joshu_mnu8z3u\Downloads\fluxtrack-main\web\ifo.py", line 1431, in _coverage_card
+    rows = coverage_by_building_day(**kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\joshu_mnu8z3u\AppData\Local\Programs\Python\Python312\Lib\unittest\mock.py", line 1139, in __call__
+    return self._mock_call(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\joshu_mnu8z3u\AppData\Local\Programs\Python\Python312\Lib\unittest\mock.py", line 1143, in _mock_call
+    return self._execute_mock_call(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\joshu_mnu8z3u\AppData\Local\Programs\Python\Python312\Lib\unittest\mock.py", line 1198, in _execute_mock_call
+    raise effect
+RuntimeError: coverage aggregate exploded
+.2026-07-25 01:25:26,209 ERROR scheduling.reporting pid=22924 Reporting card failed: _coverage_card
+Traceback (most recent call last):
+  File "C:\Users\joshu_mnu8z3u\Downloads\fluxtrack-main\scheduling\reporting.py", line 1432, in safe_card
+    return fn(*args, **kwargs), None
+           ^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\joshu_mnu8z3u\Downloads\fluxtrack-main\web\ifo.py", line 1431, in _coverage_card
+    rows = coverage_by_building_day(**kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\joshu_mnu8z3u\AppData\Local\Programs\Python\Python312\Lib\unittest\mock.py", line 1139, in __call__
+    return self._mock_call(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\joshu_mnu8z3u\AppData\Local\Programs\Python\Python312\Lib\unittest\mock.py", line 1143, in _mock_call
+    return self._execute_mock_call(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\joshu_mnu8z3u\AppData\Local\Programs\Python\Python312\Lib\unittest\mock.py", line 1198, in _execute_mock_call
+    raise effect
+  File "C:\Users\joshu_mnu8z3u\Downloads\fluxtrack-main\scheduling\reporting.py", line 1432, in safe_card
+    return fn(*args, **kwargs), None
+           ^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\joshu_mnu8z3u\Downloads\fluxtrack-main\web\ifo.py", line 1431, in _coverage_card
+    rows = coverage_by_building_day(**kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\joshu_mnu8z3u\AppData\Local\Programs\Python\Python312\Lib\unittest\mock.py", line 1139, in __call__
+    return self._mock_call(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\joshu_mnu8z3u\AppData\Local\Programs\Python\Python312\Lib\unittest\mock.py", line 1143, in _mock_call
+    return self._execute_mock_call(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\joshu_mnu8z3u\AppData\Local\Programs\Python\Python312\Lib\unittest\mock.py", line 1198, in _execute_mock_call
+    raise effect
+  File "C:\Users\joshu_mnu8z3u\Downloads\fluxtrack-main\scheduling\reporting.py", line 1432, in safe_card
+    return fn(*args, **kwargs), None
+           ^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\joshu_mnu8z3u\Downloads\fluxtrack-main\web\ifo.py", line 1431, in _coverage_card
+    rows = coverage_by_building_day(**kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\joshu_mnu8z3u\AppData\Local\Programs\Python\Python312\Lib\unittest\mock.py", line 1139, in __call__
+    return self._mock_call(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\joshu_mnu8z3u\AppData\Local\Programs\Python\Python312\Lib\unittest\mock.py", line 1143, in _mock_call
+    return self._execute_mock_call(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\joshu_mnu8z3u\AppData\Local\Programs\Python\Python312\Lib\unittest\mock.py", line 1198, in _execute_mock_call
+    raise effect
+RuntimeError: coverage aggregate exploded
+........................................................F...................................................................................................................2026-07-25 01:25:59,699 ERROR scheduling.reporting pid=22924 Reporting card failed: <MagicMock name='dept_summary' id='2629958815808'>
+Traceback (most recent call last):
+  File "C:\Users\joshu_mnu8z3u\Downloads\fluxtrack-main\scheduling\reporting.py", line 1432, in safe_card
+    return fn(*args, **kwargs), None
+           ^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\joshu_mnu8z3u\AppData\Local\Programs\Python\Python312\Lib\unittest\mock.py", line 1139, in __call__
+    return self._mock_call(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\joshu_mnu8z3u\AppData\Local\Programs\Python\Python312\Lib\unittest\mock.py", line 1143, in _mock_call
+    return self._execute_mock_call(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\joshu_mnu8z3u\AppData\Local\Programs\Python\Python312\Lib\unittest\mock.py", line 1198, in _execute_mock_call
+    raise effect
+RuntimeError: aggregate exploded
+.2026-07-25 01:26:00,421 ERROR scheduling.reporting pid=22924 Reporting card failed: <MagicMock name='faculty_attendance' id='2629958824640'>
+Traceback (most recent call last):
+  File "C:\Users\joshu_mnu8z3u\Downloads\fluxtrack-main\scheduling\reporting.py", line 1432, in safe_card
+    return fn(*args, **kwargs), None
+           ^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\joshu_mnu8z3u\AppData\Local\Programs\Python\Python312\Lib\unittest\mock.py", line 1139, in __call__
+    return self._mock_call(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\joshu_mnu8z3u\AppData\Local\Programs\Python\Python312\Lib\unittest\mock.py", line 1143, in _mock_call
+    return self._execute_mock_call(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\joshu_mnu8z3u\AppData\Local\Programs\Python\Python312\Lib\unittest\mock.py", line 1198, in _execute_mock_call
+    raise effect
+  File "C:\Users\joshu_mnu8z3u\Downloads\fluxtrack-main\scheduling\reporting.py", line 1432, in safe_card
+    return fn(*args, **kwargs), None
+           ^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\joshu_mnu8z3u\AppData\Local\Programs\Python\Python312\Lib\unittest\mock.py", line 1139, in __call__
+    return self._mock_call(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\joshu_mnu8z3u\AppData\Local\Programs\Python\Python312\Lib\unittest\mock.py", line 1143, in _mock_call
+    return self._execute_mock_call(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\joshu_mnu8z3u\AppData\Local\Programs\Python\Python312\Lib\unittest\mock.py", line 1198, in _execute_mock_call
+    raise effect
+RuntimeError: aggregate exploded
+.2026-07-25 01:26:00,919 ERROR scheduling.reporting pid=22924 Reporting card failed: <MagicMock name='room_utilization' id='2629958615408'>
+Traceback (most recent call last):
+  File "C:\Users\joshu_mnu8z3u\Downloads\fluxtrack-main\scheduling\reporting.py", line 1432, in safe_card
+    return fn(*args, **kwargs), None
+           ^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\joshu_mnu8z3u\AppData\Local\Programs\Python\Python312\Lib\unittest\mock.py", line 1139, in __call__
+    return self._mock_call(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\joshu_mnu8z3u\AppData\Local\Programs\Python\Python312\Lib\unittest\mock.py", line 1143, in _mock_call
+    return self._execute_mock_call(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\joshu_mnu8z3u\AppData\Local\Programs\Python\Python312\Lib\unittest\mock.py", line 1198, in _execute_mock_call
+    raise effect
+  File "C:\Users\joshu_mnu8z3u\Downloads\fluxtrack-main\scheduling\reporting.py", line 1432, in safe_card
+    return fn(*args, **kwargs), None
+           ^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\joshu_mnu8z3u\AppData\Local\Programs\Python\Python312\Lib\unittest\mock.py", line 1139, in __call__
+    return self._mock_call(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\joshu_mnu8z3u\AppData\Local\Programs\Python\Python312\Lib\unittest\mock.py", line 1143, in _mock_call
+    return self._execute_mock_call(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\joshu_mnu8z3u\AppData\Local\Programs\Python\Python312\Lib\unittest\mock.py", line 1198, in _execute_mock_call
+    raise effect
+  File "C:\Users\joshu_mnu8z3u\Downloads\fluxtrack-main\scheduling\reporting.py", line 1432, in safe_card
+    return fn(*args, **kwargs), None
+           ^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\joshu_mnu8z3u\AppData\Local\Programs\Python\Python312\Lib\unittest\mock.py", line 1139, in __call__
+    return self._mock_call(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\joshu_mnu8z3u\AppData\Local\Programs\Python\Python312\Lib\unittest\mock.py", line 1143, in _mock_call
+    return self._execute_mock_call(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\joshu_mnu8z3u\AppData\Local\Programs\Python\Python312\Lib\unittest\mock.py", line 1198, in _execute_mock_call
+    raise effect
+RuntimeError: aggregate exploded
+..............................................................................................................................................2026-07-25 01:26:45,277 ERROR scheduling.reporting pid=22924 Reporting card failed: <MagicMock name='dept_summary' id='2629964086160'>
+Traceback (most recent call last):
+  File "C:\Users\joshu_mnu8z3u\Downloads\fluxtrack-main\scheduling\reporting.py", line 1432, in safe_card
+    return fn(*args, **kwargs), None
+           ^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\joshu_mnu8z3u\AppData\Local\Programs\Python\Python312\Lib\unittest\mock.py", line 1139, in __call__
+    return self._mock_call(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\joshu_mnu8z3u\AppData\Local\Programs\Python\Python312\Lib\unittest\mock.py", line 1143, in _mock_call
+    return self._execute_mock_call(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\joshu_mnu8z3u\AppData\Local\Programs\Python\Python312\Lib\unittest\mock.py", line 1198, in _execute_mock_call
+    raise effect
+RuntimeError: KABOOM_SECRET_TRACE_12345
+............................................................2026-07-25 01:27:30,554 ERROR django.request pid=22924 Internal Server Error: /ifo/terms/1752/activate
+Traceback (most recent call last):
+  File "C:\Users\joshu_mnu8z3u\AppData\Roaming\Python\Python312\site-packages\django\core\handlers\exception.py", line 55, in inner
+    response = get_response(request)
+               ^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\joshu_mnu8z3u\AppData\Roaming\Python\Python312\site-packages\django\core\handlers\base.py", line 198, in _get_response
+    response = wrapped_callback(request, *callback_args, **callback_kwargs)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\joshu_mnu8z3u\AppData\Roaming\Python\Python312\site-packages\django\contrib\auth\decorators.py", line 59, in _view_wrapper
+    return view_func(request, *args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\joshu_mnu8z3u\Downloads\fluxtrack-main\web\ifo.py", line 68, in wrapped
+    return view(request, *args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\joshu_mnu8z3u\AppData\Roaming\Python\Python312\site-packages\django\views\decorators\http.py", line 64, in inner
+    return func(request, *args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\joshu_mnu8z3u\Downloads\fluxtrack-main\web\ifo_terms.py", line 219, in term_activate
+    return _term_action(request, pk, "activate")
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\joshu_mnu8z3u\Downloads\fluxtrack-main\web\ifo_terms.py", line 190, in _term_action
+    changed = activate_term(pk, **common)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\joshu_mnu8z3u\Downloads\fluxtrack-main\scheduling\term_lifecycle.py", line 363, in activate_term
+    result = materialize_term(
+             ^^^^^^^^^^^^^^^^^
+  File "C:\Users\joshu_mnu8z3u\AppData\Local\Programs\Python\Python312\Lib\unittest\mock.py", line 1139, in __call__
+    return self._mock_call(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\joshu_mnu8z3u\AppData\Local\Programs\Python\Python312\Lib\unittest\mock.py", line 1143, in _mock_call
+    return self._execute_mock_call(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\joshu_mnu8z3u\AppData\Local\Programs\Python\Python312\Lib\unittest\mock.py", line 1204, in _execute_mock_call
+    result = effect(*args, **kwargs)
+             ^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\joshu_mnu8z3u\Downloads\fluxtrack-main\web\tests_term_lifecycle.py", line 838, in fail_after_write
+    raise RuntimeError("materialization failed")
+RuntimeError: materialization failed
+.........................................................................................................................2026-07-25 01:28:00,794 INFO apscheduler.scheduler pid=22924 Adding job tentatively -- it will be properly scheduled when the scheduler starts
+2026-07-25 01:28:00,802 INFO apscheduler.scheduler pid=22924 Adding job tentatively -- it will be properly scheduled when the scheduler starts
+2026-07-25 01:28:00,802 INFO apscheduler.scheduler pid=22924 Adding job tentatively -- it will be properly scheduled when the scheduler starts
+2026-07-25 01:28:00,811 INFO apscheduler.scheduler pid=22924 Adding job tentatively -- it will be properly scheduled when the scheduler starts
+2026-07-25 01:28:00,811 INFO apscheduler.scheduler pid=22924 Adding job tentatively -- it will be properly scheduled when the scheduler starts
+.......................................................................................................................................................................................................
+======================================================================
+FAIL: test_a_booking_over_a_scheduled_class_is_refused (web.tests_ifo_ops.BookingCreateTests.test_a_booking_over_a_scheduled_class_is_refused)
+The session fixture is SCHEDULED, non-Online, un-released -- an
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "C:\Users\joshu_mnu8z3u\Downloads\fluxtrack-main\web\tests_ifo_ops.py", line 340, in test_a_booking_over_a_scheduled_class_is_refused
+    self.assertEqual(resp.status_code, 400)
+AssertionError: 200 != 400
+
+----------------------------------------------------------------------
+Ran 1315 tests in 887.648s
+
+FAILED (failures=1, skipped=2)
+Preserving test database for alias 'default'...

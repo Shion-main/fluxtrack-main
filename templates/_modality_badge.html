@@ -1,0 +1,13 @@
+{% comment %}
+Canonical structured modality badge. Pass a Modality value as `modality`.
+Keep wording and color here so every role sees the same modality language.
+{% endcomment %}
+{% if modality == "f2f" %}
+<span class="modality-badge modality-badge--f2f"><span>Face-to-face</span></span>
+{% elif modality == "blended" %}
+<span class="modality-badge modality-badge--blended"><span>Blended</span></span>
+{% elif modality == "online" %}
+<span class="modality-badge modality-badge--online"><span>Online</span></span>
+{% else %}
+<span class="modality-badge modality-badge--unknown"><span>{{ modality|default:"Unknown modality" }}</span></span>
+{% endif %}

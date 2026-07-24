@@ -27,7 +27,7 @@
           <span class="ft-bracket ft-bracket--br"></span>
         </div>
         <h1 class="ft-scan__title">Point camera at room QR code</h1>
-        <p class="ft-scan__sub" id="cam-status">Ensure the code is well lit and centered within the frame.</p>
+        <p class="ft-scan__sub" id="cam-status" role="status" aria-live="polite">Ensure the code is well lit and centered within the frame.</p>
 
         <div class="ft-or-ink">or</div>
         <button type="button" class="ft-btn-navy" onclick="showManual()">Input Room Code</button>
@@ -53,6 +53,7 @@
         <div class="ft-otp__box"></div><div class="ft-otp__box"></div>
         <div class="ft-otp__box"></div><div class="ft-otp__box"></div>
       </div>
+      <output class="sr-only" id="otp-value" aria-live="polite">0 of 6 digits entered</output>
       <p class="ft-otp__err" id="otp-err" role="alert"></p>
 
       <div class="ft-keypad">
@@ -83,7 +84,7 @@
         <uk-icon icon="x"></uk-icon>
       </button>
       <div class="ft-scan__body">
-        <div id="outcome"></div>
+        <div id="outcome" role="status" aria-live="polite" tabindex="-1"></div>
       </div>
     </div>
   </section>
@@ -137,6 +138,7 @@
   // --- Manual OTP keypad --------------------------------------------------
   const boxes = [...document.querySelectorAll("#otp .ft-otp__box")];
   const errEl = document.getElementById("otp-err");
+  const otpValue = document.getElementById("otp-value");
   const verifyBtn = document.getElementById("verify-btn");
   let digits = "";
 
@@ -146,6 +148,7 @@
       b.classList.toggle("is-filled", i < digits.length);
       b.classList.toggle("is-active", i === digits.length);
     });
+    otpValue.textContent = `${digits.length} of 6 digits entered`;
     verifyBtn.disabled = digits.length !== 6;
   }
   function resetOtp() { digits = ""; errEl.textContent = ""; renderOtp(); }
@@ -177,6 +180,17 @@
   renderOtp();
 
   // --- Resolve ------------------------------------------------------------
+  function showResolveError(message) {
+    if (!views.manual.hidden) {
+      errEl.textContent = message;
+      show("manual");
+      return;
+    }
+    document.getElementById("cam-status").textContent = message;
+    show("camera");
+    startCamera();
+  }
+
   async function postPayload(payload) {
     const body = new FormData();
     body.append("payload", payload);
@@ -185,10 +199,10 @@
       const r = await fetch("/scan/resolve", {
         method: "POST", headers: {"X-CSRFToken": CSRF}, body,
       });
+      if (!r.ok) throw new Error(`Resolve failed with ${r.status}`);
       text = await r.text();
     } catch (e) {
-      errEl.textContent = "Network error. Try again.";
-      showCamera();
+      showResolveError("Connection error. Check your network and try again.");
       return;
     }
     const el = document.getElementById("outcome");
@@ -196,6 +210,7 @@
     if (window.htmx) window.htmx.process(el);
     resetOtp();
     show("outcome");
+    el.focus();
   }
 
   // --- Entry point --------------------------------------------------------

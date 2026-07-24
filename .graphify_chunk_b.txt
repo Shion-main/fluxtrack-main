@@ -1,0 +1,13 @@
+scheduling/importing.py
+scheduling/management/commands/import_offerings.py
+scheduling/management/commands/load_room_master.py
+scheduling/management/commands/reset_term.py
+scheduling/tests.py
+scheduling/tests_e2e.py
+scheduling/tests_import.py
+scheduling/tests_import_hardening.py
+scheduling/tests_room_master.py
+scheduling/xlsx.py
+templates/faculty/schedule.html
+web/tests.py
+web/views.py

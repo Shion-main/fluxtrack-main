@@ -16,7 +16,7 @@ accent stripes. ASCII-only.
 {% endcomment %}
 <div class="ft-photo">
   {% if photo %}
-  <img class="ft-photo__img" src="{{ photo.url }}?v={{ photo_v }}"
+  <img class="ft-photo__img" src="{% url 'profile_photo' user_id=user.pk %}?v={{ photo_v }}"
        alt="Your current profile photo">
   {% else %}
   <div class="ft-photo__ph" aria-hidden="true"><uk-icon icon="user"></uk-icon></div>
@@ -24,12 +24,15 @@ accent stripes. ASCII-only.
   <div class="ft-photo__meta">
     {% if photo %}
     <div class="ft-label">Current photo</div>
-    <p class="ft-help">This is what a Checker sees when confirming your identity
-      in the room.</p>
+    <p class="ft-help">{% if user.role == "faculty" %}This is what a Checker sees
+      when confirming your identity in the room.{% else %}This picture identifies
+      you across FluxTrack.{% endif %}</p>
     {% else %}
     <div class="ft-label">No photo yet</div>
-    <p class="ft-help">Checkers have nothing to compare against until you upload
-      one, so identity checks fall back to asking you in person.</p>
+    <p class="ft-help">{% if user.role == "faculty" %}Checkers have nothing to
+      compare against until you upload one, so identity checks fall back to asking
+      you in person.{% else %}Upload a clear picture to complete your profile.
+      {% endif %}</p>
     {% endif %}
   </div>
 </div>

@@ -22,12 +22,21 @@ from django.contrib.auth.decorators import login_required
 from django.core.exceptions import PermissionDenied
 from django.core.files.storage import default_storage
 from django.http import Http404, HttpResponse
-from django.shortcuts import get_object_or_404, render
+from django.shortcuts import get_object_or_404, redirect, render
+from django.utils import timezone
 from django.views.decorators.http import require_http_methods
 
 from accounts.models import Role
 from ops.models import WeeklyReport
-from scheduling.models import Modality, ModalityShiftRequest, ModalityShiftStatus
+from scheduling.models import (
+    Modality,
+    ModalityShiftRequest,
+    ModalityShiftStatus,
+    Schedule,
+    ScheduleStatus,
+    Session,
+    SessionStatus,
+)
 from scheduling.report_render import build_csv, build_pdf
 from scheduling.reporting import (
     DeptSummary,
@@ -39,8 +48,11 @@ from scheduling.reporting import (
 from scheduling.services import (
     ModalityShiftError,
     apply_approval,
+    dean_bulk_override_modality,
+    dean_override_modality,
     reject_modality_shift,
 )
+from scheduling.term_scope import get_active_term
 from web.pagination import paginate
 from web.reporting_common import reporting_range as _reporting_range, selected_report_scope
 
@@ -142,6 +154,167 @@ def reject(request, pk):
     ctx = _queue_ctx(request.user, error=error, message=message)
     return render(request, "dean/_queue.html", ctx,
                   status=400 if error else 200)
+
+
+def _override_sessions(user, faculty):
+    """Upcoming scheduled sessions for one faculty member in the Dean's scope."""
+    term = get_active_term()
+    if user.department_id is None or faculty is None or term is None:
+        return []
+    sessions = list(
+        Session.objects
+        .filter(
+            faculty__department_id=user.department_id,
+            faculty=faculty,
+            schedule__term=term,
+            status=SessionStatus.SCHEDULED,
+            scheduled_end__gt=timezone.now(),
+        )
+        .select_related("faculty", "schedule", "room__floor__building")
+        .order_by("date", "scheduled_start")[:100]
+    )
+    labels = dict(Modality.choices)
+    for session in sessions:
+        effective = session.declared_modality or session.schedule.modality
+        session.effective_modality = effective
+        session.effective_modality_label = labels[effective]
+    return sessions
+
+
+@dean_required
+@require_http_methods(["GET"])
+def faculty_list(request):
+    """Active faculty in the Dean's own department."""
+    faculty_members = (
+        get_user_model().objects.filter(
+            role=Role.FACULTY,
+            department_id=request.user.department_id,
+            is_active=True,
+        ).order_by("last_name", "first_name", "username")
+        if request.user.department_id is not None
+        else get_user_model().objects.none()
+    )
+    return render(request, "dean/faculty_list.html", {
+        "faculty_members": faculty_members,
+    })
+
+
+@dean_required
+@require_http_methods(["GET", "POST"])
+def faculty_detail(request, faculty_id):
+    """Faculty profile, schedules, and department-scoped modality controls."""
+    if request.user.department_id is None:
+        raise Http404("No department.")
+    faculty = get_object_or_404(
+        get_user_model(),
+        pk=faculty_id,
+        role=Role.FACULTY,
+        department_id=request.user.department_id,
+        is_active=True,
+    )
+    term = get_active_term()
+    recurring_schedules = (
+        Schedule.objects.filter(
+            faculty=faculty,
+            term=term,
+            status=ScheduleStatus.ACTIVE,
+        )
+        .select_related("room__floor__building")
+        .order_by("day_of_week", "start_time", "course_code", "section")
+        if term is not None
+        else Schedule.objects.none()
+    )
+    error = message = None
+    if request.method == "POST":
+        target_modality = request.POST.get("target_modality") or ""
+        reason = request.POST.get("reason") or ""
+        if request.POST.get("action") == "bulk_override":
+            try:
+                selected_ids = {
+                    int(value) for value in request.POST.getlist("sessions")
+                }
+            except (TypeError, ValueError):
+                raise Http404("Invalid session.") from None
+            selected_sessions = list(
+                Session.objects.filter(
+                    pk__in=selected_ids,
+                    faculty=faculty,
+                    faculty__department_id=request.user.department_id,
+                ).select_related("faculty", "schedule")
+                .order_by("date", "scheduled_start")
+            )
+            if len(selected_sessions) != len(selected_ids):
+                raise Http404("Session not found.")
+            try:
+                results = dean_bulk_override_modality(
+                    sessions=selected_sessions,
+                    dean=request.user,
+                    target_modality=target_modality,
+                    reason=reason,
+                )
+            except ModalityShiftError as exc:
+                error = str(exc)
+            else:
+                changed = len(results)
+                noun = "session" if changed == 1 else "sessions"
+                message = f"{changed} {noun} changed successfully."
+        else:
+            session = get_object_or_404(
+                Session.objects.select_related("faculty", "schedule"),
+                pk=request.POST.get("session") or 0,
+                faculty=faculty,
+                faculty__department_id=request.user.department_id,
+            )
+            try:
+                result = dean_override_modality(
+                    session=session,
+                    dean=request.user,
+                    target_modality=target_modality,
+                    reason=reason,
+                )
+            except ModalityShiftError as exc:
+                error = str(exc)
+            else:
+                if result.status == ModalityShiftStatus.DENIED:
+                    error = (
+                        result.decision_reason or
+                        "The override could not be applied."
+                    )
+                else:
+                    message = "Modality changed successfully."
+    return render(request, "dean/faculty_detail.html", {
+        "faculty": faculty,
+        "recurring_schedules": recurring_schedules,
+        "sessions": _override_sessions(request.user, faculty),
+        "modality_choices": Modality.choices,
+        "error": error,
+        "message": message,
+    }, status=400 if error else 200)
+
+
+@dean_required
+@require_http_methods(["GET", "POST"])
+def modality_override(request):
+    """Compatibility seam for bookmarks and stale forms from the retired page."""
+    if request.method == "POST":
+        session = get_object_or_404(
+            Session.objects.select_related("faculty", "schedule"),
+            pk=request.POST.get("session") or 0,
+            faculty__department_id=request.user.department_id,
+        )
+        return faculty_detail(request, session.faculty_id)
+
+    selected_id = (request.GET.get("faculty") or "").strip()
+    if not selected_id:
+        return redirect("dean_faculty")
+    faculty = get_object_or_404(
+        get_user_model(),
+        pk=selected_id,
+        role=Role.FACULTY,
+        department_id=request.user.department_id,
+        is_active=True,
+    )
+    return redirect("dean_faculty_detail", faculty_id=faculty.pk)
 
 
 # --- DEAN reporting surface (DEAN-01..04, RPT-03) ---------------------------

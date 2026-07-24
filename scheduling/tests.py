@@ -56,9 +56,9 @@ class FacultyResolverTests(SimpleTestCase):
         r = resolve([sess()], now=T0 + timedelta(minutes=16))
         self.assertEqual(r.outcome, R.ABSENT)
 
-    def test_checkin_slightly_early_is_allowed(self):
+    def test_checkin_before_scheduled_start_is_too_early(self):
         r = resolve([sess()], now=T0 - timedelta(minutes=10))
-        self.assertEqual(r.outcome, R.CHECKED_IN)
+        self.assertEqual(r.outcome, R.TOO_EARLY)
 
     def test_checkin_far_too_early(self):
         r = resolve([sess()], now=T0 - timedelta(hours=2))
@@ -787,6 +787,22 @@ class ShiftScopeTests(TestCase):
                 fx.faculty, [fx.f2f_schedule], Modality.F2F,
                 date(2026, 7, 6), date(2026, 7, 6), now=_EARLY_NOW,
                 time_move=(_time(10, 0), _time(11, 30)),
+            )
+
+    def test_time_move_refused_when_end_is_not_after_start(self):
+        fx = make_shift_fixture()
+        with self.assertRaisesRegex(
+            ModalityShiftError,
+            "end time must be after",
+        ):
+            services.submit_modality_shift(
+                fx.faculty,
+                [fx.f2f_schedule],
+                Modality.F2F,
+                date(2026, 7, 6),
+                date(2026, 7, 6),
+                now=_EARLY_NOW,
+                time_move=(_time(15, 0), _time(14, 0)),
             )
 
     def test_valid_f2f_time_move_creates_time_move_ticket(self):

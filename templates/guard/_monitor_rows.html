@@ -10,7 +10,37 @@ label (WCAG 1.4.1). Off-duty renders a calm "not on duty" card. ASCII-only.{% en
   </div>
   <p class="ft-outcome__body">You don't have an active floor posting right now. Ask IFO to post you to a floor to see live room status.</p>
 </div>
-{% elif sessions %}
+{% else %}
+<div class="ft-sec">
+  <div class="ft-sec__title">Faculty on your floor</div>
+  <span class="ft-chip" style="pointer-events:none">{{ faculty_today|length }} today</span>
+</div>
+{% if faculty_today %}
+<div class="ft-list">
+  {% for item in faculty_today %}
+  <a href="{% url 'guard_faculty_day' item.faculty.pk %}"
+     class="ft-row" aria-label="View today's schedule for {{ item.faculty.get_full_name|default:item.faculty.username }}">
+    <div class="ft-row__top">
+      <uk-icon icon="user"></uk-icon>
+      <span class="ft-row__title">{{ item.faculty.get_full_name|default:item.faculty.username }}</span>
+      <uk-icon icon="chevron-right" style="margin-left:auto"></uk-icon>
+    </div>
+    <div class="ft-row__meta">
+      <span><uk-icon icon="calendar-clock"></uk-icon>
+        {{ item.first_start|time:"g:i A" }}-{{ item.last_end|time:"g:i A" }}</span>
+      <span>{{ item.session_count }} class{{ item.session_count|pluralize:"es" }}</span>
+    </div>
+  </a>
+  {% endfor %}
+</div>
+{% else %}
+<div class="ft-card ft-card--neutral">
+  <div class="ft-card__meta" style="display:flex;align-items:center;gap:8px;margin:0">
+    <uk-icon icon="users"></uk-icon> No faculty scheduled on your floor today.</div>
+</div>
+{% endif %}
+
+{% if sessions %}
 <div class="ft-sec">
   <div class="ft-sec__title">Rooms today</div>
   <span class="ft-chip" style="pointer-events:none">{{ sessions|length }} session{{ sessions|length|pluralize }}</span>
@@ -46,4 +76,5 @@ label (WCAG 1.4.1). Off-duty renders a calm "not on duty" card. ASCII-only.{% en
   <div class="ft-card__meta" style="display:flex;align-items:center;gap:8px;margin:0">
     <uk-icon icon="coffee"></uk-icon> No sessions on your floor today.</div>
 </div>
+{% endif %}
 {% endif %}

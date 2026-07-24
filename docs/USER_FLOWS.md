@@ -4,7 +4,9 @@
 > Guard, Dean, IFO, notification, reporting, term, and campus-management surfaces;
 > its “stub” labels are not current. Use [`../README.md`](../README.md),
 > [`PROGRESS.md`](./PROGRESS.md), and the live routes in `web/urls.py` for current
-> navigation. The diagrams below remain as early design history.
+> navigation. For the audited, current Faculty journey, use
+> [`FACULTY_USER_FLOW.md`](./FACULTY_USER_FLOW.md). The diagrams below remain as
+> early design history.
 
 > **What this is:** how each role actually moves through the app, screen to screen — not code
 > layers (see [`docs/ARCHITECTURE.md`](./ARCHITECTURE.md)) and not infrastructure (see
@@ -122,23 +124,38 @@ flowchart TD
 
 ## 3. Dean
 
-No persistent nav; single surface today.
+The Dean console separates incoming approvals from person-level faculty
+management. Exceptional direct overrides live with the affected faculty member's
+schedule instead of appearing as a separate navigation concept.
 
 ```mermaid
 flowchart TD
-    Home(["/ home launcher"]) --> Queue["Modality approvals<br/>/dean/requests<br/>pending shift requests from your department"]
+    Home(["Dean console"]) --> Queue["Approvals<br/>/dean/requests<br/>pending shift requests from your department"]
+    Home --> Faculty["Faculty<br/>/dean/faculty<br/>active department roster"]
     Queue -->|Approve| Approve["POST /dean/requests/&lt;id&gt;/approve"]
     Queue -->|Reject| Reject["POST /dean/requests/&lt;id&gt;/reject"]
     Approve --> QueueUpdated["HTMX-refreshed queue (_queue.html)<br/>+ Faculty notified"]
     Reject --> QueueUpdated
     QueueUpdated --> Queue
+    Faculty --> FacultyPick["Faculty cards<br/>photo + name"]
+    FacultyPick --> Profile["Faculty profile<br/>identity + recurring schedule + upcoming sessions"]
+    Profile --> SelectSessions["Select one or more sessions"]
+    SelectSessions --> SetModality["Choose one modality<br/>enter one required reason"]
+    SetModality --> ApplyOverride["Apply room release/assignment<br/>notify Faculty + IFO<br/>write override audit event"]
 ```
 
 **Screens:**
-- **Modality approvals** (`dean/queue.html` + `_queue.html`) — the only wired Dean surface. Approve
-  triggers room re-assignment/release inside `scheduling/services.py` (not visible to the Dean —
-  they just see the request disappear from the pending queue and the Faculty gets notified).
-  "Department oversight" (`#`) is a Phase 6 stub card on the home launcher.
+- **Faculty workspace** (`dean/faculty_list.html` and
+  `dean/faculty_detail.html`) - department-scoped cards lead to each active
+  faculty member's profile, recurring schedule, and upcoming dated sessions.
+  One unified form changes either one selected session or several selected
+  sessions atomically. The Dean chooses from the three visible modality options,
+  enters one required reason, and confirms once. Every change reuses the normal
+  conflict-safe room release/assignment service, notifies Faculty and IFO, and
+  is distinctly recorded as a Dean override.
+- **Modality approvals** (`dean/queue.html` + `_queue.html`) — approving triggers
+  room re-assignment/release inside `scheduling/services.py`; the request leaves
+  the pending queue and the Faculty member is notified.
 
 ## 4. IFO Admin
 
@@ -213,6 +230,13 @@ which is why `is_staff` users additionally get an **Admin** shortcut baked into 
 
 ## Cross-role notes
 
+- **Every authenticated role has a self-profile** at `/profile`, linked from the
+  standard header, floor-role account menus, and Dean/IFO console identity area.
+  It shows the user's photo, name, username, email, role, and department, and
+  allows the user to replace only their own photo. Faculty profiles additionally
+  list the faculty member's active-term teaching schedules with day, time,
+  modality, building, floor, and room. Deans manage their department roster
+  from the dedicated `/dean/faculty` workspace.
 - **QR scanning is the one mechanic two roles share** (Faculty check-in, Checker verification) but
   it means different things: Faculty confirms *their own* attendance; Checker confirms *someone
   else's*. Same camera UI, same resolver shape server-side (see `ARCHITECTURE.md` §6), different

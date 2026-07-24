@@ -184,6 +184,81 @@ class OnlineSelfStartTests(TestCase):
         self.assertEqual(s.status, SessionStatus.ACTIVE)
 
 
+class OnlineSelfCheckoutTests(TestCase):
+    """FAC-05: faculty can explicitly end an ACTIVE Online session."""
+
+    def setUp(self):
+        self.session = make_online_session(
+            username="fac_checkout",
+            status=SessionStatus.ACTIVE,
+            teams_link=GOOD_LINK,
+        )
+        self.session.actual_start = timezone.now() - timedelta(minutes=30)
+        self.session.checkin_method = CheckinMethod.ONLINE_SELF
+        self.session.save(update_fields=["actual_start", "checkin_method"])
+        self.faculty = self.session.faculty
+        self.url = f"/faculty/online/{self.session.pk}/checkout"
+
+    def test_checkout_completes_online_session_and_audits(self):
+        self.client.force_login(self.faculty)
+
+        response = self.client.post(
+            self.url,
+            {"reason": "Class moved to an emergency assembly"},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.session.refresh_from_db()
+        self.assertEqual(self.session.status, SessionStatus.COMPLETED)
+        self.assertIsNotNone(self.session.actual_end)
+        self.assertTrue(self.session.ended_early)
+        self.assertEqual(
+            self.session.early_end_reason,
+            "Class moved to an emergency assembly",
+        )
+        self.assertTrue(AuditLog.objects.filter(
+            actor=self.faculty,
+            event_type="session.online_checked_out",
+            target_id=str(self.session.pk),
+        ).exists())
+
+    def test_checkout_refuses_another_facultys_session(self):
+        attacker = _user("fac_checkout_attacker")
+        self.client.force_login(attacker)
+
+        response = self.client.post(self.url)
+
+        self.assertEqual(response.status_code, 404)
+        self.session.refresh_from_db()
+        self.assertEqual(self.session.status, SessionStatus.ACTIVE)
+
+    def test_checkout_refuses_non_active_session(self):
+        self.session.status = SessionStatus.COMPLETED
+        self.session.save(update_fields=["status"])
+        self.client.force_login(self.faculty)
+
+        response = self.client.post(self.url)
+
+        self.assertEqual(response.status_code, 400)
+
+    def test_early_online_checkout_requires_reason(self):
+        self.client.force_login(self.faculty)
+
+        response = self.client.post(self.url, {"reason": "   "})
+
+        self.assertEqual(response.status_code, 400)
+        self.session.refresh_from_db()
+        self.assertEqual(self.session.status, SessionStatus.ACTIVE)
+
+    def test_active_online_card_requests_early_end_reason(self):
+        self.client.force_login(self.faculty)
+
+        response = self.client.get("/faculty/online")
+
+        self.assertContains(response, 'name="reason"')
+        self.assertContains(response, "Reason for ending early")
+
+
 class OnlineStartValidationTests(TestCase):
     """The validation ladder, every rung refusing at 400 with nothing written."""
 

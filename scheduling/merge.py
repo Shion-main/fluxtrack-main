@@ -164,6 +164,55 @@ def propagate_merged_present(anchor, now, actor):
         return fill_ids
 
 
+def propagate_merged_completed(anchor, now, actor, *, ended_early=False, reason=""):
+    """Complete every ACTIVE sibling in the anchor's merged presence group."""
+    with transaction.atomic():
+        anchor = (
+            Session.objects.select_for_update()
+            .select_related("schedule__term")
+            .get(pk=anchor.pk)
+        )
+        term = AcademicTerm.objects.select_for_update().get(
+            pk=anchor.schedule.term_id
+        )
+        require_writable_term(term)
+        candidates = _materialize_candidates(anchor)
+        sibling_ids = merged_sibling_ids(anchor, candidates)
+        completion_ids = list(
+            Session.objects.filter(
+                pk__in=sibling_ids,
+                status=SessionStatus.ACTIVE,
+            ).values_list("pk", flat=True)
+        )
+        if not completion_ids:
+            return []
+
+        updates = {
+            "status": SessionStatus.COMPLETED,
+            "actual_end": now,
+        }
+        if ended_early:
+            updates.update(
+                ended_early=True,
+                early_end_reason=reason,
+            )
+        Session.objects.filter(pk__in=completion_ids).update(**updates)
+        AuditLog.objects.bulk_create([
+            AuditLog(
+                actor=actor,
+                event_type="session.merged_completed",
+                target_type="session",
+                target_id=str(pk),
+                payload={
+                    "merged_from": anchor.pk,
+                    "ended_early": ended_early,
+                },
+            )
+            for pk in completion_ids
+        ])
+        return completion_ids
+
+
 def propagate_merged_absent(anchor, actor, now=None):
     """Atomic SCHEDULED->ABSENT fill for the anchor's merged siblings (online D-07).
 

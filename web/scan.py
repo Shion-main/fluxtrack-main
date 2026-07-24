@@ -6,13 +6,13 @@ The outcome *decision* is the pure resolver (scheduling/resolver.py);
 this module fetches context, applies state changes, and renders outcomes.
 """
 import re
+import secrets
 from urllib.parse import parse_qs, urlparse
 
-from django.contrib.auth.decorators import login_required
 from django.core import signing
 from django.core.cache import cache
 from django.db import transaction
-from django.http import HttpResponseBadRequest
+from django.http import HttpResponse, HttpResponseBadRequest
 from django.shortcuts import render
 from django.utils import timezone
 from django.views.decorators.http import require_http_methods
@@ -23,9 +23,13 @@ from ops.models import AuditLog
 from ops.notify import notify
 from ops.policy import get_policy
 from scheduling import resolver as R
-from scheduling.merge import propagate_merged_present
+from scheduling.merge import (
+    propagate_merged_completed,
+    propagate_merged_present,
+)
 from scheduling.models import CheckinMethod, Session, SessionStatus
 from scheduling.term_scope import get_active_term
+from web.faculty import faculty_required
 
 CONFIRM_SALT = "fluxtrack.scan.confirm"
 CONFIRM_MAX_AGE = 180  # seconds a two-step token stays valid (SCAN-04)
@@ -63,6 +67,51 @@ def _room_from_payload(request, payload):
     return None, "bad-payload"
 
 
+def _current_resolution(user, room, now):
+    """Resolve one faculty scan against current authoritative state."""
+    active_term = get_active_term()
+    if active_term is None:
+        return None
+    sessions_today = list(
+        Session.objects.filter(
+            faculty=user,
+            date=timezone.localdate(),
+            schedule__term=active_term,
+        )
+        .select_related("schedule", "room")
+        .order_by("scheduled_start")
+    )
+    occupying = (
+        # A room released by IFO no longer counts as occupied, even if its
+        # session remains ACTIVE for attendance/audit purposes.
+        Session.objects.filter(
+            room=room,
+            status=SessionStatus.ACTIVE,
+            room_released_at__isnull=True,
+            schedule__term=active_term,
+        )
+        .exclude(faculty=user)
+        .values_list("pk", flat=True)
+        .first()
+    )
+    return R.resolve_faculty_scan(
+        sessions_today,
+        room.pk,
+        occupying,
+        now,
+        grace_min=get_policy("grace_minutes"),
+        early_end_min=get_policy("early_end_threshold_minutes"),
+    )
+
+
+def _stale_context(room):
+    return {
+        "resolution": None,
+        "room": room,
+        "error": "stale-confirmation",
+    }
+
+
 # --- outcome side effects --------------------------------------------------
 def _apply(request, resolution, room, method, reason=""):
     """Apply the resolved outcome's state changes. Returns context for rendering."""
@@ -70,13 +119,17 @@ def _apply(request, resolution, room, method, reason=""):
     user = request.user
     active_term = get_active_term()
     session = (
-        Session.objects.filter(pk=resolution.session_id, schedule__term=active_term)
+        Session.objects.filter(
+            pk=resolution.session_id,
+            faculty=user,
+            schedule__term=active_term,
+        )
         .select_related("schedule", "room")
         .first()
         if resolution.session_id and active_term is not None else None
     )
     if resolution.session_id and session is None:
-        return {"resolution": None, "room": room, "error": "bad-payload"}
+        return _stale_context(room)
 
     def audit(event, **payload):
         AuditLog.objects.create(actor=user, event_type=event,
@@ -86,6 +139,8 @@ def _apply(request, resolution, room, method, reason=""):
 
     o = resolution.outcome
     if o == R.CHECKED_IN:
+        if session.status != SessionStatus.SCHEDULED:
+            return _stale_context(room)
         # Anchor write + merged-group present fill share ONE transaction (D-04):
         # a rollback of the anchor rolls back every propagated sibling too.
         with transaction.atomic():
@@ -103,19 +158,35 @@ def _apply(request, resolution, room, method, reason=""):
             session.save(update_fields=["status"])
             audit("session.marked_absent", room=room.code)
     elif o == R.CHECKED_OUT:
-        session.status = SessionStatus.COMPLETED
-        session.actual_end = now
-        session.save(update_fields=["status", "actual_end"])
-        audit("session.checked_out", room=room.code)
+        if session.status != SessionStatus.ACTIVE:
+            return _stale_context(room)
+        with transaction.atomic():
+            session.status = SessionStatus.COMPLETED
+            session.actual_end = now
+            session.save(update_fields=["status", "actual_end"])
+            audit("session.checked_out", room=room.code)
+            propagate_merged_completed(session, now, user)
     elif o == R.EARLY_END:  # confirmed early end (reason supplied)
-        session.status = SessionStatus.COMPLETED
-        session.actual_end = now
-        session.ended_early = True
-        session.early_end_reason = reason
-        session.save(update_fields=["status", "actual_end", "ended_early",
-                                    "early_end_reason"])
-        audit("session.ended_early", room=room.code, reason=reason)
+        if session.status != SessionStatus.ACTIVE:
+            return _stale_context(room)
+        with transaction.atomic():
+            session.status = SessionStatus.COMPLETED
+            session.actual_end = now
+            session.ended_early = True
+            session.early_end_reason = reason
+            session.save(update_fields=["status", "actual_end", "ended_early",
+                                        "early_end_reason"])
+            audit("session.ended_early", room=room.code, reason=reason)
+            propagate_merged_completed(
+                session,
+                now,
+                user,
+                ended_early=True,
+                reason=reason,
+            )
     elif o == R.WRONG_ROOM:  # confirmed room change (FAC-10)
+        if session.status not in (SessionStatus.SCHEDULED, SessionStatus.ACTIVE):
+            return _stale_context(room)
         old = session.room.code
         session.room = room
         session.save(update_fields=["room"])
@@ -124,22 +195,29 @@ def _apply(request, resolution, room, method, reason=""):
                body=f"{user.get_full_name() or user.username} moved "
                     f"{session.schedule.course_code} from {old} to {room.code}.")
     elif o == R.ROOM_OCCUPIED:  # confirmed force handover (FAC-09)
+        if session.status != SessionStatus.SCHEDULED:
+            return _stale_context(room)
         # Prior auto-complete + anchor handover + merged-group present fill all
         # share ONE transaction (D-04), mirroring the CHECKED_IN path. The prior
         # occupant is a DIFFERENT faculty and is never merge-filled (faculty-
         # scoped helper, T-04.2-01).
         with transaction.atomic():
             prior = (
-                Session.objects.filter(
+                Session.objects.select_for_update().filter(
                     pk=resolution.prior_session_id,
+                    room=room,
+                    status=SessionStatus.ACTIVE,
+                    room_released_at__isnull=True,
                     schedule__term=active_term,
-                ).first()
+                ).exclude(faculty=user).first()
                 if active_term is not None else None
             )
-            if prior and prior.status == SessionStatus.ACTIVE:
-                prior.status = SessionStatus.COMPLETED
-                prior.actual_end = now
-                prior.save(update_fields=["status", "actual_end"])
+            if prior is None:
+                return _stale_context(room)
+            prior.status = SessionStatus.COMPLETED
+            prior.actual_end = now
+            prior.save(update_fields=["status", "actual_end"])
+            propagate_merged_completed(prior, now, user)
             session.status = SessionStatus.ACTIVE
             session.actual_start = now
             session.checkin_method = CheckinMethod.FORCE_HANDOVER
@@ -157,7 +235,7 @@ def _apply(request, resolution, room, method, reason=""):
 
 
 # --- views ------------------------------------------------------------------
-@login_required
+@faculty_required
 @require_http_methods(["POST"])
 def resolve(request):
     payload = request.POST.get("payload", "")
@@ -177,38 +255,18 @@ def resolve(request):
                        "error_detail": detail})
 
     now = timezone.now()
-    active_term = get_active_term()
-    if active_term is None:
+    resolution = _current_resolution(request.user, room, now)
+    if resolution is None:
         return render(request, "faculty/_outcome.html",
                       {"resolution": None, "error": "bad-payload"})
-    sessions_today = list(
-        Session.objects.filter(
-            faculty=request.user,
-            date=timezone.localdate(),
-            schedule__term=active_term,
-        )
-        .select_related("schedule", "room").order_by("scheduled_start"))
-    # room_released_at filter (audit M4): an ACTIVE session whose room was
-    # manually released (IFO-08) no longer holds the room — same rule as
-    # ops/availability.py and the JOB-02c conflict query. Without it, the next
-    # scan force-hands-over a ghost session and stamps a bogus actual_end.
-    occupying = (Session.objects.filter(room=room, status=SessionStatus.ACTIVE,
-                                        room_released_at__isnull=True,
-                                        schedule__term=active_term)
-                 .exclude(faculty=request.user).values_list("pk", flat=True).first())
-
-    resolution = R.resolve_faculty_scan(
-        sessions_today, room.pk, occupying, now,
-        grace_min=get_policy("grace_minutes"),
-        early_end_min=get_policy("early_end_threshold_minutes"))
-
     ctx = {"resolution": resolution, "room": room}
     if resolution.needs_confirm:
         # Two-step: sign the resolution; apply only on /scan/confirm (SCAN-04).
         ctx["confirm_token"] = signing.dumps(
             {"outcome": resolution.outcome, "session_id": resolution.session_id,
              "prior_session_id": resolution.prior_session_id, "room_id": room.pk,
-             "method": method, "user_id": request.user.pk},
+             "method": method, "user_id": request.user.pk,
+             "nonce": secrets.token_urlsafe(18)},
             salt=CONFIRM_SALT)
     elif resolution.session_id:
         # Idempotency: same user+session+minute returns without reapplying (SCAN-06).
@@ -219,12 +277,13 @@ def resolve(request):
         else:
             ctx["session"] = Session.objects.filter(
                 pk=resolution.session_id,
-                schedule__term=active_term,
+                faculty=request.user,
+                schedule__term=get_active_term(),
             ).first()
     return render(request, "faculty/_outcome.html", ctx)
 
 
-@login_required
+@faculty_required
 @require_http_methods(["POST"])
 def confirm(request):
     try:
@@ -235,16 +294,57 @@ def confirm(request):
     if data["user_id"] != request.user.pk:
         return HttpResponseBadRequest("Token does not belong to this user.")
 
-    room = Room.objects.get(pk=data["room_id"])
+    room = Room.objects.filter(pk=data.get("room_id")).first()
+    if room is None:
+        return HttpResponseBadRequest("Confirmation room no longer exists.")
     resolution = R.Resolution(data["outcome"], data["session_id"],
                               prior_session_id=data.get("prior_session_id"))
-    ctx = _apply(request, resolution, room, data["method"],
-                 reason=request.POST.get("reason", ""))
+    current = _current_resolution(request.user, room, timezone.now())
+    expected = (
+        resolution.outcome,
+        resolution.session_id,
+        resolution.prior_session_id,
+    )
+    actual = (
+        current.outcome,
+        current.session_id,
+        current.prior_session_id,
+    ) if current is not None else None
+    if actual != expected:
+        return HttpResponse(
+            "The session changed. Scan the room again.",
+            status=409,
+        )
+
+    reason = (request.POST.get("reason") or "").strip()
+    if resolution.outcome == R.EARLY_END and not reason:
+        return HttpResponseBadRequest("A reason is required to end early.")
+
+    nonce = data.get("nonce")
+    if not nonce or not cache.add(
+        f"scan-confirm-used:{request.user.pk}:{nonce}",
+        True,
+        timeout=CONFIRM_MAX_AGE,
+    ):
+        return HttpResponse("This confirmation was already used.", status=409)
+
+    ctx = _apply(
+        request,
+        resolution,
+        room,
+        data["method"],
+        reason=reason,
+    )
+    if ctx.get("error") == "stale-confirmation":
+        return HttpResponse(
+            "The session changed. Scan the room again.",
+            status=409,
+        )
     ctx["confirmed"] = True
     return render(request, "faculty/_outcome.html", ctx)
 
 
-@login_required
+@faculty_required
 def deep_link(request):
     """QR deep-link landing (SCAN-07): /scan?t=TOKEN — auto-resolves on load.
     @login_required sends anonymous users through sign-in and back here."""

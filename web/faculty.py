@@ -11,13 +11,14 @@ from datetime import timedelta
 from functools import wraps
 from urllib.parse import urlparse
 
+from django.contrib.auth import get_user_model
 from django.contrib.auth.decorators import login_required
 from django.core.exceptions import PermissionDenied
 from django.core.files.base import ContentFile
 from django.core.files.storage import default_storage
 from django.db import transaction
 from django.db.models import Exists, OuterRef
-from django.http import HttpResponse
+from django.http import FileResponse, Http404, HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils import timezone
@@ -32,6 +33,7 @@ from ops.availability import available_rooms_for, available_times_for
 from ops.models import AuditLog
 from ops.policy import get_policy
 from scheduling.merge import (_effective_is_online, merged_sibling_ids,
+                              propagate_merged_completed,
                               propagate_merged_present)
 from scheduling.models import (
     AcademicTerm,
@@ -158,7 +160,7 @@ def home(request):
     if hero is None:
         hero = next((c for c in today_cards if _is_next(c)), None)
     if hero is None:  # nothing left today -> surface the next upcoming session
-        hero = week_cards[0] if week_cards else None
+        hero = next((c for c in week_cards if _is_next(c)), None)
 
     hero_is_today = bool(hero) and hero["rep"].date == today
     return render(request, "faculty/home.html", {
@@ -166,6 +168,7 @@ def home(request):
         "hero": hero, "hero_live": hero_live, "hero_is_today": hero_is_today,
         "hero_modality": hero["modality"] if hero else "", "modalities": Modality,
         "today_count": len(today_cards),
+        "term_available": get_active_term() is not None,
     })
 
 
@@ -178,6 +181,7 @@ def schedule(request):
     return render(request, "faculty/schedule.html", {
         "today_cards": today_cards, "week_cards": week_cards,
         "today": today, "greeting": _greeting(now),
+        "term_available": get_active_term() is not None,
     })
 
 
@@ -217,6 +221,9 @@ _ERROR_COPY = {
         "times, or shift to Face-to-face or Blended instead.",
     "the new time double-books the requesting faculty":
         "You already teach another class at that time. Pick a different slot.",
+    "a time change can apply to only one class per request":
+        "Choose one class when requesting a different time. Submit separate "
+        "requests for classes that need different schedule changes.",
 }
 
 # Which step a given failure belongs to, so the form can reopen where the
@@ -224,6 +231,8 @@ _ERROR_COPY = {
 _STEP1_ERRORS = (
     "Select at least one class.", "Invalid class selection.",
     "One or more selected classes are not yours.",
+    "One or more selected classes are not yours or are not in the "
+    "active academic term.",
 )
 
 
@@ -262,6 +271,21 @@ def _modality_new_ctx(user, *, error=None, posted=None):
     # of that is needed to draw the page; it is fetched by modality_rooms() when
     # the user reaches step 2 with a room-based target, and only for the classes
     # they actually picked. Same context, 0.02s and 11 queries.
+    occurrence_dates = {}
+    if schedules:
+        for schedule_id, occurrence_date in (
+            Session.objects.filter(
+                schedule__in=schedules,
+                date__gte=today,
+                status__in=_OCCUPYING_STATUSES,
+            )
+            .order_by("date")
+            .values_list("schedule_id", "date")
+        ):
+            occurrence_dates.setdefault(schedule_id, []).append(
+                occurrence_date.isoformat()
+            )
+
     picked = set(posted.getlist("schedules")) if posted else set()
     rows = []
     for sch in schedules:
@@ -269,6 +293,7 @@ def _modality_new_ctx(user, *, error=None, posted=None):
             "schedule": sch,
             "picked": str(sch.pk) in picked,
             "preferred": (posted.get(f"preferred_room_{sch.pk}") or "") if posted else "",
+            "occurrences": occurrence_dates.get(sch.pk, []),
         })
 
     def _p(key, default=""):
@@ -286,6 +311,7 @@ def _modality_new_ctx(user, *, error=None, posted=None):
             "on_date": _p("on_date"),
             "new_start_time": _p("new_start_time"),
             "new_end_time": _p("new_end_time"),
+            "request_reason": _p("request_reason"),
         },
     }
 
@@ -345,8 +371,15 @@ def modality_new(request):
     any service refusal (too-late, no Dean, double-book) surfaces as a friendly 400.
     """
     if request.method != "POST":
+        initial = request.GET.copy()
+        schedule_id = (request.GET.get("schedule") or "").strip()
+        target = (request.GET.get("target") or "").strip()
+        if schedule_id.isdigit():
+            initial.setlist("schedules", [schedule_id])
+        if target in Modality.values:
+            initial["target_modality"] = target
         return render(request, "faculty/modality_new.html",
-                      _modality_new_ctx(request.user))
+                      _modality_new_ctx(request.user, posted=initial))
 
     target = request.POST.get("target_modality")
     mode = (request.POST.get("window_mode") or "weeks").strip()
@@ -355,6 +388,13 @@ def modality_new(request):
     schedule_ids = request.POST.getlist("schedules")
     nst_raw = (request.POST.get("new_start_time") or "").strip()
     net_raw = (request.POST.get("new_end_time") or "").strip()
+    request_reason = (request.POST.get("request_reason") or "").strip()
+
+    # Hidden controls are not authorization or intent. When Online is selected,
+    # room/time values left in the DOM by an earlier choice are irrelevant.
+    if target == Modality.ONLINE:
+        nst_raw = ""
+        net_raw = ""
 
     # Validate FORMAT before any ORM write -- a bad enum/count/date/pk must be a
     # friendly 400, never an unhandled ValidationError (500). The window is derived
@@ -366,6 +406,10 @@ def modality_new(request):
         error = "Select a valid target modality."
     elif not schedule_ids:
         error = "Select at least one class."
+    elif not request_reason:
+        error = "Tell your Dean why this change is needed."
+    elif len(request_reason) > 500:
+        error = "Keep the reason to 500 characters or fewer."
     elif not all(s.isdigit() for s in schedule_ids):
         error = "Invalid class selection."
     elif mode == "single":
@@ -378,9 +422,13 @@ def modality_new(request):
         error = f"Choose how many weeks (1 to {_MAX_WEEKS})."
     else:
         window_start, window_end = weeks_window(int(weeks_raw))
-    if error is None and (nst_raw or net_raw) and (
-            parse_time(nst_raw) is None or parse_time(net_raw) is None):
-        error = "Enter a valid alternative start and end time."
+    parsed_start = parse_time(nst_raw) if nst_raw else None
+    parsed_end = parse_time(net_raw) if net_raw else None
+    if error is None and (nst_raw or net_raw):
+        if parsed_start is None or parsed_end is None:
+            error = "Enter a valid alternative start and end time."
+        elif parsed_end <= parsed_start:
+            error = "The new end time must be after the new start time."
 
     # Re-resolve schedules to the requester's OWN active schedules (never trust the
     # posted pk set for ownership). A mismatch means a forged/foreign schedule.
@@ -388,15 +436,20 @@ def modality_new(request):
     if error is None:
         schedules = list(Schedule.objects.filter(
             pk__in=schedule_ids, faculty=request.user,
-            status=ScheduleStatus.ACTIVE))
+            status=ScheduleStatus.ACTIVE,
+            term=get_active_term(),
+        ))
         if len(schedules) != len(set(schedule_ids)):
-            error = "One or more selected classes are not yours."
+            error = (
+                "One or more selected classes are not yours or are not in the "
+                "active academic term."
+            )
 
     # Preferred rooms are a PREFERENCE only (D-05/D-06): the client room pk is never
     # trusted -- the service re-resolves free rooms at approval. Validate numericness
     # here so a bad pk is a 400, not a 500.
     preferred_rooms = {}
-    if error is None:
+    if error is None and target != Modality.ONLINE:
         for sch in schedules:
             rk = (request.POST.get(f"preferred_room_{sch.pk}") or "").strip()
             if not rk:
@@ -410,7 +463,7 @@ def modality_new(request):
 
     time_move = None
     if error is None and nst_raw and net_raw:
-        time_move = (parse_time(nst_raw), parse_time(net_raw))
+        time_move = (parsed_start, parsed_end)
 
     if error is None:
         try:
@@ -419,6 +472,7 @@ def modality_new(request):
                 window_start, window_end,
                 preferred_rooms=preferred_rooms or None,
                 time_move=time_move,
+                request_reason=request_reason,
             )
         except ModalityShiftError as exc:
             error = str(exc)
@@ -440,7 +494,11 @@ def _modality_mine_ctx(user, *, error=None):
     """Context for the 'my requests' list: only the requester's tickets (D-12)."""
     requests = (ModalityShiftRequest.objects.filter(requester=user)
                 .select_related("dean", "department")
-                .prefetch_related("items__schedule")
+                .prefetch_related(
+                    "items__schedule",
+                    "items__preferred_room",
+                    "items__assigned_room",
+                )
                 .order_by("-created_at"))
     return {"requests": requests, "error": error,
             "PENDING": ModalityShiftStatus.PENDING}
@@ -558,7 +616,7 @@ def _online_state(session, now, grace_min):
     return "startable"
 
 
-def _online_row(session, now, grace_min, *, error=None):
+def _online_row(session, now, grace_min, early_end_min, *, error=None):
     """One rendered card: the session, its state token, its style, its actions."""
     state = _online_state(session, now, grace_min)
     return {
@@ -566,6 +624,11 @@ def _online_row(session, now, grace_min, *, error=None):
         "state": state,
         "style": _ONLINE_STYLES[state],
         "can_start": state in _STARTABLE_STATES,
+        "can_checkout": state == "active",
+        "needs_checkout_reason": (
+            state == "active"
+            and now < session.scheduled_end - timedelta(minutes=early_end_min)
+        ),
         "error": error,
     }
 
@@ -578,6 +641,7 @@ def _online_rows(user, now):
     `select_related` covers everything the card reads, so the list is one query.
     """
     grace_min = get_policy("grace_minutes")
+    early_end_min = get_policy("early_end_threshold_minutes")
     active_term = get_active_term()
     if active_term is None:
         return []
@@ -585,7 +649,7 @@ def _online_rows(user, now):
                 .filter(faculty=user, date=now.date(), schedule__term=active_term)
                 .select_related("schedule", "room")
                 .order_by("scheduled_start"))
-    return [_online_row(s, now, grace_min)
+    return [_online_row(s, now, grace_min, early_end_min)
             for s in sessions if _is_effective_online(s)]
 
 
@@ -657,6 +721,7 @@ def online_start(request, pk):
     """
     now = timezone.localtime()
     grace_min = get_policy("grace_minutes")
+    early_end_min = get_policy("early_end_threshold_minutes")
     raw_link = (request.POST.get("teams_link") or "").strip()
 
     # 1. Ownership, re-gated on the re-fetched row. A foreign pk is a 404, not a
@@ -698,7 +763,9 @@ def online_start(request, pk):
         # Render the row straight from the re-fetched session rather than from
         # `_online_rows`: a refused NON-online session is not in that list at all,
         # and the refusal must still be shown rather than swapping in an empty box.
-        row = _online_row(session, now, grace_min, error=error)
+        row = _online_row(
+            session, now, grace_min, early_end_min, error=error
+        )
         return render(request, "faculty/_online_start.html",
                       {"rows": [row]}, status=400)
 
@@ -727,7 +794,88 @@ def online_start(request, pk):
         propagate_merged_present(session, session.actual_start,
                                  actor=request.user)
 
-    row = _online_row(session, now, grace_min)
+    row = _online_row(session, now, grace_min, early_end_min)
+    return render(request, "faculty/_online_start.html", {"rows": [row]})
+
+
+@faculty_required
+@require_http_methods(["POST"])
+def online_checkout(request, pk):
+    """FAC-05: explicitly complete an ACTIVE Online session."""
+    now = timezone.localtime()
+    grace_min = get_policy("grace_minutes")
+    early_end_min = get_policy("early_end_threshold_minutes")
+    active_term = get_active_term()
+    session = get_object_or_404(
+        Session.objects.select_related("schedule", "room"),
+        pk=pk,
+        faculty=request.user,
+        schedule__term=active_term,
+    )
+
+    ended_at = timezone.now()
+    ends_early = (
+        ended_at
+        < session.scheduled_end
+        - timedelta(minutes=early_end_min)
+    )
+    reason = (request.POST.get("reason") or "").strip()
+
+    if not _is_effective_online(session):
+        error = "This class is not Online, so it must be checked out in its room."
+    elif session.status != SessionStatus.ACTIVE:
+        error = "Only an Online class that is currently in session can be checked out."
+    elif ends_early and not reason:
+        error = "Enter a reason before ending this Online class early."
+    else:
+        error = None
+
+    if error:
+        row = _online_row(
+            session,
+            now,
+            grace_min,
+            early_end_min,
+            error=error,
+        )
+        return render(
+            request,
+            "faculty/_online_start.html",
+            {"rows": [row]},
+            status=400,
+        )
+
+    with transaction.atomic():
+        session.status = SessionStatus.COMPLETED
+        session.actual_end = ended_at
+        session.ended_early = ends_early
+        session.early_end_reason = reason if ends_early else ""
+        session.save(update_fields=[
+            "status",
+            "actual_end",
+            "ended_early",
+            "early_end_reason",
+        ])
+        AuditLog.objects.create(
+            actor=request.user,
+            event_type="session.online_checked_out",
+            target_type="session",
+            target_id=str(session.pk),
+            payload={
+                "session": session.pk,
+                "ended_early": ends_early,
+                "reason": reason if ends_early else "",
+            },
+        )
+        propagate_merged_completed(
+            session,
+            ended_at,
+            request.user,
+            ended_early=ends_early,
+            reason=reason if ends_early else "",
+        )
+
+    row = _online_row(session, now, grace_min, early_end_min)
     return render(request, "faculty/_online_start.html", {"rows": [row]})
 
 
@@ -738,7 +886,7 @@ def online_start(request, pk):
 # recorded deferred idea, not a Phase 7 clarification. Disputes go through HR out
 # of band (D-15).
 
-FACULTY_HISTORY_PAGE_SIZE = 25
+FACULTY_HISTORY_PAGE_SIZE = 5
 
 # The two actions that are a flag AGAINST the faculty member. VERIFIED_EMPTY is
 # deliberately excluded: "the Checker found the room empty" is not the same claim
@@ -881,9 +1029,23 @@ def _photo_version(field):
 
 def _profile_ctx(user, *, error=None, saved=False):
     """Context for the profile page and for its small status region."""
+    teaching_schedules = []
+    if user.role == Role.FACULTY:
+        term = get_active_term()
+        if term is not None:
+            teaching_schedules = list(
+                Schedule.objects.filter(
+                    faculty=user,
+                    term=term,
+                    status=ScheduleStatus.ACTIVE,
+                )
+                .select_related("room__floor__building")
+                .order_by("day_of_week", "start_time", "course_code", "section")
+            )
     return {
         "photo": user.profile_photo if user.profile_photo else None,
         "photo_v": _photo_version(user.profile_photo) if user.profile_photo else 0,
+        "teaching_schedules": teaching_schedules,
         "error": error,
         "saved": saved,
         "max_mb": MAX_UPLOAD_BYTES // (1024 * 1024),
@@ -904,18 +1066,51 @@ def _photo_status(request, user, *, error=None, saved=False):
                   status=400 if error else 200)
 
 
-@faculty_required
+@login_required
 @require_http_methods(["GET"])
 def profile(request):
-    """The faculty member's own profile: identity photo + a link to notification
-    preferences (FAC-12). Read-only; the photo write is a separate POST view."""
+    """The user's profile, with role-specific teaching or department details."""
     return render(request, "faculty/profile.html", _profile_ctx(request.user))
 
 
-@faculty_required
+@login_required
+@require_http_methods(["GET"])
+def profile_photo_file(request, user_id):
+    """Serve a protected photo to its owner or an authorized faculty reviewer."""
+    profile_user = get_object_or_404(get_user_model(), pk=user_id)
+    can_review_faculty = (
+        profile_user.role == Role.FACULTY
+        and (
+            request.user.role == Role.CHECKER
+            or (
+                request.user.role == Role.DEAN
+                and request.user.department_id is not None
+                and request.user.department_id == profile_user.department_id
+            )
+        )
+    )
+    if (
+        request.user.pk != profile_user.pk
+        and not can_review_faculty
+        and not request.user.is_superuser
+    ):
+        raise PermissionDenied
+    if not profile_user.profile_photo:
+        raise Http404
+    try:
+        photo_file = default_storage.open(profile_user.profile_photo.name, "rb")
+    except (FileNotFoundError, OSError):
+        raise Http404 from None
+    response = FileResponse(photo_file, content_type="image/jpeg")
+    response["Cache-Control"] = "private, max-age=3600"
+    response["Content-Disposition"] = 'inline; filename="faculty-photo.jpg"'
+    return response
+
+
+@login_required
 @require_http_methods(["POST"])
 def profile_photo_upload(request):
-    """Replace the requesting faculty member's identity photo (FAC-12, D-16).
+    """Replace the requesting user's own identity photo.
 
     The target is ALWAYS request.user. No user id is read from the POST body --
     the IDOR re-gate this module states at modality_withdraw. A posted id is not

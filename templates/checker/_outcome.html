@@ -109,7 +109,7 @@ WHICH room/session only; the server never trusts them for gating. Navy family:
 <div class="ft-outcome ft-outcome--warn" data-outcome="active-unverified">
   <div class="ft-idrow">
     {% if session.faculty.profile_photo %}
-    <img class="ft-idrow__photo" src="{{ session.faculty.profile_photo.url }}"
+    <img class="ft-idrow__photo" src="{% url 'faculty_photo' user_id=session.faculty.pk %}"
          alt="Photo of {{ session.faculty.get_full_name }}">
     {% else %}
     <div class="ft-idrow__ph" aria-label="No photo for {{ session.faculty.get_full_name }}">

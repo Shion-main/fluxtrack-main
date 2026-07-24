@@ -1,0 +1,170 @@
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Write|Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"C:/Program Files/nodejs/node.exe\" 'c:\\Users\\joshu_mnu8z3u\\Downloads\\fluxtrack-main\\.codex\\hooks\\gsd-prompt-guard.js'",
+            "timeout": 5
+          }
+        ]
+      },
+      {
+        "matcher": "Write|Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"C:/Program Files/nodejs/node.exe\" 'c:\\Users\\joshu_mnu8z3u\\Downloads\\fluxtrack-main\\.codex\\hooks\\gsd-read-guard.js'",
+            "timeout": 5
+          }
+        ]
+      },
+      {
+        "matcher": "Bash|Edit|Write|MultiEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"C:/Program Files/nodejs/node.exe\" 'c:\\Users\\joshu_mnu8z3u\\Downloads\\fluxtrack-main\\.codex\\hooks\\gsd-workflow-guard.js'",
+            "timeout": 5
+          }
+        ]
+      },
+      {
+        "matcher": "Write|Edit|MultiEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"C:/Program Files/nodejs/node.exe\" 'c:\\Users\\joshu_mnu8z3u\\Downloads\\fluxtrack-main\\.codex\\hooks\\gsd-worktree-path-guard.js'",
+            "timeout": 5
+          }
+        ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "'c:\\Users\\joshu_mnu8z3u\\Downloads\\fluxtrack-main\\.codex\\hooks\\gsd-validate-commit.sh'",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Bash|Edit|Write|MultiEdit|Agent|Task",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"C:/Program Files/nodejs/node.exe\" 'c:\\Users\\joshu_mnu8z3u\\Downloads\\fluxtrack-main\\.codex\\hooks\\gsd-context-monitor.js'",
+            "timeout": 10
+          }
+        ]
+      },
+      {
+        "matcher": "Read",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"C:/Program Files/nodejs/node.exe\" 'c:\\Users\\joshu_mnu8z3u\\Downloads\\fluxtrack-main\\.codex\\hooks\\gsd-read-injection-scanner.js'",
+            "timeout": 5
+          }
+        ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "'c:\\Users\\joshu_mnu8z3u\\Downloads\\fluxtrack-main\\.codex\\hooks\\gsd-graphify-update.sh'",
+            "timeout": 5
+          }
+        ]
+      },
+      {
+        "matcher": "Write|Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "'c:\\Users\\joshu_mnu8z3u\\Downloads\\fluxtrack-main\\.codex\\hooks\\gsd-phase-boundary.sh'",
+            "timeout": 5
+          }
+        ]
+      },
+      {
+        "matcher": "Edit|Write|apply_patch",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \".agents/skills/impeccable/scripts/hook.mjs\"",
+            "timeout": 5,
+            "statusMessage": "Checking UI changes"
+          }
+        ]
+      }
+    ],
+    "PreCompact": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"C:/Program Files/nodejs/node.exe\" 'c:\\Users\\joshu_mnu8z3u\\Downloads\\fluxtrack-main\\.codex\\hooks\\gsd-context-monitor.js'",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"C:/Program Files/nodejs/node.exe\" 'c:\\Users\\joshu_mnu8z3u\\Downloads\\fluxtrack-main\\.codex\\hooks\\gsd-check-update.js'"
+          }
+        ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "'c:\\Users\\joshu_mnu8z3u\\Downloads\\fluxtrack-main\\.codex\\hooks\\gsd-session-state.sh'"
+          }
+        ]
+      }
+    ],
+    "SubagentStop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"C:/Program Files/nodejs/node.exe\" 'c:\\Users\\joshu_mnu8z3u\\Downloads\\fluxtrack-main\\.codex\\hooks\\gsd-context-monitor.js'",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"C:/Program Files/nodejs/node.exe\" 'c:\\Users\\joshu_mnu8z3u\\Downloads\\fluxtrack-main\\.codex\\hooks\\gsd-context-monitor.js'",
+            "timeout": 10
+          }
+        ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \".agents/skills/impeccable/scripts/hook.mjs\"",
+            "timeout": 30,
+            "statusMessage": "Design deep pass"
+          }
+        ]
+      }
+    ]
+  }
+}

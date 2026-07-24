@@ -35,11 +35,48 @@
   {% endcomment %}
   <meta name="htmx-config" content='{"responseHandling":[{"code":"204","swap":false},{"code":"[23]..","swap":true},{"code":"400","swap":true,"error":false},{"code":"[45]..","swap":false,"error":true}]}'>
   <script src="{% static 'vendor/htmx/2.0.6/htmx.min.js' %}" defer></script>
+  {% if not app_is_production %}
   <script>
     if ('serviceWorker' in navigator) {
-      window.addEventListener('load', () => navigator.serviceWorker.register('/sw.js'));
+      window.addEventListener('load', async () => {
+        const resetMarker = 'fluxtrack-dev-worker-reset';
+        const hadController = Boolean(navigator.serviceWorker.controller);
+        try {
+          const registrations = await navigator.serviceWorker.getRegistrations();
+          await Promise.all(registrations.map((registration) => registration.unregister()));
+          if ('caches' in window) {
+            const cacheNames = await caches.keys();
+            await Promise.all(cacheNames.map((name) => caches.delete(name)));
+          }
+          if (hadController && sessionStorage.getItem(resetMarker) !== '1') {
+            sessionStorage.setItem(resetMarker, '1');
+            window.location.reload();
+            return;
+          }
+          sessionStorage.removeItem(resetMarker);
+        } catch (error) {
+          sessionStorage.removeItem(resetMarker);
+        }
+      });
     }
   </script>
+  {% else %}
+  <script>
+    if ('serviceWorker' in navigator) {
+      let reloadingForWorker = false;
+      navigator.serviceWorker.addEventListener('controllerchange', () => {
+        if (reloadingForWorker) return;
+        reloadingForWorker = true;
+        window.location.reload();
+      });
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('/sw.js', { updateViaCache: 'none' })
+          .then((registration) => registration.update())
+          .catch(() => {});
+      });
+    }
+  </script>
+  {% endif %}
   {% block head %}{% endblock %}
 </head>
 <body class="bg-background text-foreground" hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'>
@@ -69,6 +106,9 @@
         <span class="uk-label uk-label-secondary">{{ user.get_role_display }}</span>
         <nav class="ml-auto flex items-center gap-1">
           {% if user.is_staff %}<a href="/admin/" class="uk-btn uk-btn-ghost uk-btn-sm">Admin</a>{% endif %}
+          <a href="{% url 'profile' %}" class="uk-btn uk-btn-ghost uk-btn-sm">
+            <uk-icon icon="user"></uk-icon> Profile
+          </a>
           {% comment %}Notification bell mounted in the Franken shell (D-01); the
           faculty ft-top mounts the same partial separately.{% endcomment %}
           {% include "notifications/_bell.html" %}
@@ -113,21 +153,22 @@
   actions, so it is not a tab.{% endcomment %}
   <nav class="ft-tabbar" aria-label="Faculty">
     <div class="ft-tabbar__row">
+      <span class="ft-tabbar__role">Faculty</span>
       <a href="/faculty/home" class="ft-tab {% if un == 'faculty_home' %}is-active{% endif %}"
          aria-label="Home"{% if un == 'faculty_home' %} aria-current="page"{% endif %}>
-        <uk-icon icon="house"></uk-icon></a>
+        <uk-icon icon="house"></uk-icon><span class="ft-tab__label">Home</span></a>
       <a href="/faculty/schedule" class="ft-tab {% if un == 'faculty_schedule' %}is-active{% endif %}"
          aria-label="Schedule"{% if un == 'faculty_schedule' %} aria-current="page"{% endif %}>
-        <uk-icon icon="calendar-days"></uk-icon></a>
+        <uk-icon icon="calendar-days"></uk-icon><span class="ft-tab__label">Schedule</span></a>
       <a href="/faculty/online" class="ft-tab {% if un == 'faculty_online' %}is-active{% endif %}"
          aria-label="Online classes"{% if un == 'faculty_online' %} aria-current="page"{% endif %}>
-        <uk-icon icon="monitor"></uk-icon></a>
+        <uk-icon icon="monitor"></uk-icon><span class="ft-tab__label">Online classes</span></a>
       <a href="/faculty/history" class="ft-tab {% if un == 'faculty_history' %}is-active{% endif %}"
          aria-label="My attendance"{% if un == 'faculty_history' %} aria-current="page"{% endif %}>
-        <uk-icon icon="clipboard-list"></uk-icon></a>
+        <uk-icon icon="clipboard-list"></uk-icon><span class="ft-tab__label">My attendance</span></a>
       <a href="/faculty/modality/mine" class="ft-tab {% if un == 'faculty_modality_mine' %}is-active{% endif %}"
          aria-label="Requests"{% if un == 'faculty_modality_mine' %} aria-current="page"{% endif %}>
-        <uk-icon icon="arrow-left-right"></uk-icon></a>
+        <uk-icon icon="arrow-left-right"></uk-icon><span class="ft-tab__label">Requests</span></a>
     </div>
   </nav>
   {% endif %}
@@ -137,15 +178,16 @@
   (online_open) render headerless without a tab.{% endcomment %}
   <nav class="ft-tabbar" aria-label="Checker">
     <div class="ft-tabbar__row">
+      <span class="ft-tabbar__role">Checker</span>
       <a href="/checker/floor" class="ft-tab {% if un == 'checker_floor' %}is-active{% endif %}"
          aria-label="Floor board"{% if un == 'checker_floor' %} aria-current="page"{% endif %}>
-        <uk-icon icon="layout-grid"></uk-icon></a>
+        <uk-icon icon="layout-grid"></uk-icon><span class="ft-tab__label">Floor board</span></a>
       <a href="/checker/scan" class="ft-tab {% if un == 'checker_scan' %}is-active{% endif %}"
          aria-label="Scan"{% if un == 'checker_scan' %} aria-current="page"{% endif %}>
-        <uk-icon icon="qr-code"></uk-icon></a>
+        <uk-icon icon="qr-code"></uk-icon><span class="ft-tab__label">Scan</span></a>
       <a href="/checker/online" class="ft-tab {% if un == 'checker_online' %}is-active{% endif %}"
          aria-label="Online"{% if un == 'checker_online' %} aria-current="page"{% endif %}>
-        <uk-icon icon="monitor"></uk-icon></a>
+        <uk-icon icon="monitor"></uk-icon><span class="ft-tab__label">Online</span></a>
     </div>
   </nav>
   {% endif %}
@@ -154,12 +196,13 @@
   {% comment %}Guard floor-role tab bar: Floor monitor / Locate.{% endcomment %}
   <nav class="ft-tabbar" aria-label="Guard">
     <div class="ft-tabbar__row">
+      <span class="ft-tabbar__role">Guard</span>
       <a href="/guard/monitor" class="ft-tab {% if un == 'guard_monitor' %}is-active{% endif %}"
          aria-label="Floor monitor"{% if un == 'guard_monitor' %} aria-current="page"{% endif %}>
-        <uk-icon icon="layout-grid"></uk-icon></a>
+        <uk-icon icon="layout-grid"></uk-icon><span class="ft-tab__label">Floor monitor</span></a>
       <a href="/guard/locate" class="ft-tab {% if un == 'guard_locate' %}is-active{% endif %}"
          aria-label="Locate"{% if un == 'guard_locate' %} aria-current="page"{% endif %}>
-        <uk-icon icon="search"></uk-icon></a>
+        <uk-icon icon="search"></uk-icon><span class="ft-tab__label">Locate</span></a>
     </div>
   </nav>
   {% endif %}

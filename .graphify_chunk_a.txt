@@ -1,0 +1,13 @@
+.planning/ROADMAP.md
+.planning/STATE.md
+.planning/phases/04.1-real-data-integration/04.1-01-PLAN.md
+.planning/phases/04.1-real-data-integration/04.1-01-SUMMARY.md
+.planning/phases/04.1-real-data-integration/04.1-02-PLAN.md
+.planning/phases/04.1-real-data-integration/04.1-02-SUMMARY.md
+.planning/phases/04.1-real-data-integration/04.1-03-PLAN.md
+.planning/phases/04.1-real-data-integration/04.1-03-SUMMARY.md
+.planning/phases/04.1-real-data-integration/04.1-04-PLAN.md
+.planning/phases/04.1-real-data-integration/04.1-04-SUMMARY.md
+.planning/phases/04.1-real-data-integration/04.1-CONTEXT.md
+docs/sessions/2026-07-07-phase04.1-real-data-integration.md
+docs/sessions/README.md

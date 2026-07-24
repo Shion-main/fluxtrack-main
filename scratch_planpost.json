@@ -1,0 +1,16 @@
+{
+  "point": "plan:post",
+  "activeHooks": [
+    {
+      "capId": "gap-analysis",
+      "kind": "gate",
+      "when": "workflow.post_planning_gaps",
+      "check": {
+        "query": "gap-analysis.plan-post"
+      },
+      "blocking": false,
+      "onError": "skip"
+    }
+  ],
+  "rendered": "**Gate** (gap-analysis): check={\"query\":\"gap-analysis.plan-post\"}, blocking=false, onError=skip\n- when: `workflow.post_planning_gaps`"
+}

@@ -22,6 +22,7 @@ professor to their current room/course/end time, "Online -- not on campus", or
           <b>{{ user.get_full_name|default:user.username }}</b>
           <span>{{ user.get_role_display }}</span>
         </div>
+        <a class="ft-acct__item" href="{% url 'profile' %}"><uk-icon icon="user"></uk-icon> Profile</a>
         <a class="ft-acct__item" href="/logout"><uk-icon icon="log-out"></uk-icon> Sign out</a>
       </div>
     </details>
@@ -51,7 +52,7 @@ professor to their current room/course/end time, "Online -- not on campus", or
     <div class="ft-sec"><div class="ft-sec__title">Did you mean</div></div>
     <div class="ft-list">
       {% for m in matches %}
-      <a href="?q={{ m.username|urlencode }}" class="ft-card ft-card--neutral">
+      <a href="{% url 'guard_faculty_day' m.pk %}" class="ft-card ft-card--neutral">
         <div class="ft-card__head"><uk-icon icon="user"></uk-icon>
           <span class="ft-card__room" style="margin-left:0">{{ m.get_full_name|default:m.username }}</span>
           <uk-icon icon="chevron-right" style="margin-left:auto"></uk-icon></div>
@@ -86,6 +87,10 @@ professor to their current room/course/end time, "Online -- not on campus", or
         {% else %}No more classes scheduled today.{% endif %}</p>
     </div>
     {% endif %}
+    <a href="{% url 'guard_faculty_day' faculty.pk %}" class="ft-btn-navy"
+       style="margin-top:14px;text-decoration:none">
+      <uk-icon icon="calendar-days"></uk-icon> View today's full schedule
+    </a>
     {% endif %}
   </div>
 </div>

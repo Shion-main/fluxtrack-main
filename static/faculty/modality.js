@@ -18,10 +18,9 @@
         select (or for an Online shift, which frees the room) is the specific
         thing that made the old form feel unfinished.
 
-     3. A live plain-language summary. It states only what the user LITERALLY
-        selected -- classes, modality, window -- and never what the server will
-        resolve (the room). Claiming a room here would be a promise the ticket
-        cannot keep: rooms are decided at Dean approval (D-06).
+     3. A live plain-language summary of the complete submitted payload:
+        classes, occurrences, modality, rationale, optional requested time, and
+        room preferences. Assigned rooms remain an approval-time decision.
 
    Re-inits after every htmx swap, because a 400 replaces the whole partial.
    ASCII-only.
@@ -140,7 +139,11 @@
     function syncConditional() {
       var online = targetModality() === "online";
       // Online frees the room, so the whole block is irrelevant, not just empty.
-      if (roomBlock) roomBlock.hidden = online;
+      if (roomBlock) {
+        roomBlock.hidden = online;
+        [].slice.call(roomBlock.querySelectorAll("input, select, textarea"))
+          .forEach(function (control) { control.disabled = online; });
+      }
       if (online || current !== 2) return;
       loadRooms();
     }
@@ -174,24 +177,70 @@
       var sel = chosen();
       var word = MODALITY_WORDS[targetModality()] || targetModality();
       var what = sel.length === 1
-        ? "<b>" + sel[0].dataset.label + "</b>"
-        : "<b>" + sel.length + " classes</b>";
-
-      line.innerHTML = "Move " + what + " to <b>" + word + "</b> " + windowPhrase() + ".";
+        ? sel[0].dataset.label
+        : sel.length + " classes";
+      var mode = form.querySelector("[data-window]:checked");
+      var phrase = windowPhrase().replace(/<\/?b>/g, "");
+      line.textContent = "Move " + what + " to " + word + " " + phrase + ".";
 
       list.innerHTML = "";
       sel.forEach(function (p) {
-        var row = document.createElement("div");
-        row.className = "ft-summary__row";
-        var icon = document.createElement("uk-icon");
-        icon.setAttribute("icon", "calendar");
-        var text = document.createElement("span");
-        // textContent, not innerHTML: course codes and section names are data.
-        text.textContent = p.dataset.label + " · " + p.dataset.when;
-        row.appendChild(icon);
-        row.appendChild(text);
-        list.appendChild(row);
+        var dates = (p.dataset.occurrences || "").split(",").filter(Boolean);
+        if (mode && mode.value === "single") {
+          var dateControl = form.querySelector("[data-on-date]");
+          dates = dates.filter(function (date) {
+            return dateControl && date === dateControl.value;
+          });
+        } else {
+          var weeks = form.querySelector("[data-weeks]");
+          var count = Math.max(1, parseInt(weeks && weeks.value, 10) || 1);
+          dates = dates.slice(0, count);
+        }
+        if (!dates.length) dates = ["No matching occurrence"];
+        dates.forEach(function (date) {
+          var row = document.createElement("div");
+          row.className = "ft-summary__row";
+          var icon = document.createElement("uk-icon");
+          icon.setAttribute("icon", "calendar");
+          var text = document.createElement("span");
+          text.textContent = p.dataset.label + " · " + date + " · " + p.dataset.when;
+          row.appendChild(icon);
+          row.appendChild(text);
+          list.appendChild(row);
+        });
       });
+
+      var reason = form.querySelector('[name="request_reason"]');
+      if (reason && reason.value.trim()) {
+        var reasonRow = document.createElement("div");
+        reasonRow.className = "ft-summary__row";
+        reasonRow.textContent = "Reason: " + reason.value.trim();
+        list.appendChild(reasonRow);
+      }
+
+      if (targetModality() !== "online") {
+        var start = form.querySelector('[name="new_start_time"]');
+        var end = form.querySelector('[name="new_end_time"]');
+        if (start && end && start.value && end.value) {
+          var timeRow = document.createElement("div");
+          timeRow.className = "ft-summary__row";
+          timeRow.textContent = "Requested time: " + start.value + "-" + end.value;
+          list.appendChild(timeRow);
+        }
+
+        sel.forEach(function (p) {
+          var room = form.querySelector(
+            '[name="preferred_room_' + p.value + '"]'
+          );
+          if (!room || !room.value) return;
+          var roomRow = document.createElement("div");
+          roomRow.className = "ft-summary__row";
+          var chosenRoom = room.options[room.selectedIndex];
+          roomRow.textContent = "Preferred room for " + p.dataset.label
+            + ": " + (chosenRoom ? chosenRoom.textContent : room.value);
+          list.appendChild(roomRow);
+        });
+      }
     }
 
     /* --- Wiring ------------------------------------------------------------ */

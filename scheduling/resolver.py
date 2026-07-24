@@ -53,7 +53,7 @@ def is_no_show_past_grace(scheduled_start, now, grace_min):
 
 
 def resolve_faculty_scan(sessions_today, scanned_room_id, occupying_session_id,
-                         now, *, grace_min, early_end_min, open_min=15):
+                         now, *, grace_min, early_end_min, open_min=0):
     """
     sessions_today: the faculty member's Session objects for today
                     (any status), ordered by scheduled_start.
@@ -63,7 +63,8 @@ def resolve_faculty_scan(sessions_today, scanned_room_id, occupying_session_id,
     now: aware datetime.
     grace_min: minutes after start during which check-in counts Present (FAC-03/04).
     early_end_min: checkout earlier than this before end needs a reason (FAC-06).
-    open_min: minutes before start when the check-in window opens.
+    open_min: minutes before start when the check-in window opens. The default
+              is zero to match FAC-03: check-in begins at scheduled start.
     """
     early_end = timedelta(minutes=early_end_min)
     open_lead = timedelta(minutes=open_min)

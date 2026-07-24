@@ -22,7 +22,10 @@ tags in this header (03-02 parse-error lesson). Franken UI (uk-*). ASCII-only.
 <div class="uk-card uk-card-body mb-3">
   <div class="flex items-start justify-between gap-3">
     <div class="min-w-0">
-      <p class="font-semibold">Shift to {{ r.get_target_modality_display }}</p>
+      <div class="flex items-center gap-2">
+        <p class="font-semibold">Modality shift</p>
+        {% include "_modality_badge.html" with modality=r.target_modality %}
+      </div>
       <p class="uk-text-small uk-text-muted">
         {{ r.requester.get_full_name|default:r.requester.username }}</p>
       <p class="uk-text-small uk-text-muted">
@@ -30,6 +33,9 @@ tags in this header (03-02 parse-error lesson). Franken UI (uk-*). ASCII-only.
         {% if r.window_end != r.window_start %}- {{ r.window_end|date:"M j, Y" }}
         {% else %}, {{ r.window_start|date:"Y" }}{% endif %}
         {% if r.is_time_move %}&middot; time-move{% endif %}
+      </p>
+      <p class="uk-text-small mt-2">
+        <strong>Faculty reason:</strong> {{ r.request_reason|default:"No rationale recorded." }}
       </p>
     </div>
     <span class="uk-label uk-label-primary">Pending</span>
@@ -61,7 +67,8 @@ tags in this header (03-02 parse-error lesson). Franken UI (uk-*). ASCII-only.
   <div class="flex flex-wrap items-end gap-2 mt-3">
     <form hx-post="/dean/requests/{{ r.pk }}/approve"
           hx-target="#dean-queue-panel" hx-swap="innerHTML"
-          method="post" action="/dean/requests/{{ r.pk }}/approve">
+          method="post" action="/dean/requests/{{ r.pk }}/approve"
+          onsubmit="return window.confirm('Approve this request and apply all listed schedule and room changes?');">
       {% csrf_token %}
       <button type="submit" class="uk-btn uk-btn-primary uk-btn-sm">
         <uk-icon icon="check" class="size-4"></uk-icon> Approve</button>

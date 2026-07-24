@@ -53,6 +53,25 @@ ASCII-only (no em dash).
          target="_blank">{{ row.session.teams_link }}</a></p>
     {% endif %}
   </div>
+  {% if row.can_checkout %}
+  <form class="ft-form" style="margin-top:12px"
+        hx-post="{% url 'faculty_online_checkout' pk=row.session.pk %}"
+        hx-target="#online-card-{{ row.session.pk }}" hx-swap="outerHTML"
+        method="post" action="{% url 'faculty_online_checkout' pk=row.session.pk %}">
+    {% csrf_token %}
+    {% if row.needs_checkout_reason %}
+    <div class="ft-field">
+      <label class="ft-field__label" for="online-end-reason-{{ row.session.pk }}">
+        Reason for ending early</label>
+      <input class="ft-control" id="online-end-reason-{{ row.session.pk }}"
+             name="reason" required maxlength="255"
+             placeholder="For example: emergency evacuation">
+    </div>
+    {% endif %}
+    <button class="ft-btn-navy" type="submit">
+      <uk-icon icon="square"></uk-icon> Checkout</button>
+  </form>
+  {% endif %}
 
   {% elif row.can_start %}
   <form class="ft-form" style="margin-top:12px"
@@ -81,7 +100,7 @@ ASCII-only (no em dash).
     {% if row.state == "past-grace" %}
       Start is past the grace window, so this class can no longer be started here.
     {% elif row.state == "absent" %}
-      Recorded as Absent. A Checker can correct this if you did hold the class.
+      Recorded as Absent. Ask the IFO office to reinstate it if you held the class.
     {% else %}
       This class is finished.
     {% endif %}</p>

@@ -14,11 +14,9 @@
         <b>{{ user.get_full_name|default:user.username }}</b>
         <span>{{ user.get_role_display }}{% if user.department %} &middot; {{ user.department.name }}{% endif %}</span>
       </div>
-      {% if user.role == "faculty" %}
-      <a class="ft-acct__item" href="{% url 'faculty_profile' %}">
+      <a class="ft-acct__item" href="{% url 'profile' %}">
         <uk-icon icon="user"></uk-icon> Profile
       </a>
-      {% endif %}
       <a class="ft-acct__item" href="/logout">
         <uk-icon icon="log-out"></uk-icon> Sign out
       </a>
