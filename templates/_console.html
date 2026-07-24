@@ -21,7 +21,7 @@ missed every page added after it was written.{% endcomment %}
 <div class="cns" id="cns">
   <div class="cns__scrim" data-cns-close></div>
 
-  <aside class="cns__side">
+  <aside class="cns__side" id="cns-side">
     <a href="{% block console_home %}/{% endblock %}" class="cns__brand">
       <img src="{% static 'brand/mmcm-crest.png' %}" alt=""><b>FluxTrack</b></a>
     <div class="cns__role">{% block console_role %}{{ user.get_role_display }}{% if user.department %} &middot; {{ user.department.code }}{% endif %}{% endblock %}</div>
@@ -41,7 +41,9 @@ missed every page added after it was written.{% endcomment %}
 
   <main class="cns__main">
     <header class="cns__bar">
-      <button type="button" class="cns__ham" data-cns-open aria-label="Open menu"><uk-icon icon="menu"></uk-icon></button>
+      <button type="button" class="cns__ham" data-cns-open
+              aria-label="Open menu" aria-controls="cns-side" aria-expanded="false">
+        <uk-icon icon="menu"></uk-icon></button>
       <span class="cns__title">{% block console_title %}{% endblock %}</span>
       <div class="cns__actions">
         {% block page_actions %}{% endblock %}
@@ -56,10 +58,21 @@ missed every page added after it was written.{% endcomment %}
 <script>
   (function () {
     var c = document.getElementById("cns");
+    var trigger = c && c.querySelector("[data-cns-open]");
     if (!c) return;
+    function setOpen(open) {
+      c.classList.toggle("is-open", open);
+      if (trigger) trigger.setAttribute("aria-expanded", open ? "true" : "false");
+    }
     c.addEventListener("click", function (e) {
-      if (e.target.closest("[data-cns-open]")) c.classList.add("is-open");
-      else if (e.target.closest("[data-cns-close]")) c.classList.remove("is-open");
+      if (e.target.closest("[data-cns-open]")) setOpen(true);
+      else if (e.target.closest("[data-cns-close]")) setOpen(false);
+    });
+    document.addEventListener("keydown", function (e) {
+      if (e.key === "Escape" && c.classList.contains("is-open")) {
+        setOpen(false);
+        if (trigger) trigger.focus();
+      }
     });
   })();
 </script>
