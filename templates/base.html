@@ -209,33 +209,10 @@
   {% endwith %}
 
   {% if user.is_authenticated %}
-  {% comment %}Soft pre-prompt banner (D-07), rendered once globally across BOTH
-  shells (faculty pages extend this template). Hidden by default; push.js shows it
-  only when the origin permission is still 'default' and the user has not dismissed
-  it, so the REAL browser prompt fires only from the Enable tap -- a stray Block
-  can never be triggered by an ignored banner. The VAPID public key comes from the
-  global context processor (05-04); the CSRF token is read by the raw fetch.{% endcomment %}
-  {% comment %}Centering and width live in the style attribute, NOT in Tailwind
-  utilities. `-translate-x-1/2` is not generated in this build and resolved to
-  `transform: none`, so `left-1/2` alone put the banner's LEFT edge at the
-  viewport centre and ran it off the right side — 128px past the edge at 390px.
-  Because the banner is position:fixed the page does not scroll to reveal it, so
-  "Not now" / "Enable" were unreachable on a phone, and it overlaid table values
-  on desktop. Plain CSS here cannot silently fail the same way.{% endcomment %}
-  <div id="push-banner" hidden
-       data-vapid-key="{{ vapid_public_key }}" data-csrftoken="{{ csrf_token }}"
-       class="fixed z-40"
-       style="bottom:5rem; left:50%; transform:translateX(-50%); width:min(92%,26rem)">
-    <div class="uk-card uk-card-body border border-border bg-background shadow-lg flex items-center gap-3">
-      <uk-icon icon="bell"></uk-icon>
-      <div class="flex-1">
-        <div class="font-medium">Turn on notifications?</div>
-        <div class="uk-text-small uk-text-muted">Get alerts for room changes and approvals.</div>
-      </div>
-      <button id="push-dismiss" type="button" class="uk-btn uk-btn-default uk-btn-sm">Not now</button>
-      <button id="push-enable" type="button" class="uk-btn uk-btn-primary uk-btn-sm">Enable</button>
-    </div>
-  </div>
+  {% comment %}Push permission is managed on the dedicated notification settings
+  surface. A global fixed prompt used to cover check-in actions, filters, and
+  report values across every role; settings keeps this optional action available
+  without interrupting the task the user came to complete.{% endcomment %}
   <script src="{% static 'js/push.js' %}" defer></script>
   {% endif %}
 </body>

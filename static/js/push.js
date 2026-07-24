@@ -1,8 +1,8 @@
 /**
  * Web-push client flow (NOTIF-02, D-07).
  *
- * Vanilla JS, no wrapper library (project constraint). Drives the soft
- * pre-prompt banner and the settings-page push control:
+ * Vanilla JS, no wrapper library (project constraint). Drives the
+ * settings-page push control:
  *
  *   currentState() -> 'unsupported' | 'default' | 'subscribed' | 'granted' | 'denied'
  *   enablePush()   -> requests the REAL browser permission (only on an explicit
@@ -11,16 +11,15 @@
  *
  * D-07 hazard: the browser permission prompt fires ONLY from enablePush(), never
  * automatically -- so a stray "Block" can never be triggered by an ignored or
- * dismissed banner, keeping the origin re-askable from the settings page.
+ * dismissed permission, keeping the origin re-askable from the settings page.
  *
- * The banner and the settings control read the VAPID public key + CSRF token from
- * data attributes on their host element (supplied by the server templates). All
+ * The settings control reads the VAPID public key + CSRF token from data
+ * attributes on its host element (supplied by the server templates). All
  * source comments are ASCII-only (Windows console is cp1252).
  */
 (function () {
   "use strict";
 
-  var NOT_NOW_KEY = "fluxtrack-push-not-now";
   var SUBSCRIBE_URL = "/notifications/push/subscribe";
   var UNSUBSCRIBE_URL = "/notifications/push/unsubscribe";
 
@@ -123,55 +122,6 @@
     });
   }
 
-  // The global soft pre-prompt banner. Shows only when we can still ask
-  // (state 'default') and the user has not dismissed it (D-07). If permission is
-  // already 'granted' but no subscription exists, silently re-subscribe (no
-  // prompt) so a cache bump / cleared subscription self-heals.
-  function initBanner(banner, vapidKey, csrftoken) {
-    var enableBtn = document.getElementById("push-enable");
-    var dismissBtn = document.getElementById("push-dismiss");
-
-    currentState().then(function (state) {
-      if (state === "granted" && vapidKey) {
-        subscribe(vapidKey, csrftoken).catch(function () {});
-        return;
-      }
-      if (state === "default" && vapidKey && !readNotNow()) {
-        banner.hidden = false;
-      }
-    });
-
-    if (enableBtn) {
-      enableBtn.addEventListener("click", function () {
-        enablePush(vapidKey, csrftoken).then(function () {
-          banner.hidden = true;
-        });
-      });
-    }
-    if (dismissBtn) {
-      dismissBtn.addEventListener("click", function () {
-        writeNotNow();
-        banner.hidden = true;
-      });
-    }
-  }
-
-  function readNotNow() {
-    try {
-      return !!window.localStorage.getItem(NOT_NOW_KEY);
-    } catch (e) {
-      return false;
-    }
-  }
-
-  function writeNotNow() {
-    try {
-      window.localStorage.setItem(NOT_NOW_KEY, "1");
-    } catch (e) {
-      // localStorage unavailable (private mode) -- banner simply reappears.
-    }
-  }
-
   // Populate the settings-page #push-controls placeholder with the state-driven
   // control: Enable, a "turn off" for an active subscription, or a passive note
   // for a denied/unsupported origin (a denied origin cannot be re-prompted from
@@ -222,20 +172,13 @@
   }
 
   function boot() {
-    var banner = document.getElementById("push-banner");
     var controls = document.getElementById("push-controls");
-    var host = banner || controls;
-    if (!host) {
+    if (!controls) {
       return;
     }
-    var vapidKey = host.getAttribute("data-vapid-key") || "";
-    var csrftoken = host.getAttribute("data-csrftoken") || "";
-    if (banner) {
-      initBanner(banner, vapidKey, csrftoken);
-    }
-    if (controls) {
-      initSettings(controls, vapidKey, csrftoken);
-    }
+    var vapidKey = controls.getAttribute("data-vapid-key") || "";
+    var csrftoken = controls.getAttribute("data-csrftoken") || "";
+    initSettings(controls, vapidKey, csrftoken);
   }
 
   if (document.readyState === "loading") {

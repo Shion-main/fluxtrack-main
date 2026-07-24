@@ -132,7 +132,7 @@
 
   /* Chrome that only exists to navigate. */
   .cns__side, .cns__bar, .cns__scrim, .cns__ham,
-  .no-print, #push-banner, .skip-link, #notif-bell { display: none !important; }
+  .no-print, .skip-link, #notif-bell { display: none !important; }
 
   .cns, .cns__main { display: block; min-height: 0; }
   .cns__body { padding: 0; max-width: none; }
