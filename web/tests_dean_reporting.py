@@ -71,6 +71,22 @@ class DeanDashboardTests(_DeanBase):
         resp = self.client.get(reverse("dean_dashboard"))
         self.assertEqual(resp.status_code, 403)
 
+    def test_no_completed_sessions_render_as_neutral_not_started_state(self):
+        User = get_user_model()
+        dean_without_department = User.objects.create(
+            username="dn_dean_unscoped",
+            role=Role.DEAN,
+            department=None,
+            is_active=True,
+        )
+        self.client.force_login(dean_without_department)
+
+        resp = self.client.get(reverse("dean_dashboard"))
+
+        self.assertContains(resp, "Not started")
+        self.assertContains(resp, "No completed sessions yet")
+        self.assertNotContains(resp, ">0%</span>")
+
 
 @override_settings(MEDIA_ROOT=_TMP_MEDIA)
 class DeanScopeTests(_DeanBase):

@@ -85,11 +85,18 @@ value so colour is never the only signal. ASCII-only.
     <div class="uk-card uk-card-body" data-kpi-card="attendance">
       <div class="uk-text-small uk-text-muted flex items-center gap-1">
         <uk-icon icon="percent" class="size-4"></uk-icon> Attendance %</div>
+      {% if summary.0.held or summary.0.absent %}
       {% with pct=summary.0.attendance_pct %}
       <div class="mt-1">
         <span class="uk-label" style="{% if pct >= 90 %}background:var(--green-tint);color:var(--green){% elif pct >= 75 %}background:var(--amber-tint);color:var(--amber){% else %}background:var(--red-tint);color:var(--red){% endif %};font-size:1.4rem;padding:2px 10px">{{ pct }}%</span>
       </div>
       {% endwith %}
+      {% else %}
+      <div class="mt-1">
+        <span class="uk-label uk-label-secondary" style="font-size:1rem;padding:5px 10px">Not started</span>
+      </div>
+      <div class="uk-text-small uk-text-muted mt-1">No completed sessions yet</div>
+      {% endif %}
     </div>
   {% endif %}
 </div>
