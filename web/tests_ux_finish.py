@@ -126,6 +126,33 @@ class FacultyProfileReachabilityTests(TestCase):
                 self.assertContains(response, 'href="/profile"')
 
 
+class AdminNavigationVisibilityTests(TestCase):
+    """Only system administrators receive a Django admin entry point."""
+
+    def test_staff_hr_does_not_receive_django_admin_link(self):
+        user = get_user_model().objects.create(
+            username="phase13_hr", role=Role.HR_ADMIN, is_staff=True
+        )
+        self.client.force_login(user)
+
+        body = self.client.get(reverse("hr_attendance")).content.decode()
+
+        self.assertNotIn('href="/admin/"', body)
+
+    def test_system_admin_receives_django_admin_link(self):
+        user = get_user_model().objects.create(
+            username="phase13_system_admin",
+            role=Role.SYSTEM_ADMIN,
+            is_staff=True,
+            is_superuser=True,
+        )
+        self.client.force_login(user)
+
+        body = self.client.get(reverse("notifications")).content.decode()
+
+        self.assertIn('href="/admin/"', body)
+
+
 class SharedBrandAndFailureFeedbackTests(TestCase):
     def test_login_consumes_the_shared_brand_navy_token(self):
         body = self.client.get(reverse("login")).content.decode()
