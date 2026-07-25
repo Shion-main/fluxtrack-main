@@ -291,8 +291,14 @@
   }
   .sheet.is-open { transform: translateY(0); }
   .bd__bar { position: static; }
+  .bd__scope a {
+    min-height: 44px; display: inline-flex; align-items: center;
+  }
+  .bd__chip {
+    min-height: 44px; display: inline-flex; align-items: center;
+  }
   .bd__search { margin-left: 0; width: 100%; }
-  .bd__search input { width: 100%; }
+  .bd__search input { width: 100%; height: 44px; }
 }
 
 @media (prefers-reduced-motion: reduce) {
