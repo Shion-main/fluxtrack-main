@@ -1,0 +1,575 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>FluxTrack — Rooms & buildings UX wireframe</title>
+  <style>
+    :root {
+      --navy:#002b5c;
+      --navy-2:#001f42;
+      --ink:#101827;
+      --body:#334155;
+      --muted:#64748b;
+      --line:#dbe2ea;
+      --wash:#f6f8fb;
+      --white:#fff;
+      --green:#14734b;
+      --green-bg:#eaf7f0;
+      --amber:#9a5a00;
+      --amber-bg:#fff6df;
+      --red:#b42318;
+      --red-bg:#fff0ef;
+      --radius:10px;
+    }
+
+    * { box-sizing:border-box; }
+    html, body { margin:0; min-height:100%; background:var(--white); color:var(--ink); }
+    body {
+      font-family:"Segoe UI", Arial, sans-serif;
+      font-size:14px;
+      line-height:1.45;
+    }
+    button, input, select { font:inherit; }
+    button, a { -webkit-tap-highlight-color:transparent; }
+    button:focus-visible, input:focus-visible, select:focus-visible {
+      outline:3px solid rgba(0,43,92,.22);
+      outline-offset:2px;
+    }
+    .sr-only {
+      position:absolute;
+      width:1px;
+      height:1px;
+      padding:0;
+      margin:-1px;
+      overflow:hidden;
+      clip:rect(0,0,0,0);
+      white-space:nowrap;
+      border:0;
+    }
+    .app { min-height:100vh; display:grid; grid-template-columns:244px minmax(0,1fr); }
+    .sidebar {
+      position:sticky;
+      top:0;
+      height:100vh;
+      padding:22px 12px;
+      border-right:1px solid var(--line);
+      background:var(--white);
+    }
+    .brand { display:flex; align-items:center; gap:9px; padding:0 8px 24px; font-weight:800; font-size:17px; }
+    .brand-mark { width:22px; height:22px; border-radius:4px; background:var(--navy); position:relative; }
+    .brand-mark::after { content:""; position:absolute; inset:5px; border:2px solid white; border-radius:50%; }
+    .role { display:block; margin-top:1px; color:var(--muted); font-size:12px; font-weight:500; }
+    .nav { display:grid; gap:4px; }
+    .nav a {
+      min-height:43px;
+      display:flex;
+      align-items:center;
+      gap:10px;
+      padding:0 12px;
+      color:var(--ink);
+      border-radius:8px;
+      text-decoration:none;
+      font-weight:650;
+    }
+    .nav a.active { background:var(--navy-2); color:white; }
+    .nav-icon { width:17px; color:currentColor; text-align:center; }
+    .nav-section {
+      margin:20px 10px 7px;
+      color:var(--muted);
+      font-size:11px;
+      font-weight:800;
+      letter-spacing:.08em;
+      text-transform:uppercase;
+    }
+    .main { min-width:0; }
+    .topbar {
+      height:68px;
+      display:flex;
+      align-items:center;
+      gap:16px;
+      padding:0 24px;
+      border-bottom:1px solid var(--line);
+      background:white;
+    }
+    .mobile-menu { display:none; }
+    h1 { margin:0; font-size:19px; letter-spacing:-.015em; }
+    .top-count { color:var(--muted); margin-left:4px; }
+    .top-actions { margin-left:auto; display:flex; align-items:center; gap:8px; }
+    .btn {
+      min-height:40px;
+      display:inline-flex;
+      align-items:center;
+      justify-content:center;
+      gap:7px;
+      padding:0 14px;
+      border:1px solid var(--line);
+      border-radius:8px;
+      background:white;
+      color:var(--ink);
+      cursor:pointer;
+      font-weight:700;
+    }
+    .btn.primary { background:var(--navy); border-color:var(--navy); color:white; }
+    .btn.icon { width:40px; padding:0; }
+    .content { padding:22px 24px 40px; max-width:1440px; margin:0 auto; }
+    .modes {
+      width:max-content;
+      display:flex;
+      gap:3px;
+      padding:3px;
+      border-radius:9px;
+      background:#edf1f5;
+      margin-bottom:16px;
+    }
+    .mode {
+      min-height:38px;
+      padding:0 17px;
+      border:0;
+      border-radius:7px;
+      background:transparent;
+      color:var(--muted);
+      cursor:pointer;
+      font-weight:750;
+    }
+    .mode.active { background:white; color:var(--ink); box-shadow:0 1px 2px rgba(15,23,42,.14); }
+    .control-row {
+      display:grid;
+      grid-template-columns:minmax(300px,1fr) auto auto auto;
+      align-items:end;
+      gap:10px;
+      margin-bottom:12px;
+    }
+    .field-label { display:block; margin:0 0 6px; color:var(--body); font-size:12px; font-weight:750; }
+    .search { position:relative; }
+    .search::before { content:"⌕"; position:absolute; left:13px; bottom:11px; color:var(--muted); font-size:20px; line-height:1; }
+    .search input, select {
+      width:100%;
+      height:44px;
+      border:1px solid var(--line);
+      border-radius:8px;
+      background:white;
+      color:var(--ink);
+    }
+    .search input { padding:0 14px 0 42px; }
+    select { min-width:145px; padding:0 34px 0 11px; }
+    .filter-mobile { display:none; }
+    .chips { min-height:33px; display:flex; flex-wrap:wrap; align-items:center; gap:7px; margin-bottom:15px; }
+    .chip {
+      display:inline-flex;
+      align-items:center;
+      gap:7px;
+      min-height:30px;
+      padding:0 10px;
+      border:1px solid #cfd8e3;
+      border-radius:999px;
+      background:var(--wash);
+      color:var(--body);
+      font-size:12px;
+      font-weight:650;
+    }
+    .chip strong { color:var(--navy); }
+    .clear { border:0; background:transparent; color:var(--navy); font-weight:700; cursor:pointer; }
+    .workspace {
+      min-height:590px;
+      display:grid;
+      grid-template-columns:242px minmax(0,1fr);
+      border:1px solid var(--line);
+      border-radius:var(--radius);
+      overflow:hidden;
+      background:white;
+    }
+    .tree { border-right:1px solid var(--line); background:#fbfcfd; }
+    .tree-head {
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      min-height:55px;
+      padding:0 14px;
+      border-bottom:1px solid var(--line);
+    }
+    .tree-head h2 { margin:0; font-size:13px; text-transform:uppercase; letter-spacing:.06em; }
+    .tree-more { width:34px; height:34px; border:0; background:transparent; border-radius:7px; cursor:pointer; }
+    .tree-list { padding:8px; }
+    .tree-item, .floor {
+      width:100%;
+      display:flex;
+      align-items:center;
+      gap:8px;
+      border:0;
+      text-align:left;
+      cursor:pointer;
+    }
+    .tree-item {
+      min-height:46px;
+      padding:6px 8px;
+      border-radius:7px;
+      background:transparent;
+      color:var(--ink);
+      font-weight:750;
+    }
+    .tree-item small { margin-left:auto; color:var(--muted); font-weight:600; }
+    .tree-item.active { background:#e8f0f8; color:var(--navy); }
+    .floors { margin:2px 0 9px 17px; padding-left:12px; border-left:1px solid #cfd8e3; }
+    .floor {
+      min-height:37px;
+      padding:0 8px;
+      border-radius:6px;
+      background:transparent;
+      color:var(--body);
+      font-size:13px;
+    }
+    .floor span { margin-left:auto; color:var(--muted); }
+    .floor.active { background:var(--navy); color:white; font-weight:750; }
+    .floor.active span { color:#dbeafe; }
+    .system-records { margin:12px 8px 4px; padding-top:12px; border-top:1px solid var(--line); }
+    .system-title { margin:0 8px 6px; color:var(--muted); font-size:11px; font-weight:800; text-transform:uppercase; letter-spacing:.06em; }
+    .records { min-width:0; }
+    .records-head {
+      min-height:68px;
+      display:flex;
+      align-items:center;
+      gap:12px;
+      padding:12px 16px;
+      border-bottom:1px solid var(--line);
+    }
+    .records-head h2 { margin:0; font-size:16px; }
+    .records-head p { margin:2px 0 0; color:var(--muted); font-size:12px; }
+    .records-actions { margin-left:auto; display:flex; gap:7px; }
+    .table-wrap { overflow:auto; }
+    table { width:100%; border-collapse:collapse; min-width:810px; }
+    th {
+      padding:11px 14px;
+      border-bottom:1px solid var(--line);
+      background:#fbfcfd;
+      color:var(--muted);
+      text-align:left;
+      font-size:11px;
+      font-weight:800;
+      letter-spacing:.045em;
+      text-transform:uppercase;
+    }
+    td { padding:13px 14px; border-bottom:1px solid #e8edf3; vertical-align:middle; }
+    tr:hover td { background:#f9fbfd; }
+    .room-code { display:block; color:var(--navy); font-weight:800; font-size:15px; }
+    .sub { display:block; margin-top:2px; color:var(--muted); font-size:12px; }
+    .type {
+      display:inline-flex;
+      min-height:24px;
+      align-items:center;
+      padding:0 8px;
+      border-radius:999px;
+      background:#e8f0f8;
+      color:var(--navy);
+      font-size:11px;
+      font-weight:800;
+    }
+    .state {
+      display:inline-flex;
+      align-items:center;
+      gap:6px;
+      font-size:12px;
+      font-weight:750;
+      white-space:nowrap;
+    }
+    .state::before { content:""; width:7px; height:7px; border-radius:50%; background:currentColor; }
+    .state.free { color:var(--green); }
+    .state.session { color:var(--navy); }
+    .state.issue { color:var(--red); }
+    .row-menu {
+      width:36px;
+      height:36px;
+      border:0;
+      border-radius:7px;
+      background:transparent;
+      cursor:pointer;
+      font-size:18px;
+    }
+    .result-foot {
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap:12px;
+      padding:13px 16px;
+      color:var(--muted);
+      font-size:12px;
+    }
+    .page-btns { display:flex; gap:5px; }
+    .page-btns button { min-width:34px; height:34px; border:1px solid var(--line); border-radius:7px; background:white; }
+    .page-btns .current { background:var(--navy); color:white; border-color:var(--navy); }
+    .live-panel { display:none; }
+
+    @media (max-width:900px) {
+      .app { grid-template-columns:1fr; }
+      .sidebar { display:none; }
+      .mobile-menu { display:inline-flex; }
+      .content { padding:18px 16px 32px; }
+      .workspace { grid-template-columns:1fr; }
+      .tree { border-right:0; border-bottom:1px solid var(--line); }
+      .tree-list { display:flex; gap:7px; overflow:auto; padding:10px; }
+      .tree-item { min-width:max-content; border:1px solid var(--line); background:white; }
+      .floors, .system-records { display:none; }
+      table { min-width:0; }
+      th:nth-child(4), td:nth-child(4) { display:none; }
+    }
+
+    @media (max-width:640px) {
+      .topbar {
+        height:auto;
+        min-height:112px;
+        padding:10px 16px;
+        display:grid;
+        grid-template-columns:40px minmax(0,1fr) auto;
+        grid-template-rows:44px 44px;
+        gap:4px 10px;
+      }
+      .mobile-menu { grid-column:1; grid-row:1; }
+      .topbar h1 { grid-column:2; grid-row:1; white-space:nowrap; font-size:18px; }
+      .top-count { grid-column:2; grid-row:2; width:auto; margin:0; font-size:12px; }
+      .top-actions { display:contents; }
+      .top-actions .secondary { display:none; }
+      .top-actions .primary { grid-column:3; grid-row:2; min-height:40px; }
+      .top-actions .icon { grid-column:3; grid-row:1; justify-self:end; }
+      .content { padding:16px 12px 28px; }
+      .modes { width:100%; }
+      .mode { flex:1; }
+      .control-row { grid-template-columns:1fr auto; }
+      .control-row > .desktop-filter { display:none; }
+      .filter-mobile { display:inline-flex; height:44px; }
+      .search input { height:46px; }
+      .chips { margin-bottom:12px; }
+      .workspace { border-radius:8px; min-height:0; }
+      .tree { display:none; }
+      .records-head { align-items:flex-start; padding:14px; }
+      .records-actions .secondary { display:none; }
+      .records-head .btn { min-width:44px; min-height:44px; padding:0 11px; }
+      table, tbody, tr, td { display:block; min-width:0; width:100%; }
+      thead { display:none; }
+      tr { position:relative; padding:13px 52px 13px 14px; border-bottom:1px solid var(--line); }
+      td { padding:0; border:0; }
+      td:nth-child(2), td:nth-child(3), td:nth-child(4) { display:inline; }
+      td:nth-child(2)::after, td:nth-child(3)::after { content:" · "; color:var(--muted); }
+      td:nth-child(5) { margin-top:8px; }
+      td:last-child { position:static; }
+      .row-menu { position:absolute; top:13px; right:10px; }
+      .room-code { font-size:16px; }
+      .sub { display:inline; }
+      .type { padding:0; background:transparent; color:var(--body); font-weight:650; }
+      .state + .sub { margin-left:4px; }
+      .result-foot { align-items:flex-start; flex-direction:column; }
+    }
+
+    @media (prefers-reduced-motion:reduce) {
+      * { scroll-behavior:auto !important; transition:none !important; }
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <aside class="sidebar" aria-label="IFO navigation">
+      <div class="brand">
+        <span class="brand-mark" aria-hidden="true"></span>
+        <span>FluxTrack<span class="role">IFO Admin</span></span>
+      </div>
+      <nav class="nav">
+        <a class="active" href="#"><span class="nav-icon">▦</span>Rooms &amp; buildings</a>
+        <a href="#"><span class="nav-icon">⇧</span>Import schedules</a>
+        <a href="#"><span class="nav-icon">▣</span>Bookings</a>
+        <a href="#"><span class="nav-icon">△</span>Room conflicts</a>
+        <a href="#"><span class="nav-icon">♙</span>Assignments</a>
+        <div class="nav-section">Academic lifecycle</div>
+        <a href="#"><span class="nav-icon">□</span>Terms</a>
+        <div class="nav-section">Campus calendar</div>
+        <a href="#"><span class="nav-icon">☁</span>Suspensions</a>
+        <a href="#"><span class="nav-icon">⌁</span>Holidays</a>
+      </nav>
+    </aside>
+
+    <div class="main">
+      <header class="topbar">
+        <button class="btn icon mobile-menu" aria-label="Open navigation">☰</button>
+        <h1>Rooms &amp; buildings</h1>
+        <span class="top-count">119 physical rooms</span>
+        <div class="top-actions">
+          <button class="btn secondary">Add ▾</button>
+          <button class="btn primary">＋ Add room</button>
+          <button class="btn icon" aria-label="Notifications">♢</button>
+        </div>
+      </header>
+
+      <main class="content">
+        <div class="modes" role="tablist" aria-label="Workspace view">
+          <button class="mode" id="live-tab" role="tab" aria-selected="false">Live</button>
+          <button class="mode active" id="directory-tab" role="tab" aria-selected="true">Directory</button>
+        </div>
+
+        <section id="directory-panel" role="tabpanel" aria-labelledby="directory-tab">
+          <div class="control-row">
+            <label class="search">
+              <span class="field-label">Search rooms</span>
+              <input id="room-search" type="search" placeholder="Room code, name, building, or faculty">
+            </label>
+            <label class="desktop-filter">
+              <span class="field-label">Building</span>
+              <select><option>Academic</option><option>Admin</option><option>Gym</option></select>
+            </label>
+            <label class="desktop-filter">
+              <span class="field-label">Room type</span>
+              <select><option>All types</option><option>Classroom</option><option selected>IT lab</option><option>Gym</option><option>Other</option></select>
+            </label>
+            <label class="desktop-filter">
+              <span class="field-label">Record type</span>
+              <select><option selected>Physical</option><option>Virtual</option><option>Unassigned</option></select>
+            </label>
+            <button class="btn filter-mobile">Filters <strong>2</strong></button>
+          </div>
+
+          <div class="chips" aria-label="Active filters">
+            <span class="chip">Building: <strong>Academic</strong> ×</span>
+            <span class="chip">Floor: <strong>3</strong> ×</span>
+            <span class="chip">Type: <strong>IT lab</strong> ×</span>
+            <button class="clear">Clear all</button>
+          </div>
+
+          <div class="workspace">
+            <aside class="tree" aria-label="Campus structure">
+              <div class="tree-head">
+                <h2>Physical campus</h2>
+                <button class="tree-more" aria-label="Campus actions">•••</button>
+              </div>
+              <div class="tree-list">
+                <button class="tree-item active">▾ Academic <small>74 rooms</small></button>
+                <div class="floors">
+                  <button class="floor">Floor 1 <span>9</span></button>
+                  <button class="floor">Floor 2 <span>11</span></button>
+                  <button class="floor active">Floor 3 <span>19</span></button>
+                  <button class="floor">Floor 4 <span>16</span></button>
+                  <button class="floor">Floor 5 <span>8</span></button>
+                  <button class="floor">Floor 6 <span>11</span></button>
+                </div>
+                <button class="tree-item">› Admin <small>39 rooms</small></button>
+                <button class="tree-item">› Gym <small>6 rooms</small></button>
+                <div class="system-records">
+                  <p class="system-title">System records</p>
+                  <button class="tree-item">Virtual <small>93</small></button>
+                  <button class="tree-item">Unassigned <small style="color:var(--red)">6</small></button>
+                </div>
+              </div>
+            </aside>
+
+            <section class="records" aria-labelledby="results-title">
+              <div class="records-head">
+                <div>
+                  <h2 id="results-title">Academic · Floor 3</h2>
+                  <p><strong>3 IT labs</strong> of 19 rooms · physical campus only</p>
+                </div>
+                <div class="records-actions">
+                  <button class="btn secondary">Manage floor</button>
+                  <button class="btn icon" aria-label="More actions">•••</button>
+                </div>
+              </div>
+
+              <div class="table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Room</th>
+                      <th>Name / type</th>
+                      <th>Location</th>
+                      <th>Capacity</th>
+                      <th>Current status</th>
+                      <th><span class="sr-only">Actions</span></th>
+                    </tr>
+                  </thead>
+                  <tbody id="room-rows">
+                    <tr data-search="it-301 programming lab 1 academic floor 3 it lab">
+                      <td><span class="room-code">IT-301</span><span class="sub">In service</span></td>
+                      <td><span class="type">IT lab</span><span class="sub"> Programming Lab 1</span></td>
+                      <td>Academic · F3</td>
+                      <td>40 seats</td>
+                      <td><span class="state session">In session</span><span class="sub">to 5:00 PM</span></td>
+                      <td><button class="row-menu" aria-label="Actions for IT-301">•••</button></td>
+                    </tr>
+                    <tr data-search="it-302 programming lab 2 academic floor 3 it lab">
+                      <td><span class="room-code">IT-302</span><span class="sub">In service</span></td>
+                      <td><span class="type">IT lab</span><span class="sub"> Programming Lab 2</span></td>
+                      <td>Academic · F3</td>
+                      <td>40 seats</td>
+                      <td><span class="state free">Free</span><span class="sub">next 5:00 PM</span></td>
+                      <td><button class="row-menu" aria-label="Actions for IT-302">•••</button></td>
+                    </tr>
+                    <tr data-search="it-303 lecture room a academic floor 3 it lab">
+                      <td><span class="room-code">IT-303</span><span class="sub">In service</span></td>
+                      <td><span class="type">IT lab</span><span class="sub"> Lecture Room A</span></td>
+                      <td>Academic · F3</td>
+                      <td>50 seats</td>
+                      <td><span class="state issue">Needs attention</span><span class="sub">no check-in</span></td>
+                      <td><button class="row-menu" aria-label="Actions for IT-303">•••</button></td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+
+              <div class="result-foot">
+                <span id="result-count" aria-live="polite">Showing 3 matching rooms</span>
+                <div class="page-btns" aria-label="Pagination">
+                  <button disabled>‹</button><button class="current" aria-current="page">1</button><button disabled>›</button>
+                </div>
+              </div>
+            </section>
+          </div>
+        </section>
+
+        <section class="live-panel" id="live-panel" role="tabpanel" aria-labelledby="live-tab">
+          <h2>Live room board</h2>
+          <p>The existing operational tile board remains here, with the same search field and only Academic, Admin, and Gym as physical building filters.</p>
+        </section>
+      </main>
+    </div>
+  </div>
+
+  <script>
+    const directoryTab = document.getElementById("directory-tab");
+    const liveTab = document.getElementById("live-tab");
+    const directoryPanel = document.getElementById("directory-panel");
+    const livePanel = document.getElementById("live-panel");
+
+    function selectMode(mode) {
+      const isDirectory = mode === "directory";
+      directoryTab.classList.toggle("active", isDirectory);
+      liveTab.classList.toggle("active", !isDirectory);
+      directoryTab.setAttribute("aria-selected", String(isDirectory));
+      liveTab.setAttribute("aria-selected", String(!isDirectory));
+      directoryPanel.style.display = isDirectory ? "" : "none";
+      livePanel.style.display = isDirectory ? "none" : "block";
+    }
+    directoryTab.addEventListener("click", () => selectMode("directory"));
+    liveTab.addEventListener("click", () => selectMode("live"));
+
+    const search = document.getElementById("room-search");
+    const rows = Array.from(document.querySelectorAll("#room-rows tr"));
+    const count = document.getElementById("result-count");
+    function applySearch() {
+      const query = search.value.trim().toLowerCase();
+      let shown = 0;
+      rows.forEach(row => {
+        const match = !query || row.dataset.search.includes(query);
+        row.hidden = !match;
+        if (match) shown += 1;
+      });
+      count.textContent = shown ? `Showing ${shown} matching room${shown === 1 ? "" : "s"}` : `No rooms match “${search.value.trim()}”`;
+    }
+    search.addEventListener("input", applySearch);
+    document.addEventListener("keydown", event => {
+      if (event.key === "/" && !/INPUT|SELECT|TEXTAREA/.test(document.activeElement.tagName)) {
+        event.preventDefault();
+        search.focus();
+      }
+      if (event.key === "Escape" && document.activeElement === search && search.value) {
+        search.value = "";
+        applySearch();
+      }
+    });
+  </script>
+</body>
+</html>
