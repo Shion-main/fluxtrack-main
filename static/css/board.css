@@ -371,6 +371,23 @@
 .dir__active button uk-icon, .dir__active button svg { width: 13px; height: 13px; }
 .dir__active > a { margin-left: 3px; color: hsl(var(--primary)); font-size: .76rem; font-weight: 650; }
 
+/* Search is the persistent control. The more spacious facet controls stay one
+   click away so they do not steal working height from the two directory panes. */
+@media (min-width: 641px) {
+  .dir__filter-open {
+    min-height: 42px; display: inline-flex; align-items: center; justify-content: center;
+    gap: 7px; padding: 0 13px; border: 1px solid hsl(var(--border)); border-radius: 8px;
+    background: hsl(var(--background)); color: var(--ink); font-size: .8rem; font-weight: 650;
+    cursor: pointer;
+  }
+  .dir__filter-open:hover { background: hsl(var(--muted)); }
+  .dir__filter-open:focus-visible { outline: none; box-shadow: 0 0 0 2px hsl(var(--ring)); }
+  .dir__advanced { display: none; }
+  .dir__advanced.is-open { display: grid; }
+  .bd--directory .dir__search > span:first-child { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+  .bd--directory .dir__active { margin-bottom: 10px; }
+}
+
 .dir__layout { display: grid; grid-template-columns: 240px minmax(0, 1fr); gap: 22px; align-items: start; }
 .dir__buildings {
   position: sticky; top: 130px; border: 1px solid hsl(var(--border));
