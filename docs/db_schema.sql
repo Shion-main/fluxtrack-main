@@ -1,14 +1,17 @@
 /* =============================================================================
-   FluxTrack — Exact Relational Schema (Microsoft SQL Server / T-SQL)
+   FluxTrack — Historical Relational Schema Snapshot (Microsoft SQL Server / T-SQL)
    =============================================================================
-   PROVENANCE — this file is the AUTHORITATIVE, machine-generated DDL.
-   It is the verbatim output of Django's own schema editor via:
+   PROVENANCE — this is a historical, machine-generated application-DDL
+   reference covering the migration blocks listed below. It is the verbatim
+   output of Django's schema editor via:
 
-       py -3.12 manage.py sqlmigrate <app> <migration>
+       python manage.py sqlmigrate <app> <migration>
 
-   for every migration in the project, concatenated in dependency order.
    Backend: mssql-django (ENGINE="mssql", ODBC Driver 18) — config/settings.py.
-   Regenerate any block by re-running the command for that migration.
+   It does not include later project migrations or Django/third-party tables.
+   Do not use this file to provision a current FluxTrack database. The migration
+   files are authoritative; run `python manage.py migrate` as documented in the
+   repository README. Regenerate a block with `sqlmigrate` when needed.
 
    NOTES
    -----
@@ -24,8 +27,8 @@
      FIRST apply Django's built-in migrations (auth, contenttypes, admin,
      sessions) — i.e. run `manage.py migrate` — which create those parent
      tables. This file covers only the FluxTrack application migrations.
-   * Each migration is wrapped in its own BEGIN TRANSACTION / COMMIT exactly as
-     Django emits it; apply the blocks in the given order.
+   * Each captured migration is wrapped in its own BEGIN TRANSACTION / COMMIT
+     exactly as Django emitted it. This snapshot is for inspection, not setup.
    ============================================================================= */
 
 
