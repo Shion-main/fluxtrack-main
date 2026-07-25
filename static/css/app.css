@@ -79,6 +79,13 @@
    Dense admin tables scroll horizontally inside their card instead of forcing
    the whole page to overflow on narrow viewports. */
 .table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+.table-scroll-hint {
+  display: none; margin: -8px 0 10px;
+  align-items: center; gap: 6px;
+  color: var(--ft-muted); font-size: .8rem;
+}
+.table-scroll-hint uk-icon,
+.table-scroll-hint svg { width: 15px; height: 15px; flex: none; }
 
 /* --- Data grid --------------------------------------------------------------
    A long table (100s of rows: live monitor, reporting) bounded to a scroll area
@@ -230,6 +237,7 @@
 .pgr__gap { padding: 0 2px; color: var(--ft-muted); font-size: .82rem; }
 
 @media (max-width: 640px) {
+  .table-scroll-hint { display: flex; }
   .pgr__nav { margin-left: 0; }
   /* Numbered pages are a fiddly tap target on a phone; prev/next is enough. */
   .pgr__n:not(.is-on) { display: none; }

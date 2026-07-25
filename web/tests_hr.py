@@ -56,6 +56,7 @@ class HrGateTests(_HrBase):
         # The list is unscoped by department -> both faculties are visible.
         self.assertContains(resp, self.fx.faculty_a.last_name)
         self.assertContains(resp, self.fx.faculty_b.last_name)
+        self.assertContains(resp, "Swipe the table to see Actual time and Status.")
 
     def test_hr_admin_gets_csv(self):
         resp = self.client.get(reverse("hr_attendance_csv"))
