@@ -1,0 +1,12 @@
+{% extends "ifo/_console.html" %}
+{% block title %}Add building - FluxTrack{% endblock %}
+{% block console_title %}Add building{% endblock %}
+{% block page_actions %}
+<a href="/ifo/rooms?view=directory" class="uk-btn uk-btn-ghost uk-btn-sm">
+  <uk-icon icon="chevron-left"></uk-icon> Rooms &amp; buildings</a>
+{% endblock %}
+{% block console %}
+<div class="max-w-xl uk-card uk-card-body">
+  {% include "ifo/_building_create_form.html" %}
+</div>
+{% endblock %}

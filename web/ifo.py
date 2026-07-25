@@ -2,6 +2,7 @@
 and a live 'today' view (IFO-07, htmx-polled)."""
 import csv
 import io
+import re
 from datetime import datetime, timedelta
 from functools import wraps
 
@@ -10,8 +11,8 @@ from django.contrib.auth.decorators import login_required
 from django.core.exceptions import PermissionDenied
 from django.core.files.storage import default_storage
 from django.core.management import call_command
-from django.db import transaction
-from django.db.models import Count
+from django.db import IntegrityError, transaction
+from django.db.models import Count, Prefetch, Q
 from django.db.models.deletion import ProtectedError
 from django.http import Http404, HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
@@ -21,7 +22,7 @@ from django.views.decorators.http import require_http_methods
 
 from accounts.models import Role
 from campus.codes import new_room_credentials
-from campus.models import Building, Floor, Room
+from campus.models import SYSTEM_BUILDING_CODES, Building, Floor, Room
 from campus.services import (building_delete_blockers, floor_delete_blockers,
                              room_delete_blockers)
 from ops.availability import room_is_free
@@ -99,6 +100,9 @@ def _room_board(scope="live"):
 
     groups, buildings, totals = [], [], {"rooms": 0, "problems": 0, "hidden": 0}
     for room in rooms:
+        building = room.floor.building
+        if building.is_physical and building.code not in buildings:
+            buildings.append(building.code)
         tile = room_tile(room, by_room.get(room.id, []), now, grace)
         # "Live" hides rooms with nothing on today; "All" is the full inventory
         # (QR posters, capacity) and keeps them.
@@ -106,8 +110,12 @@ def _room_board(scope="live"):
             totals["hidden"] += 1
             continue
 
-        building = room.floor.building
-        label = f"{building.code} · Floor {room.floor.number}"
+        if building.code == "ONLINE":
+            label = "System records · Virtual rooms"
+        elif building.code == "UNASSIGNED":
+            label = "System records · Unassigned rooms"
+        else:
+            label = f"{building.code} · Floor {room.floor.number}"
         if not groups or groups[-1]["label"] != label:
             groups.append({"label": label, "building": building.code,
                            "floor": room.floor.number, "tiles": [],
@@ -117,8 +125,6 @@ def _room_board(scope="live"):
         if tile["state"] in ROOM_PROBLEM_STATES:
             groups[-1]["problems"] += 1
             totals["problems"] += 1
-        if building.code not in buildings:
-            buildings.append(building.code)
 
     for g in groups:
         g["tiles"].sort(key=lambda t: (ROOM_STATE_ORDER[t["state"]], t["room"].code))
@@ -131,14 +137,229 @@ def _board_scope(request):
     return "all" if request.GET.get("scope") == "all" else "live"
 
 
+def _live_filters(request):
+    """Allow only physical buildings and known status values in Live URLs."""
+    building = (request.GET.get("building") or "").strip().upper()
+    valid_buildings = set(
+        Building.objects.exclude(code__in=SYSTEM_BUILDING_CODES)
+        .values_list("code", flat=True)
+    )
+    if building not in valid_buildings:
+        building = ""
+    status = (request.GET.get("status") or "").strip().lower()
+    if status not in {"attention", "in_session", "starting", "free", "idle"}:
+        status = ""
+    return {
+        "q": (request.GET.get("q") or "").strip()[:100],
+        "building": building,
+        "status": status,
+    }
+
+
+def _rooms_mode(request):
+    """Return the bookmarkable workspace mode, falling back safely to Live."""
+    return "directory" if request.GET.get("view") == "directory" else "live"
+
+
+def _directory_filters(request):
+    """Normalize URL filters so stale or hand-edited links never error."""
+    building = (request.GET.get("building") or "").strip().upper()
+    valid_buildings = set(
+        Building.objects.exclude(code__in=SYSTEM_BUILDING_CODES)
+        .values_list("code", flat=True)
+    )
+    if building not in valid_buildings:
+        building = ""
+
+    floor = (request.GET.get("floor") or "").strip()
+    if not floor.isdigit() or not Floor.objects.filter(pk=int(floor)).exists():
+        floor = ""
+
+    room_type = (request.GET.get("room_type") or "").strip().upper()
+    if room_type not in Room.RoomType.values:
+        room_type = ""
+
+    service = (request.GET.get("service") or "").strip().lower()
+    if service not in {"in", "out"}:
+        service = ""
+
+    record_type = (request.GET.get("record_type") or "").strip().lower()
+    if record_type not in Room.RecordType.values:
+        record_type = ""
+
+    return {
+        "q": (request.GET.get("q") or "").strip()[:100],
+        "building": building,
+        "floor": floor,
+        "room_type": room_type,
+        "service": service,
+        "record_type": record_type,
+    }
+
+
+def _directory_room_query(filters):
+    rooms = Room.objects.select_related("floor__building")
+
+    record_type = filters["record_type"]
+    if record_type == Room.RecordType.PHYSICAL:
+        rooms = rooms.exclude(code__istartswith="V").exclude(
+            floor__building__code__in=SYSTEM_BUILDING_CODES
+        )
+    elif record_type == Room.RecordType.VIRTUAL:
+        rooms = rooms.filter(code__istartswith="V")
+    elif record_type == Room.RecordType.UNASSIGNED:
+        rooms = rooms.filter(
+            floor__building__code="UNASSIGNED"
+        ).exclude(code__istartswith="V")
+
+    if filters["building"]:
+        rooms = rooms.filter(floor__building__code=filters["building"])
+    if filters["floor"]:
+        rooms = rooms.filter(floor_id=int(filters["floor"]))
+    if filters["room_type"]:
+        rooms = rooms.filter(room_type=filters["room_type"])
+    if filters["service"] == "in":
+        rooms = rooms.filter(out_of_service=False)
+    elif filters["service"] == "out":
+        rooms = rooms.filter(out_of_service=True)
+
+    q = filters["q"]
+    if q:
+        search = (
+            Q(code__icontains=q)
+            | Q(name__icontains=q)
+            | Q(floor__building__code__icontains=q)
+            | Q(floor__building__name__icontains=q)
+        )
+        room_types = [
+            value for value, label in Room.RoomType.choices
+            if q.casefold() in label.casefold()
+        ]
+        if room_types:
+            search |= Q(room_type__in=room_types)
+        floor_match = re.fullmatch(r"\s*(?:floor|f)\s*(-?\d+)\s*", q, re.I)
+        if floor_match:
+            search |= Q(floor__number=int(floor_match.group(1)))
+        rooms = rooms.filter(search)
+
+    return rooms.order_by(
+        "floor__building__code", "floor__number", "code"
+    )
+
+
+def _directory_context(request):
+    """Build a paginated inventory and derive status only for visible rooms."""
+    filters = _directory_filters(request)
+    rooms = _directory_room_query(filters)
+    page_ctx = paginate(request, rooms, per_page=50)
+    visible_rooms = list(page_ctx["page"].object_list)
+
+    now = timezone.now()
+    term = get_active_term()
+    by_room = {}
+    if term is not None and visible_rooms:
+        room_ids = [room.pk for room in visible_rooms]
+        sessions = (
+            Session.objects.filter(
+                room_id__in=room_ids,
+                date=timezone.localdate(),
+                schedule__term=term,
+            )
+            .select_related("schedule", "faculty")
+            .order_by("scheduled_start")
+        )
+        for session in sessions:
+            by_room.setdefault(session.room_id, []).append(session)
+
+    grace = timedelta(minutes=int(get_policy("grace_minutes")))
+    rows = [
+        {
+            "room": room,
+            "tile": room_tile(room, by_room.get(room.pk, []), now, grace),
+            "record_type": room.record_type,
+        }
+        for room in visible_rooms
+    ]
+
+    physical_buildings = list(
+        Building.objects.exclude(code__in=SYSTEM_BUILDING_CODES)
+        .prefetch_related(Prefetch(
+            "floors",
+            queryset=Floor.objects.annotate(n_rooms=Count("rooms")).order_by("number"),
+            to_attr="directory_floors",
+        ))
+        .annotate(
+            n_floors=Count("floors", distinct=True),
+            n_rooms=Count("floors__rooms", distinct=True),
+        )
+        .order_by("code")
+    )
+    physical_floors = Floor.objects.exclude(
+        building__code__in=SYSTEM_BUILDING_CODES
+    ).select_related("building")
+    if filters["building"]:
+        physical_floors = physical_floors.filter(
+            building__code=filters["building"]
+        )
+    else:
+        physical_floors = physical_floors.none()
+    system_counts = Room.objects.aggregate(
+        virtual=Count("id", filter=Q(code__istartswith="V")),
+        unassigned=Count(
+            "id",
+            filter=Q(floor__building__code="UNASSIGNED")
+            & ~Q(code__istartswith="V"),
+        ),
+    )
+    physical_room_count = Room.objects.exclude(
+        code__istartswith="V"
+    ).exclude(
+        floor__building__code__in=SYSTEM_BUILDING_CODES
+    ).count()
+
+    return {
+        **page_ctx,
+        "mode": "directory",
+        "filters": filters,
+        "directory_rows": rows,
+        "result_count": page_ctx["paginator"].count,
+        "physical_buildings": physical_buildings,
+        "physical_floors": physical_floors.order_by(
+            "building__code", "number"
+        ),
+        "room_types": Room.RoomType.choices,
+        "record_types": Room.RecordType.choices,
+        "system_counts": system_counts,
+        "physical_room_count": physical_room_count,
+        "active_filter_count": sum(
+            bool(filters[key])
+            for key in ("building", "floor", "room_type", "service", "record_type")
+        ),
+        "has_active_filters": any(filters.values()),
+        "now": timezone.localtime(now),
+    }
+
+
 @ifo_required
 def rooms_list(request):
-    """The room board shell: filter bar + Live/All toggle. The tiles themselves
-    live in the polled `_board.html` partial so filters survive a poll swap."""
+    """Combined Live board and searchable room/building directory."""
+    if _rooms_mode(request) == "directory":
+        ctx = _directory_context(request)
+        ctx["total_rooms"] = ctx["physical_room_count"]
+        if _is_hx(request):
+            return render(request, "ifo/_room_directory.html", ctx)
+        return render(request, "ifo/rooms.html", ctx)
+
     scope = _board_scope(request)
     ctx = _room_board(scope)
+    ctx["mode"] = "live"
+    ctx["filters"] = _live_filters(request)
     ctx["poll_ms"] = int(get_policy("poll_interval_seconds")) * 1000
-    ctx["total_rooms"] = Room.objects.count()
+    ctx["total_rooms"] = Room.objects.exclude(
+        code__istartswith="V"
+    ).exclude(
+        floor__building__code__in=SYSTEM_BUILDING_CODES
+    ).count()
     return render(request, "ifo/rooms.html", ctx)
 
 
@@ -372,12 +593,26 @@ def _room_form_ctx(*, room=None, error=None, form=None):
     """
     floors = (Floor.objects.select_related("building")
               .order_by("building__code", "number"))
-    return {"room": room, "floors": floors, "error": error,
-            "form": form or {}, "is_edit": room is not None}
+    form = form or {}
+    room_types = list(Room.RoomType.choices)
+    valid_types = {value for value, _label in room_types}
+    return {
+        "room": room,
+        "floors": floors,
+        "room_types": room_types,
+        "invalid_room_type": (
+            form.get("room_type")
+            if form.get("room_type") not in valid_types
+            else ""
+        ),
+        "error": error,
+        "form": form,
+        "is_edit": room is not None,
+    }
 
 
-def _room_form_fields(request):
-    """Read the four posted room fields.
+def _room_form_fields(request, *, editing=None):
+    """Read the five posted room fields.
 
     The code is uppercased here and nowhere else. `Room.code` sits in the
     database's ordinary case-INSENSITIVE collation, so `r301` and `R301` are
@@ -390,6 +625,10 @@ def _room_form_fields(request):
         "name": (request.POST.get("name") or "").strip(),
         "floor": (request.POST.get("floor") or "").strip(),
         "capacity": (request.POST.get("capacity") or "").strip(),
+        "room_type": (
+            request.POST.get("room_type")
+            or (editing.room_type if editing else Room.RoomType.CLASSROOM)
+        ).strip(),
     }
 
 
@@ -423,6 +662,8 @@ def _room_field_errors(fields, *, editing=None):
     # numeric and the non-negative half of the capacity rule.
     if fields["capacity"] and not fields["capacity"].isdigit():
         return "Capacity must be a whole number of seats (0 or more)."
+    if fields["room_type"] not in Room.RoomType.values:
+        return "Select a valid room type."
     if len(fields["name"]) > 120:
         return "A room name is at most 120 characters."
     return None
@@ -458,16 +699,28 @@ def room_new(request):
                       _room_form_ctx(error=error, form=fields), status=400)
 
     qr_token, manual_code = new_room_credentials()
-    room = Room.objects.create(
-        code=fields["code"], name=fields["name"], floor=floor,
-        capacity=int(fields["capacity"] or 0),
-        qr_token=qr_token, manual_code=manual_code)
+    try:
+        with transaction.atomic():
+            room = Room.objects.create(
+                code=fields["code"], name=fields["name"], floor=floor,
+                capacity=int(fields["capacity"] or 0),
+                room_type=fields["room_type"],
+                qr_token=qr_token, manual_code=manual_code)
 
-    AuditLog.objects.create(
-        actor=request.user, event_type="room.created",
-        target_type="room", target_id=str(room.pk),
-        payload={"code": room.code, "name": room.name, "floor": floor.pk,
-                 "floor_label": str(floor), "capacity": room.capacity})
+            AuditLog.objects.create(
+                actor=request.user, event_type="room.created",
+                target_type="room", target_id=str(room.pk),
+                payload={"code": room.code, "name": room.name, "floor": floor.pk,
+                         "floor_label": str(floor), "capacity": room.capacity,
+                         "room_type": room.room_type})
+    except IntegrityError:
+        return render(
+            request, "ifo/room_form.html",
+            _room_form_ctx(
+                error=f"Room {fields['code']} already exists.", form=fields
+            ),
+            status=400,
+        )
     return redirect("ifo_room_detail", code=room.code)
 
 
@@ -494,7 +747,7 @@ def room_edit(request, code):
     if request.method == "GET":
         return render(request, "ifo/room_form.html", _room_form_ctx(room=room))
 
-    fields = _room_form_fields(request)
+    fields = _room_form_fields(request, editing=room)
     error = _room_field_errors(fields, editing=room)
     floor = None
     if error is None:
@@ -510,15 +763,16 @@ def room_edit(request, code):
     # Before-values are captured for the audit payload: "capacity changed" is
     # not an answerable question later unless the previous value is recorded.
     before = {"name": room.name, "capacity": room.capacity,
-              "floor": room.floor_id}
+              "floor": room.floor_id, "room_type": room.room_type}
     room.name = fields["name"]
     room.capacity = int(fields["capacity"] or 0)
     room.floor = floor
-    room.save(update_fields=["name", "capacity", "floor"])
+    room.room_type = fields["room_type"]
+    room.save(update_fields=["name", "capacity", "floor", "room_type"])
 
     changed = {f: before[f] for f, now in
-               (("name", room.name), ("capacity", room.capacity),
-                ("floor", room.floor_id))
+                 (("name", room.name), ("capacity", room.capacity),
+                 ("floor", room.floor_id), ("room_type", room.room_type))
                if before[f] != now}
     AuditLog.objects.create(
         actor=request.user, event_type="room.updated",
@@ -2112,14 +2366,8 @@ def _structure_blocker_rows(blockers):
 @ifo_required
 @require_http_methods(["GET"])
 def buildings_list(request):
-    """Campus structure: buildings with floor/room counts + add-building form."""
-    buildings = (Building.objects
-                 .annotate(n_floors=Count("floors", distinct=True),
-                           n_rooms=Count("floors__rooms", distinct=True))
-                 .order_by("code"))
-    flash = request.session.pop("ifo_flash", None)
-    return render(request, "ifo/buildings.html",
-                  {"buildings": buildings, "flash": flash, "form": {}})
+    """Compatibility entry point for the former standalone structure list."""
+    return redirect("/ifo/rooms?view=directory")
 
 
 def _building_fields(request):
@@ -2128,34 +2376,58 @@ def _building_fields(request):
 
 
 @ifo_required
-@require_http_methods(["POST"])
+@require_http_methods(["GET", "POST"])
 def building_create(request):
     """Create a building (code unique, upper-cased)."""
+    if request.method == "GET":
+        template = (
+            "ifo/_building_create_drawer.html"
+            if _is_hx(request) else "ifo/building_create.html"
+        )
+        return render(request, template, {"form": {}, "drawer": _is_hx(request)})
+
     fields = _building_fields(request)
 
     def fail(msg):
-        buildings = (Building.objects
-                     .annotate(n_floors=Count("floors", distinct=True),
-                               n_rooms=Count("floors__rooms", distinct=True))
-                     .order_by("code"))
-        return render(request, "ifo/buildings.html",
-                      {"buildings": buildings, "error": msg, "form": fields},
-                      status=400)
+        template = (
+            "ifo/_building_create_drawer.html"
+            if _is_hx(request) else "ifo/building_create.html"
+        )
+        return render(
+            request, template,
+            {"error": msg, "form": fields, "drawer": _is_hx(request)},
+            status=400,
+        )
 
     if not fields["code"]:
         return fail("A building code is required (for example, ACAD).")
     if not fields["name"]:
         return fail("A building name is required.")
+    if fields["code"] in SYSTEM_BUILDING_CODES:
+        return fail(
+            f"{fields['code']} is reserved for system records and cannot be "
+            "created as a physical building."
+        )
     if Building.objects.filter(code=fields["code"]).exists():
         return fail(f"A building with code {fields['code']} already exists.")
 
-    building = Building.objects.create(code=fields["code"][:20],
-                                       name=fields["name"][:120])
+    try:
+        with transaction.atomic():
+            building = Building.objects.create(
+                code=fields["code"][:20], name=fields["name"][:120]
+            )
+    except IntegrityError:
+        return fail(f"A building with code {fields['code']} already exists.")
     AuditLog.objects.create(
         actor=request.user, event_type="building.created",
         target_type="building", target_id=str(building.pk),
         payload={"code": building.code, "name": building.name})
     request.session["ifo_flash"] = f"Building {building.code} added."
+    if _is_hx(request):
+        return _render_building(
+            request, building, flash=f"Building {building.code} added.",
+            changed=True,
+        )
     return redirect("ifo_building_detail", pk=building.pk)
 
 
@@ -2165,23 +2437,104 @@ def building_edit(request, pk):
     """Rename a building or change its code (code stays unique)."""
     building = get_object_or_404(Building, pk=pk)
     fields = _building_fields(request)
+    if building.is_system_record:
+        return _structure_failure(
+            request, building,
+            "This is a read-only system record and cannot be managed as a physical building.",
+            form=fields,
+        )
+    if fields["code"] in SYSTEM_BUILDING_CODES:
+        return _structure_failure(
+            request, building,
+            f"{fields['code']} is reserved for read-only system records.",
+            form=fields,
+        )
     if not fields["code"] or not fields["name"]:
-        request.session["ifo_flash"] = "Code and name are both required. Not changed."
-        return redirect("ifo_building_detail", pk=pk)
+        return _structure_failure(
+            request, building, "Code and name are both required. Not changed.",
+            form=fields,
+        )
     clash = Building.objects.filter(code=fields["code"]).exclude(pk=pk).exists()
     if clash:
-        request.session["ifo_flash"] = (
-            f"Another building already uses code {fields['code']}. Not changed.")
-        return redirect("ifo_building_detail", pk=pk)
-    building.code = fields["code"][:20]
-    building.name = fields["name"][:120]
-    building.save(update_fields=["code", "name"])
+        return _structure_failure(
+            request, building,
+            f"Another building already uses code {fields['code']}. Not changed.",
+            form=fields,
+        )
+    try:
+        with transaction.atomic():
+            building.code = fields["code"][:20]
+            building.name = fields["name"][:120]
+            building.save(update_fields=["code", "name"])
+    except IntegrityError:
+        building.refresh_from_db()
+        return _structure_failure(
+            request, building,
+            f"Another building already uses code {fields['code']}. Not changed.",
+            form=fields,
+        )
     AuditLog.objects.create(
         actor=request.user, event_type="building.updated",
         target_type="building", target_id=str(building.pk),
         payload={"code": building.code, "name": building.name})
     request.session["ifo_flash"] = f"Building {building.code} updated."
-    return redirect("ifo_building_detail", pk=pk)
+    return _structure_success(request, building)
+
+
+def _building_detail_context(building, *, flash=None, error=None, form=None):
+    """One context for full-page recovery and the workspace drawer."""
+    floors = (
+        building.floors.annotate(n_rooms=Count("rooms"))
+        .order_by("number")
+    )
+    blockers = building_delete_blockers(building)
+    return {
+        "building": building,
+        "floors": floors,
+        "flash": flash,
+        "error": error,
+        "delete_blockers": _structure_blocker_rows(blockers),
+        "form": form or {},
+        "drawer": False,
+    }
+
+
+def _is_hx(request):
+    return request.headers.get("HX-Request", "").lower() == "true"
+
+
+def _render_building(request, building, *, status=200, error=None, form=None,
+                     flash=None, changed=False):
+    """Return drawer markup for HTMX and a complete recovery page otherwise."""
+    ctx = _building_detail_context(
+        building, flash=flash, error=error, form=form
+    )
+    if _is_hx(request):
+        ctx["drawer"] = True
+        response = render(
+            request, "ifo/_building_drawer.html", ctx, status=status
+        )
+        if changed:
+            response["HX-Trigger"] = "roomsStructureChanged"
+        return response
+    return render(request, "ifo/building_detail.html", ctx, status=status)
+
+
+def _structure_failure(request, building, message, *, form=None):
+    if _is_hx(request):
+        return _render_building(
+            request, building, status=400, error=message, form=form
+        )
+    request.session["ifo_flash"] = message
+    return redirect("ifo_building_detail", pk=building.pk)
+
+
+def _structure_success(request, building, *, message=None):
+    if _is_hx(request):
+        return _render_building(
+            request, building, flash=message, changed=True
+        )
+    return redirect("ifo_building_detail", pk=building.pk)
 
 
 @ifo_required
@@ -2189,13 +2542,8 @@ def building_edit(request, pk):
 def building_detail(request, pk):
     """A building's floors (with room counts) + add-floor form + edit/delete."""
     building = get_object_or_404(Building, pk=pk)
-    floors = (building.floors.annotate(n_rooms=Count("rooms"))
-              .order_by("number"))
-    blockers = building_delete_blockers(building)
     flash = request.session.pop("ifo_flash", None)
-    return render(request, "ifo/building_detail.html", {
-        "building": building, "floors": floors, "flash": flash,
-        "delete_blockers": _structure_blocker_rows(blockers), "form": {}})
+    return _render_building(request, building, flash=flash)
 
 
 @ifo_required
@@ -2203,13 +2551,19 @@ def building_detail(request, pk):
 def building_delete(request, pk):
     """Delete a building, or refuse by name if it still holds floors/rooms."""
     building = get_object_or_404(Building, pk=pk)
+    if building.is_system_record:
+        return _structure_failure(
+            request, building,
+            "This is a read-only system record and cannot be deleted.",
+        )
     blockers = building_delete_blockers(building)
     if blockers:
-        request.session["ifo_flash"] = (
+        return _structure_failure(
+            request, building,
             f"{building.code} still has "
             + ", ".join(f"{n} {k}" for k, n in blockers.items())
-            + ". Remove those first.")
-        return redirect("ifo_building_detail", pk=pk)
+            + ". Remove those first.",
+        )
     code = building.code
     AuditLog.objects.create(
         actor=request.user, event_type="building.deleted",
@@ -2217,7 +2571,11 @@ def building_delete(request, pk):
         payload={"code": code, "name": building.name})
     building.delete()
     request.session["ifo_flash"] = f"Building {code} deleted."
-    return redirect("ifo_buildings")
+    if _is_hx(request):
+        response = HttpResponse(status=204)
+        response["HX-Trigger"] = "roomsStructureChanged"
+        return response
+    return redirect("/ifo/rooms?view=directory")
 
 
 @ifo_required
@@ -2225,23 +2583,39 @@ def building_delete(request, pk):
 def floor_create(request, pk):
     """Add a floor (integer number, unique within the building) to a building."""
     building = get_object_or_404(Building, pk=pk)
+    if building.is_system_record:
+        return _structure_failure(
+            request, building,
+            "This is a read-only system record; physical floors cannot be added.",
+        )
     raw = (request.POST.get("number") or "").strip()
     try:
         number = int(raw)
     except (TypeError, ValueError):
-        request.session["ifo_flash"] = "Enter a whole number for the floor."
-        return redirect("ifo_building_detail", pk=pk)
+        return _structure_failure(
+            request, building, "Enter a whole number for the floor."
+        )
     if Floor.objects.filter(building=building, number=number).exists():
-        request.session["ifo_flash"] = (
-            f"{building.code} already has a floor {number}.")
-        return redirect("ifo_building_detail", pk=pk)
-    floor = Floor.objects.create(building=building, number=number)
+        return _structure_failure(
+            request, building,
+            f"{building.code} already has a floor {number}.",
+        )
+    try:
+        with transaction.atomic():
+            floor = Floor.objects.create(building=building, number=number)
+    except IntegrityError:
+        return _structure_failure(
+            request, building,
+            f"{building.code} already has a floor {number}.",
+        )
     AuditLog.objects.create(
         actor=request.user, event_type="floor.created",
         target_type="floor", target_id=str(floor.pk),
         payload={"building": building.code, "number": number})
     request.session["ifo_flash"] = f"Floor {number} added to {building.code}."
-    return redirect("ifo_building_detail", pk=pk)
+    return _structure_success(
+        request, building, message=f"Floor {number} added."
+    )
 
 
 @ifo_required
@@ -2250,12 +2624,18 @@ def floor_delete(request, pk):
     """Delete a floor, or refuse by name if it still holds rooms."""
     floor = get_object_or_404(Floor.objects.select_related("building"), pk=pk)
     building_pk = floor.building_id
+    if floor.building.is_system_record:
+        return _structure_failure(
+            request, floor.building,
+            "This is a read-only system record and its floor cannot be deleted.",
+        )
     blockers = floor_delete_blockers(floor)
     if blockers:
-        request.session["ifo_flash"] = (
+        return _structure_failure(
+            request, floor.building,
             f"Floor {floor.number} still has {blockers['rooms']} room(s). "
-            f"Move or delete those first.")
-        return redirect("ifo_building_detail", pk=building_pk)
+            f"Move or delete those first.",
+        )
     label = f"{floor.building.code} F{floor.number}"
     AuditLog.objects.create(
         actor=request.user, event_type="floor.deleted",
@@ -2263,7 +2643,9 @@ def floor_delete(request, pk):
         payload={"building": floor.building.code, "number": floor.number})
     floor.delete()
     request.session["ifo_flash"] = f"{label} deleted."
-    return redirect("ifo_building_detail", pk=building_pk)
+    return _structure_success(
+        request, floor.building, message=f"{label} deleted."
+    )
 
 
 # --- Single-schedule ops: add / edit / cancel (Phase 10, A9) -----------------

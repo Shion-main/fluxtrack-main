@@ -30,6 +30,7 @@ from datetime import time, timedelta
 from unittest import mock
 
 from django.contrib.auth import get_user_model
+from django.db import IntegrityError
 from django.test import TestCase
 from django.urls import reverse
 from django.utils import timezone
@@ -159,6 +160,28 @@ class RoomCreateEditTests(_RoomCrudBase):
         self.assertEqual(log.payload["code"], "R503")
         self.assertEqual(log.payload["capacity"], 30)
 
+    def test_create_accepts_and_audits_room_type(self):
+        self.client.post(reverse("ifo_room_new"), {
+            "code": "IT-401", "floor": self.floor.pk, "capacity": "40",
+            "room_type": Room.RoomType.IT_LAB,
+        })
+        room = Room.objects.get(code="IT-401")
+        self.assertEqual(room.room_type, Room.RoomType.IT_LAB)
+        log = AuditLog.objects.get(
+            event_type="room.created", target_id=str(room.pk)
+        )
+        self.assertEqual(log.payload["room_type"], Room.RoomType.IT_LAB)
+
+    def test_create_rejects_unknown_room_type_and_keeps_the_value_visible(self):
+        resp = self.client.post(reverse("ifo_room_new"), {
+            "code": "R-TYPE", "floor": self.floor.pk, "capacity": "20",
+            "room_type": "SERVER_CLOSET",
+        })
+        self.assertEqual(resp.status_code, 400)
+        self.assertContains(resp, "Select a valid room type", status_code=400)
+        self.assertContains(resp, 'value="SERVER_CLOSET"', status_code=400)
+        self.assertFalse(Room.objects.filter(code="R-TYPE").exists())
+
     def test_duplicate_code_is_a_400_and_creates_nothing(self):
         existing = self._room(code="R601")
         before = Room.objects.count()
@@ -177,6 +200,16 @@ class RoomCreateEditTests(_RoomCrudBase):
         resp = self.client.post(reverse("ifo_room_new"), {
             "code": "r602", "floor": self.floor.pk, "capacity": "10"})
         self.assertEqual(resp.status_code, 400)
+
+    def test_create_uniqueness_race_is_a_friendly_400(self):
+        with mock.patch(
+            "web.ifo.Room.objects.create", side_effect=IntegrityError
+        ):
+            resp = self.client.post(reverse("ifo_room_new"), {
+                "code": "R-RACE", "floor": self.floor.pk, "capacity": "10"
+            })
+        self.assertEqual(resp.status_code, 400)
+        self.assertContains(resp, "already exists", status_code=400)
 
     def test_non_numeric_floor_is_a_friendly_400_not_a_500(self):
         """A non-numeric pk reaches Floor.objects.filter(pk=...) as an
@@ -257,6 +290,27 @@ class RoomCreateEditTests(_RoomCrudBase):
                                    target_id=str(room.pk))
         self.assertIn("capacity", log.payload["changed"])
         self.assertEqual(log.payload["before"]["capacity"], 20)
+
+    def test_edit_changes_and_audits_room_type_without_rotating_credentials(self):
+        room = self._room()
+        before_credentials = (room.qr_token, room.manual_code)
+        resp = self.client.post(reverse("ifo_room_edit", args=[room.code]), {
+            "name": room.name,
+            "floor": self.floor.pk,
+            "capacity": str(room.capacity),
+            "room_type": Room.RoomType.GYM,
+        })
+        self.assertEqual(resp.status_code, 302)
+        room.refresh_from_db()
+        self.assertEqual(room.room_type, Room.RoomType.GYM)
+        self.assertEqual((room.qr_token, room.manual_code), before_credentials)
+        log = AuditLog.objects.get(
+            event_type="room.updated", target_id=str(room.pk)
+        )
+        self.assertIn("room_type", log.payload["changed"])
+        self.assertEqual(
+            log.payload["before"]["room_type"], Room.RoomType.CLASSROOM
+        )
 
     def test_edit_with_a_bad_floor_is_a_400_and_changes_nothing(self):
         room = self._room()

@@ -68,6 +68,15 @@ py -3.12 manage.py test              # full suite (builds an MSSQL test database
 py -3.12 manage.py test scheduling.tests.FacultyResolverTests   # fast pure-logic subset (no DB)
 ```
 
+## Rooms & buildings workspace
+
+`/ifo/rooms` opens the Live operational board. Use **Directory** for the
+searchable building -> floor -> room inventory; its filters are bookmarkable.
+Academic, Admin, and Gym are the physical campus. Online and Unassigned remain
+searchable system records, while IT labs are room types on Academic Building
+Floor 3. The legacy `/ifo/buildings` list redirects to Directory; building
+detail and mutation links continue to work for bookmarks and integrations.
+
 ## Load real schedule data (IFO import)
 Source files live in `data/raw/` (gitignored). The importer reads the Course
 Offering CSV's `Schedule` column (day/time/room), skips virtual `V` rooms.

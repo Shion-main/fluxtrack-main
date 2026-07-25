@@ -1,0 +1,225 @@
+<div id="directory-workspace" class="dir" aria-busy="false">
+  <form class="dir__filters" method="get" action="/ifo/rooms"
+        hx-get="/ifo/rooms" hx-target="#directory-workspace"
+        hx-swap="outerHTML" hx-push-url="true"
+        hx-trigger="submit, change delay:150ms, input changed delay:250ms from:input[name='q']">
+    <input type="hidden" name="view" value="directory">
+    <label class="dir__search">
+      <span>Search rooms</span>
+      <span class="dir__searchbox">
+        <uk-icon icon="search"></uk-icon>
+        <input name="q" type="search" value="{{ filters.q }}"
+               placeholder="Room code, name, building, or type" autocomplete="off">
+      </span>
+    </label>
+
+    <button class="dir__filter-open" type="button" data-filters-open
+            aria-controls="directory-filter-panel" aria-expanded="false">
+      <uk-icon icon="list-filter"></uk-icon>
+      Filters{% if active_filter_count %} ({{ active_filter_count }}){% endif %}
+    </button>
+    <div class="dir__filter-scrim" data-filters-close hidden></div>
+
+    <div class="dir__advanced" id="directory-filter-panel">
+      <div class="dir__filter-sheet-head">
+        <div><strong>Filter rooms</strong><span>Choose any combination</span></div>
+        <button type="button" data-filters-close aria-label="Close filters">
+          <uk-icon icon="x"></uk-icon></button>
+      </div>
+      <label>
+        <span>Building</span>
+        <select name="building">
+          <option value="">All physical buildings</option>
+          {% for building in physical_buildings %}
+          <option value="{{ building.code }}" {% if filters.building == building.code %}selected{% endif %}>
+            {{ building.code }} - {{ building.name }}</option>
+          {% endfor %}
+        </select>
+      </label>
+
+      <label>
+        <span>Floor</span>
+        <select name="floor" {% if not filters.building %}aria-describedby="floor-help"{% endif %}>
+          <option value="">{% if filters.building %}All floors{% else %}Choose a building first{% endif %}</option>
+          {% for floor in physical_floors %}
+            {% with floor_id=floor.pk|stringformat:"s" %}
+            <option value="{{ floor.pk }}" {% if filters.floor == floor_id %}selected{% endif %}>
+              Floor {{ floor.number }}</option>
+            {% endwith %}
+          {% endfor %}
+        </select>
+        {% if not filters.building %}<small id="floor-help">Select a building to narrow its floors.</small>{% endif %}
+      </label>
+
+      <label>
+        <span>Room type</span>
+        <select name="room_type">
+          <option value="">All types</option>
+          {% for value, label in room_types %}
+          <option value="{{ value }}" {% if filters.room_type == value %}selected{% endif %}>{{ label }}</option>
+          {% endfor %}
+        </select>
+      </label>
+
+      <label>
+        <span>Record</span>
+        <select name="record_type">
+          <option value="">All records</option>
+          {% for value, label in record_types %}
+          <option value="{{ value }}" {% if filters.record_type == value %}selected{% endif %}>{{ label }}</option>
+          {% endfor %}
+        </select>
+      </label>
+
+      <label>
+        <span>Service</span>
+        <select name="service">
+          <option value="">Any status</option>
+          <option value="in" {% if filters.service == "in" %}selected{% endif %}>In service</option>
+          <option value="out" {% if filters.service == "out" %}selected{% endif %}>Out of service</option>
+        </select>
+      </label>
+
+      <div class="dir__filter-actions">
+        <button class="uk-btn uk-btn-primary uk-btn-sm" type="submit">Show rooms</button>
+        <a class="uk-btn uk-btn-secondary uk-btn-sm" href="/ifo/rooms?view=directory">Clear all</a>
+      </div>
+    </div>
+  </form>
+
+  {% if has_active_filters %}
+  <div class="dir__active" aria-label="Active filters">
+    {% if filters.q %}<button type="button" data-remove-filter="q">Search: {{ filters.q }} <uk-icon icon="x"></uk-icon></button>{% endif %}
+    {% if filters.building %}<button type="button" data-remove-filter="building">{{ filters.building }} <uk-icon icon="x"></uk-icon></button>{% endif %}
+    {% if filters.floor %}<button type="button" data-remove-filter="floor">Selected floor <uk-icon icon="x"></uk-icon></button>{% endif %}
+    {% if filters.room_type %}<button type="button" data-remove-filter="room_type">{{ filters.room_type|title }} <uk-icon icon="x"></uk-icon></button>{% endif %}
+    {% if filters.record_type %}<button type="button" data-remove-filter="record_type">{{ filters.record_type|title }} <uk-icon icon="x"></uk-icon></button>{% endif %}
+    {% if filters.service %}<button type="button" data-remove-filter="service">{% if filters.service == "out" %}Out of service{% else %}In service{% endif %} <uk-icon icon="x"></uk-icon></button>{% endif %}
+    <a href="/ifo/rooms?view=directory">Clear all</a>
+  </div>
+  {% endif %}
+
+  <div class="dir__layout">
+    <aside class="dir__buildings" aria-label="Campus hierarchy">
+      <div class="dir__aside-head">
+        <div><h2>Physical campus</h2><span>{{ physical_buildings|length }} buildings</span></div>
+      </div>
+      {% for building in physical_buildings %}
+      <section class="dir__building {% if filters.building == building.code %}is-active{% endif %}">
+        <div class="dir__building-main">
+          <a href="?view=directory&building={{ building.code }}">
+            <span class="dir__building-code">{{ building.code }}</span>
+            <span class="dir__building-name">{{ building.name }}</span>
+            <span class="dir__building-meta">
+              {{ building.n_floors }} floor{{ building.n_floors|pluralize }} ·
+              {{ building.n_rooms }} room{{ building.n_rooms|pluralize }}
+            </span>
+          </a>
+          <button type="button" class="dir__manage"
+                  hx-get="/ifo/buildings/{{ building.id }}" hx-target="#sheet-content"
+                  hx-swap="innerHTML" aria-label="Manage {{ building.name }}">
+            <uk-icon icon="ellipsis"></uk-icon></button>
+        </div>
+        <div class="dir__floors">
+          {% for floor in building.directory_floors %}
+          <a href="?view=directory&building={{ building.code }}&floor={{ floor.id }}"
+             {% with floor_id=floor.pk|stringformat:"s" %}
+             class="{% if filters.floor == floor_id %}is-active{% endif %}"
+             {% endwith %}>
+            <span>Floor {{ floor.number }}</span><b>{{ floor.n_rooms }}</b></a>
+          {% empty %}
+          <span>No floors yet</span>
+          {% endfor %}
+        </div>
+      </section>
+      {% empty %}
+      <p class="dir__aside-empty">No physical buildings yet.</p>
+      {% endfor %}
+
+      <div class="dir__system">
+        <h3>System records</h3>
+        <a href="?view=directory&record_type=virtual">
+          <span>Virtual rooms</span><b>{{ system_counts.virtual }}</b></a>
+        <a href="?view=directory&record_type=unassigned">
+          <span>Unassigned rooms</span><b>{{ system_counts.unassigned }}</b></a>
+      </div>
+    </aside>
+
+    <section class="dir__results" aria-labelledby="directory-title">
+      <div class="dir__results-head">
+        <div>
+          <h2 id="directory-title">Room directory</h2>
+          <p aria-live="polite">{{ result_count }} matching room{{ result_count|pluralize }}</p>
+        </div>
+        <span class="bd__stamp"><b></b> status as of {{ now|time:"g:i A" }}</span>
+      </div>
+
+      {% if directory_rows %}
+      <div class="dir__table-wrap">
+        <table class="dir__table">
+          <thead>
+            <tr>
+              <th scope="col">Room</th>
+              <th scope="col">Location</th>
+              <th scope="col">Type</th>
+              <th scope="col">Capacity</th>
+              <th scope="col">Live status</th>
+              <th scope="col">Service</th>
+              <th scope="col"><span class="sr-only">Actions</span></th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for row in directory_rows %}
+            <tr>
+              <td>
+                <a class="dir__room-code" href="/ifo/rooms/{{ row.room.code }}"
+                   hx-get="/ifo/rooms/{{ row.room.code }}/panel"
+                   hx-target="#sheet-content" hx-swap="innerHTML">
+                  {% include "_room_code.html" with room=row.room %}</a>
+                {% if row.room.name %}<span class="dir__room-name">{{ row.room.name }}</span>{% endif %}
+                {% if row.record_type != "physical" %}
+                  <span class="dir__tag">{{ row.record_type|title }}</span>
+                {% endif %}
+              </td>
+              <td>
+                {% if row.record_type == "physical" %}
+                  {{ row.room.floor.building.code }} · Floor {{ row.room.floor.number }}
+                {% else %}
+                  <span class="uk-text-muted">System record</span>
+                {% endif %}
+              </td>
+              <td>{{ row.room.get_room_type_display }}</td>
+              <td>{{ row.room.capacity|default:"-" }}</td>
+              <td><span class="dir__state dir__state--{{ row.tile.state }}">
+                {% if row.tile.state == "in_session" %}In session
+                {% else %}{{ row.tile.state|title }}{% endif %}
+              </span></td>
+              <td>
+                {% if row.room.out_of_service %}
+                  <span class="dir__service dir__service--out">Out of service</span>
+                {% else %}
+                  <span class="dir__service">In service</span>
+                {% endif %}
+              </td>
+              <td><a class="dir__open" href="/ifo/rooms/{{ row.room.code }}"
+                     hx-get="/ifo/rooms/{{ row.room.code }}/panel"
+                     hx-target="#sheet-content" hx-swap="innerHTML"
+                     aria-label="Open {{ row.room.code }}">
+                <uk-icon icon="arrow-right"></uk-icon></a></td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% include "_pager.html" %}
+      {% else %}
+      <div class="bd__empty">
+        <uk-icon icon="search-x"></uk-icon>
+        <h4>No rooms match</h4>
+        <p>Try removing a filter or searching by a broader room or building name.</p>
+        <a href="/ifo/rooms?view=directory" class="uk-btn uk-btn-secondary uk-btn-sm">Clear filters</a>
+      </div>
+      {% endif %}
+    </section>
+  </div>
+</div>

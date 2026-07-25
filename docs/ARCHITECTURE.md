@@ -150,7 +150,7 @@ own surface set (`SURFACES` map), and every view module has its own role-guard d
 |---|---|
 | **Faculty** | `/faculty/schedule`, `/faculty/scan`, `/faculty/modality/*` |
 | **Checker** | `/checker/scan`, `/checker/floor`, `/checker/online`, `/checker/replay` |
-| **IFO Admin** | `/ifo/rooms`, `/ifo/buildings`, `/ifo/terms`, `/ifo/import`, `/ifo/suspensions`, `/ifo/breaks`, bookings, duties, reporting |
+| **IFO Admin** | `/ifo/rooms` (Live + Directory workspace), `/ifo/buildings` compatibility redirect and retained building detail/mutation routes, `/ifo/terms`, `/ifo/import`, `/ifo/suspensions`, `/ifo/breaks`, bookings, duties, reporting |
 | **Dean** | `/dean/requests`, `/dean/faculty`, department dashboard, reports, and scorecards |
 | **HR Admin** | `/hr/attendance` and CSV export |
 | **Guard** | `/guard/monitor`, `/guard/rooms/<code>`, `/guard/locate` |

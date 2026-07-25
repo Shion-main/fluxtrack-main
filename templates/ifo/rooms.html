@@ -7,57 +7,90 @@ through them, so the room is the tile.
 
 The filter bar and the slide-over live OUTSIDE #board on purpose -- #board is
 swapped every poll, so anything inside it would lose its state (and close the
-panel) every few seconds. board.js re-applies the active filters after each
+panel) every few seconds. live-board.js re-applies the active filters after each
 htmx swap. ASCII-only.
 {% endcomment %}
 {% block head %}{{ block.super }}
 <link rel="stylesheet" href="{% static 'css/board.css' %}"/>
 {% endblock %}
-{% block title %}Rooms - FluxTrack{% endblock %}
-{% block console_title %}Rooms{% endblock %}
+{% block title %}Rooms & buildings - FluxTrack{% endblock %}
+{% block console_title %}Rooms &amp; buildings{% endblock %}
 {% block page_actions %}
-<span class="uk-text-small uk-text-muted">{{ total_rooms }} room{{ total_rooms|pluralize }}</span>
+<span class="uk-text-small uk-text-muted dir__header-count">{{ total_rooms }} room{{ total_rooms|pluralize }}</span>
 {% comment %}IFO-01b entry point. The per-room Edit/Delete actions deliberately
 live on the slide-over panel and the full room page instead of on the tiles:
 #board is replaced wholesale every poll, so a control rendered inside a tile
 would be destroyed mid-click every few seconds.{% endcomment %}
 <a href="/ifo/rooms/new" class="uk-btn uk-btn-primary uk-btn-sm">
   <uk-icon icon="plus" class="size-4"></uk-icon> New room</a>
+<details class="dir__add-menu">
+  <summary class="uk-btn uk-btn-secondary uk-btn-sm">
+    <uk-icon icon="chevron-down" class="size-4"></uk-icon> Structure</summary>
+  <div class="dir__add-popover">
+    <p>Add a physical building, or open one to add a floor.</p>
+    <a href="/ifo/buildings/create" hx-get="/ifo/buildings/create"
+       hx-target="#sheet-content" hx-swap="innerHTML">Add building</a>
+    {% if mode == "directory" %}
+      {% for building in physical_buildings %}
+      <a href="/ifo/buildings/{{ building.id }}"
+         hx-get="/ifo/buildings/{{ building.id }}" hx-target="#sheet-content"
+         hx-swap="innerHTML">{{ building.code }} floors</a>
+      {% endfor %}
+    {% else %}
+    <a href="/ifo/rooms?view=directory">Open Directory</a>
+    {% endif %}
+  </div>
+</details>
 {% endblock %}
 
 {% block console %}
 <div class="bd" id="bd">
 
   <div class="bd__bar">
-    {% comment %}Scope is a real link, not a JS toggle, so the view stays
-    bookmarkable and the back button behaves.{% endcomment %}
-    <div class="bd__scope" role="group" aria-label="Room scope">
-      <a href="/ifo/rooms" class="{% if scope == 'live' %}is-on{% endif %}"
-         {% if scope == 'live' %}aria-current="true"{% endif %}>Live</a>
-      <a href="/ifo/rooms?scope=all" class="{% if scope == 'all' %}is-on{% endif %}"
-         {% if scope == 'all' %}aria-current="true"{% endif %}>All rooms</a>
+    <div class="bd__scope" role="group" aria-label="Rooms workspace">
+      <a href="/ifo/rooms" class="{% if mode == 'live' %}is-on{% endif %}"
+         {% if mode == 'live' %}aria-current="page"{% endif %}>Live</a>
+      <a href="/ifo/rooms?view=directory" class="{% if mode == 'directory' %}is-on{% endif %}"
+         {% if mode == 'directory' %}aria-current="page"{% endif %}>Directory</a>
     </div>
 
+    {% if mode == "live" %}
     <div class="bd__chips" role="group" aria-label="Filter by building">
       <button type="button" class="bd__chip" data-filter="building" data-value=""
-              aria-pressed="true">All buildings</button>
+              aria-pressed="{% if not filters.building %}true{% else %}false{% endif %}">All buildings</button>
       {% for b in buildings %}
       <button type="button" class="bd__chip" data-filter="building" data-value="{{ b }}"
-              aria-pressed="false">{{ b }}</button>
+              aria-pressed="{% if filters.building == b %}true{% else %}false{% endif %}">{{ b }}</button>
       {% endfor %}
     </div>
 
     <button type="button" class="bd__chip bd__chip--alert" data-filter="alert" data-value="1"
-            aria-pressed="false">
+            aria-pressed="{% if filters.status == 'attention' %}true{% else %}false{% endif %}">
       Needs attention <span class="bd__n" data-alert-count>{{ totals.problems }}</span></button>
+    <div class="bd__statuses" role="group" aria-label="Filter by room status">
+      <button type="button" class="bd__chip" data-filter="status" data-value="in_session"
+              aria-pressed="{% if filters.status == 'in_session' %}true{% else %}false{% endif %}">In session</button>
+      <button type="button" class="bd__chip" data-filter="status" data-value="starting"
+              aria-pressed="{% if filters.status == 'starting' %}true{% else %}false{% endif %}">Starting</button>
+      <button type="button" class="bd__chip" data-filter="status" data-value="free"
+              aria-pressed="{% if filters.status == 'free' %}true{% else %}false{% endif %}">Free</button>
+      <button type="button" class="bd__chip" data-filter="status" data-value="idle"
+              aria-pressed="{% if filters.status == 'idle' %}true{% else %}false{% endif %}">Idle</button>
+    </div>
 
     <label class="bd__search">
       <span class="sr-only">Search rooms</span>
       <uk-icon icon="search"></uk-icon>
-      <input type="search" placeholder="Room or faculty" data-filter="q" autocomplete="off">
+      <input type="search" placeholder="Room code, name, building, or faculty"
+             value="{{ filters.q }}" data-filter="q" autocomplete="off"
+             aria-label="Search rooms">
     </label>
+    {% endif %}
   </div>
 
+  {% if mode == "directory" %}
+    {% include "ifo/_room_directory.html" %}
+  {% else %}
   <div id="board" class="js-poll"
        hx-get="/ifo/rooms/board?scope={{ scope }}"
        hx-trigger="every {{ poll_ms }}ms"
@@ -67,7 +100,7 @@ would be destroyed mid-click every few seconds.{% endcomment %}
   </div>
 
   {% comment %}Filtered-to-nothing is a different problem from having no rooms,
-  so it gets its own message and a way out. Toggled by board.js.{% endcomment %}
+  so it gets its own message and a way out. Toggled by live-board.js.{% endcomment %}
   <div class="bd__empty" id="bd-nomatch" hidden>
     <uk-icon icon="search-x"></uk-icon>
     <h4>No rooms match these filters</h4>
@@ -75,6 +108,7 @@ would be destroyed mid-click every few seconds.{% endcomment %}
     <button type="button" class="uk-btn uk-btn-secondary uk-btn-sm" data-clear-filters>
       Clear filters</button>
   </div>
+  {% endif %}
 </div>
 
 {% comment %}Slide-over: htmx loads the panel body here; the board keeps polling
@@ -85,5 +119,6 @@ behind it so you never lose your place scanning a floor.{% endcomment %}
   <div id="sheet-content"></div>
 </aside>
 
-<script src="{% static 'js/board.js' %}" defer></script>
+<script src="{% static 'js/rooms-workspace.js' %}" defer></script>
+{% if mode == "live" %}<script src="{% static 'js/live-board.js' %}" defer></script>{% endif %}
 {% endblock %}

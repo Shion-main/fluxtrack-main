@@ -3,12 +3,23 @@ from django.conf import settings
 from django.db import models
 
 
+SYSTEM_BUILDING_CODES = frozenset({"ONLINE", "UNASSIGNED"})
+
+
 class Building(models.Model):
     name = models.CharField(max_length=120)
     code = models.CharField(max_length=20, unique=True)
 
     def __str__(self):
         return self.code
+
+    @property
+    def is_system_record(self):
+        return self.code.upper() in SYSTEM_BUILDING_CODES
+
+    @property
+    def is_physical(self):
+        return not self.is_system_record
 
 
 class Floor(models.Model):
@@ -24,10 +35,24 @@ class Floor(models.Model):
 
 
 class Room(models.Model):
+    class RoomType(models.TextChoices):
+        CLASSROOM = "CLASSROOM", "Classroom"
+        IT_LAB = "IT_LAB", "IT lab"
+        GYM = "GYM", "Gym"
+        OTHER = "OTHER", "Other"
+
+    class RecordType(models.TextChoices):
+        PHYSICAL = "physical", "Physical"
+        VIRTUAL = "virtual", "Virtual"
+        UNASSIGNED = "unassigned", "Unassigned"
+
     floor = models.ForeignKey(Floor, on_delete=models.PROTECT, related_name="rooms")
     code = models.CharField(max_length=30, unique=True)
     name = models.CharField(max_length=120, blank=True)
     capacity = models.PositiveIntegerField(default=0)
+    room_type = models.CharField(
+        max_length=16, choices=RoomType.choices, default=RoomType.CLASSROOM
+    )
 
     # Resolver-only credentials — never rendered client-side (SCAN-07, §6.2)
     # Case-SENSITIVE collation on the two opaque token columns ONLY: case-variant
@@ -60,6 +85,14 @@ class Room(models.Model):
         and no second column has to be kept in sync with it.
         """
         return self.code.upper().startswith("V")
+
+    @property
+    def record_type(self):
+        if self.is_virtual:
+            return self.RecordType.VIRTUAL
+        if self.floor.building.code.upper() == "UNASSIGNED":
+            return self.RecordType.UNASSIGNED
+        return self.RecordType.PHYSICAL
 
     def __str__(self):
         return self.code

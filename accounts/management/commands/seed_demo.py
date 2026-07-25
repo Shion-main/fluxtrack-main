@@ -54,7 +54,8 @@ class Command(BaseCommand):
             "status": AcademicTerm.Status.ACTIVE,
         })
 
-        bldg, _ = Building.objects.get_or_create(code="IT", defaults={"name": "IT Building"})
+        bldg, _ = Building.objects.get_or_create(
+            code="ACAD", defaults={"name": "Academic Building"})
         floor, _ = Floor.objects.get_or_create(building=bldg, number=3)
         rooms = []
         for code, name, cap in [("IT-301", "Programming Lab 1", 40),
@@ -63,8 +64,25 @@ class Command(BaseCommand):
             room, created = Room.objects.get_or_create(code=code, defaults={
                 "floor": floor, "name": name, "capacity": cap,
                 "qr_token": secrets.token_urlsafe(24), "manual_code": rand_code(),
+                "room_type": Room.RoomType.IT_LAB,
             })
+            changed = []
+            if room.floor_id != floor.pk:
+                room.floor = floor
+                changed.append("floor")
+            if room.room_type != Room.RoomType.IT_LAB:
+                room.room_type = Room.RoomType.IT_LAB
+                changed.append("room_type")
+            if changed:
+                room.save(update_fields=changed)
             rooms.append(room)
+
+        # Older demo runs created a fake IT building. Once its three demo rooms
+        # have been corrected above, remove only the empty legacy structure.
+        legacy_it = Building.objects.filter(code="IT").first()
+        if legacy_it and not Room.objects.filter(floor__building=legacy_it).exists():
+            legacy_it.floors.all().delete()
+            legacy_it.delete()
 
         # One user per role (dev-login). system_admin is a Django superuser.
         people = [

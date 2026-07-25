@@ -79,6 +79,25 @@ stripes. Every control has a real <label for>. ASCII-only.
         {% endif %}
       </div>
 
+      <div>
+        <label class="uk-form-label" for="r-type">Room type</label>
+        <select id="r-type" name="room_type" class="uk-select h-11" required>
+          {% if invalid_room_type %}
+          <option value="{{ invalid_room_type }}" selected>
+            Invalid selection: {{ invalid_room_type }}</option>
+          {% endif %}
+          {% for value, label in room_types %}
+          <option value="{{ value }}"
+            {% if form.room_type == value %}selected
+            {% elif not form.room_type and is_edit and room.room_type == value %}selected
+            {% elif not form.room_type and not is_edit and value == "CLASSROOM" %}selected{% endif %}>
+            {{ label }}</option>
+          {% endfor %}
+        </select>
+        <p class="uk-text-small uk-text-muted">
+          Use IT lab for computing rooms; building and floor still describe its location.</p>
+      </div>
+
       <div class="grid gap-4 sm:grid-cols-2">
         <div>
           <label class="uk-form-label" for="r-name">Name <span class="uk-text-muted">(optional)</span></label>

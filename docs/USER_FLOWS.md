@@ -159,15 +159,18 @@ flowchart TD
 
 ## 4. IFO Admin
 
-No persistent nav; three live surfaces + one stub.
+The IFO console has a persistent role navigation. Rooms and physical campus
+structure share one Rooms & buildings workspace.
 
 ```mermaid
 flowchart TD
-    Home(["/ signs in -> /ifo/rooms"]) --> Rooms["Room board<br/>/ifo/rooms<br/>live state per room, grouped by building/floor<br/>Live | All rooms scope toggle"]
+    Home(["/ signs in -> /ifo/rooms"]) --> Rooms["Rooms & buildings<br/>/ifo/rooms<br/>Live status and searchable Directory"]
     Home --> Assign["Assignments<br/>/ifo/assignments<br/>post Checkers/Guards, grant online duty"]
     Home -.-> Reports["Reports (stub, Phase 6)"]
 
-    Rooms -->|auto-refresh| Board["_board.html fragment<br/>/ifo/rooms/board<br/>swapped without full reload"]
+    Rooms -->|Live auto-refresh| Board["_board.html fragment<br/>/ifo/rooms/board<br/>swapped without full reload"]
+    Rooms -->|Directory| Directory["Inventory<br/>/ifo/rooms?view=directory<br/>physical hierarchy + system records"]
+    Directory -->|manage building| Building["Building drawer<br/>floors and protected structure actions"]
     Rooms -->|click a tile| Panel["Room slide-over<br/>/ifo/rooms/&lt;code&gt;/panel<br/>right now | today | this week"]
     Panel --> Detail["Full room page<br/>/ifo/rooms/&lt;code&gt;"]
     Panel --> Poster["Print QR poster<br/>/ifo/rooms/&lt;code&gt;/poster<br/>(also serves raw /qr.png)"]
@@ -183,12 +186,17 @@ flowchart TD
   one. A tile per room grouped by building → floor, each carrying its derived state (absent /
   starting / in session / online / free / idle) as colour + icon + label. Filters by building, by
   "needs attention", and by room-or-faculty search are client-side over the already-loaded tiles,
-  and are re-applied after every poll swap (`static/js/board.js`). The Live | All rooms toggle is a
-  real link, so the view stays bookmarkable. `/ifo/live` 301s here.
+  and are re-applied after every poll swap (`static/js/live-board.js`). Live and Directory are
+  bookmarkable modes; Directory adds URL-backed inventory, physical building/floor filters, and
+  separate Virtual and Unassigned system records. `/ifo/live` 301s here.
 - **Room slide-over** (`_room_panel.html`) — opens over the board (which keeps polling behind it)
   with what is happening right now, today's timeline, and the recurring week. Links out to the
   full **Room detail** page (`room_detail.html`) and the **QR poster** (`poster.html`, printable,
   plus a raw `qr.png` endpoint used by the poster image itself).
+- **Building drawer** (`_building_drawer.html`) opens from Directory to rename a physical
+  building, add a floor, or see named deletion blockers. Online and Unassigned are read-only
+  system records. `static/js/rooms-workspace.js` owns the shared drawer, focus restoration, and
+  mobile filter sheet.
 - **Assignments** (`ifo/assignments.html` + `_assignment_form.html`) — where Checker/Guard floor
   coverage and online-verification duty actually get posted; this is what makes the Checker's
   Floor view and Online list non-empty.

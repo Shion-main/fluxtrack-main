@@ -1,0 +1,29 @@
+{% if error %}
+<div class="uk-alert uk-alert-destructive mb-4" role="alert">
+  <p class="uk-text-small">{{ error }}</p>
+</div>
+{% endif %}
+<p class="uk-text-small uk-text-muted mb-5">
+  Add a physical campus building. ONLINE and UNASSIGNED are reserved system records.
+</p>
+<form method="post" action="/ifo/buildings/create"
+      {% if drawer %}hx-post="/ifo/buildings/create"
+      hx-target="#sheet-content" hx-swap="innerHTML"{% endif %}
+      class="flex flex-col gap-4">
+  {% csrf_token %}
+  <div>
+    <label class="uk-form-label" for="new-building-code">Building code</label>
+    <input id="new-building-code" name="code" class="uk-input h-11"
+           maxlength="20" required autocomplete="off"
+           value="{{ form.code|default:'' }}" placeholder="SCI">
+    <p class="uk-text-small uk-text-muted">Stored upper case and must be unique.</p>
+  </div>
+  <div>
+    <label class="uk-form-label" for="new-building-name">Building name</label>
+    <input id="new-building-name" name="name" class="uk-input h-11"
+           maxlength="120" required autocomplete="off"
+           value="{{ form.name|default:'' }}" placeholder="Science Building">
+  </div>
+  <button class="uk-btn uk-btn-primary h-11" type="submit">
+    <uk-icon icon="plus"></uk-icon> Add building</button>
+</form>

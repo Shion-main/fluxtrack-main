@@ -1,0 +1,130 @@
+{% if flash %}
+<div class="uk-alert uk-alert-success mb-4" role="status">
+  <p class="uk-text-small">{{ flash }}</p>
+</div>
+{% endif %}
+{% if error %}
+<div class="uk-alert uk-alert-destructive mb-4" role="alert" data-error="1">
+  <p class="uk-text-small">{{ error }}</p>
+</div>
+{% endif %}
+
+{% if building.is_system_record %}
+<div class="uk-alert mb-4" role="note">
+  <p class="uk-text-small"><strong>System record.</strong> This group supports
+    schedule imports and is read-only from physical campus management.</p>
+</div>
+{% endif %}
+
+<div class="flex flex-col gap-6">
+  <div class="uk-card uk-card-body">
+    <h3 class="uk-h4 mb-3">Name & code</h3>
+    <form method="post" action="/ifo/buildings/{{ building.id }}/edit"
+          {% if drawer %}hx-post="/ifo/buildings/{{ building.id }}/edit"
+          hx-target="#sheet-content" hx-swap="innerHTML"{% endif %}
+          class="flex flex-col gap-4">
+      {% csrf_token %}
+      <div class="grid gap-4 sm:grid-cols-2">
+        <div>
+          <label class="uk-form-label" for="e-code">Code</label>
+          <input id="e-code" type="text" name="code" class="uk-input h-11"
+                 maxlength="20" required
+                 value="{{ form.code|default:building.code }}"
+                 {% if building.is_system_record %}disabled{% endif %}>
+        </div>
+        <div>
+          <label class="uk-form-label" for="e-name">Name</label>
+          <input id="e-name" type="text" name="name" class="uk-input h-11"
+                 maxlength="120" required
+                 value="{{ form.name|default:building.name }}"
+                 {% if building.is_system_record %}disabled{% endif %}>
+        </div>
+      </div>
+      {% if not building.is_system_record %}
+      <div><button type="submit" class="uk-btn uk-btn-primary h-11">
+        <uk-icon icon="save" class="size-4"></uk-icon> Save changes</button></div>
+      {% endif %}
+    </form>
+  </div>
+
+  <div class="uk-card uk-card-body">
+    <div class="dir__section-head">
+      <div>
+        <h3 class="uk-h4">Floors</h3>
+        <p class="uk-text-small uk-text-muted">Select a floor in Directory to see its rooms.</p>
+      </div>
+    </div>
+    {% if floors %}
+    <div class="dir__floor-list">
+      {% for f in floors %}
+      <div class="dir__floor-row">
+        <a href="/ifo/rooms?view=directory&building={{ building.code }}&floor={{ f.id }}">
+          <strong>Floor {{ f.number }}</strong>
+          <span>{{ f.n_rooms }} room{{ f.n_rooms|pluralize }}</span>
+        </a>
+        {% if f.n_rooms == 0 and not building.is_system_record %}
+        <form method="post" action="/ifo/floors/{{ f.id }}/delete"
+              {% if drawer %}hx-post="/ifo/floors/{{ f.id }}/delete"
+              hx-target="#sheet-content" hx-swap="innerHTML"{% endif %}>
+          {% csrf_token %}
+          <button type="submit" class="uk-btn uk-btn-ghost uk-btn-sm"
+                  aria-label="Remove floor {{ f.number }}">
+            <uk-icon icon="trash-2"></uk-icon> Remove</button>
+        </form>
+        {% else %}
+        <span class="uk-text-muted uk-text-small">
+          {% if building.is_system_record %}read-only{% else %}has rooms{% endif %}</span>
+        {% endif %}
+      </div>
+      {% endfor %}
+    </div>
+    {% else %}
+    <p class="uk-text-muted uk-text-small mb-4">No floors yet. Add the first floor below.</p>
+    {% endif %}
+
+    {% if not building.is_system_record %}
+    <form method="post" action="/ifo/buildings/{{ building.id }}/floors/create"
+          {% if drawer %}hx-post="/ifo/buildings/{{ building.id }}/floors/create"
+          hx-target="#sheet-content" hx-swap="innerHTML"{% endif %}
+          class="flex items-end gap-3 mt-4">
+      {% csrf_token %}
+      <div>
+        <label class="uk-form-label" for="f-number">Add floor number</label>
+        <input id="f-number" type="number" name="number" class="uk-input h-11"
+               step="1" inputmode="numeric" required style="width:8rem" placeholder="3">
+      </div>
+      <button type="submit" class="uk-btn uk-btn-default h-11">
+        <uk-icon icon="plus" class="size-4"></uk-icon> Add floor</button>
+    </form>
+    {% endif %}
+  </div>
+
+  {% if not building.is_system_record %}
+  <div class="uk-card uk-card-body">
+    <h3 class="uk-h4 mb-2">Delete building</h3>
+    {% if delete_blockers %}
+    <p class="uk-text-small uk-text-muted mb-3">
+      {{ building.code }} cannot be deleted yet. It still holds:</p>
+    <ul class="uk-text-small mb-3" style="list-style:none;padding:0">
+      {% for r in delete_blockers %}
+      <li class="flex items-center gap-2 mb-1">
+        <uk-icon icon="{{ r.icon }}" class="size-4"></uk-icon>
+        {{ r.count }} {{ r.label|lower }}</li>
+      {% endfor %}
+    </ul>
+    <p class="uk-text-small uk-text-muted">
+      Move or remove rooms and floors first. Nothing is cascaded silently.</p>
+    {% else %}
+    <p class="uk-text-small uk-text-muted mb-3">
+      This building has no floors or rooms and can be safely deleted.</p>
+    <form method="post" action="/ifo/buildings/{{ building.id }}/delete"
+          {% if drawer %}hx-post="/ifo/buildings/{{ building.id }}/delete"
+          hx-target="#sheet-content" hx-swap="innerHTML"{% endif %}>
+      {% csrf_token %}
+      <button type="submit" class="uk-btn uk-btn-destructive h-11">
+        <uk-icon icon="trash-2" class="size-4"></uk-icon> Delete {{ building.code }}</button>
+    </form>
+    {% endif %}
+  </div>
+  {% endif %}
+</div>

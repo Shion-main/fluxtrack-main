@@ -1,0 +1,16 @@
+<div class="sheet__head">
+  <div>
+    <h2 id="sheet-title">{{ building.code }}</h2>
+    <p>{{ building.name }}</p>
+  </div>
+  <button type="button" class="sheet__x" data-sheet-close aria-label="Close building management">
+    <uk-icon icon="x"></uk-icon>
+  </button>
+</div>
+<div class="sheet__body">
+  {% include "ifo/_building_content.html" %}
+</div>
+<div class="sheet__foot">
+  <a href="/ifo/rooms?view=directory&building={{ building.code }}"
+     class="uk-btn uk-btn-secondary uk-btn-sm" data-sheet-close>Back to directory</a>
+</div>
