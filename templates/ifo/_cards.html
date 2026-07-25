@@ -50,6 +50,7 @@ value so colour is never the only signal. ASCII-only.
       exactly the way the faculty row links to the scorecard below: the card says
       how much capacity is idle, and the only useful next question is WHERE, which
       is the utilization page's whole job (IFO-09 tier T2).{% endcomment %}
+      {% if occupancy.0.used_hours or occupancy.0.wasted_hours %}
       <div class="uk-h2 mt-1">
         <a href="{% url 'ifo_utilization' %}?{{ scope_query }}">{{ occupancy.0.used_hours }}</a></div>
       <div class="uk-text-small uk-text-muted">session-hours used of {{ occupancy.0.booked_hours }} booked</div>
@@ -66,6 +67,29 @@ value so colour is never the only signal. ASCII-only.
       <p class="uk-text-small uk-text-muted mt-2">{{ occupancy.0.wasted_hours }} room-hours were booked and unused &mdash; reclaimable as bookable slots.</p>
       {% if occupancy.0.in_flight %}
         <p class="uk-text-small uk-text-muted mt-1">{{ occupancy.0.in_flight }} session{{ occupancy.0.in_flight|pluralize }} still running, so not yet counted.</p>
+      {% endif %}
+      {% elif occupancy.0.booked_hours %}
+      <div class="uk-h4 mt-2">Awaiting records</div>
+      <p class="uk-text-small uk-text-muted mt-1">
+        {{ occupancy.0.booked_hours }} room-hours are scheduled, but no completed
+        room-use or absence evidence is available yet.</p>
+      <a href="{% url 'ifo_utilization' %}?{{ scope_query }}"
+         class="uk-text-small inline-flex items-center gap-1 mt-2">
+        Review utilization window <uk-icon icon="chevron-right" class="size-4"></uk-icon></a>
+      {% elif occupancy.0.in_flight %}
+      <div class="uk-h4 mt-2">Recording in progress</div>
+      <p class="uk-text-small uk-text-muted mt-1">
+        {{ occupancy.0.in_flight }} room session{{ occupancy.0.in_flight|pluralize }}
+        still running. Final occupancy appears after checkout.</p>
+      <a href="{% url 'ifo_utilization' %}?{{ scope_query }}"
+         class="uk-text-small inline-flex items-center gap-1 mt-2">
+        Review utilization window <uk-icon icon="chevron-right" class="size-4"></uk-icon></a>
+      {% else %}
+      <div class="uk-h4 mt-2">Not started</div>
+      <p class="uk-text-small uk-text-muted mt-1">No physical-room bookings in this window.</p>
+      <a href="{% url 'ifo_utilization' %}?{{ scope_query }}"
+         class="uk-text-small inline-flex items-center gap-1 mt-2">
+        Review utilization window <uk-icon icon="chevron-right" class="size-4"></uk-icon></a>
       {% endif %}
     </div>
   {% endif %}

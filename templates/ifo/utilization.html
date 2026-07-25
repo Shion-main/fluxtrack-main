@@ -31,7 +31,7 @@ anything with. ASCII-only.{% endcomment %}
   Where and when physical room capacity sits idle (IFO-09). Virtual rooms are
   excluded &mdash; an online class occupies no room. Point-in-time; refresh with Apply.</p>
 
-<form method="get" class="uk-card uk-card-body mb-6 no-print">
+<form method="get" class="uk-card uk-card-body mb-6 no-print" id="util-filters">
   <div class="flex flex-wrap items-end gap-4">
     {% include "reports/_term_filter.html" %}
     <button type="submit" class="uk-btn uk-btn-primary uk-btn-sm">Apply</button>
@@ -52,13 +52,26 @@ this sheet is or what window it covers.{% endcomment %}
 <p class="uk-text-small uk-text-muted mb-6">
   Applied window: <b>{{ date_from|date:"M j, Y" }}</b> to <b>{{ date_to|date:"M j, Y" }}</b>{% if term %} &middot; {{ term.name }}{% endif %}.
   {% if not occupancy.1 and occupancy.0 %}
+  {% if occupancy.0.used_hours or occupancy.0.wasted_hours %}
   <b>{{ occupancy.0.wasted_hours }}</b> room-hours were booked and left unused in
   this window &mdash; reclaimable as bookable slots. Campus ran at
   {{ occupancy.0.utilization_pct }}% of {{ occupancy.0.available_hours }} available
   room-hours across {{ occupancy.0.physical_rooms }} physical rooms.
+  {% elif occupancy.0.booked_hours %}
+  <b>{{ occupancy.0.booked_hours }}</b> room-hours are scheduled in this window,
+  but no completed check-in/out or absence evidence is available yet. A utilization
+  rate will appear after those sessions are resolved.
+  {% elif occupancy.0.in_flight %}
+  {{ occupancy.0.in_flight }} room session{{ occupancy.0.in_flight|pluralize }} still
+  running. Final utilization appears after checkout records the completed use.
+  {% else %}
+  No physical-room bookings were recorded in this window, so a utilization rate
+  would not be meaningful.
+  {% endif %}
   {% endif %}
 </p>
 
+{% if occupancy.1 or occupancy.0.used_hours or occupancy.0.wasted_hours %}
 {% comment%}--- 1. HEAT GRID -------------------------------------------------{% endcomment %}
 <div class="uk-card uk-card-body mb-6 pr-flat" data-util-section="grid">
   <h3 class="uk-card-title mb-3">When capacity is idle</h3>
@@ -274,4 +287,45 @@ whole booking is reclaimable.{% endcomment %}
   </div>
   {% endif %}
 </div>
+{% else %}
+  {% if occupancy.0.booked_hours %}
+  <section class="uk-card uk-card-body" data-util-state="pending" aria-labelledby="util-state-title">
+    <uk-icon icon="clock" class="size-6 uk-text-muted"></uk-icon>
+    <h2 class="uk-h3 mt-3 mb-2" id="util-state-title">No completed room-use evidence yet</h2>
+    <p class="uk-text-muted mb-4">
+      {{ occupancy.0.booked_hours }} room-hours are scheduled in this window, but
+      none have a completed check-in/out or recorded absence. Rankings would be
+      misleading until those sessions are resolved.</p>
+    <div class="flex flex-wrap gap-2 no-print">
+      <a href="/ifo/rooms" class="uk-btn uk-btn-primary uk-btn-sm">View live rooms</a>
+      <a href="#util-filters" class="uk-btn uk-btn-ghost uk-btn-sm">Change date range</a>
+    </div>
+  </section>
+  {% elif occupancy.0.in_flight %}
+  <section class="uk-card uk-card-body" data-util-state="pending" aria-labelledby="util-state-title">
+    <uk-icon icon="clock" class="size-6 uk-text-muted"></uk-icon>
+    <h2 class="uk-h3 mt-3 mb-2" id="util-state-title">Room use is still being recorded</h2>
+    <p class="uk-text-muted mb-4">
+      {{ occupancy.0.in_flight }} session{{ occupancy.0.in_flight|pluralize }} in this
+      window still need{{ occupancy.0.in_flight|pluralize:"s," }} checkout. Rankings
+      will appear when completed room-use records are available.</p>
+    <div class="flex flex-wrap gap-2 no-print">
+      <a href="/ifo/rooms" class="uk-btn uk-btn-primary uk-btn-sm">View live rooms</a>
+      <a href="#util-filters" class="uk-btn uk-btn-ghost uk-btn-sm">Change date range</a>
+    </div>
+  </section>
+  {% else %}
+  <section class="uk-card uk-card-body" data-util-state="empty" aria-labelledby="util-state-title">
+    <uk-icon icon="calendar-search" class="size-6 uk-text-muted"></uk-icon>
+    <h2 class="uk-h3 mt-3 mb-2" id="util-state-title">No booked room activity in this window</h2>
+    <p class="uk-text-muted mb-4">
+      There are no physical-room bookings to compare with recorded check-ins.
+      Choose a range with classes, or use the live board for today's room status.</p>
+    <div class="flex flex-wrap gap-2 no-print">
+      <a href="/ifo/rooms" class="uk-btn uk-btn-primary uk-btn-sm">View live rooms</a>
+      <a href="#util-filters" class="uk-btn uk-btn-ghost uk-btn-sm">Change date range</a>
+    </div>
+  </section>
+  {% endif %}
+{% endif %}
 {% endblock %}
