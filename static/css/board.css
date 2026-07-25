@@ -481,6 +481,32 @@
 .dir__floor-row > a span { display: block; margin-top: 2px; color: var(--ft-muted); font-size: .72rem; }
 .dir__section-head { display: flex; align-items: flex-start; justify-content: space-between; margin-bottom: 10px; }
 
+/* Desktop directory: the campus hierarchy and the room list are separate
+   working surfaces. Each keeps its own position while the other is scanned. */
+@media (min-width: 1024px) {
+  .cns:has(.bd--directory) { height: 100dvh; overflow: hidden; }
+  .cns__main:has(.bd--directory),
+  .cns__body:has(.bd--directory) { min-height: 0; }
+  .cns__body:has(.bd--directory) { flex: 1; overflow: hidden; }
+
+  .bd--directory { height: 100%; min-height: 0; display: flex; flex-direction: column; }
+  .bd--directory .bd__bar { position: static; flex: none; }
+  .bd--directory .dir { min-height: 0; flex: 1; display: flex; flex-direction: column; }
+  .bd--directory .dir__filters,
+  .bd--directory .dir__active { flex: none; }
+  .bd--directory .dir__layout { min-height: 0; flex: 1; align-items: stretch; }
+
+  .bd--directory .dir__buildings,
+  .bd--directory .dir__results { min-height: 0; overflow-y: auto; overscroll-behavior: contain; }
+  .bd--directory .dir__buildings { position: static; scrollbar-gutter: stable; }
+  .bd--directory .dir__results { padding-right: 2px; scrollbar-gutter: stable; }
+  .bd--directory .dir__aside-head,
+  .bd--directory .dir__results-head {
+    position: sticky; top: 0; z-index: 1; background: hsl(var(--background));
+  }
+  .bd--directory .dir__results-head { padding-bottom: 10px; }
+}
+
 @media (max-width: 1023px) {
   .dir__layout { grid-template-columns: 1fr; }
   .dir__buildings {

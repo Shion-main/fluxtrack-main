@@ -44,7 +44,7 @@ would be destroyed mid-click every few seconds.{% endcomment %}
 {% endblock %}
 
 {% block console %}
-<div class="bd" id="bd">
+<div class="bd{% if mode == 'directory' %} bd--directory{% endif %}" id="bd">
 
   <div class="bd__bar">
     <div class="bd__scope" role="group" aria-label="Rooms workspace">
