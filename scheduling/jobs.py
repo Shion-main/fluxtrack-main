@@ -40,6 +40,7 @@ from ops.models import AuditLog, RoomConflictFlag
 from ops.locking import serialized_write
 from ops.notify import notify
 from ops.policy import get_policy
+from scheduling.merge import _effective_is_online, merged_sibling_ids
 from scheduling.models import Session, SessionStatus
 from scheduling.resolver import is_no_show_past_grace
 from scheduling.suspensions import excused_checker, session_is_calendar_excused
@@ -127,11 +128,24 @@ def sweep_no_shows(now=None, collect=None):
     return marked
 
 
+def _is_contended(sessions):
+    """True when one room's ACTIVE sessions are more than one real class.
+
+    An online class is not in the room, and merged sections are one class. Inside
+    a single room every merged section matches the same anchor, so one pass over
+    the first session is enough.
+    """
+    in_room = [s for s in sessions if not _effective_is_online(s)]
+    if len(in_room) < 2:
+        return False
+    return len(merged_sibling_ids(in_room[0], in_room)) + 1 < len(in_room)
+
+
 def detect_room_conflicts(now=None, collect=None):
     """JOB-02c: flag contradictory room occupancy once, auto-resolve on clear.
 
-    A conflict is 2+ ACTIVE sessions holding one room (`room_released_at` NULL).
-    Each newly-detected conflict creates an open `RoomConflictFlag` (dedup key
+    A conflict is two or more real classes ACTIVE in one room (`room_released_at`
+    NULL); see `_is_contended`. Each newly-detected conflict creates an open `RoomConflictFlag` (dedup key
     `room:{room_id}`) and notifies IFO once; open flags whose conflict has
     cleared are stamped `resolved_at`. Returns the count of NEW conflicts flagged.
 
@@ -145,15 +159,21 @@ def detect_room_conflicts(now=None, collect=None):
     active_term = get_active_term()
     if active_term is None:
         return 0
-    # Current conflict set: rooms with 2+ ACTIVE sessions still holding the room.
-    conflicting_room_ids = [
+    # Current conflict set: rooms with 2+ ACTIVE sessions still holding the room,
+    # narrowed to those where the sessions are genuinely different classes.
+    holding = Session.objects.filter(status=SessionStatus.ACTIVE,
+                                     room_released_at__isnull=True,
+                                     schedule__term=active_term)
+    crowded_room_ids = [
         row["room_id"] for row in
-        (Session.objects.filter(status=SessionStatus.ACTIVE,
-                                room_released_at__isnull=True,
-                                schedule__term=active_term)
-         .values("room_id").annotate(n=Count("id")).filter(n__gt=1))
+        holding.values("room_id").annotate(n=Count("id")).filter(n__gt=1)
     ]
-    current_keys = {f"room:{rid}": rid for rid in conflicting_room_ids}
+    by_room = {}
+    for s in list(holding.filter(room_id__in=crowded_room_ids)
+                  .select_related("schedule")):
+        by_room.setdefault(s.room_id, []).append(s)
+    current_keys = {f"room:{rid}": rid for rid, sessions in by_room.items()
+                    if _is_contended(sessions)}
 
     # Auto-resolve open flags whose conflict has cleared (key no longer present).
     # Materialize first (list) so the save() below doesn't write while the SELECT

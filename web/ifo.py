@@ -345,6 +345,12 @@ def _directory_context(request):
 
 
 @ifo_required
+def console_home(request):
+    """/ifo: the console's front door, which notifications link to."""
+    return redirect("ifo_rooms")
+
+
+@ifo_required
 def rooms_list(request):
     """Combined Live board and searchable room/building directory."""
     if _rooms_mode(request) == "directory":

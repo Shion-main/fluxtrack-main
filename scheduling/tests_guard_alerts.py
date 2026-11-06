@@ -80,12 +80,22 @@ class GuardAlertBase(TestCase):
             floor=floor, code=f"GA{n:03d}",
             qr_token=f"ga-tok-{n}", manual_code=f"G{n:05d}")
 
-    def _session(self, room, minutes_ago=60, status=SessionStatus.SCHEDULED):
+    def _session(self, room, minutes_ago=60, status=SessionStatus.SCHEDULED,
+                 faculty=None):
         start = self.now - timedelta(minutes=minutes_ago)
         return Session.objects.create(
-            schedule=self.schedule, faculty=self.faculty, room=room,
+            schedule=self.schedule, faculty=faculty or self.faculty, room=room,
             date=start.date(), scheduled_start=start,
             scheduled_end=start + timedelta(minutes=90), status=status)
+
+    def _two_active_classes(self, room):
+        """A real conflict needs two instructors: one instructor's two sessions
+        at the same instant in one room are a merged class, not a conflict."""
+        self._session(room, minutes_ago=10, status=SessionStatus.ACTIVE)
+        other = get_user_model().objects.create(
+            username=f"other_fac_{room.pk}", email=f"other_fac_{room.pk}@mcm.edu.ph",
+            role=Role.FACULTY)
+        self._session(room, minutes_ago=10, status=SessionStatus.ACTIVE, faculty=other)
 
     def _guard(self, username, is_active=True):
         return get_user_model().objects.create(
@@ -210,8 +220,7 @@ class IfoBehaviourUnchangedTests(GuardAlertBase):
 
     def _conflicting_room(self):
         room = self._room(self.floor1)
-        for _ in range(2):
-            self._session(room, minutes_ago=10, status=SessionStatus.ACTIVE)
+        self._two_active_classes(room)
         return room
 
     def test_one_ifo_notification_per_new_conflict(self):
@@ -349,8 +358,7 @@ class SweepReturnCompatibilityTests(GuardAlertBase):
 
     def test_detect_room_conflicts_returns_the_same_int_with_and_without(self):
         room = self._room(self.floor1)
-        for _ in range(2):
-            self._session(room, minutes_ago=10, status=SessionStatus.ACTIVE)
+        self._two_active_classes(room)
 
         events = []
         with_collector = detect_room_conflicts(now=self.now, collect=events)
@@ -374,8 +382,7 @@ class SweepReturnCompatibilityTests(GuardAlertBase):
     def test_collected_kinds_are_the_two_documented_strings(self):
         self._session(self._room(self.floor1))
         room = self._room(self.floor2)
-        for _ in range(2):
-            self._session(room, minutes_ago=10, status=SessionStatus.ACTIVE)
+        self._two_active_classes(room)
 
         events = []
         sweep_no_shows(now=self.now, collect=events)

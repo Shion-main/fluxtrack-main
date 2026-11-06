@@ -822,12 +822,13 @@ class ActiveTermJobScopeTests(TestCase):
         status=SessionStatus.SCHEDULED,
         room=None,
         hour=8,
+        faculty=None,
     ):
         d = date(2026, 7, 6)
         start = timezone.make_aware(datetime.combine(d, time(hour, 0)))
         return Session.objects.create(
             schedule=schedule,
-            faculty=self.faculty,
+            faculty=faculty or self.faculty,
             room=room or schedule.room,
             date=d,
             scheduled_start=start,
@@ -894,8 +895,10 @@ class ActiveTermJobScopeTests(TestCase):
 
         self.assertEqual(detect_room_conflicts(), 0)
 
-        other_active_schedule = _schedule(self.active, self.faculty, "jbc")
-        self._job_session(other_active_schedule, status=SessionStatus.ACTIVE, room=room)
+        other_faculty = _user("jbc_faculty", role=Role.FACULTY)
+        other_active_schedule = _schedule(self.active, other_faculty, "jbc")
+        self._job_session(other_active_schedule, status=SessionStatus.ACTIVE, room=room,
+                          faculty=other_faculty)
 
         self.assertEqual(detect_room_conflicts(), 1)
         self.assertEqual(RoomConflictFlag.objects.count(), 1)

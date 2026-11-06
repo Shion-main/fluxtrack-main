@@ -32,7 +32,7 @@ from django.views.decorators.http import require_http_methods
 
 from accounts.models import Role
 from campus.models import Room
-from ops.models import AuditLog
+from ops.models import AuditLog, Notification
 from ops.notify import notify
 from ops.policy import get_policy
 from scheduling.merge import (propagate_merged_absent,
@@ -762,11 +762,15 @@ def online_open(request, session_id):
     if session is None:
         raise Http404("No online session for this checker.")
     if not session.teams_link:
-        notify(role=Role.IFO_ADMIN, type="online_no_link",
-               title="Online session missing its Teams link",
-               body=f"{session.schedule.course_code}-{session.schedule.section} "
-                    f"has no Teams meeting link. Please add one so the assigned "
-                    f"checker can verify attendance.")
+        # This is a page view, so it can repeat freely: tell IFO once per class
+        # meeting, however often the page is opened and by whichever Checker.
+        body = (f"{session.schedule.course_code}-{session.schedule.section} on "
+                f"{session.date} has no Teams meeting link. Please add one so the "
+                f"assigned checker can verify attendance.")
+        if not Notification.objects.filter(type="online_no_link",
+                                           body=body).exists():
+            notify(role=Role.IFO_ADMIN, type="online_no_link",
+                   title="Online session missing its Teams link", body=body)
         return render(request, "checker/online_open.html",
                       {"session": session, "no_link": True})
     return render(request, "checker/online_open.html", {"session": session})

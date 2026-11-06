@@ -82,6 +82,7 @@ urlpatterns = [
     path("hr/attendance", hr.attendance, name="hr_attendance"),
     path("hr/attendance.csv", hr.attendance_csv, name="hr_attendance_csv"),
     # IFO Admin surfaces
+    path("ifo", ifo.console_home, name="ifo_home"),
     path("ifo/terms", ifo_terms.terms_list, name="ifo_terms"),
     path("ifo/terms/create", ifo_terms.term_create, name="ifo_term_create"),
     path("ifo/terms/<int:pk>", ifo_terms.term_detail, name="ifo_term_detail"),
