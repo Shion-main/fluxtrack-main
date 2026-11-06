@@ -17,7 +17,6 @@ from django.db.models.deletion import ProtectedError
 from django.http import Http404, HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
-from django.utils.dateparse import parse_date, parse_time
 from django.views.decorators.http import require_http_methods
 
 from accounts.models import Role
@@ -55,6 +54,7 @@ from verification.models import (Assignment, AssignmentScope, AssignmentType,
                                  DutyRole)
 from verification.services import assign_online_sessions
 from web.pagination import paginate
+from web.parsing import is_id, safe_parse_date, safe_parse_time
 from web.room_state import (ROOM_PROBLEM_STATES, ROOM_STATE_ORDER, occupies,
                             room_tile, room_timetable)
 from web.reporting_common import (
@@ -175,7 +175,7 @@ def _directory_filters(request):
         building = ""
 
     floor = (request.GET.get("floor") or "").strip()
-    if not floor.isdigit() or not Floor.objects.filter(pk=int(floor)).exists():
+    if not is_id(floor) or not Floor.objects.filter(pk=int(floor)).exists():
         floor = ""
 
     room_type = (request.GET.get("room_type") or "").strip().upper()
@@ -587,6 +587,10 @@ def room_rotate(request, code):
 #      (D-17). See `room_delete`.
 
 
+# Room.capacity is a PositiveIntegerField; anything larger fails at INSERT.
+_MAX_ROOM_CAPACITY = 2147483647
+
+
 def _room_form_ctx(*, room=None, error=None, form=None):
     """Choice data + sticky values for the room create/edit form.
 
@@ -660,11 +664,12 @@ def _room_field_errors(fields, *, editing=None):
         # rather than surfacing as a UNIQUE violation.
         if Room.objects.filter(code__iexact=fields["code"]).exists():
             return f"Room {fields['code']} already exists."
-    if not fields["floor"].isdigit():
+    if not is_id(fields["floor"]):
         return "Select a floor."
-    # `.isdigit()` rejects "", "abc" and "-5" in one test, so it covers both the
-    # numeric and the non-negative half of the capacity rule.
-    if fields["capacity"] and not fields["capacity"].isdigit():
+    # `is_id` rejects "", "abc" and "-5" in one test, so it covers both the numeric
+    # and the non-negative half of the capacity rule.
+    capacity = fields["capacity"]
+    if capacity and not (is_id(capacity) and int(capacity) <= _MAX_ROOM_CAPACITY):
         return "Capacity must be a whole number of seats (0 or more)."
     if fields["room_type"] not in Room.RoomType.values:
         return "Select a valid room type."
@@ -1076,30 +1081,6 @@ def bookings_list(request):
     return render(request, "ifo/bookings.html", _booking_panel(request))
 
 
-def _safe_parse_date(raw):
-    """`parse_date` that returns None for BOTH kinds of bad input.
-
-    Django's `parse_date`/`parse_time` return None only when the string does
-    not MATCH the expected shape. A string that matches the shape but carries
-    an impossible value -- "25:99", "2026-13-45" -- gets as far as constructing
-    the date/time object and raises ValueError instead. A validation ladder
-    that only tests `is None` therefore lets exactly the inputs an operator is
-    most likely to fat-finger through as a 500 (T-07-25).
-    """
-    try:
-        return parse_date(raw)
-    except ValueError:
-        return None
-
-
-def _safe_parse_time(raw):
-    """See `_safe_parse_date` -- same trap, same reason."""
-    try:
-        return parse_time(raw)
-    except ValueError:
-        return None
-
-
 def _booking_fields(request):
     return {
         "occupant_name": (request.POST.get("occupant_name") or "").strip(),
@@ -1140,13 +1121,13 @@ def booking_create(request):
         error = "The occupant name is at most 120 characters."
     elif len(fields["purpose"]) > 255:
         error = "The purpose is at most 255 characters."
-    elif not fields["room"].isdigit():
+    elif not is_id(fields["room"]):
         error = "Select a room."
-    elif _safe_parse_date(fields["date"]) is None:
+    elif safe_parse_date(fields["date"]) is None:
         error = "Enter a valid date."
-    elif _safe_parse_time(fields["start_time"]) is None:
+    elif safe_parse_time(fields["start_time"]) is None:
         error = "Enter a valid start time."
-    elif _safe_parse_time(fields["end_time"]) is None:
+    elif safe_parse_time(fields["end_time"]) is None:
         error = "Enter a valid end time."
 
     if error is None:
@@ -1159,13 +1140,13 @@ def booking_create(request):
             error = f"{room.code} is out of service and cannot be booked."
 
     if error is None:
-        day = _safe_parse_date(fields["date"])
+        day = safe_parse_date(fields["date"])
         # Combined the same way ops/availability.py:106 builds a reservation
         # window, so a booking and a reservation are compared on one clock.
         start = timezone.make_aware(
-            datetime.combine(day, _safe_parse_time(fields["start_time"])))
+            datetime.combine(day, safe_parse_time(fields["start_time"])))
         end = timezone.make_aware(
-            datetime.combine(day, _safe_parse_time(fields["end_time"])))
+            datetime.combine(day, safe_parse_time(fields["end_time"])))
         if end <= start:
             # Half-open overlap means a zero-length booking occupies nothing at
             # all, so it would silently "succeed" while reserving no time.
@@ -1365,7 +1346,7 @@ def _draft_terms():
 
 def _draft_term_from_post(request):
     raw = (request.POST.get("term") or "").strip()
-    if not raw.isdigit():
+    if not is_id(raw):
         return None
     return AcademicTerm.objects.filter(
         pk=int(raw), status=AcademicTerm.Status.DRAFT
@@ -1590,8 +1571,10 @@ def assignment_create(request):
     error partial (status 400), never a 500.
     """
     User = get_user_model()
-    user = User.objects.filter(pk=request.POST.get("user"),
-                               role__in=[Role.CHECKER, Role.GUARD]).first()
+    user_raw = request.POST.get("user")
+    user = (User.objects.filter(pk=user_raw,
+                                role__in=[Role.CHECKER, Role.GUARD]).first()
+            if is_id(user_raw) else None)
     role = request.POST.get("role")
     type_ = request.POST.get("type")
     scope = request.POST.get("scope")
@@ -1614,17 +1597,17 @@ def assignment_create(request):
     # Validate date/time FORMAT and floor-id numericness BEFORE the ORM write —
     # DateField/TimeField.to_python() and a non-numeric pk__in both raise an
     # unhandled ValidationError (500) at INSERT/.set() time otherwise (CR-04).
-    # `_safe_parse_*` rather than the raw parsers: a shape-matching but
+    # `safe_parse_*` rather than the raw parsers: a shape-matching but
     # impossible value ("25:99", "2026-13-45") raises ValueError out of
     # `parse_time`/`parse_date` instead of returning None, so an `is None` test
     # alone still lets a fat-fingered time through as a 500.
-    elif date_raw and _safe_parse_date(date_raw) is None:
+    elif date_raw and safe_parse_date(date_raw) is None:
         error = "Enter a valid date."
-    elif start_raw and _safe_parse_time(start_raw) is None:
+    elif start_raw and safe_parse_time(start_raw) is None:
         error = "Enter a valid start time."
-    elif end_raw and _safe_parse_time(end_raw) is None:
+    elif end_raw and safe_parse_time(end_raw) is None:
         error = "Enter a valid end time."
-    elif floor_ids and not all(f.isdigit() for f in floor_ids):
+    elif floor_ids and not all(is_id(f) for f in floor_ids):
         error = "Invalid floor selection."
 
     term = get_active_term()
@@ -2050,7 +2033,7 @@ def weekly_reports(request):
             "weeks": [], "range_note": scope.error,
         })
     week_raw = (request.GET.get("week") or "").strip()
-    week = parse_date(week_raw) if week_raw else None
+    week = safe_parse_date(week_raw) if week_raw else None
     if week is None:
         latest = WeeklyReport.objects.filter(term=scope.term).order_by("-week_start").first()
         week = latest.week_start if latest else None
@@ -2140,7 +2123,7 @@ def suspensions_list(request):
 def suspension_create(request):
     """Declare a suspension; delegate the flip+notify to the service (Phase 9 core).
 
-    Format is settled before the ORM (the `_safe_parse_date` trap). A reason is
+    Format is settled before the ORM (the `safe_parse_date` trap). A reason is
     mandatory: an unexplained mass-cancellation is exactly what an attendance
     system must keep accountable.
     """
@@ -2163,8 +2146,8 @@ def suspension_create(request):
         require_writable_term(term)
     except ArchivedTermError:
         return fail("Archived terms are read-only.")
-    start = _safe_parse_date(fields["start"])
-    end = _safe_parse_date(fields["end"]) if fields["end"] else start
+    start = safe_parse_date(fields["start"])
+    end = safe_parse_date(fields["end"]) if fields["end"] else start
     if start is None:
         return fail("Enter a valid start date.")
     if end is None:
@@ -2176,7 +2159,7 @@ def suspension_create(request):
     building = None
     if fields["building"]:
         building = (Building.objects.filter(pk=fields["building"]).first()
-                    if fields["building"].isdigit() else None)
+                    if is_id(fields["building"]) else None)
         if building is None:
             return fail("Select a valid building, or leave it campus-wide.")
 
@@ -2233,8 +2216,8 @@ def break_create(request):
 
     if term is None:
         return fail("No active term. Import a term first.")
-    start = _safe_parse_date(fields["start"])
-    end = _safe_parse_date(fields["end"]) if fields["end"] else start
+    start = safe_parse_date(fields["start"])
+    end = safe_parse_date(fields["end"]) if fields["end"] else start
     if start is None:
         return fail("Enter a valid start date.")
     if end is None:
@@ -2703,15 +2686,15 @@ def schedule_new(request):
     if not fields["course_code"] or not fields["section"]:
         return fail("Course code and section are required.")
     faculty = (get_user_model().objects.filter(pk=fields["faculty"],
-               role=Role.FACULTY).first() if fields["faculty"].isdigit() else None)
+               role=Role.FACULTY).first() if is_id(fields["faculty"]) else None)
     if faculty is None:
         return fail("Select a faculty member.")
     room = (Room.objects.filter(pk=fields["room"]).first()
-            if fields["room"].isdigit() else None)
+            if is_id(fields["room"]) else None)
     if room is None:
         return fail("Select a room.")
-    start = _safe_parse_time(fields["start_time"])
-    end = _safe_parse_time(fields["end_time"])
+    start = safe_parse_time(fields["start_time"])
+    end = safe_parse_time(fields["end_time"])
     if start is None or end is None:
         return fail("Enter valid start and end times.")
     if end <= start:
@@ -2763,11 +2746,11 @@ def schedule_edit(request, pk):
                       status=400)
 
     faculty = (get_user_model().objects.filter(pk=fields["faculty"],
-               role=Role.FACULTY).first() if fields["faculty"].isdigit() else None)
+               role=Role.FACULTY).first() if is_id(fields["faculty"]) else None)
     room = (Room.objects.filter(pk=fields["room"]).first()
-            if fields["room"].isdigit() else None)
-    start = _safe_parse_time(fields["start_time"])
-    end = _safe_parse_time(fields["end_time"])
+            if is_id(fields["room"]) else None)
+    start = safe_parse_time(fields["start_time"])
+    end = safe_parse_time(fields["end_time"])
     if faculty is None:
         return fail("Select a faculty member.")
     if room is None:

@@ -33,6 +33,9 @@ ROOM_PROBLEM_STATES = ("absent", "starting")
 def occupies(session, room):
     """True when `session` actually uses `room`.
 
+    A CANCELLED class uses no room: it is not happening, so it must not read as
+    starting or as a no-show. Every room surface shares this rule.
+
     An ONLINE class does not occupy a physical room -- nobody is in it, so it
     must not appear in that room's schedule or affect its state; the room is
     simply free. In a VIRTUAL room the online class is the whole point, so it
@@ -43,6 +46,8 @@ def occupies(session, room):
     existed to explain why a booked room looked empty; once an online class no
     longer books a physical room, there is nothing left to explain.
     """
+    if session.status == SessionStatus.CANCELLED:
+        return False
     if room.is_virtual:
         return True
     effective = session.declared_modality or session.schedule.modality

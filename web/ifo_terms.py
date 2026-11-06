@@ -3,7 +3,6 @@
 from django.contrib import messages
 from django.db.models import Case, Count, IntegerField, Value, When
 from django.shortcuts import get_object_or_404, redirect, render
-from django.utils.dateparse import parse_date
 from django.views.decorators.http import require_http_methods
 
 from scheduling.models import AcademicTerm
@@ -17,6 +16,7 @@ from scheduling.term_lifecycle import (
     reopen_term,
 )
 from web.ifo import ifo_required
+from web.parsing import safe_parse_date
 
 
 _STATUS_ORDER = Case(
@@ -65,8 +65,8 @@ def _creation_preflight(request, fields):
     return preflight_term_creation(
         actor=request.user,
         name=fields["name"],
-        start_date=parse_date(fields["start_date"]),
-        end_date=parse_date(fields["end_date"]),
+        start_date=safe_parse_date(fields["start_date"]),
+        end_date=safe_parse_date(fields["end_date"]),
     )
 
 
@@ -97,8 +97,8 @@ def term_create(request):
         term = create_term(
             actor=request.user,
             name=fields["name"],
-            start_date=parse_date(fields["start_date"]),
-            end_date=parse_date(fields["end_date"]),
+            start_date=safe_parse_date(fields["start_date"]),
+            end_date=safe_parse_date(fields["end_date"]),
             confirmation_name=request.POST.get("confirmation_name", ""),
         )
     except TermLifecycleError as exc:

@@ -101,6 +101,8 @@ ASCII-only (no em dash).
       Start is past the grace window, so this class can no longer be started here.
     {% elif row.state == "absent" %}
       Recorded as Absent. Ask the IFO office to reinstate it if you held the class.
+    {% elif row.state == "cancelled" %}
+      This class is cancelled{% if row.session.cancelled_reason %}: {{ row.session.cancelled_reason }}{% endif %}. No check-in needed.
     {% else %}
       This class is finished.
     {% endif %}</p>

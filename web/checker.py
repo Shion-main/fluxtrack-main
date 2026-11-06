@@ -43,6 +43,7 @@ from verification import resolver as R
 from verification.models import (Assignment, AssignmentScope,
                                  CheckerReplayReceipt, CheckerValidation,
                                  DutyRole, ValidationAction)
+from web.parsing import is_id
 
 _FLAG_ACTIONS = {ValidationAction.FLAG_IDENTITY_MISMATCH,
                  ValidationAction.FLAG_NOT_PRESENT}
@@ -131,7 +132,7 @@ def _online_session(session_id, user):
     CHK-01 rule the F2F floor path enforces). A non-numeric id, a missing
     session, a non-online session, or a foreign owner all resolve to None.
     """
-    if not str(session_id or "").isdigit():
+    if not is_id(session_id):
         return None
     active_term = get_active_term()
     if active_term is None:
@@ -413,8 +414,8 @@ def action(request):
     # trusted for gating). A missing/forged room_id degrades to an error partial.
     # Guard non-numeric room_id BEFORE the ORM filter (CR-03) — an AutoField pk
     # filtered on "abc" raises ValidationError (500); mirror the online path's
-    # `.isdigit()` guard so it degrades to the bad-payload partial (200).
-    if not str(room_id or "").isdigit():
+    # `is_id` guard so it degrades to the bad-payload partial (200).
+    if not is_id(room_id):
         return render(request, "checker/_outcome.html", {"error": "bad-payload"})
     room = (Room.objects.filter(pk=room_id)
             .select_related("floor").first())
@@ -579,8 +580,8 @@ def replay(request):
         note = item.get("note", "") or ""
         scanned_at = parse_datetime(item.get("scanned_at") or "") or now
         claimed_session_id = item.get("session_id")
-        claimed_session_valid = claimed_session_id in (None, "") or str(
-            claimed_session_id).isdigit()
+        claimed_session_valid = (claimed_session_id in (None, "")
+                                 or is_id(claimed_session_id))
 
         if room is None:
             reason = "bad-room"
@@ -831,7 +832,8 @@ def floor_rows(request):
         active = list(Session.objects
                       .filter(room__floor_id__in=floor_ids, date=timezone.localdate(),
                               schedule__term=active_term)
-                      .exclude(status=SessionStatus.ABSENT)
+                      .exclude(status__in=[SessionStatus.ABSENT,
+                                           SessionStatus.CANCELLED])
                       .select_related("room", "room__floor", "schedule", "faculty")
                       .prefetch_related("validations")
                       .order_by("scheduled_start"))

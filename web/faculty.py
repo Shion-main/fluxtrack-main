@@ -22,7 +22,6 @@ from django.http import FileResponse, Http404, HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils import timezone
-from django.utils.dateparse import parse_date, parse_time
 from django.views.decorators.http import require_http_methods
 
 from accounts.models import Role
@@ -51,6 +50,7 @@ from scheduling.resolver import is_no_show_past_grace
 from scheduling.term_scope import get_active_term
 from verification.models import CheckerValidation, ValidationAction
 from web.pagination import paginate
+from web.parsing import is_id, safe_parse_date, safe_parse_time
 from web.reporting_common import status_label
 from scheduling.services import (
     ModalityShiftError,
@@ -332,7 +332,7 @@ def modality_rooms(request):
     schedules, so a forged pk yields nothing rather than another faculty's rooms.
     """
     raw = (request.GET.get("schedules") or "").split(",")
-    ids = [s for s in (r.strip() for r in raw) if s.isdigit()]
+    ids = [s for s in (r.strip() for r in raw) if is_id(s)]
     rows = []
     if ids:
         active_term = get_active_term()
@@ -375,7 +375,7 @@ def modality_new(request):
         initial = request.GET.copy()
         schedule_id = (request.GET.get("schedule") or "").strip()
         target = (request.GET.get("target") or "").strip()
-        if schedule_id.isdigit():
+        if is_id(schedule_id):
             initial.setlist("schedules", [schedule_id])
         if target in Modality.values:
             initial["target_modality"] = target
@@ -411,20 +411,20 @@ def modality_new(request):
         error = "Tell your Dean why this change is needed."
     elif len(request_reason) > 500:
         error = "Keep the reason to 500 characters or fewer."
-    elif not all(s.isdigit() for s in schedule_ids):
+    elif not all(is_id(s) for s in schedule_ids):
         error = "Invalid class selection."
     elif mode == "single":
-        on_date = parse_date(on_date_raw)
+        on_date = safe_parse_date(on_date_raw)
         if on_date is None:
             error = "Pick a valid date for the single session."
         else:
             window_start = window_end = on_date
-    elif not weeks_raw.isdigit() or not (1 <= int(weeks_raw) <= _MAX_WEEKS):
+    elif not is_id(weeks_raw) or not (1 <= int(weeks_raw) <= _MAX_WEEKS):
         error = f"Choose how many weeks (1 to {_MAX_WEEKS})."
     else:
         window_start, window_end = weeks_window(int(weeks_raw))
-    parsed_start = parse_time(nst_raw) if nst_raw else None
-    parsed_end = parse_time(net_raw) if net_raw else None
+    parsed_start = safe_parse_time(nst_raw) if nst_raw else None
+    parsed_end = safe_parse_time(net_raw) if net_raw else None
     if error is None and (nst_raw or net_raw):
         if parsed_start is None or parsed_end is None:
             error = "Enter a valid alternative start and end time."
@@ -455,7 +455,7 @@ def modality_new(request):
             rk = (request.POST.get(f"preferred_room_{sch.pk}") or "").strip()
             if not rk:
                 continue
-            if not rk.isdigit():
+            if not is_id(rk):
                 error = "Invalid room selection."
                 break
             room = Room.objects.filter(pk=rk).first()
@@ -581,6 +581,8 @@ _ONLINE_STYLES = {
                "icon": "x", "label": "Absent"},
     "completed": {"card": "ft-card--neutral", "pill": "ft-pill ft-pill--done",
                   "icon": "check", "label": "Done"},
+    "cancelled": {"card": "ft-card--neutral", "pill": "ft-pill ft-pill--done",
+                  "icon": "x", "label": "Cancelled"},
 }
 
 # The two states from which `online_start` will accept a write. Display and the
@@ -610,6 +612,8 @@ def _online_state(session, now, grace_min):
         return "completed"
     if session.status == SessionStatus.ABSENT:
         return "absent"
+    if session.status == SessionStatus.CANCELLED:
+        return "cancelled"
     if is_no_show_past_grace(session.scheduled_start, now, grace_min):
         return "past-grace"
     if now < session.scheduled_start:
@@ -920,14 +924,14 @@ def _history_filters(request):
     to_raw = (request.GET.get("to") or "").strip()
 
     note = None
-    d_from = parse_date(from_raw) if from_raw else None
-    d_to = parse_date(to_raw) if to_raw else None
+    d_from = safe_parse_date(from_raw) if from_raw else None
+    d_to = safe_parse_date(to_raw) if to_raw else None
     if (from_raw and d_from is None) or (to_raw and d_to is None):
         note = ("That date wasn't valid, so the date filter was ignored. "
                 "Enter dates as YYYY-MM-DD.")
     return {
         "term": term_raw, "date_from": from_raw, "date_to": to_raw,
-        "note": note, "_term_id": int(term_raw) if term_raw.isdigit() else None,
+        "note": note, "_term_id": int(term_raw) if is_id(term_raw) else None,
         "_d_from": d_from, "_d_to": d_to,
         "any_applied": bool(term_raw or from_raw or to_raw),
     }

@@ -54,6 +54,7 @@ from scheduling.services import (
 )
 from scheduling.term_scope import get_active_term
 from web.pagination import paginate
+from web.parsing import is_id
 from web.reporting_common import reporting_range as _reporting_range, selected_report_scope
 
 
@@ -65,6 +66,12 @@ def dean_required(view):
             raise PermissionDenied
         return view(request, *args, **kwargs)
     return wrapped
+
+
+def _posted_session_pk(request):
+    """The posted session id, or 0 (which matches nothing) when it is not one."""
+    raw = request.POST.get("session")
+    return raw if is_id(raw) else 0
 
 
 def _queue_ctx(user, *, error=None, message=None):
@@ -229,12 +236,10 @@ def faculty_detail(request, faculty_id):
         target_modality = request.POST.get("target_modality") or ""
         reason = request.POST.get("reason") or ""
         if request.POST.get("action") == "bulk_override":
-            try:
-                selected_ids = {
-                    int(value) for value in request.POST.getlist("sessions")
-                }
-            except (TypeError, ValueError):
-                raise Http404("Invalid session.") from None
+            raw_ids = request.POST.getlist("sessions")
+            if not all(is_id(value) for value in raw_ids):
+                raise Http404("Invalid session.")
+            selected_ids = {int(value) for value in raw_ids}
             selected_sessions = list(
                 Session.objects.filter(
                     pk__in=selected_ids,
@@ -261,7 +266,7 @@ def faculty_detail(request, faculty_id):
         else:
             session = get_object_or_404(
                 Session.objects.select_related("faculty", "schedule"),
-                pk=request.POST.get("session") or 0,
+                pk=_posted_session_pk(request),
                 faculty=faculty,
                 faculty__department_id=request.user.department_id,
             )
@@ -299,7 +304,7 @@ def modality_override(request):
     if request.method == "POST":
         session = get_object_or_404(
             Session.objects.select_related("faculty", "schedule"),
-            pk=request.POST.get("session") or 0,
+            pk=_posted_session_pk(request),
             faculty__department_id=request.user.department_id,
         )
         return faculty_detail(request, session.faculty_id)

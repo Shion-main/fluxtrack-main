@@ -53,12 +53,13 @@ label (WCAG 1.4.1). Off-duty renders a calm "not on duty" card. ASCII-only.{% en
   destroyed mid-tap.{% endcomment %}
   {% for se in sessions %}
   <a href="/guard/rooms/{{ se.room.code }}" class="gd-roomlink ft-card
-    {% if se.status == 'active' %}ft-card--ok{% elif se.status == 'absent' %}ft-card--bad{% elif se.status == 'completed' %}ft-card--neutral{% else %}ft-card--info{% endif %}"
+    {% if se.status == 'active' %}ft-card--ok{% elif se.status == 'absent' %}ft-card--bad{% elif se.status == 'completed' or se.status == 'cancelled' %}ft-card--neutral{% else %}ft-card--info{% endif %}"
     data-state="{{ se.status }}">
     <div class="ft-card__head">
       {% if se.status == 'active' %}<uk-icon icon="check-circle"></uk-icon><span class="ft-pill ft-pill--active">In session</span>
       {% elif se.status == 'absent' %}<uk-icon icon="x"></uk-icon><span class="ft-pill ft-pill--absent">Absent</span>
       {% elif se.status == 'completed' %}<uk-icon icon="check"></uk-icon><span class="ft-pill ft-pill--done">Done</span>
+      {% elif se.status == 'cancelled' %}<uk-icon icon="x"></uk-icon><span class="ft-pill ft-pill--done">Cancelled</span>
       {% else %}<uk-icon icon="clock"></uk-icon><span class="ft-pill ft-pill--upcoming">Scheduled</span>{% endif %}
       <span class="ft-card__room">{% include "_room_code.html" with room=se.room %}</span>
     </div>

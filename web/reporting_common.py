@@ -19,11 +19,11 @@ from typing import Callable, Mapping
 from urllib.parse import urlencode
 
 from django.utils import timezone
-from django.utils.dateparse import parse_date
 
 from ops.policy import get_policy
 from scheduling.models import AcademicTerm, SessionStatus
 from scheduling.term_scope import get_active_term
+from web.parsing import is_id, safe_parse_date
 
 # reporting_week_start policy value -> Python weekday() index (Mon=0 .. Sun=6).
 _WEEKDAY_INDEX = {"monday": 0, "tuesday": 1, "wednesday": 2, "thursday": 3,
@@ -99,7 +99,7 @@ def selected_report_scope(
     term_raw = (request.GET.get("term") or "").strip()
 
     if term_was_supplied:
-        if not term_raw.isdigit():
+        if not is_id(term_raw):
             return _empty_report_scope(
                 choices=choices, code="invalid-term",
                 message=("That academic term is not available. Choose a term "
@@ -135,9 +135,9 @@ def selected_report_scope(
     from_raw = (request.GET.get("from") or "").strip()
     to_raw = (request.GET.get("to") or "").strip()
     as_of_raw = (request.GET.get("as_of") or "").strip()
-    parsed_start = parse_date(from_raw) if from_raw else None
-    parsed_end = parse_date(to_raw) if to_raw else None
-    parsed_as_of = parse_date(as_of_raw) if as_of_raw else None
+    parsed_start = safe_parse_date(from_raw) if from_raw else None
+    parsed_end = safe_parse_date(to_raw) if to_raw else None
+    parsed_as_of = safe_parse_date(as_of_raw) if as_of_raw else None
 
     invalid_date = (
         (from_raw and parsed_start is None)
@@ -185,12 +185,15 @@ def status_label(status):
     """Map a Session status to the present/absent payroll label (HR-01, FAC-11).
 
     ACTIVE/COMPLETED are the two "held" states -> Present; ABSENT -> Absent;
-    anything else (SCHEDULED, future) -> Scheduled (not yet a payroll fact).
+    CANCELLED -> Cancelled (the class did not meet); SCHEDULED -> Scheduled (not
+    yet a payroll fact).
     """
     if status in (SessionStatus.ACTIVE, SessionStatus.COMPLETED):
         return "Present"
     if status == SessionStatus.ABSENT:
         return "Absent"
+    if status == SessionStatus.CANCELLED:
+        return "Cancelled"
     return "Scheduled"
 
 
@@ -213,8 +216,8 @@ def reporting_range(request):
 
     from_raw = (request.GET.get("from") or "").strip()
     to_raw = (request.GET.get("to") or "").strip()
-    start = parse_date(from_raw) if from_raw else None
-    end = parse_date(to_raw) if to_raw else None
+    start = safe_parse_date(from_raw) if from_raw else None
+    end = safe_parse_date(to_raw) if to_raw else None
 
     note = None
     if (from_raw and start is None) or (to_raw and end is None):

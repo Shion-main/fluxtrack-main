@@ -236,7 +236,8 @@ def locate(request):
             nxt = (Session.objects
                    .filter(faculty=faculty, date=today, scheduled_start__gte=now,
                            schedule__term=active_term)
-                   .exclude(status=SessionStatus.ABSENT)
+                   .exclude(status__in=[SessionStatus.ABSENT,
+                                        SessionStatus.CANCELLED])
                    .select_related("room", "schedule").order_by("scheduled_start").first())
     return render(request, "guard/locate.html", {
         "q": q, "faculty": faculty, "matches": matches,

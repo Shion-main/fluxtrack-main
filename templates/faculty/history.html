@@ -98,6 +98,8 @@ text label. ASCII-only (no em dash).
             <span class="ft-pill ft-pill--active"><uk-icon icon="check"></uk-icon> Present</span>
             {% elif s.present_label == "Absent" %}
             <span class="ft-pill ft-pill--absent"><uk-icon icon="x"></uk-icon> Absent</span>
+            {% elif s.present_label == "Cancelled" %}
+            <span class="ft-pill ft-pill--done"><uk-icon icon="x"></uk-icon> Cancelled</span>
             {% else %}
             <span class="ft-pill ft-pill--upcoming"><uk-icon icon="clock"></uk-icon> Scheduled</span>
             {% endif %}

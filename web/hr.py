@@ -40,6 +40,7 @@ from scheduling.report_render import csv_safe
 from scheduling.reporting import session_minutes_late
 from verification.models import CheckerValidation, ValidationAction
 from web.pagination import paginate
+from web.parsing import is_id
 from web.reporting_common import selected_report_scope, status_label
 
 # The on-screen list is PAGED, not capped. The old behaviour sliced to 200 rows
@@ -134,9 +135,9 @@ def _filtered_sessions(request, scope):
 
     # FK-id filters: applied only when the value is a clean integer id. A forged or
     # garbage value is ignored (never fed to the ORM as a raw non-numeric lookup).
-    if faculty_raw.isdigit():
+    if is_id(faculty_raw):
         qs = qs.filter(faculty_id=int(faculty_raw))
-    if dept_raw.isdigit():
+    if is_id(dept_raw):
         qs = qs.filter(faculty__department_id=int(dept_raw))
     # Free-text search over the faculty display name + course code.
     if q:
