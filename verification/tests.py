@@ -751,7 +751,7 @@ class AssignmentCreateTests(_CheckerFixtureMixin, TestCase):
 
         r = self.client.post("/ifo/assignments/create", {
             "user": checker.id, "role": "checker", "type": "shift",
-            "scope": "floor", "floors": [self.floor.id]})
+            "scope": "floor", "floors": [self.floor.id], "date": "2026-07-06"})
         self.assertIn(r.status_code, (200, 302))
         a = Assignment.objects.filter(
             user=checker, role="checker", scope="floor").first()

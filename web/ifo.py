@@ -52,7 +52,8 @@ from scheduling.reporting import (block_saturation, building_floor_rollup,
                                   zero_coverage_floors)
 from verification.models import (Assignment, AssignmentScope, AssignmentType,
                                  DutyRole)
-from verification.services import assign_online_sessions
+from verification.services import (AssignmentAlreadyEnded,
+                                   assign_online_sessions, end_assignment)
 from web.pagination import paginate
 from web.parsing import is_id, safe_parse_date, safe_parse_time
 from web.room_state import (ROOM_PROBLEM_STATES, ROOM_STATE_ORDER, occupies,
@@ -1592,6 +1593,12 @@ def assignment_create(request):
         error = "Select shift or standing."
     elif scope not in AssignmentScope.values:
         error = "Select floor or online scope."
+    elif role != user.role:
+        error = (f"{user.get_full_name() or user.username} is a "
+                 f"{user.get_role_display()}, so choose {user.get_role_display()} "
+                 f"duty.")
+    elif scope == AssignmentScope.ONLINE and role != DutyRole.CHECKER:
+        error = "Online duty is for Checkers."
     elif scope == AssignmentScope.FLOOR and not floor_ids:
         error = "A floor posting needs at least one floor."
     # Validate date/time FORMAT and floor-id numericness BEFORE the ORM write —
@@ -1609,6 +1616,14 @@ def assignment_create(request):
         error = "Enter a valid end time."
     elif floor_ids and not all(is_id(f) for f in floor_ids):
         error = "Invalid floor selection."
+    # A blank date is what makes a posting permanent, so a shift must carry one.
+    elif type_ == AssignmentType.SHIFT and not date_raw:
+        error = "A shift needs a date. Choose Standing posting for an ongoing post."
+    elif type_ == AssignmentType.STANDING and (date_raw or start_raw or end_raw):
+        error = "A standing posting has no date or times. Choose Shift to set them."
+    elif (start_raw and end_raw
+          and safe_parse_time(end_raw) <= safe_parse_time(start_raw)):
+        error = "The end time must be after the start time."
 
     term = get_active_term()
     if error is None and term is None:
@@ -1649,6 +1664,27 @@ def assignment_create(request):
     ctx = {"assignments": _active_assignments(), "created": a,
            **_assignment_form_ctx()}
     return render(request, "ifo/_assignment_form.html", ctx)
+
+
+@ifo_required
+@require_http_methods(["POST"])
+def assignment_end(request, pk):
+    """IFO-06: end a posting now. Duty stops as soon as this commits."""
+    term = get_active_term()
+    if term is None:
+        raise Http404("No active academic term.")
+    assignment = get_object_or_404(
+        Assignment.objects.select_related("user"), pk=pk, term=term)
+    ctx = {**_assignment_form_ctx()}
+    status = 200
+    try:
+        ctx["released"] = end_assignment(assignment, actor=request.user)
+        ctx["ended"] = assignment
+    except AssignmentAlreadyEnded:
+        ctx["error"] = "That posting has already ended."
+        status = 400
+    ctx["assignments"] = _active_assignments()
+    return render(request, "ifo/_assignment_form.html", ctx, status=status)
 
 
 # --- IFO-09 reporting dashboard + scorecard drill-down (RPT-04/RPT-05) -------

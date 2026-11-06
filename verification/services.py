@@ -25,12 +25,17 @@ from django.db.models import Q
 from django.utils import timezone
 
 from accounts.models import Role
+from ops.locking import serialized_write
 from ops.models import AuditLog, Notification
 from ops.notify import notify
-from scheduling.models import Modality, Session
+from scheduling.models import Modality, Session, SessionStatus
 from scheduling.term_scope import get_active_term
 from verification import resolver as R
 from verification.models import Assignment, AssignmentScope, DutyRole
+
+
+class AssignmentAlreadyEnded(Exception):
+    """The posting was ended by an earlier request."""
 
 
 def _candidate_online_sessions(target_date, active_term):
@@ -155,3 +160,64 @@ def assign_online_sessions(target_date):
 
     assigned = sum(assigned_counts.values())
     return {"assigned": assigned, "unassigned": len(sessions) - assigned}
+
+
+def _release_online_sessions(assignment, actor, now):
+    """Unown the live sessions this ended posting was covering; return their dates.
+
+    A session stays with the Checker only if another of their active online
+    postings still covers it. Finished sessions keep their owner as a record.
+    """
+    remaining = list(Assignment.objects.filter(
+        user=assignment.user, role=DutyRole.CHECKER, scope=AssignmentScope.ONLINE,
+        status="active", term=assignment.term))
+    sessions = list(Session.objects.filter(
+        online_checker=assignment.user,
+        status__in=(SessionStatus.SCHEDULED, SessionStatus.ACTIVE),
+        scheduled_end__gte=now,
+        schedule__term=assignment.term))
+    released = []
+    for s in sessions:
+        local = timezone.localtime(s.scheduled_start)
+        if not any(R.assignment_covers_now(a, local.date(), local.time())
+                   for a in remaining):
+            released.append(s)
+    for s in released:
+        Session.objects.filter(pk=s.pk).update(online_checker=None)
+    AuditLog.objects.bulk_create([
+        AuditLog(actor=actor, event_type="session.online_checker_released",
+                 target_type="session", target_id=str(s.pk),
+                 payload={"checker_id": assignment.user_id,
+                          "assignment": assignment.pk})
+        for s in released])
+    return sorted({s.date for s in released}), len(released)
+
+
+@serialized_write
+def end_assignment(assignment, *, actor, now=None):
+    """End a posting immediately; return how many online sessions it released.
+
+    Every on-duty check reads ``status="active"``, so duty stops the moment this
+    commits. The row is kept as the record that the posting existed. Released
+    online sessions go through the normal round-robin, which hands them to another
+    on-duty Checker or warns IFO, so no class is left with an owner who cannot
+    verify it.
+    """
+    now = now or timezone.now()
+    assignment = (Assignment.objects.select_for_update()
+                  .select_related("user", "term").get(pk=assignment.pk))
+    if assignment.status != "active":
+        raise AssignmentAlreadyEnded
+    assignment.status = "ended"
+    assignment.save(update_fields=["status"])
+    dates, released = [], 0
+    if assignment.scope == AssignmentScope.ONLINE:
+        dates, released = _release_online_sessions(assignment, actor, now)
+    AuditLog.objects.create(
+        actor=actor, event_type="assignment.ended",
+        target_type="assignment", target_id=str(assignment.pk),
+        payload={"user": assignment.user_id, "role": assignment.role,
+                 "scope": assignment.scope, "sessions_released": released})
+    for target_date in dates:
+        assign_online_sessions(target_date)
+    return released

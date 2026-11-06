@@ -19,6 +19,12 @@ parse the {% %} tags inside the header (03-02 parse-error lesson).
     </div>
     {% endif %}
 
+    {% if ended %}
+    <div class="uk-alert uk-alert-secondary mb-3" role="status" data-ended="1">
+      <p class="uk-text-small">Ended the posting for {{ ended.user.get_full_name|default:ended.user.username }}.{% if released %} {{ released }} online session(s) released.{% endif %}</p>
+    </div>
+    {% endif %}
+
     <form hx-post="/ifo/assignments/create" hx-target="#assignment-panel" hx-swap="innerHTML"
           class="flex flex-col gap-3">
       {% csrf_token %}
@@ -82,7 +88,7 @@ parse the {% %} tags inside the header (03-02 parse-error lesson).
           <input id="a-end" type="time" name="end_time" class="uk-input h-11">
         </div>
       </div>
-      <p class="uk-text-small uk-text-muted">Leave date blank for a standing posting.</p>
+      <p class="uk-text-small uk-text-muted">A shift needs a date. A standing posting has no date or times.</p>
 
       <button type="submit" class="uk-btn uk-btn-primary w-full h-12">
         <uk-icon icon="user-plus" class="size-4"></uk-icon> Create assignment</button>
@@ -98,12 +104,19 @@ parse the {% %} tags inside the header (03-02 parse-error lesson).
         <p class="font-semibold truncate">{{ a.user.get_full_name|default:a.user.username }}</p>
         <p class="uk-text-small uk-text-muted">
           {{ a.get_role_display }} &middot; {{ a.get_type_display }}
+          {% if a.date %}&middot; {{ a.date|date:"M j" }}{% if a.start_time %} {{ a.start_time|time:"g:i A" }}{% endif %}{% if a.end_time %} to {{ a.end_time|time:"g:i A" }}{% endif %}{% endif %}
           {% if a.scope == 'floor' %}&middot;
             {% for f in a.floors.all %}{{ f.building.code }} F{{ f.number }}{% if not forloop.last %}, {% endif %}{% empty %}(no floor){% endfor %}
           {% endif %}
         </p>
       </div>
       <span class="uk-label {% if a.scope == 'online' %}uk-label-primary{% else %}uk-label-secondary{% endif %} ml-auto">{{ a.get_scope_display }}</span>
+      <form hx-post="/ifo/assignments/{{ a.id }}/end" hx-target="#assignment-panel" hx-swap="innerHTML"
+            hx-confirm="End this posting now? {{ a.user.get_full_name|default:a.user.username }} goes off duty immediately.">
+        {% csrf_token %}
+        <button type="submit" class="uk-btn uk-btn-ghost uk-btn-sm"
+                aria-label="End posting for {{ a.user.get_full_name|default:a.user.username }}">End</button>
+      </form>
     </div>
     {% empty %}
     <p class="uk-text-muted uk-text-small">No active assignments yet.</p>

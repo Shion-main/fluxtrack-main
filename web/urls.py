@@ -145,6 +145,7 @@ urlpatterns = [
          name="ifo_session_release"),
     path("ifo/assignments", ifo.assignments_list, name="ifo_assignments"),
     path("ifo/assignments/create", ifo.assignment_create, name="ifo_assignment_create"),
+    path("ifo/assignments/<int:pk>/end", ifo.assignment_end, name="ifo_assignment_end"),
     # Phase 9 (A1/A5) campus calendar: class suspensions + holidays/breaks.
     path("ifo/suspensions", ifo.suspensions_list, name="ifo_suspensions"),
     path("ifo/suspensions/create", ifo.suspension_create,
