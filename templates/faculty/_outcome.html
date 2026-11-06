@@ -18,8 +18,8 @@ Confirm forms reuse .ft-control + .ft-btn-navy. ASCII-only (no em dash).
 
 {% elif resolution.outcome == "move-occupied" %}
 <div class="ft-outcome ft-outcome--bad" data-outcome="move-occupied">
-  <div class="ft-outcome__title">Room occupied</div>
-  <p class="ft-outcome__body">Another class is active in {{ room.code }}. Your class cannot move here until the room is free.</p>
+  <div class="ft-outcome__title">Room not available</div>
+  <p class="ft-outcome__body">{{ room.code }} is booked or has another class during your class. Contact IFO to arrange a room.</p>
 </div>
 
 {% elif resolution.outcome == "checked-in" %}

@@ -156,6 +156,7 @@ class ActiveTermOperationalScopeTests(_LiveTermFixture):
             self.active,
             "ONACTIVE",
             modality=Modality.ONLINE,
+            start_delta=-20,  # a shared instant would merge it with the class above
         )
         self._session(self.draft, "ONDRAFT", modality=Modality.ONLINE)
         self._session(self.archived, "ONARCH", modality=Modality.ONLINE)

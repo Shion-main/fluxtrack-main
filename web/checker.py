@@ -38,6 +38,7 @@ from ops.policy import get_policy
 from scheduling.merge import (propagate_merged_absent,
                               propagate_merged_present)
 from scheduling.models import CheckinMethod, Modality, Session, SessionStatus
+from scheduling.resolver import is_no_show_past_grace
 from scheduling.term_scope import get_active_term
 from verification import resolver as R
 from verification.models import (Assignment, AssignmentScope,
@@ -245,8 +246,9 @@ def _room_session_state(room, now):
     (None, None) when the room is empty.
 
     F2F/Blended only: an online session (declared or scheduled) has no room-scan
-    target in this plan (online verify is 03-05), so it reads as an empty room.
-    Completed sessions are ignored (the room is free again).
+    target in this plan (online verify is 03-05), so it is skipped and can never
+    hide a real class in the room. Completed sessions are ignored (the room is
+    free again).
 
     Selection is `now`-aware (CR-01): prefer the room's ACTIVE session, else the
     session whose scheduled window contains `now`, else the room reads empty. A
@@ -256,20 +258,18 @@ def _room_session_state(room, now):
     active_term = get_active_term()
     if active_term is None:
         return None, None
-    sessions = list(Session.objects
-                    .filter(room=room, date=timezone.localdate(),
-                            schedule__term=active_term)
-                    .exclude(status=SessionStatus.COMPLETED)
-                    .select_related("schedule", "faculty")
-                    .order_by("scheduled_start"))
+    sessions = [s for s in (Session.objects
+                            .filter(room=room, date=timezone.localdate(),
+                                    schedule__term=active_term)
+                            .exclude(status=SessionStatus.COMPLETED)
+                            .select_related("schedule", "faculty")
+                            .order_by("scheduled_start"))
+                if (s.declared_modality or s.schedule.modality) != Modality.ONLINE]
     session = next((s for s in sessions if s.status == SessionStatus.ACTIVE), None)
     if session is None:
         session = next((s for s in sessions
                         if s.scheduled_start <= now <= s.scheduled_end), None)
     if session is None:
-        return None, None
-    effective = session.declared_modality or session.schedule.modality
-    if effective == Modality.ONLINE:
         return None, None
     return session, _SessionState(session.pk, session.status,
                                   session.verified_by_checker)
@@ -762,15 +762,20 @@ def online_open(request, session_id):
     if session is None:
         raise Http404("No online session for this checker.")
     if not session.teams_link:
-        # This is a page view, so it can repeat freely: tell IFO once per class
-        # meeting, however often the page is opened and by whichever Checker.
-        body = (f"{session.schedule.course_code}-{session.schedule.section} on "
-                f"{session.date} has no Teams meeting link. Please add one so the "
-                f"assigned checker can verify attendance.")
-        if not Notification.objects.filter(type="online_no_link",
-                                           body=body).exists():
-            notify(role=Role.IFO_ADMIN, type="online_no_link",
-                   title="Online session missing its Teams link", body=body)
+        # A blank link is normal until the instructor starts the class, and only
+        # the instructor can set it, so IFO hears about it only past grace. This
+        # is a page view, so it can repeat freely: tell IFO once per class meeting,
+        # however often the page is opened and by whichever Checker.
+        late = is_no_show_past_grace(session.scheduled_start, timezone.now(),
+                                     get_policy("grace_minutes"))
+        if late and session.status != SessionStatus.CANCELLED:
+            body = (f"{session.schedule.course_code}-{session.schedule.section} on "
+                    f"{session.date} is past its grace period with no Teams meeting "
+                    f"link. Only the instructor can set it, so please contact them.")
+            if not Notification.objects.filter(type="online_no_link",
+                                               body=body).exists():
+                notify(role=Role.IFO_ADMIN, type="online_no_link",
+                       title="Online session missing its Teams link", body=body)
         return render(request, "checker/online_open.html",
                       {"session": session, "no_link": True})
     return render(request, "checker/online_open.html", {"session": session})

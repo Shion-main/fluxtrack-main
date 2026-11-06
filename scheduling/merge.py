@@ -116,6 +116,14 @@ def _materialize_candidates(anchor):
     return candidates
 
 
+def merged_schedule_ids(anchor):
+    """The schedules of ``anchor``'s whole merged group, its own included."""
+    candidates = _materialize_candidates(anchor)
+    sibling_ids = merged_sibling_ids(anchor, candidates)
+    return {anchor.schedule_id} | {
+        c.schedule_id for c in candidates if c.id in sibling_ids}
+
+
 def propagate_merged_present(anchor, now, actor):
     """Atomic SCHEDULED->ACTIVE fill for the anchor's merged siblings (D-04/D-05).
 

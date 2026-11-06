@@ -587,8 +587,8 @@ def resolve_shift_room(item, at_start, at_end, *, exclude_session_id=None):
 def _apply_f2f(request, sessions, dean, now):
     """MOD-04/D-06/D-16/D-18: assign a re-resolved room to each in-window session.
 
-    Iterates items (mapping each session back to its item for the reservation and
-    the time-move slot). For each affected session: if the item carries a time-move
+    Iterates items (mapping each given session back to its item for the reservation
+    and the time-move slot). For each affected session: if the item carries a time-move
     (D-16) the new [start, end) is re-checked against ``faculty_has_conflict``
     (D-17) and rewritten; the room is re-resolved INSIDE the transaction via
     ``resolve_shift_room`` (TOCTOU, D-06). A ``None`` resolution or a failed
@@ -597,8 +597,7 @@ def _apply_f2f(request, sessions, dean, now):
     future in-window sessions (D-18). Items are ``list()``-materialized (HY010).
     """
     for item in list(request.items.select_related("schedule").all()):
-        item_sessions = _in_window_sessions(
-            item.schedule, request.window_start, request.window_end)
+        item_sessions = [s for s in sessions if s.schedule_id == item.schedule_id]
         resolved_room = None
         is_move = item.new_start_time is not None and item.new_end_time is not None
         for session in item_sessions:
@@ -681,12 +680,18 @@ def apply_approval(request, dean, *, now=None):
         if req.status != ModalityShiftStatus.PENDING:
             raise ModalityShiftError("only a pending request may be approved")
 
-        sessions = list(affected_sessions(req))  # HY010: materialize before writes
+        in_window = list(affected_sessions(req))  # HY010: materialize before writes
+        # A request can wait in the queue past its class's start. A running class
+        # is a live record, so the decision only reaches what has not started.
+        sessions = [s for s in in_window if s.status == SessionStatus.SCHEDULED]
 
         # Apply the consequence inside a SAVEPOINT so a no-room / double-book
         # aborts ALL session + item writes (all-or-nothing, D-07 REVISED / D-19).
         deny_reason = None
-        if not sessions:
+        if in_window and not sessions:
+            deny_reason = ("The class has already started, so nothing could be "
+                           "changed. Submit a new request for later dates.")
+        elif not sessions:
             deny_reason = "No sessions remain eligible for this request."
         else:
             try:

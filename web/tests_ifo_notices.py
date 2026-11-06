@@ -112,3 +112,50 @@ class MissingTeamsLinkNoticeTests(TestCase):
         for _ in range(2):
             response = self.open()
         self.assertTrue(response.context["no_link"])
+
+
+class TeamsLinkNoticeTimingTests(TestCase):
+    """A blank link is normal until the instructor starts the class, so IFO hears
+    about it only once the class is past grace, and is told who can act on it."""
+
+    def setUp(self):
+        cache.clear()
+        self.fx = make_shift_fixture("ntt")
+        self.ifo = person(Role.IFO_ADMIN, "ntt_ifo")
+        self.checker = person(Role.CHECKER, "ntt_chk")
+        Assignment.objects.create(
+            user=self.checker, role=DutyRole.CHECKER, type=AssignmentType.STANDING,
+            scope=AssignmentScope.ONLINE, term=self.fx.term)
+        self.session = self.fx.online_session  # 10:00-11:30
+        Session.objects.filter(pk=self.session.pk).update(online_checker=self.checker)
+        self.client = browser(self.checker)
+
+    def open_at(self, when):
+        with frozen(when):
+            return self.client.get(f"/checker/online/{self.session.pk}")
+
+    def notices(self):
+        return Notification.objects.filter(user=self.ifo, type="online_no_link")
+
+    def test_before_the_class_starts_nobody_is_told(self):
+        self.open_at(at(9))
+        self.assertFalse(self.notices().exists())
+
+    def test_during_grace_nobody_is_told(self):
+        self.open_at(at(10, 10))
+        self.assertFalse(self.notices().exists())
+
+    def test_past_grace_ifo_is_told_to_contact_the_instructor(self):
+        self.open_at(at(10, 20))
+        self.assertIn("instructor", self.notices().get().body)
+
+    def test_cancelled_class_tells_nobody(self):
+        Session.objects.filter(pk=self.session.pk).update(status="cancelled")
+        self.open_at(at(10, 20))
+        self.assertFalse(self.notices().exists())
+
+    def test_checker_page_does_not_promise_that_ifo_will_add_a_link(self):
+        response = self.open_at(at(9))
+        self.assertTrue(response.context["no_link"])
+        self.assertNotContains(response, "flagged IFO")
+

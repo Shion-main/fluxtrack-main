@@ -19,6 +19,7 @@ from django.views.decorators.http import require_http_methods
 
 from accounts.models import Role
 from campus.models import Room
+from ops.availability import room_is_free
 from ops.models import AuditLog
 from ops.notify import notify
 from ops.policy import get_policy
@@ -26,6 +27,8 @@ from ops.locking import serialized_write
 from scheduling import resolver as R
 from scheduling.jobs import close_finished_sessions_for
 from scheduling.merge import (
+    _effective_is_online,
+    merged_schedule_ids,
     propagate_merged_completed,
     propagate_merged_present,
     propagate_merged_room,
@@ -70,6 +73,41 @@ def _room_from_payload(request, payload):
     return None, "bad-payload"
 
 
+def _room_occupant(room, term, user):
+    """Pk of another faculty's class physically holding ``room``, or None.
+
+    A room released by IFO no longer counts, even if its session remains ACTIVE
+    for attendance. Neither does an online class filed under the room: nobody is
+    in it, so there is nothing to hand over from.
+    """
+    holders = list(
+        Session.objects.filter(
+            room=room,
+            status=SessionStatus.ACTIVE,
+            room_released_at__isnull=True,
+            schedule__term=term,
+        )
+        .exclude(faculty=user)
+        .select_related("schedule")
+    )
+    return next((s.pk for s in holders if not _effective_is_online(s)), None)
+
+
+def _move_blocked(session, room, now, term):
+    """True when ``session`` may not move into ``room`` for the rest of its time.
+
+    A booking or another class there is a commitment to someone else, so the
+    faculty member is sent to IFO. The class's own merged group never blocks it.
+    """
+    if _room_occupant(room, term, session.faculty) is not None:
+        return True
+    return not room_is_free(
+        room, max(now, session.scheduled_start), session.scheduled_end,
+        exclude_session_id=session.pk,
+        exclude_schedule_id=merged_schedule_ids(session),
+    )
+
+
 def _current_resolution(user, room, now):
     """Resolve one faculty scan against current authoritative state."""
     active_term = get_active_term()
@@ -84,27 +122,20 @@ def _current_resolution(user, room, now):
         .select_related("schedule", "room")
         .order_by("scheduled_start")
     )
-    occupying = (
-        # A room released by IFO no longer counts as occupied, even if its
-        # session remains ACTIVE for attendance/audit purposes.
-        Session.objects.filter(
-            room=room,
-            status=SessionStatus.ACTIVE,
-            room_released_at__isnull=True,
-            schedule__term=active_term,
-        )
-        .exclude(faculty=user)
-        .values_list("pk", flat=True)
-        .first()
-    )
-    return R.resolve_faculty_scan(
+    resolution = R.resolve_faculty_scan(
         sessions_today,
         room.pk,
-        occupying,
+        _room_occupant(room, active_term, user),
         now,
         grace_min=get_policy("grace_minutes"),
         early_end_min=get_policy("early_end_threshold_minutes"),
     )
+    if resolution.outcome == R.WRONG_ROOM:
+        # Refuse here, not after a confirmation that could only fail.
+        session = next(s for s in sessions_today if s.id == resolution.session_id)
+        if _move_blocked(session, room, now, active_term):
+            return R.Resolution(R.MOVE_OCCUPIED, session.pk)
+    return resolution
 
 
 def _stale_context(room):
@@ -195,9 +226,7 @@ def _apply(request, resolution, room, method, reason=""):
     elif o == R.WRONG_ROOM:  # confirmed room change (FAC-10)
         if session.status not in (SessionStatus.SCHEDULED, SessionStatus.ACTIVE):
             return _stale_context(room)
-        if Session.objects.filter(room=room, status=SessionStatus.ACTIVE,
-                                  room_released_at__isnull=True,
-                                  schedule__term=active_term).exclude(faculty=user).exists():
+        if _move_blocked(session, room, now, active_term):
             return {"resolution": R.Resolution(R.MOVE_OCCUPIED, session.pk), "room": room}
         old = session.room.code
         with transaction.atomic():
