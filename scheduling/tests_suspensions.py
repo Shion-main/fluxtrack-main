@@ -241,7 +241,10 @@ class SuspendClassesServiceTests(TestCase):
                                   reason="Lifted later", declared_by=self.ifo)
         s.refresh_from_db()
         self.assertEqual(s.status, SessionStatus.CANCELLED)
-        n = lift_suspension(susp, lifted_by=self.ifo)
+        # Lifted before the class starts: a class already past its no-show point
+        # stays Cancelled (see tests_calendar_and_edits.LiftSuspensionTests).
+        n = lift_suspension(susp, lifted_by=self.ifo,
+                            now=s.scheduled_start - timedelta(hours=1))
         self.assertEqual(n, 1)
         s.refresh_from_db()
         self.assertEqual(s.status, SessionStatus.SCHEDULED)
@@ -265,7 +268,8 @@ class SuspendClassesServiceTests(TestCase):
         susp, _ = suspend_classes(term=self.term, start_date=self.d, end_date=self.d,
                                   reason="Lifted later", declared_by=self.ifo)
 
-        lift_suspension(susp, lifted_by=self.ifo)
+        lift_suspension(susp, lifted_by=self.ifo,
+                        now=s.scheduled_start - timedelta(hours=1))
 
         s.refresh_from_db()
         archived.refresh_from_db()

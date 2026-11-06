@@ -24,6 +24,8 @@ from django.contrib.auth import get_user_model
 from django.core.cache import cache
 from django.test import RequestFactory, TestCase
 from django.utils import timezone
+from unittest.mock import patch
+from datetime import timedelta
 
 from accounts.models import Role
 from ops.models import AuditLog
@@ -64,6 +66,10 @@ class MergeCheckerOnlineVerifyTests(TestCase):
     def setUp(self):
         cache.clear()
         self.fx = make_merge_fixture()
+        # Online verification now requires the occurrence's date and window.
+        clock = patch("web.checker.timezone.now", return_value=self.fx.online_anchor.scheduled_start + timedelta(minutes=20))
+        clock.start()
+        self.addCleanup(clock.stop)
         self.checker = _make_online_checker(self.fx)
         self.client.force_login(self.checker)
 
@@ -134,6 +140,9 @@ class MergeCheckerOnlineFlagTests(TestCase):
     def setUp(self):
         cache.clear()
         self.fx = make_merge_fixture()
+        clock = patch("web.checker.timezone.now", return_value=self.fx.online_anchor.scheduled_start + timedelta(minutes=20))
+        clock.start()
+        self.addCleanup(clock.stop)
         self.checker = _make_online_checker(self.fx)
         self.client.force_login(self.checker)
 

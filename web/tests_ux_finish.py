@@ -190,7 +190,7 @@ class SharedBrandAndFailureFeedbackTests(TestCase):
         body = response.content.decode()
 
         self.assertEqual(response["Cache-Control"], "no-cache, no-store, must-revalidate")
-        self.assertIn("fluxtrack-shell-v6", body)
+        self.assertIn("fluxtrack-shell-v7", body)
         self.assertIn("fetch(req)", body)
         self.assertIn("caches.match(req)", body)
         self.assertLess(body.index("fetch(req)"), body.index("caches.match(req)"))

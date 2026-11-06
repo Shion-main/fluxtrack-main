@@ -7,6 +7,7 @@ from django.utils import timezone
 
 from accounts.models import Role
 from ops.models import AuditLog
+from ops.locking import serialized_write
 from ops.policy import get_policy
 from scheduling.materialization import materialize_term
 from scheduling.models import AcademicTerm, Session, SessionStatus
@@ -266,6 +267,7 @@ def _validate_activation_inputs(term, *, preflight, confirmation_name,
     return tuple(preflight.warnings)
 
 
+@serialized_write
 def close_term(term_id, *, actor, confirmation_name, reason,
                acknowledged_warnings=(), today=None):
     today = today or timezone.localdate()
@@ -302,6 +304,7 @@ def close_term(term_id, *, actor, confirmation_name, reason,
         return term
 
 
+@serialized_write
 def reopen_term(term_id, *, actor, confirmation_name, reason,
                 acknowledged_warnings=(), today=None):
     today = today or timezone.localdate()
@@ -338,6 +341,7 @@ def reopen_term(term_id, *, actor, confirmation_name, reason,
         return term
 
 
+@serialized_write
 def activate_term(term_id, *, actor, confirmation_name,
                   acknowledged_warnings=(), today=None):
     today = today or timezone.localdate()

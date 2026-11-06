@@ -32,6 +32,9 @@ from scheduling.models import (AcademicTerm, CheckinMethod, Modality, Session,
 from scheduling.resolver import is_no_show_past_grace
 from scheduling.term_scope import require_writable_term
 
+# How a section is ACTIVE with no evidence of its own beyond the group's one start.
+_SHARED_START_METHODS = (CheckinMethod.MERGED, CheckinMethod.ONLINE_SELF)
+
 
 def merged_sibling_ids(anchor, candidates):
     """Return the set of candidate ids that merge with `anchor` under D-01.
@@ -213,30 +216,75 @@ def propagate_merged_completed(anchor, now, actor, *, ended_early=False, reason=
         return completion_ids
 
 
+def propagate_merged_room(anchor, room, actor):
+    """Move the anchor's live merged siblings into ``room``; return the moved pks.
+
+    One confirmed room change covers the group, like one check-in does. Call this
+    BEFORE saving the anchor's new room: same-room siblings are found through the
+    room the anchor is leaving. Only SCHEDULED/ACTIVE siblings move, because a
+    finished or Absent section is a record of where it was.
+    """
+    with transaction.atomic():
+        anchor = (
+            Session.objects.select_for_update()
+            .select_related("schedule__term")
+            .get(pk=anchor.pk)
+        )
+        term = AcademicTerm.objects.select_for_update().get(
+            pk=anchor.schedule.term_id)
+        require_writable_term(term)
+        candidates = _materialize_candidates(anchor)
+        sibling_ids = merged_sibling_ids(anchor, candidates)
+        move_ids = list(
+            Session.objects.filter(
+                pk__in=sibling_ids,
+                status__in=(SessionStatus.SCHEDULED, SessionStatus.ACTIVE),
+            ).exclude(room=room).values_list("pk", flat=True)
+        )
+        if not move_ids:
+            return []
+        Session.objects.filter(pk__in=move_ids).update(room=room)
+        AuditLog.objects.bulk_create([
+            AuditLog(
+                actor=actor,
+                event_type="session.merged_room_changed",
+                target_type="session",
+                target_id=str(pk),
+                payload={"merged_from": anchor.pk, "new_room": room.code},
+            )
+            for pk in move_ids
+        ])
+        return move_ids
+
+
 def propagate_merged_absent(anchor, actor, now=None):
-    """Atomic SCHEDULED->ABSENT fill for the anchor's merged siblings (online D-07).
+    """Atomic ABSENT fill for the anchor's merged siblings (online D-07).
 
     The online counterpart of ``propagate_merged_present``: when the anchor is
-    resolved Absent (online Flag-not-present / un-verified no-show), flip every
-    SCHEDULED merged sibling to ABSENT and write one ``session.merged_absent``
-    AuditLog per row with payload ``{"merged_from": anchor.pk}``. Same
-    faculty-scoping, status-guard, atomicity, and HY010 safety as the present
-    path. Returns the list of absented pks (``[]`` when nothing qualifies).
+    resolved Absent (online Flag-not-present / un-verified no-show), its merged
+    siblings follow and each gets one ``session.merged_absent`` AuditLog with
+    payload ``{"merged_from": anchor.pk}``. Same faculty-scoping, atomicity, and
+    HY010 safety as the present path. Returns the list of absented pks (``[]``
+    when nothing qualifies).
 
-    Grace gate (2026-07-19 audit H2): siblings are absented ONLY when the group
-    is already past the shared no-show grace window. ABSENT is terminal -- a
-    flag placed minutes after start would otherwise permanently block a
+    ACTIVE siblings whose presence came from the shared start (MERGED fill or
+    faculty self-start) follow at once: that start is what was just contradicted.
+    A sibling with its own evidence stays ACTIVE, namely one a Checker activated
+    or verified.
+
+    Grace gate (2026-07-19 audit H2): SCHEDULED siblings are absented ONLY when
+    the group is already past the shared no-show grace window. ABSENT is terminal
+    -- a flag placed minutes after start would otherwise permanently block a
     within-grace faculty start (or the sibling's own checker Verify) on every
     sibling. The anchor is the CALLER's authoritative decision and is not
-    touched here; within grace the siblings are simply left SCHEDULED for the
+    touched here; within grace those siblings are simply left SCHEDULED for the
     JOB-02 sweep, which applies the same ``is_no_show_past_grace`` predicate.
     Merge candidates share ``scheduled_start`` exactly (the D-01 key), so the
     anchor's start speaks for the whole group.
     """
     now = now or timezone.now()
     grace_min = get_policy("grace_minutes")
-    if not is_no_show_past_grace(anchor.scheduled_start, now, grace_min):
-        return []
+    past_grace = is_no_show_past_grace(anchor.scheduled_start, now, grace_min)
     with transaction.atomic():
         anchor = (
             Session.objects.select_for_update()
@@ -249,9 +297,18 @@ def propagate_merged_absent(anchor, actor, now=None):
         candidates = _materialize_candidates(anchor)
         sib_ids = merged_sibling_ids(anchor, candidates)
         fill_ids = list(
-            Session.objects.filter(pk__in=sib_ids, status=SessionStatus.SCHEDULED)
+            Session.objects.filter(
+                pk__in=sib_ids,
+                status=SessionStatus.ACTIVE,
+                checkin_method__in=_SHARED_START_METHODS,
+            ).exclude(validations__action="verified")
             .values_list("pk", flat=True)
         )
+        if past_grace:
+            fill_ids += list(
+                Session.objects.filter(pk__in=sib_ids, status=SessionStatus.SCHEDULED)
+                .values_list("pk", flat=True)
+            )
         if not fill_ids:
             return []
         Session.objects.filter(pk__in=fill_ids).update(status=SessionStatus.ABSENT)

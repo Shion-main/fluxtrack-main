@@ -175,7 +175,7 @@ class ScheduleConsoleTests(TestCase):
             "enrolled_count": "25"})
 
         self.assertEqual(resp.status_code, 400)
-        self.assertContains(resp, "room is occupied", status_code=400)
+        self.assertContains(resp, "has another class", status_code=400)
         self.fx.schedule.refresh_from_db()
         self.assertEqual(self.fx.schedule.room_id, self.fx.room1.pk)
 

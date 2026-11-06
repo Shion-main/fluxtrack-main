@@ -37,6 +37,7 @@ from accounts.models import Role
 from campus.models import Room
 from ops.guard_alerts import KIND_ABSENT, KIND_CONFLICT
 from ops.models import AuditLog, RoomConflictFlag
+from ops.locking import serialized_write
 from ops.notify import notify
 from ops.policy import get_policy
 from scheduling.models import Session, SessionStatus
@@ -44,7 +45,11 @@ from scheduling.resolver import is_no_show_past_grace
 from scheduling.suspensions import excused_checker, session_is_calendar_excused
 from scheduling.term_scope import get_active_term
 
+# How many classes an auto-close notice names before summarizing the rest.
+_AUTO_CLOSE_LISTED = 5
 
+
+@serialized_write
 def sweep_no_shows(now=None, collect=None):
     """JOB-02b: mark unscanned no-shows ABSENT. Returns count marked.
 
@@ -176,3 +181,75 @@ def detect_room_conflicts(now=None, collect=None):
         if collect is not None and room is not None:
             collect.append((KIND_CONFLICT, room.floor_id))
     return flagged
+
+
+def _auto_close(sessions):
+    """Close ACTIVE sessions at their scheduled end and tell IFO once.
+
+    The real finish is unknown, so the end is an estimate: each row is audited as
+    such and IFO gets one summary per call rather than one notice per class. The
+    status-guarded update lets a checkout that just committed win. The room is not
+    released here; room_released_at stays a deliberate act (see ops/occupancy.py).
+    """
+    closed = []
+    for s in sessions:
+        with transaction.atomic():
+            flipped = (Session.objects
+                       .filter(pk=s.pk, status=SessionStatus.ACTIVE)
+                       .update(status=SessionStatus.COMPLETED,
+                               actual_end=s.scheduled_end))
+            if not flipped:
+                continue
+            AuditLog.objects.create(
+                actor=None, event_type="session.auto_closed",
+                target_type="session", target_id=str(s.pk),
+                payload={"estimated": True, "room": s.room.code,
+                         "actual_end": s.scheduled_end.isoformat()})
+        closed.append(s)
+    if closed:
+        count = len(closed)
+        shown = [f"{s.schedule.course_code}-{s.schedule.section} "
+                 f"({s.room.code}, {s.date})" for s in closed[:_AUTO_CLOSE_LISTED]]
+        more = count - len(shown)
+        notify(role=Role.IFO_ADMIN, type="session_auto_closed",
+               title=(f"{count} class closed automatically" if count == 1
+                      else f"{count} classes closed automatically"),
+               body=("Nobody checked out, so the end time was recorded as the "
+                     "scheduled end and is an estimate: " + "; ".join(shown)
+                     + (f"; and {more} more." if more else ".")))
+    return len(closed)
+
+
+@serialized_write
+def close_unfinished_sessions(now=None):
+    """JOB-02d: complete ACTIVE sessions nobody checked out of. Returns the count.
+
+    Waits out the grace period after the scheduled end so a faculty member a few
+    minutes late to check out does so normally and is not reported to IFO. The
+    recorded end is still the scheduled end. Backfills every past date, so a
+    forgotten checkout can never hold a term open.
+    """
+    now = now or timezone.now()
+    active_term = get_active_term()
+    if active_term is None:
+        return 0
+    cutoff = now - timedelta(minutes=get_policy("grace_minutes"))
+    return _auto_close(list(
+        Session.objects.filter(status=SessionStatus.ACTIVE,
+                               scheduled_end__lt=cutoff,
+                               schedule__term=active_term)
+        .select_related("schedule", "room")
+        .order_by("scheduled_start")))
+
+
+def close_finished_sessions_for(faculty, now):
+    """Close this faculty member's ended classes as they start another one.
+
+    Starting the next class proves the last one is over, so the grace period
+    is not needed. The caller holds the operational write lock.
+    """
+    return _auto_close(list(
+        Session.objects.filter(faculty=faculty, status=SessionStatus.ACTIVE,
+                               scheduled_end__lte=now)
+        .select_related("schedule", "room")
+        .order_by("scheduled_start")))

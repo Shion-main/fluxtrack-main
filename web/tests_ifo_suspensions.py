@@ -83,6 +83,9 @@ class SuspensionConsoleTests(TestCase):
 
     def test_lift_reinstates(self):
         s = _session(self.term, self.fac, self.today)
+        # Still upcoming when lifted: a class past its no-show point stays Cancelled.
+        Session.objects.filter(pk=s.pk).update(
+            scheduled_start=timezone.now() + timedelta(hours=1))
         self.client.post("/ifo/suspensions/create", {
             "start_date": self.today.isoformat(), "reason": "Storm"})
         susp = ClassSuspension.objects.get(term=self.term)

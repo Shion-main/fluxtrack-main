@@ -26,6 +26,8 @@ from campus.models import SYSTEM_BUILDING_CODES, Building, Floor, Room
 from campus.services import (building_delete_blockers, floor_delete_blockers,
                              room_delete_blockers)
 from ops.availability import room_is_free
+from ops.bookings import create_booking
+from ops.locking import serialized_write
 from ops.import_staging import (ALLOWED_EXTENSIONS, MAX_UPLOAD_BYTES,
                                 ImportStagingError, consume_staged,
                                 discard_staged, resolve_staged, staged_path,
@@ -38,8 +40,9 @@ from scheduling.models import (AcademicBreak, AcademicTerm, ClassSuspension,
                                 Session, SessionStatus)
 from scheduling.importing import reconcile
 from scheduling.schedule_ops import (ScheduleConflictError, cancel_schedule,
-                                     update_schedule)
-from scheduling.suspensions import lift_suspension, suspend_classes
+                                     create_schedule, update_schedule)
+from scheduling.suspensions import (declare_break, lift_suspension, remove_break,
+                                    suspend_classes)
 from scheduling.term_scope import ArchivedTermError, get_active_term, require_writable_term
 from scheduling.report_render import build_csv, csv_safe
 from scheduling.reporting import (block_saturation, building_floor_rollup,
@@ -431,6 +434,7 @@ def room_detail(request, code):
 
 @ifo_required
 @require_http_methods(["POST"])
+@serialized_write
 def room_toggle_service(request, code):
     """Take a room out of service (renovation) or return it (Phase 10, A7).
 
@@ -1176,15 +1180,13 @@ def booking_create(request):
                       _booking_panel(request, error=error, form=fields),
                       status=400)
 
-    booking = Booking.objects.create(
-        room=room, created_by=request.user,
-        occupant_name=fields["occupant_name"], purpose=fields["purpose"],
-        start_datetime=start, end_datetime=end, status="active")
-    AuditLog.objects.create(
-        actor=request.user, event_type="booking.created",
-        target_type="booking", target_id=str(booking.pk),
-        payload={"room": room.code, "occupant": booking.occupant_name,
-                 "start": start.isoformat(), "end": end.isoformat()})
+    try:
+        booking = create_booking(room=room, actor=request.user,
+            occupant_name=fields["occupant_name"], purpose=fields["purpose"],
+            start=start, end=end)
+    except ValueError as exc:
+        return render(request, "ifo/_booking_form.html",
+            _booking_panel(request, error=str(exc), form=fields), status=400)
 
     return render(request, "ifo/_booking_form.html",
                   _booking_panel(request, created=booking))
@@ -2242,13 +2244,11 @@ def break_create(request):
     if not fields["reason"]:
         return fail("Name the holiday (for example, Araw ng Kagitingan).")
 
-    AcademicBreak.objects.create(term=term, start_date=start, end_date=end,
-                                 reason=fields["reason"][:120])
-    AuditLog.objects.create(
-        actor=request.user, event_type="academicbreak.created",
-        target_type="term", target_id=str(term.pk),
-        payload={"start": str(start), "end": str(end), "reason": fields["reason"]})
-    request.session["ifo_flash"] = f"Holiday added: {fields['reason']} ({start})."
+    _, cancelled = declare_break(term=term, start_date=start, end_date=end,
+                                 reason=fields["reason"], declared_by=request.user)
+    request.session["ifo_flash"] = (
+        f"Holiday added: {fields['reason']} ({start}). "
+        f"{cancelled} session(s) cancelled, faculty notified.")
     return redirect("ifo_breaks")
 
 
@@ -2262,13 +2262,9 @@ def break_delete(request, pk):
     require_writable_term(term)
     brk = get_object_or_404(AcademicBreak, pk=pk, term=term)
     label = brk.reason
-    AuditLog.objects.create(
-        actor=request.user, event_type="academicbreak.deleted",
-        target_type="term", target_id=str(brk.term_id),
-        payload={"start": str(brk.start_date), "end": str(brk.end_date),
-                 "reason": brk.reason})
-    brk.delete()
-    request.session["ifo_flash"] = f"Holiday removed: {label}."
+    restored = remove_break(brk, removed_by=request.user)
+    request.session["ifo_flash"] = (
+        f"Holiday removed: {label}. {restored} upcoming session(s) restored.")
     return redirect("ifo_breaks")
 
 
@@ -2307,6 +2303,7 @@ def corrections_list(request):
 
 @ifo_required
 @require_http_methods(["POST"])
+@serialized_write
 def session_reinstate(request, pk):
     """Reinstate a wrongly-Absent session as held (COMPLETED); reason required (D3)."""
     term = get_active_term()
@@ -2673,6 +2670,16 @@ def _schedule_fields(request):
              "start_time", "end_time", "enrolled_count", "modality")}
 
 
+def _enrollment(value):
+    try:
+        number = int(value or 0)
+    except (ValueError, TypeError):
+        raise ScheduleConflictError("Enrollment must be a nonnegative whole number.")
+    if not 0 <= number <= 2147483647:
+        raise ScheduleConflictError("Enrollment must be a nonnegative whole number.")
+    return number
+
+
 @ifo_required
 @require_http_methods(["GET", "POST"])
 def schedule_new(request):
@@ -2709,22 +2716,20 @@ def schedule_new(request):
         return fail("Enter valid start and end times.")
     if end <= start:
         return fail("The end time must be after the start time.")
-    if not fields["day_of_week"].isdigit():
+    if fields["day_of_week"] not in {"0", "1", "2", "3", "4", "5", "6"}:
         return fail("Select a day of week.")
     modality = fields["modality"] if fields["modality"] in dict(Modality.choices) \
         else Modality.F2F
 
-    schedule = Schedule.objects.create(
-        term=term, course_code=fields["course_code"][:30],
-        section=fields["section"][:30], faculty=faculty, room=room,
-        day_of_week=int(fields["day_of_week"]), start_time=start, end_time=end,
-        enrolled_count=int(fields["enrolled_count"] or 0), modality=modality,
-        status=ScheduleStatus.ACTIVE)
-    AuditLog.objects.create(
-        actor=request.user, event_type="schedule.created",
-        target_type="schedule", target_id=str(schedule.pk),
-        payload={"course": schedule.course_code, "section": schedule.section,
-                 "room": room.code})
+    try:
+        schedule = create_schedule(
+            term=term, course_code=fields["course_code"][:30],
+            section=fields["section"][:30], faculty=faculty, room=room,
+            day_of_week=int(fields["day_of_week"]), start_time=start, end_time=end,
+            enrolled_count=_enrollment(fields["enrolled_count"]), modality=modality,
+            actor=request.user)
+    except ScheduleConflictError as exc:
+        return fail(str(exc))
     # Materialize via the canonical command so the new class is immediately
     # checkable and never diverges from the scheduler's own materialize rules
     # (idempotent get_or_create; honors breaks/suspensions).
@@ -2775,7 +2780,7 @@ def schedule_edit(request, pk):
     try:
         n = update_schedule(
             schedule, faculty=faculty, room=room, start_time=start, end_time=end,
-            enrolled_count=int(fields["enrolled_count"] or 0), actor=request.user)
+            enrolled_count=_enrollment(fields["enrolled_count"]), actor=request.user)
     except ScheduleConflictError as exc:
         return fail(str(exc))
     request.session["ifo_flash"] = (

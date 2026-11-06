@@ -28,6 +28,42 @@ import xml.etree.ElementTree as ET
 
 # OOXML relationships namespace used for the r:id attribute on <sheet>.
 _R_NS = "http://schemas.openxmlformats.org/officeDocument/2006/relationships"
+MAX_MEMBERS = 512
+MAX_MEMBER_BYTES = 16 * 1024 * 1024
+MAX_EXPANDED_BYTES = 64 * 1024 * 1024
+MAX_ROWS = 20000
+MAX_COLUMNS = 256
+MAX_GRID_CELLS = 1000000
+MAX_XML_DEPTH = 64
+
+
+class _BoundedTreeBuilder(ET.TreeBuilder):
+    """Reject declarations and limit nodes before building them, any encoding."""
+    def __init__(self):
+        super().__init__()
+        self.nodes = self.depth = 0
+
+    def doctype(self, name, pubid, system):
+        raise ValueError("Spreadsheet entity declarations are not supported")
+
+    def start(self, tag, attrs):
+        self.nodes += 1
+        self.depth += 1
+        if self.nodes > MAX_GRID_CELLS or self.depth > MAX_XML_DEPTH:
+            raise ValueError("Spreadsheet XML exceeds complexity limit")
+        return super().start(tag, attrs)
+
+    def end(self, tag):
+        self.depth -= 1
+        return super().end(tag)
+
+
+def _validate_archive(zf):
+    members = zf.infolist()
+    if (len(members) > MAX_MEMBERS
+            or sum(member.file_size for member in members) > MAX_EXPANDED_BYTES
+            or any(member.file_size > MAX_MEMBER_BYTES for member in members)):
+        raise ValueError("Spreadsheet exceeds expanded archive limits")
 
 
 def _localname(tag):
@@ -42,10 +78,18 @@ def _parse(zf, member):
     so there is no XXE / billion-laughs surface from untrusted registrar files.
     """
     try:
-        data = zf.read(member)
+        info = zf.getinfo(member)
+        if info.file_size > MAX_MEMBER_BYTES:
+            raise ValueError("Spreadsheet member exceeds size limit")
+        with zf.open(info) as stream:
+            data = stream.read(MAX_MEMBER_BYTES + 1)
+        if len(data) > MAX_MEMBER_BYTES:
+            raise ValueError("Spreadsheet member exceeds size limit")
     except KeyError:
         return None
-    return ET.fromstring(data)
+    if b"<!DOCTYPE" in data.upper() or b"<!ENTITY" in data.upper():
+        raise ValueError("Spreadsheet entity declarations are not supported")
+    return ET.fromstring(data, parser=ET.XMLParser(target=_BoundedTreeBuilder()))
 
 
 def _col_index(cell_ref):
@@ -56,6 +100,8 @@ def _col_index(cell_ref):
     col = 0
     for ch in letters.group(0).upper():
         col = col * 26 + (ord(ch) - ord("A") + 1)
+        if col > MAX_COLUMNS:
+            raise ValueError("Spreadsheet column exceeds limit")
     return col - 1
 
 
@@ -120,6 +166,7 @@ def _rels_map(zf):
 def sheet_names(path):
     """Return worksheet tab names in workbook (document) order."""
     with zipfile.ZipFile(path) as zf:
+        _validate_archive(zf)
         return [name for name, _rid in _workbook_sheets(zf)]
 
 
@@ -171,6 +218,7 @@ def read_grid(path, sheet=None):
     ``O4``). Missing cells and gaps are ``""``.
     """
     with zipfile.ZipFile(path) as zf:
+        _validate_archive(zf)
         shared = _load_shared_strings(zf)
         part = _worksheet_part(zf, sheet)
         if part is None:
@@ -191,6 +239,8 @@ def read_grid(path, sheet=None):
                     continue
                 r_attr = row.get("r")
                 row_idx = int(r_attr) - 1 if r_attr else ri
+                if not 0 <= row_idx < MAX_ROWS:
+                    raise ValueError("Spreadsheet row exceeds limit")
                 for cell in row:
                     if _localname(cell.tag) != "c":
                         continue
@@ -202,6 +252,8 @@ def read_grid(path, sheet=None):
                         max_col = col_idx
                 if row_idx > max_row:
                     max_row = row_idx
+                if (max_row + 1) * (max_col + 1) > MAX_GRID_CELLS:
+                    raise ValueError("Spreadsheet grid exceeds cell limit")
 
     if max_row < 0:
         return []

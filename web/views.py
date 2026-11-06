@@ -186,19 +186,21 @@ def manifest(request):
 
 
 SW_JS = r"""
-const CACHE = 'fluxtrack-shell-v6';
+const CACHE = 'fluxtrack-shell-v7';
 // Precache only stable, non-redirecting assets. '/' redirects when anonymous,
 // so caching it (and replaying the redirect) breaks navigation — never precache it.
-const SHELL = ['/login', '/icon-192.png'];
+const SHELL = ['/checker/offline', '/icon-192.png', '/static/checker/offline_queue.js'];
+const isPublic = (url) => !url.search && (url.pathname.startsWith('/static/') || /^\/icon-(32|192|512)\.png$/.test(url.pathname) || url.pathname === '/checker/offline');
+const cacheable = (resp) => resp.ok && resp.type === 'basic' && !resp.redirected && !/private|no-store/i.test(resp.headers.get('Cache-Control') || '');
 
 self.addEventListener('install', (e) => {
-  e.waitUntil(caches.open(CACHE).then((c) => c.addAll(SHELL).catch(() => {})));
+  e.waitUntil(caches.open(CACHE).then((c) => Promise.all(SHELL.map((path) => fetch(path).then((resp) => cacheable(resp) ? c.put(path, resp) : undefined))).catch(() => {})));
   self.skipWaiting();
 });
 
 self.addEventListener('activate', (e) => e.waitUntil(
   caches.keys()
-    .then((keys) => Promise.all(keys.filter((k) => k !== CACHE).map((k) => caches.delete(k))))
+    .then((keys) => Promise.all(keys.filter((k) => k.startsWith('fluxtrack-') && k !== CACHE).map((k) => caches.delete(k))))
     .then(() => self.clients.claim())
 ));
 
@@ -210,15 +212,17 @@ self.addEventListener('fetch', (e) => {
   // HTML navigations: network-first, fall back to the login shell offline.
   // Never cache navigations — they may be redirects, which break when replayed.
   if (req.mode === 'navigate') {
-    e.respondWith(fetch(req).catch(() => caches.match('/login')));
+    e.respondWith(fetch(req).catch(() => caches.match('/checker/offline')));
     return;
   }
+
+  if (!isPublic(url)) return;
 
   // Static assets: network-first so a deployment can never combine fresh HTML
   // with stale CSS/JS. The last clean response remains available offline.
   e.respondWith(
     fetch(req).then((resp) => {
-        if (resp.ok && resp.type === 'basic') {
+        if (cacheable(resp)) {
           const copy = resp.clone();
           caches.open(CACHE).then((c) => c.put(req, copy));
         }
@@ -285,6 +289,8 @@ def icon(request, size):
     endpoints (used by the manifest, apple-touch-icon, and the service worker
     precache) never 500.
     """
+    if size not in {32, 192, 512}:
+        return HttpResponse(status=404)
     from PIL import Image
     s = int(size)
     try:
@@ -312,3 +318,11 @@ def icon(request, size):
     buf = io.BytesIO()
     img.save(buf, format="PNG")
     return HttpResponse(buf.getvalue(), content_type="image/png")
+
+
+def checker_offline(request):
+    """Public capture shell: no authenticated state or attendance is rendered."""
+    from django.template.loader import render_to_string
+    response = HttpResponse(render_to_string("checker/offline.html"))
+    response["Cache-Control"] = "public, max-age=300"
+    return response

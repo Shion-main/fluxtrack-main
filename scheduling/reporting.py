@@ -48,6 +48,15 @@ logger = logging.getLogger(__name__)
 HELD_STATUSES = (SessionStatus.ACTIVE, SessionStatus.COMPLETED)
 
 
+def _scheduled_count():
+    """The attendance denominator: every session except CANCELLED ones (IFO-12).
+
+    A cancelled class did not meet, so it is neither held nor missed. Built per
+    query because a Count expression must not be shared between aggregates.
+    """
+    return Count("id", filter=~Q(status=SessionStatus.CANCELLED))
+
+
 @dataclass
 class AbsenceItem:
     """One itemized ABSENT session for a faculty row (RPT-01)."""
@@ -508,7 +517,7 @@ def faculty_attendance(*, term, start, end, department=None, as_of=None):
     status_rows = (
         qs.values("faculty_id", "faculty__first_name", "faculty__last_name")
         .annotate(
-            scheduled=Count("id"),
+            scheduled=_scheduled_count(),
             held=Count("id", filter=Q(status__in=HELD_STATUSES)),
             absent=Count("id", filter=Q(status=SessionStatus.ABSENT)),
             early_ends=Count("id", filter=Q(ended_early=True)),
@@ -548,7 +557,7 @@ def dept_summary(*, term, start, end, department=None, as_of=None):
     qs = _scoped_sessions(
         term=term, start=start, end=end, department=department, as_of=as_of)
     agg = qs.aggregate(
-        scheduled=Count("id"),
+        scheduled=_scheduled_count(),
         held=Count("id", filter=Q(status__in=HELD_STATUSES)),
         absent=Count("id", filter=Q(status=SessionStatus.ABSENT)),
         faculty_count=Count("faculty_id", distinct=True),
@@ -673,7 +682,7 @@ def faculty_scorecard(*, term, faculty, start, end, as_of=None):
         term=term, start=start, end=end, as_of=as_of, faculty=faculty)
 
     agg = qs.aggregate(
-        scheduled=Count("id"),
+        scheduled=_scheduled_count(),
         held=Count("id", filter=Q(status__in=HELD_STATUSES)),
         absent=Count("id", filter=Q(status=SessionStatus.ABSENT)),
         early_ends=Count("id", filter=Q(ended_early=True)),

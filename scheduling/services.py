@@ -38,6 +38,7 @@ from ops.availability import (
     room_is_free,
 )
 from ops.models import AuditLog
+from ops.locking import serialized_write
 from ops.notify import notify
 from ops.occupancy import release_room
 from ops.policy import get_policy
@@ -183,6 +184,7 @@ def affected_sessions(request):
     return result
 
 
+@serialized_write
 def dean_override_modality(session, dean, target_modality, reason, *, now=None):
     """Directly change one upcoming department session on a Dean's authority.
 
@@ -256,6 +258,7 @@ def dean_override_modality(session, dean, target_modality, reason, *, now=None):
         return result
 
 
+@serialized_write
 def dean_bulk_override_modality(sessions, dean, target_modality, reason, *, now=None):
     """Atomically apply one Dean-authorized modality to selected sessions.
 
@@ -656,6 +659,7 @@ def _apply_online(request, sessions, dean, now):
         release_room(session, actor=dean, now=now)
 
 
+@serialized_write
 def apply_approval(request, dean, *, now=None):
     """Apply an approved modality shift atomically (MOD-03..06).
 

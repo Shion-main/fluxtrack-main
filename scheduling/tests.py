@@ -930,7 +930,7 @@ class TransitionLockingTests(SimpleTestCase):
             services.apply_approval,
         ):
             with self.subTest(transition=transition.__name__):
-                source = inspect.getsource(transition)
+                source = inspect.getsource(inspect.unwrap(transition))
                 self.assertIn(
                     "ModalityShiftRequest.objects.select_for_update()", source)
 

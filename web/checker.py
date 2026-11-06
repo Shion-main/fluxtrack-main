@@ -21,6 +21,7 @@ from uuid import UUID
 from django.conf import settings
 from django.contrib.auth.decorators import login_required
 from django.core.cache import cache
+from ops.locking import serialized_write
 from django.core.exceptions import PermissionDenied
 from django.db import IntegrityError, transaction
 from django.http import Http404, JsonResponse
@@ -302,6 +303,7 @@ def _room_session_at_scan(room, scanned_at):
 
 
 # --- apply layer -----------------------------------------------------------
+@serialized_write
 def _apply_action(request, session, room, action, *, note="", identity_match=None,
                   scanned_at=None, offline=False, online=False):
     """Write the CheckerValidation + AuditLog and, for flags, notify IFO + HR.
@@ -339,17 +341,18 @@ def _apply_action(request, session, room, action, *, note="", identity_match=Non
             # coverage stays honest (CHK-04 not inflated).
             with transaction.atomic():
                 session.status = SessionStatus.ACTIVE
-                session.actual_start = scanned_at or timezone.now()
-                session.checkin_method = CheckinMethod.ONLINE_MANUAL
+                if session.actual_start is None:
+                    session.actual_start = scanned_at or timezone.now()
+                    session.checkin_method = CheckinMethod.ONLINE_MANUAL
                 session.save(update_fields=["status", "actual_start", "checkin_method"])
                 propagate_merged_present(session, session.actual_start,
                                          actor=request.user)
         elif action == ValidationAction.FLAG_NOT_PRESENT:
             # Online not-present fails the online merged group ABSENT (D-07
-            # online), in ONE transaction. The helper's SCHEDULED status-guard
-            # leaves an already-ACTIVE sibling untouched, and its grace gate
-            # (audit H2) defers within-grace siblings to the sweep -- only the
-            # anchor is the checker's immediate, authoritative call.
+            # online), in ONE transaction. A sibling a Checker activated or
+            # verified has its own evidence and stays ACTIVE, and the helper's
+            # grace gate (audit H2) defers within-grace SCHEDULED siblings to
+            # the sweep.
             with transaction.atomic():
                 session.status = SessionStatus.ABSENT  # authoritative (Open Q2)
                 session.save(update_fields=["status"])
@@ -389,6 +392,7 @@ def resolve(request):
 
 @checker_required
 @require_http_methods(["POST"])
+@serialized_write
 def action(request):
     now = timezone.now()
     action_val = request.POST.get("action", "")
@@ -416,6 +420,9 @@ def action(request):
             .select_related("floor").first())
     if room is None:
         return render(request, "checker/_outcome.html", {"error": "bad-payload"})
+
+    if room.out_of_service:
+        return render(request, "checker/_outcome.html", {"error": "out-of-service"})
 
     # UNCONDITIONAL server-side re-gate: recompute the room's session state and
     # re-run the pure core against CURRENT on-duty floors before any write. A
@@ -463,8 +470,12 @@ def action(request):
     scope_pk = session.pk if session else room.pk
     idem = f"checker-idem:{request.user.pk}:{scope_pk}:{action_val}:{now:%Y%m%d%H%M}"
     if cache.add(idem, True, timeout=120):
-        _apply_action(request, session, room, action_val, note=note,
-                      identity_match=identity_match, scanned_at=now)
+        try:
+            _apply_action(request, session, room, action_val, note=note,
+                          identity_match=identity_match, scanned_at=now)
+        except Exception:
+            cache.delete(idem)
+            raise
 
     return render(request, "checker/_outcome.html", {
         "resolution": resolution, "room": room, "session": session,
@@ -491,6 +502,7 @@ def _claim_replay_receipt(user, client_uuid, status, reason=""):
 
 @checker_required
 @require_http_methods(["POST"])
+@serialized_write
 def replay(request):
     """Re-validate every offline-queued scan against CURRENT state through the
     SAME pure gating core `action` uses above — the offline snapshot's
@@ -511,11 +523,21 @@ def replay(request):
     except (ValueError, UnicodeDecodeError):
         return JsonResponse({"results": []}, status=400)
 
-    items = list(payload.get("items") or [])   # materialize up front (Pitfall 3, MSSQL HY010)
+    if not isinstance(payload, dict) or not isinstance(payload.get("items", []), list):
+        return JsonResponse({"results": []}, status=400)
+    items = payload.get("items", [])
+    if len(items) > 500 or any(not isinstance(item, dict) for item in items):
+        return JsonResponse({"results": []}, status=400)
     now = timezone.now()
     results = []
 
     for item in items:
+        # Ownership precedes UUID/receipt lookup, rate limits and all writes.
+        # Legacy unowned records remain quarantined in the browser.
+        if str(item.get("owner_id", "")) != str(request.user.pk):
+            results.append({"uuid": str(item.get("client_uuid") or ""),
+                            "status": "rejected", "reason": "owner-mismatch"})
+            continue
         client_uuid_raw = str(item.get("client_uuid") or "")
         # Reject items with a missing/empty client_uuid outright (WR-03): without
         # it the per-uuid idempotency guard cannot key the item, so a re-post
@@ -562,6 +584,9 @@ def replay(request):
 
         if room is None:
             reason = "bad-room"
+            session = None
+        elif room.out_of_service:
+            reason = "out-of-service"
             session = None
         else:
             # ALWAYS re-derive CURRENT state server-side — never the offline
@@ -646,6 +671,7 @@ def replay(request):
 _ONLINE_ACTIONS = {ValidationAction.VERIFIED, ValidationAction.FLAG_NOT_PRESENT}
 
 
+@serialized_write
 def _online_action(request, session_id, action_val, note, now):
     """Apply an online Verify / Flag-not-present after a server-side re-gate.
 
@@ -657,8 +683,11 @@ def _online_action(request, session_id, action_val, note, now):
     """
     session = _online_session(session_id, request.user)
     on_duty = _is_online_on_duty(request.user, now)
-    actionable = session is not None and session.status not in (
-        SessionStatus.ABSENT, SessionStatus.COMPLETED)
+    actionable = (session is not None
+                  and session.status in (SessionStatus.SCHEDULED, SessionStatus.ACTIVE)
+                  and session.date == timezone.localdate(now)
+                  and session.scheduled_start <= now <= session.scheduled_end
+                  and not session.verified_by_checker)
 
     if session is None or not on_duty or not actionable:
         # Refuse: not owned / not on duty / already resolved. Audit + no write.
@@ -688,8 +717,12 @@ def _online_action(request, session_id, action_val, note, now):
     if cache.add(idem, True, timeout=120):
         # room=session.room: online sessions still carry their scheduled room, so
         # the NOT-NULL CheckerValidation.room is satisfied without a schema change.
-        _apply_action(request, session, session.room, action_val, note=note,
-                      identity_match=identity_match, scanned_at=now, online=True)
+        try:
+            _apply_action(request, session, session.room, action_val, note=note,
+                          identity_match=identity_match, scanned_at=now, online=True)
+        except Exception:
+            cache.delete(idem)
+            raise
 
     return render(request, "checker/_outcome.html", {
         "session": session, "room": session.room,
@@ -708,11 +741,12 @@ def online_list(request):
     sessions = [
         s for s in (Session.objects
                     .filter(online_checker=request.user, date=timezone.localdate(),
-                            status=SessionStatus.SCHEDULED,
+                            status__in=[SessionStatus.SCHEDULED, SessionStatus.ACTIVE],
                             schedule__term=active_term)
                     .select_related("schedule", "faculty", "room")
                     .order_by("scheduled_start"))
-        if (s.declared_modality or s.schedule.modality) == Modality.ONLINE]
+        if (s.declared_modality or s.schedule.modality) == Modality.ONLINE
+        and not s.verified_by_checker]
     return render(request, "checker/online_list.html", {"sessions": sessions})
 
 

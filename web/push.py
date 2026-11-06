@@ -10,23 +10,27 @@ State-changing endpoints are `@require_http_methods(["POST"])` and CSRF-protecte
 the client sends `X-CSRFToken` explicitly on the raw fetch (RESEARCH Pitfall 5,
 T-05-15). subscribe VALIDATES the payload (endpoint must be an https URL, keys
 must carry p256dh + auth) and rejects junk with a 400 (T-05-14) so only clean,
-sendable rows enter the outbox. Persistence is `update_or_create(endpoint=...)`
+sendable rows enter the outbox. Persistence is `update_or_create(user=..., endpoint=...)`
 so re-subscribing the same endpoint updates rather than duplicates (Pitfall 6).
 """
 import json
 
 from django.conf import settings
 from django.contrib.auth.decorators import login_required
+from django.contrib.auth import get_user_model
 from django.http import HttpResponseBadRequest, JsonResponse
 from django.views.decorators.http import require_http_methods
+from django.db import transaction
 
 from ops.models import PushSubscription
+from ops.push_validation import valid_subscription
 
 
 def _parse_json(request):
     """Parse the request body as JSON; return {} on any malformed input."""
     try:
-        return json.loads(request.body.decode("utf-8"))
+        payload = json.loads(request.body.decode("utf-8"))
+        return payload if isinstance(payload, dict) else {}
     except (ValueError, UnicodeDecodeError):
         return {}
 
@@ -40,19 +44,22 @@ def subscribe(request):
     keys MUST carry both p256dh and auth, else 400 -- this keeps junk / SSRF-shaped
     rows out of the outbox (T-05-14). Deduped on endpoint via update_or_create so a
     re-subscribe of the same endpoint updates rather than duplicates (Pitfall 6),
-    and the row is always (re)bound to request.user.
+    scoped to request.user without rebinding another account's row.
     """
     data = _parse_json(request)
     endpoint = data.get("endpoint", "")
     keys = data.get("keys", {})
-    if (not isinstance(endpoint, str) or not endpoint.startswith("https://")
-            or not isinstance(keys, dict)
-            or not keys.get("p256dh") or not keys.get("auth")):
+    if not valid_subscription(endpoint, keys):
         return HttpResponseBadRequest("invalid subscription")
-    PushSubscription.objects.update_or_create(
-        endpoint=endpoint,
-        defaults={"user": request.user, "keys": keys},
-    )
+    with transaction.atomic():
+        # Serialize subscription changes for this account; never rebind another
+        # account's endpoint based on client-supplied knowledge of its URL.
+        get_user_model().objects.select_for_update().get(pk=request.user.pk)
+        existing = PushSubscription.objects.filter(user=request.user, endpoint=endpoint)
+        if not existing.exists() and request.user.push_subscriptions.count() >= 10:
+            return HttpResponseBadRequest("subscription limit reached")
+        PushSubscription.objects.update_or_create(
+            user=request.user, endpoint=endpoint, defaults={"keys": keys})
     return JsonResponse({"ok": True})
 
 

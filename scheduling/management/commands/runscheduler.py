@@ -32,7 +32,8 @@ from ops.jobrun import run_job
 from ops.policy import get_policy
 from ops.push import send_push_outbox
 from ops.reports import generate_week_reports, report_week_bounds
-from scheduling.jobs import detect_room_conflicts, sweep_no_shows
+from scheduling.jobs import (close_unfinished_sessions, detect_room_conflicts,
+                             sweep_no_shows)
 from scheduling.term_scope import get_active_term
 
 # Materialize cadence (discretion): re-fill the session horizon every 6 hours.
@@ -42,8 +43,11 @@ _MATERIALIZE_INTERVAL_HOURS = 6
 
 
 def _job_materialize():
-    """JOB-01: extend the dated-session horizon. Reuses the command (not its logic)."""
+    """JOB-01: extend the dated-session horizon, then give new online sessions an
+    owner. Reuses the commands (not their logic). Assignment belongs here because
+    every run creates sessions that no IFO save will ever visit."""
     call_command("materialize_sessions")
+    call_command("assign_online")
     return 0  # session count is reported by the command; nothing to tally here
 
 
@@ -65,15 +69,16 @@ def _job_sweep():
     already handled -- `send_push_outbox` runs in the separate `push_outbox` job,
     never in a web worker, so the whole GRD-04 path stays out of any request.
 
-    The return stays `marked + flagged`. The guard count is deliberately NOT
+    The return is `marked + closed + flagged`. The guard count is deliberately NOT
     folded in: JobRun.rows_affected means "rows this sweep changed", and guards
     notified is a different quantity.
     """
     events = []
     marked = sweep_no_shows(collect=events)
+    closed = close_unfinished_sessions()
     flagged = detect_room_conflicts(collect=events)
     notify_floor_guards(events)
-    return marked + flagged
+    return marked + closed + flagged
 
 
 def _job_weekly_report():

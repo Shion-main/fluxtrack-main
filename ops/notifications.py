@@ -50,7 +50,8 @@ GUARD_FLOOR_ALERT = "guard_floor_alert"
 #
 # Types intentionally NOT in any group (owner default #1: always-shown /
 # never-mutable this phase): checker_flag, checker_replay_conflict, online_no_link,
-# online_unassigned, online_assigned, and the five modality_shift_* types. Do not
+# online_unassigned, online_assigned, session_auto_closed, and the five
+# modality_shift_* types. Do not
 # add them to a group -- granular mute is a deferred idea.
 CATEGORY_TYPES = {
     # GUARD_FLOOR_ALERT joins ROOM (D-21): both of its triggers are room events,

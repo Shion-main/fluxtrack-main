@@ -25,6 +25,7 @@ from ops.jobrun import run_job
 from ops.models import Notification, NotificationMute, PushSubscription
 from ops.notifications import NotificationCategory
 from ops.push import send_push_outbox
+from ops.tests_push_hardening import subscription_keys
 
 
 def _resp(status):
@@ -46,8 +47,8 @@ class PushOutboxTests(TestCase):
         self.user = User.objects.create(username="fac_push")
         self.sub = PushSubscription.objects.create(
             user=self.user,
-            endpoint="https://push.example.com/ep-1",
-            keys={"p256dh": "k", "auth": "a"},
+            endpoint="https://fcm.googleapis.com/fcm/send/ep-1",
+            keys=subscription_keys(),
         )
 
     def _mk(self, type="room_event"):
@@ -97,12 +98,13 @@ class PushOutboxTests(TestCase):
         exc = WebPushException("boom", response=_resp(500))
         with mock.patch("ops.push.webpush", side_effect=exc):
             sent = send_push_outbox()
-        self.assertEqual(sent, 1)
+        self.assertEqual(sent, 0)
         self.assertTrue(
             PushSubscription.objects.filter(pk=self.sub.pk).exists(),
             "transient 500 must keep the subscription for a later pass")
         n.refresh_from_db()
-        self.assertIsNotNone(n.pushed_at)
+        self.assertIsNone(n.pushed_at)
+        self.assertIsNotNone(n.next_push_at)
 
     def test_transient_no_response_keeps_subscription(self):
         # (c) A transport failure with response=None (timeout-like) must not prune.

@@ -20,6 +20,7 @@ ROOM_OCCUPIED = "room-occupied"
 EARLY_END = "early-end"
 ONLINE_REJECT = "online-reject"
 NO_SCHEDULE = "no-schedule"
+MOVE_OCCUPIED = "move-occupied"
 
 # Outcomes that require a second, explicit confirmation (SCAN-04)
 CONFIRM_OUTCOMES = {WRONG_ROOM, ROOM_OCCUPIED, EARLY_END}
@@ -69,23 +70,37 @@ def resolve_faculty_scan(sessions_today, scanned_room_id, occupying_session_id,
     early_end = timedelta(minutes=early_end_min)
     open_lead = timedelta(minutes=open_min)
 
-    # An active session takes priority: re-scan means checkout (FAC-05).
-    for s in sessions_today:
-        if s.status == "active":
-            if s.room_id == scanned_room_id:
-                if now < s.scheduled_end - early_end:
-                    return Resolution(EARLY_END, s.id)
-                return Resolution(CHECKED_OUT, s.id)
-            return Resolution(WRONG_ROOM, s.id)
-
-    # Otherwise find a scheduled session whose window contains now. At a
-    # back-to-back boundary two windows can contain ``now``; prefer the one in
-    # the scanned room before falling back to the first scheduled candidate.
+    # At a back-to-back boundary two windows can contain ``now``; the candidate
+    # below prefers the one in the scanned room.
     window_candidates = [
         s for s in sessions_today
         if (s.status == "scheduled"
             and s.scheduled_start - open_lead <= now <= s.scheduled_end)
     ]
+    next_class_in_room = any(
+        s.room_id == scanned_room_id for s in window_candidates)
+
+    # An active session takes priority: re-scan means checkout (FAC-05).
+    for s in sessions_today:
+        if s.status == "active":
+            if now >= s.scheduled_end:
+                # The class is over, so it is not the current class: a forgotten
+                # checkout must never hide the class being taught now. A late
+                # checkout still works in its own room unless the next class
+                # starts there; the sweep closes whatever is left.
+                if s.room_id == scanned_room_id and not next_class_in_room:
+                    return Resolution(CHECKED_OUT, s.id)
+                continue
+            if s.room_id == scanned_room_id:
+                if now < s.scheduled_end - early_end:
+                    return Resolution(EARLY_END, s.id)
+                return Resolution(CHECKED_OUT, s.id)
+            if occupying_session_id is not None:
+                return Resolution(MOVE_OCCUPIED, s.id)
+            return Resolution(WRONG_ROOM, s.id)
+
+    # Otherwise find a scheduled session whose window contains now, preferring
+    # the scanned room before falling back to the first scheduled candidate.
     candidate = next(
         (s for s in window_candidates if s.room_id == scanned_room_id),
         window_candidates[0] if window_candidates else None,

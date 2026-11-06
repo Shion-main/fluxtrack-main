@@ -260,6 +260,17 @@ class OnlineSelfCheckoutTests(TestCase):
 
 
 class OnlineStartValidationTests(TestCase):
+    def test_future_window_cannot_be_started(self):
+        self.session.scheduled_start = timezone.now() + timedelta(hours=1)
+        self.session.scheduled_end = timezone.now() + timedelta(hours=2)
+        self.session.save(update_fields=["scheduled_start", "scheduled_end"])
+        self._assert_refused(GOOD_LINK)
+
+    def test_other_date_cannot_be_started(self):
+        self.session.date = timezone.localdate() + timedelta(days=1)
+        self.session.save(update_fields=["date"])
+        self._assert_refused(GOOD_LINK)
+
     """The validation ladder, every rung refusing at 400 with nothing written."""
 
     def setUp(self):

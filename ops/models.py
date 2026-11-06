@@ -123,6 +123,10 @@ class Notification(models.Model):
     # Outbox stamp (NOTIF-02): the 05-03 scheduler push pass sets this after
     # delivering a push for this row. NULL means not yet processed.
     pushed_at = models.DateTimeField(null=True, blank=True)
+    push_attempts = models.PositiveSmallIntegerField(default=0)
+    next_push_at = models.DateTimeField(null=True, blank=True)
+    push_error = models.CharField(max_length=80, blank=True)
+    push_delivered_subscriptions = models.JSONField(default=list, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:

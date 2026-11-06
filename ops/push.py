@@ -16,50 +16,58 @@ key event or a muted category is. VAPID crypto is owned entirely by pywebpush
 """
 import json
 from datetime import timedelta
+import requests
 
 from django.conf import settings
+from django.db.models import Q
 from django.utils import timezone
 from pywebpush import WebPushException, webpush
 
 from ops.models import Notification
 from ops.notifications import PUSH_TYPES, muted_types
+from ops.push_validation import valid_endpoint, valid_subscription
 
-# Recent-window bound (D-09): keep-all retention means the outbox must never
-# re-scan ancient rows. 15 minutes comfortably covers the ~15s push cadence plus
-# misfire grace while keeping every pass O(recent) instead of O(all-time). A
-# discretionary constant (mirrors runscheduler's _MATERIALIZE_INTERVAL_HOURS),
-# not a tunable policy knob.
-_WINDOW_MINUTES = 15
+# Bound retry work and expire undelivered notifications after one day.
+MAX_ATTEMPTS = 6
+MAX_AGE = timedelta(days=1)
+BATCH_SIZE = 100
+
+
+class ProviderSession(requests.Session):
+    """Never follow a provider redirect to an arbitrary outbound destination."""
+    def request(self, method, url, **kwargs):
+        if not valid_endpoint(url):
+            raise ValueError("Invalid push destination")
+        kwargs["allow_redirects"] = False
+        return super().request(method, url, **kwargs)
 
 
 def _send_one(sub, payload):
-    """Deliver one push. True = handled (keep the subscription); False = prune.
-
-    Returns False ONLY on a WebPushException whose HTTP status is 404 or 410 (a
-    dead endpoint the vendor has expired -- D-09 pruning). Any other failure
-    (429/5xx/timeout/network) returns True: the row is treated as handled this
-    pass so it is never retried forever, and a merely-flaky vendor never causes a
-    live subscription to be dropped (T-05-08). NEVER raises -- a failed send must
-    not be able to reach the caller (criterion #4 / T-05-05).
-    """
+    """Return delivered, dead, permanent, or retry; no transient data loss."""
+    if not valid_subscription(sub.endpoint, sub.keys):
+        return "dead"
     try:
-        webpush(
-            subscription_info={"endpoint": sub.endpoint, "keys": sub.keys},
-            data=json.dumps(payload),
-            vapid_private_key=settings.VAPID_PRIVATE_KEY_PATH,
-            vapid_claims={"sub": settings.VAPID_SUB},
-            ttl=600,
-            timeout=10,  # hard cap so a hung endpoint can never stall the job (T-05-05)
-        )
-        return True
+        with ProviderSession() as transport:
+            response = webpush(
+                subscription_info={"endpoint": sub.endpoint, "keys": sub.keys},
+                data=json.dumps(payload),
+                vapid_private_key=settings.VAPID_PRIVATE_KEY_PATH,
+                vapid_claims={"sub": settings.VAPID_SUB},
+                ttl=600, timeout=10, requests_session=transport)
+        status = getattr(response, "status_code", 201)
+        if isinstance(status, int) and not 200 <= status < 300:
+            return "permanent" if status < 500 and status not in (408, 429) else "retry"
+        return "delivered"
     except WebPushException as exc:
         # response may be None (a transport-level failure with no HTTP status).
         status = getattr(getattr(exc, "response", None), "status_code", None)
         if status in (404, 410):
-            return False  # dead endpoint -> prune (D-09)
-        return True       # transient (429/5xx) -> keep for a later pass (T-05-08)
+            return "dead"
+        if isinstance(status, int) and 300 <= status < 500 and status not in (408, 429):
+            return "permanent"
+        return "retry"
     except Exception:     # noqa: BLE001 -- a failed send must never reach the caller
-        return True       # timeout/network -> keep, treat as handled this pass
+        return "retry"
 
 
 def send_push_outbox():
@@ -68,20 +76,23 @@ def send_push_outbox():
     Invoked ONLY by the scheduler's push_outbox job (never inline in a web
     request) -- the structural guarantee behind criterion #4. Selects rows whose
     type is a key event (PUSH_TYPES, D-08), not yet pushed (pushed_at IS NULL),
-    and created within the recent window. For each row: if the recipient has muted
+    and due for delivery. For each row: if the recipient has muted
     the row's category the send is suppressed but pushed_at is still stamped
     (D-05); otherwise the payload is pushed to every subscription and any dead
-    endpoint is pruned (D-09). pushed_at is stamped exactly once per row so it is
-    never re-sent. Short-circuits to 0 when VAPID is unconfigured (push disabled).
+    endpoint is pruned (D-09). Successful devices are recorded separately while
+    transient failures retry with backoff until expiry or the attempt limit.
+    Short-circuits to 0 when VAPID is unconfigured (push disabled).
     """
     if not settings.VAPID_PRIVATE_KEY_PATH:
         return 0  # push disabled -- an empty key path means no VAPID configured
 
-    window = timezone.now() - timedelta(minutes=_WINDOW_MINUTES)
-    rows = (Notification.objects
-            .filter(type__in=PUSH_TYPES, pushed_at__isnull=True,
-                    created_at__gte=window)
-            .select_related("user"))
+    now = timezone.now()
+    Notification.objects.filter(type__in=PUSH_TYPES, pushed_at__isnull=True,
+        created_at__lt=now-MAX_AGE).update(pushed_at=now, push_error="expired")
+    rows = list(Notification.objects
+            .filter(type__in=PUSH_TYPES, pushed_at__isnull=True)
+            .filter(Q(next_push_at__isnull=True) | Q(next_push_at__lte=now))
+            .select_related("user").order_by("created_at", "pk")[:BATCH_SIZE])
 
     sent = 0
     for n in rows:
@@ -93,10 +104,30 @@ def send_push_outbox():
             continue
         payload = {"title": n.title, "body": n.body,
                    "link": n.link or "/notifications"}
-        for sub in n.user.push_subscriptions.all():
-            if not _send_one(sub, payload):
-                sub.delete()  # prune dead endpoint (D-09)
-        n.pushed_at = timezone.now()
-        n.save(update_fields=["pushed_at"])
-        sent += 1
+        delivered = set(n.push_delivered_subscriptions)
+        pending, permanent = False, "permanent" in n.push_error
+        for sub in list(n.user.push_subscriptions.all().order_by("pk")):
+            if sub.pk in delivered:
+                continue
+            result = _send_one(sub, payload)
+            if result == "dead":
+                sub.delete()
+            elif result == "retry":
+                pending = True
+            else:
+                delivered.add(sub.pk)
+                permanent |= result == "permanent"
+                n.push_delivered_subscriptions = sorted(delivered)
+                n.save(update_fields=["push_delivered_subscriptions"])
+        n.push_attempts += 1
+        n.push_delivered_subscriptions = sorted(delivered)
+        if pending and n.push_attempts < MAX_ATTEMPTS:
+            n.next_push_at = now + timedelta(seconds=min(3600, 60 * 2 ** (n.push_attempts-1)))
+            n.push_error = "transient and permanent failure" if permanent else "transient failure"
+        else:
+            n.pushed_at, n.next_push_at = now, None
+            n.push_error = "attempt limit" if pending else ("permanent failure" if permanent else "")
+            sent += 1
+        n.save(update_fields=["pushed_at", "push_attempts", "next_push_at",
+                              "push_error", "push_delivered_subscriptions"])
     return sent

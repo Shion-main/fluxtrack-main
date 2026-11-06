@@ -226,6 +226,69 @@ class _CheckerFixtureMixin:
 
 
 class CheckerScanDBTests(_CheckerFixtureMixin, TestCase):
+    def test_online_flag_failure_rolls_back_evidence_and_can_retry(self):
+        from unittest.mock import patch
+        checker = self._checker()
+        self._online_duty_assignment(checker)
+        session = self._owned_online_session(checker)
+        self.client.force_login(checker)
+        payload = {"action": "flag_not_present", "session_id": session.pk,
+                   "note": "Meeting empty"}
+        with patch("web.checker.notify", side_effect=RuntimeError("notify failed")):
+            with self.assertRaises(RuntimeError):
+                self.client.post("/checker/action", payload)
+        session.refresh_from_db()
+        self.assertEqual(session.status, SessionStatus.SCHEDULED)
+        self.assertFalse(CheckerValidation.objects.filter(session=session).exists())
+        self.client.post("/checker/action", payload)
+        session.refresh_from_db()
+        self.assertEqual(session.status, SessionStatus.ABSENT)
+        self.assertEqual(CheckerValidation.objects.filter(session=session).count(), 1)
+
+    def test_online_verify_rejects_terminal_and_outside_window_sessions(self):
+        checker = self._checker()
+        self._online_duty_assignment(checker)
+        self.client.force_login(checker)
+        for status, start in [(SessionStatus.CANCELLED, -10),
+                              (SessionStatus.SCHEDULED, 60),
+                              (SessionStatus.SCHEDULED, -120)]:
+            session = self._owned_online_session(checker, status=status,
+                                                 start_delta_min=start)
+            self.client.post("/checker/action", {"action": "verified", "session_id": session.pk})
+            session.refresh_from_db()
+            self.assertEqual(session.status, status)
+            self.assertFalse(CheckerValidation.objects.filter(session=session).exists())
+
+    def test_verify_self_started_online_preserves_start_and_is_once(self):
+        checker = self._checker()
+        self._online_duty_assignment(checker)
+        session = self._owned_online_session(checker, status=SessionStatus.ACTIVE)
+        started = timezone.now() - timedelta(minutes=7)
+        session.actual_start = started
+        session.checkin_method = CheckinMethod.ONLINE_SELF
+        session.save(update_fields=["actual_start", "checkin_method"])
+        self.client.force_login(checker)
+        self.client.post("/checker/action", {"action": "verified", "session_id": session.pk})
+        from django.core.cache import cache
+        cache.clear()
+        self.client.post("/checker/action", {"action": "verified", "session_id": session.pk})
+        session.refresh_from_db()
+        self.assertEqual(session.actual_start, started)
+        self.assertEqual(session.checkin_method, CheckinMethod.ONLINE_SELF)
+        self.assertEqual(CheckerValidation.objects.filter(session=session).count(), 1)
+
+    def test_online_verify_rejects_a_different_occurrence_date(self):
+        checker = self._checker()
+        self._online_duty_assignment(checker)
+        session = self._owned_online_session(checker)
+        session.date = timezone.localdate() - timedelta(days=1)
+        session.save(update_fields=["date"])
+        self.client.force_login(checker)
+        self.client.post("/checker/action", {"action": "verified", "session_id": session.pk})
+        session.refresh_from_db()
+        self.assertEqual(session.status, SessionStatus.SCHEDULED)
+        self.assertFalse(CheckerValidation.objects.filter(session=session).exists())
+
     def test_active_assignment_grants_scan(self):
         # No assignment -> OFF_DUTY; active FLOOR assignment on the room's floor
         # -> ACTIVE_UNVERIFIED; assignment on another floor -> WRONG_FLOOR.
@@ -839,9 +902,22 @@ import uuid  # noqa: E402
 
 class ReplayTests(_CheckerFixtureMixin, TestCase):
     def _post_replay(self, items):
+        items = [dict(item, owner_id=item.get("owner_id", self.client.session.get("_auth_user_id"))) for item in items]
         return self.client.post(
             "/checker/replay", data=json.dumps({"items": items}),
             content_type="application/json")
+
+    def test_wrong_or_missing_owner_has_no_receipt_or_audit(self):
+        from verification.models import CheckerReplayReceipt
+        checker = self._checker()
+        self.client.force_login(checker)
+        before = AuditLog.objects.count()
+        for owner in (None, "other-account"):
+            identity = str(uuid.uuid4())
+            response = self._post_replay([{"client_uuid": identity, "owner_id": owner}])
+            self.assertEqual(response.json()["results"][0]["status"], "rejected")
+            self.assertFalse(CheckerReplayReceipt.objects.filter(client_uuid=identity).exists())
+        self.assertEqual(AuditLog.objects.count(), before)
 
     def test_valid_replay_applies(self):
         # A queued scan whose CURRENT room/session state is still actionable is

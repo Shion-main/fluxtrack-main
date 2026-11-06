@@ -31,6 +31,30 @@ the checkout, and run `deploy/deploy.sh`; it installs dependencies, runs Django'
 deployment checks, migrates, collects hashed static assets, validates Nginx,
 restarts both processes, starts the watchdog timer, and probes `/healthz/`.
 
+The script loads the same administrator-owned environment file as the services,
+`/etc/fluxtrack/fluxtrack.env`, before any management commands and refuses a
+non-production environment. This file must use shell-compatible `KEY=value`
+assignments (quote values containing spaces or semicolons); it is trusted code
+readable only by administrators and the service group. For a different file,
+invoke `sudo ENV_FILE=/path/to/production.env deploy/deploy.sh` and update the
+systemd `EnvironmentFile` paths to match. `DEPLOY_HEALTH_HOST` can override the
+health probe Host header; by default it uses the first `ALLOWED_HOSTS` entry.
+
+Push permits Google FCM, Mozilla, Apple, and Windows notification providers,
+validates encryption keys, and refuses redirects. Restrict scheduler egress to
+these HTTPS providers. Transient failures retry up to six times with backoff,
+expire after 24 hours, and record the terminal reason on the Notification row;
+in-app notifications remain available.
+
+This release requires migration `ops.0008_push_retry_state` before starting the
+updated web and scheduler processes. Operational services use a transaction-owned
+SQL Server application lock to serialize attendance and room allocations,
+including empty rooms and future occurrences. Reads remain concurrent; write
+throughput and the ten-second lock timeout should be monitored under institutional
+load. Keep one scheduler process for push delivery. Raw SQL and direct Django
+admin edits do not pass through these service validations; use the operational
+consoles for booking, schedule and attendance changes.
+
 For rollback, restore the prior code commit and rerun the script only when its
 migrations are backward-compatible. Otherwise restore the pre-deploy RDS snapshot
 to a new instance, point the environment at it, and restart both units. Never

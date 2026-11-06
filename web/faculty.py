@@ -32,6 +32,7 @@ from campus.models import Room
 from ops.availability import available_rooms_for, available_times_for
 from ops.models import AuditLog
 from ops.policy import get_policy
+from ops.locking import serialized_write
 from scheduling.merge import (_effective_is_online, merged_sibling_ids,
                               propagate_merged_completed,
                               propagate_merged_present)
@@ -696,6 +697,7 @@ def online_list(request):
 
 @faculty_required
 @require_http_methods(["POST"])
+@serialized_write
 def online_start(request, pk):
     """FAC-08/D-01: start an own Online session from a pasted Teams link.
 
@@ -752,6 +754,8 @@ def online_start(request, pk):
     #    atom the scan resolver and the sweep agree on, and this surface must
     #    agree with both. Discretion call: reusing the F2F/Blended grace rule for
     #    an online start is a consistency choice, revisitable as a policy.
+    elif session.date != timezone.localdate(now) or not (session.scheduled_start <= now <= session.scheduled_end):
+        error = "This class can only be started today during its scheduled window."
     elif is_no_show_past_grace(session.scheduled_start, now, grace_min):
         error = (f"Start is past the {grace_min}-minute grace window for this "
                  f"class, so it can no longer be started here.")
@@ -800,6 +804,7 @@ def online_start(request, pk):
 
 @faculty_required
 @require_http_methods(["POST"])
+@serialized_write
 def online_checkout(request, pk):
     """FAC-05: explicitly complete an ACTIVE Online session."""
     now = timezone.localtime()

@@ -53,7 +53,7 @@ def resolve_checker_scan(active_floor_ids, scanned_floor_id, session_state, now)
         return CheckerResolution(WRONG_FLOOR)
     if session_state is None or session_state.status == "scheduled":
         return CheckerResolution(NO_SESSION)          # room empty -> Verified empty
-    if session_state.status == "absent":
+    if session_state.status in {"absent", "cancelled", "completed"}:
         return CheckerResolution(ABSENT_EXCLUDED, session_state.id)
     if session_state.verified:
         return CheckerResolution(ALREADY_VERIFIED, session_state.id)

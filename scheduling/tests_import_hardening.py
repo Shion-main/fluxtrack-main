@@ -22,6 +22,7 @@ from datetime import date
 from io import StringIO
 from pathlib import Path
 from unittest import skipUnless
+from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
 from django.core.management import call_command
@@ -107,6 +108,22 @@ class ExplicitTermImportTests(TransactionTestCase):
             self._import(archived)
 
         self.assertEqual(Schedule.objects.count(), 0)
+
+    def test_term_archived_during_parsing_refuses_locked_write_phase(self):
+        from scheduling.management.commands.import_offerings import Command
+        term = self._term("Closing Import Target", AcademicTerm.Status.ACTIVE)
+        read_rows = Command._read_rows
+
+        def archive_after_read(command, path, sheet):
+            rows = read_rows(command, path, sheet)
+            AcademicTerm.objects.filter(pk=term.pk).update(status=AcademicTerm.Status.ARCHIVED)
+            return rows
+
+        with patch.object(Command, "_read_rows", archive_after_read):
+            with self.assertRaisesMessage(CommandError, "archived academic terms"):
+                self._import(term)
+        self.assertEqual(Schedule.objects.count(), 0)
+        self.assertEqual(Room.objects.count(), 0)
 
     def test_missing_target_refuses_before_writes(self):
         with self.assertRaises(CommandError):

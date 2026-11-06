@@ -48,7 +48,7 @@
 
       <div class="ft-or-ink">or</div>
 
-      <form hx-post="/checker/resolve" hx-target="#outcome" hx-swap="innerHTML" class="ft-form">
+      <form id="manual-scan-form" class="ft-form">
         {% csrf_token %}
         <div class="ft-form__group">
           <label class="ft-label" for="manual-code">Six-digit room code</label>
@@ -95,6 +95,7 @@
   let scanner = null;
   let pendingPayload = null;
   let pendingSessionId = null;
+  let resolveGeneration = 0;
 
   function captureResolvedSession() {
     const input = document.querySelector('#outcome input[name="session_id"]');
@@ -102,6 +103,8 @@
   }
 
   async function postPayload(payload) {
+    const generation = ++resolveGeneration;
+    pendingSessionId = null;
     pendingPayload = payload;
     if (!navigator.onLine) {
       showOfflineCapture();
@@ -113,14 +116,16 @@
       const r = await fetch("/checker/resolve", {
         method: "POST", headers: {"X-CSRFToken": CSRF}, body,
       });
+      const html = await r.text();
+      if (generation !== resolveGeneration) return;
       const el = document.getElementById("outcome");
-      el.innerHTML = await r.text();
+      el.innerHTML = html;
       if (window.htmx) window.htmx.process(el);
       captureResolvedSession();
       el.scrollIntoView({behavior: "smooth", block: "nearest"});
     } catch (e) {
       // Network failed mid-scan (not just navigator.onLine=false) — queue too.
-      showOfflineCapture();
+      if (generation === resolveGeneration) showOfflineCapture();
     }
   }
 
@@ -138,25 +143,16 @@
     box.scrollIntoView({behavior: "smooth", block: "nearest"});
   }
 
-  // The manual-code form posts via htmx directly (not through postPayload());
-  // capture its value on submit so an offline/network failure can still fall
-  // back to the offline-capture prompt.
-  document.addEventListener("submit", (ev) => {
-    const input = document.getElementById("manual-code");
-    if (input && ev.target && ev.target.contains(input)) {
-      pendingPayload = input.value;
-      if (!navigator.onLine) {
-        ev.preventDefault();
-        showOfflineCapture();
-      }
-    }
+  // QR and manual submissions share the same request generation guard.
+  document.getElementById("manual-scan-form").addEventListener("submit", (ev) => {
+    ev.preventDefault();
+    postPayload(document.getElementById("manual-code").value);
   });
-  document.body.addEventListener("htmx:afterSwap", (ev) => {
-    if (ev.detail && ev.detail.target && ev.detail.target.id === "outcome") {
-      captureResolvedSession();
-    }
+  document.getElementById("manual-code").addEventListener("input", () => {
+    resolveGeneration += 1;
+    pendingSessionId = null;
+    pendingPayload = document.getElementById("manual-code").value;
   });
-  document.body.addEventListener("htmx:sendError", () => { showOfflineCapture(); });
 
   document.addEventListener("click", async (ev) => {
     const btn = ev.target.closest("[data-offline-action]");

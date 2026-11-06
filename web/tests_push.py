@@ -14,10 +14,11 @@ from django.urls import reverse
 
 from accounts.models import Role
 from ops.models import PushSubscription
+from ops.tests_push_hardening import subscription_keys
 
 _VALID = {
-    "endpoint": "https://push.example.com/ep/abc123",
-    "keys": {"p256dh": "BPk_key_material", "auth": "auth_secret"},
+    "endpoint": "https://fcm.googleapis.com/fcm/send/abc123",
+    "keys": subscription_keys(),
 }
 
 
@@ -46,7 +47,7 @@ class SubscribePersistTests(TestCase):
         self._post(_VALID)
         # Re-subscribe the SAME endpoint with refreshed keys -> update, not insert.
         refreshed = {"endpoint": _VALID["endpoint"],
-                     "keys": {"p256dh": "NEW_key", "auth": "NEW_auth"}}
+                     "keys": subscription_keys()}
         resp = self._post(refreshed)
         self.assertEqual(resp.status_code, 200)
         rows = PushSubscription.objects.filter(endpoint=_VALID["endpoint"])

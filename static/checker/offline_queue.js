@@ -24,7 +24,16 @@
   var STORE = "queue";
   var REPLAY_URL = "/checker/replay";
 
-  var available = !!window.indexedDB;
+  var renderedOwner = document.documentElement.getAttribute("data-account-id");
+  var offlineShell = document.documentElement.hasAttribute("data-offline-shell");
+  var owner = renderedOwner || "";
+  try {
+    if (renderedOwner) localStorage.setItem("fluxtrack-last-checker-owner", renderedOwner);
+    else if (offlineShell) owner = localStorage.getItem("fluxtrack-last-checker-owner") || "";
+    else localStorage.removeItem("fluxtrack-last-checker-owner");
+  } catch (e) {}
+  // The offline label is not authentication: replay verifies owner on the server.
+  var available = !!window.indexedDB && !!owner;
   var dbPromise = null;
 
   function openDB() {
@@ -68,8 +77,12 @@
     });
   }
 
+  function ownedItems(items) {
+    return items.filter(function (item) { return String(item.owner_id || "") === owner; });
+  }
+
   function countItems() {
-    return getAllItems().then(function (items) { return items.length; });
+    return getAllItems().then(function (items) { return ownedItems(items).length; });
   }
 
   function removeItem(clientUuid) {
@@ -118,6 +131,7 @@
     var token = item.token || extractToken(item.payload);
     if (!token) return Promise.reject(new Error("invalid scan payload"));
     var record = {
+      owner_id: owner,
       client_uuid: randomUUID(),
       token: token,
       session_id: item.session_id || null,
@@ -139,42 +153,58 @@
    * duplicate are all terminal — removed locally. A network failure leaves
    * the queue intact for the next reconnect attempt.
    */
+  var drainPromise = null;
   function drain() {
     if (!available) return Promise.resolve();
-    return getAllItems().then(function (items) {
-      if (!items.length) return;
-      var body = JSON.stringify({
-        items: items.map(function (r) {
-          return {
-            client_uuid: r.client_uuid, token: r.token, action: r.action,
-            session_id: r.session_id, note: r.note, scanned_at: r.scanned_at,
-          };
-        }),
-      });
-      return fetch(REPLAY_URL, {
-        method: "POST",
-        headers: {"Content-Type": "application/json", "X-CSRFToken": getCookie("csrftoken")},
-        body: body,
-      }).then(function (res) {
-        if (!res.ok) return; // leave queue intact; try again next reconnect
-        return res.json().then(function (data) {
-          var applied = 0, flagged = 0;
-          var results = (data && data.results) || [];
-          return Promise.all(results.map(function (r) {
-            if (r.status === "applied" || r.status === "flagged" || r.status === "duplicate") {
-              if (r.status === "applied") applied += 1;
-              if (r.status === "flagged") flagged += 1;
-              return removeItem(r.uuid);
-            }
-            return Promise.resolve();
-          })).then(function () {
-            showSyncSummary(applied, flagged);
-          });
+    if (drainPromise) return drainPromise;
+    drainPromise = getAllItems().then(function (allItems) {
+      // Snapshot each owned record once per run: rejected items cannot starve
+      // later batches and retrying never creates an endless drain loop.
+      var remaining = ownedItems(allItems);
+      var applied = 0, flagged = 0;
+      function nextBatch() {
+        var items = remaining.splice(0, 500);
+        if (!items.length) return Promise.resolve();
+        var body = JSON.stringify({
+          items: items.map(function (r) {
+            return {
+              owner_id: r.owner_id, client_uuid: r.client_uuid, token: r.token, action: r.action,
+              session_id: r.session_id, note: r.note, scanned_at: r.scanned_at,
+            };
+          }),
         });
-      }).catch(function () {
-        // Offline again mid-drain — queue stays intact, retry on next 'online'.
+        return fetch(REPLAY_URL, {
+          method: "POST",
+          headers: {"Content-Type": "application/json", "X-CSRFToken": getCookie("csrftoken")},
+          body: body,
+        }).then(function (res) {
+          if (!res.ok) return; // leave queue intact; try again next reconnect
+          return res.json().then(function (data) {
+            var results = (data && data.results) || [];
+            return Promise.all(results.map(function (r) {
+              if (r.status === "applied" || r.status === "flagged" || r.status === "duplicate") {
+                if (r.status === "applied") applied += 1;
+                if (r.status === "flagged") flagged += 1;
+                if (items.some(function (item) { return item.client_uuid === r.uuid; })) return removeItem(r.uuid);
+              }
+              return Promise.resolve();
+            })).then(function () {
+              return nextBatch();
+            });
+          });
+        }).catch(function () {
+          // Offline again mid-drain — queue stays intact, retry on next 'online'.
+        });
+      }
+      return nextBatch().then(function () {
+        drainPromise = null;
+        showSyncSummary(applied, flagged);
       });
+    }).catch(function () {
+      drainPromise = null;
+      refreshBanner();
     });
+    return drainPromise;
   }
 
   // --- banner ----------------------------------------------------------------
@@ -198,7 +228,14 @@
       }
       return;
     }
-    countItems().then(function (n) {
+    getAllItems().then(function (items) {
+      var n = ownedItems(items).length;
+      var quarantined = items.length - n;
+      if (quarantined) {
+        els.banner.classList.remove("hidden");
+        els.text.textContent = n + " scan(s) for this account. " + quarantined + " saved scan(s) belong to another account or have no owner; preserved without syncing.";
+        return;
+      }
       els.text.classList.remove("text-destructive");
       if (!navigator.onLine) {
         els.banner.classList.remove("hidden");
@@ -259,5 +296,6 @@
     count: countItems,
     initBanner: initBanner,
     extractToken: extractToken,
+    ownerLabel: owner,
   };
 })();

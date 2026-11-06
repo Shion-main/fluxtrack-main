@@ -23,6 +23,57 @@ User = get_user_model()
 
 
 class FacultyScanSafetyTests(TestCase):
+    def test_active_move_allows_same_faculty_merged_sibling_in_destination(self):
+        self.session.status = SessionStatus.ACTIVE
+        self.session.save(update_fields=["status"])
+        sibling = Session.objects.create(
+            schedule=self.session.schedule, faculty=self.faculty,
+            room=self.room_b, date=self.session.date,
+            scheduled_start=self.session.scheduled_start,
+            scheduled_end=self.session.scheduled_end,
+            status=SessionStatus.ACTIVE,
+            checkin_method=CheckinMethod.MERGED,
+        )
+        request = RequestFactory().post("/scan/confirm")
+        request.user = self.faculty
+        context = _apply(request, R.Resolution(R.WRONG_ROOM, self.session.pk),
+                         self.room_b, CheckinMethod.QR_SCAN)
+        self.assertNotIn("error", context)
+        self.assertEqual(context["resolution"].outcome, R.WRONG_ROOM)
+        self.session.refresh_from_db()
+        sibling.refresh_from_db()
+        self.assertEqual(self.session.room_id, self.room_b.pk)
+        self.assertEqual(sibling.status, SessionStatus.ACTIVE)
+
+    def test_confirm_refuses_room_closed_after_preview(self):
+        token = self._wrong_room_token()
+        self.room_b.out_of_service = True
+        self.room_b.save(update_fields=["out_of_service"])
+        response = self.client.post("/scan/confirm", {"token": token})
+        self.assertEqual(response.status_code, 409)
+        self.session.refresh_from_db()
+        self.assertEqual(self.session.room_id, self.room_a.pk)
+
+    def test_active_wrong_room_refuses_occupied_destination(self):
+        self.session.status = SessionStatus.ACTIVE
+        self.session.save(update_fields=["status"])
+        resolution = R.resolve_faculty_scan(
+            [self.session], self.room_b.pk, 999, timezone.now(),
+            grace_min=15, early_end_min=15)
+        self.assertEqual(resolution.outcome, R.MOVE_OCCUPIED)
+        self.assertFalse(resolution.needs_confirm)
+
+    def test_failed_confirmation_releases_nonce_and_rolls_back_room(self):
+        from unittest.mock import patch
+        token = self._wrong_room_token()
+        with patch("web.scan.notify", side_effect=RuntimeError("notify failed")):
+            with self.assertRaises(RuntimeError):
+                self.client.post("/scan/confirm", {"token": token})
+        self.session.refresh_from_db()
+        self.assertEqual(self.session.room_id, self.room_a.pk)
+        response = self.client.post("/scan/confirm", {"token": token})
+        self.assertEqual(response.status_code, 200)
+
     def setUp(self):
         cache.clear()
         self.department = Department.objects.create(name="Scan Safety", code="SCAN-SAFE")

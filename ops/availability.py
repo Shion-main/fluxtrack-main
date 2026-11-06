@@ -58,6 +58,12 @@ _DAY_OPEN = time(7, 0)
 _DAY_CLOSE = time(21, 0)
 
 
+def _excluded_schedules(value):
+    if value is None:
+        return set()
+    return set(value) if isinstance(value, (set, list, tuple)) else {value}
+
+
 def _effective_modality(session):
     """declared_modality overrides schedule.modality (mirror verification/services.py)."""
     return session.declared_modality or session.schedule.modality
@@ -98,19 +104,32 @@ def _reservation_occupies(room, start, end, exclude_schedule_id=None):
     local_date = _local_date(start)
     qs = (
         ModalityShiftItem.objects.filter(
-            assigned_room=room,
             request__status=ModalityShiftStatus.APPROVED,
             request__window_start__lte=local_date,
             request__window_end__gte=local_date,
             schedule__day_of_week=local_date.weekday(),
         )
-        .exclude(request__target_modality=Modality.ONLINE)
-        .select_related("request", "schedule")
+        .select_related("request", "schedule__term")
+        .order_by("schedule_id", "-request__decided_at", "-pk")
     )
     if exclude_schedule_id is not None:
-        qs = qs.exclude(schedule_id=exclude_schedule_id)
+        qs = qs.exclude(schedule_id__in=_excluded_schedules(exclude_schedule_id))
     items = list(qs)  # HY010 guard: materialize before the overlap loop
+    seen = set()
     for item in items:
+        if item.schedule_id in seen:
+            continue
+        seen.add(item.schedule_id)
+        if (item.assigned_room_id != room.pk
+                or item.request.target_modality == Modality.ONLINE
+                or item.schedule.status != ScheduleStatus.ACTIVE
+                or item.schedule.term.status != AcademicTerm.Status.ACTIVE):
+            continue
+        # Existing sessions are authoritative, including cancellation/release.
+        if Session.objects.filter(schedule_id=item.schedule_id, date=local_date).exists():
+            continue
+        if excused_checker(item.schedule.term)(local_date, room.floor.building_id):
+            continue
         st = item.new_start_time or item.schedule.start_time
         et = item.new_end_time or item.schedule.end_time
         r_start = timezone.make_aware(datetime.combine(local_date, st))
@@ -141,7 +160,7 @@ def _schedule_occupies(room, start, end, exclude_schedule_id=None):
         .select_related("term", "room__floor")
     )
     if exclude_schedule_id is not None:
-        qs = qs.exclude(pk=exclude_schedule_id)
+        qs = qs.exclude(pk__in=_excluded_schedules(exclude_schedule_id))
     schedules = list(qs)
     if not schedules:
         return False
@@ -203,7 +222,12 @@ def room_is_free(room, start, end, *, exclude_session_id=None,
     occurrence; an active Booking; or an approved ->F2F/Blended reservation
     (D-18). All candidate querysets are materialized before evaluation (HY010).
     """
+    if room.out_of_service:
+        return False
+    excluded = _excluded_schedules(exclude_schedule_id)
     for s in _session_occupants(room, start, end, exclude_session_id):
+        if s.schedule_id in excluded:
+            continue
         if _effective_modality(s) != Modality.ONLINE:
             return False
 

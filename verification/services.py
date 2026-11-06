@@ -25,7 +25,7 @@ from django.db.models import Q
 from django.utils import timezone
 
 from accounts.models import Role
-from ops.models import AuditLog
+from ops.models import AuditLog, Notification
 from ops.notify import notify
 from scheduling.models import Modality, Session
 from scheduling.term_scope import get_active_term
@@ -118,10 +118,14 @@ def assign_online_sessions(target_date):
     if not mapping:
         # No Checker's window covers any session -> do not guess an owner. Leave
         # NULL, flag IFO once (preserves the empty-roster behavior).
-        notify(role=Role.IFO_ADMIN, type="online_unassigned",
-               title="Online sessions unassigned",
-               body=f"{len(sessions)} online session(s) for {target_date} have no "
-                    f"online-duty Checker. Assign online duty to cover them.")
+        # This runs on every materialize pass, so repeat the warning only when
+        # the situation changes rather than every six hours.
+        body = (f"{len(sessions)} online session(s) for {target_date} have no "
+                f"online-duty Checker. Assign online duty to cover them.")
+        if not Notification.objects.filter(type="online_unassigned",
+                                           body=body).exists():
+            notify(role=Role.IFO_ADMIN, type="online_unassigned",
+                   title="Online sessions unassigned", body=body)
         return {"assigned": 0, "unassigned": len(sessions)}
 
     assigned_counts = {}   # checker_id -> number of sessions assigned this run

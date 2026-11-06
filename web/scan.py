@@ -22,10 +22,13 @@ from campus.models import Room
 from ops.models import AuditLog
 from ops.notify import notify
 from ops.policy import get_policy
+from ops.locking import serialized_write
 from scheduling import resolver as R
+from scheduling.jobs import close_finished_sessions_for
 from scheduling.merge import (
     propagate_merged_completed,
     propagate_merged_present,
+    propagate_merged_room,
 )
 from scheduling.models import CheckinMethod, Session, SessionStatus
 from scheduling.term_scope import get_active_term
@@ -113,10 +116,14 @@ def _stale_context(room):
 
 
 # --- outcome side effects --------------------------------------------------
+@serialized_write
 def _apply(request, resolution, room, method, reason=""):
     """Apply the resolved outcome's state changes. Returns context for rendering."""
     now = timezone.now()
     user = request.user
+    room.refresh_from_db()
+    if room.out_of_service:
+        return {"resolution": None, "room": room, "error": "out-of-service"}
     active_term = get_active_term()
     session = (
         Session.objects.filter(
@@ -144,6 +151,7 @@ def _apply(request, resolution, room, method, reason=""):
         # Anchor write + merged-group present fill share ONE transaction (D-04):
         # a rollback of the anchor rolls back every propagated sibling too.
         with transaction.atomic():
+            close_finished_sessions_for(user, now)
             session.status = SessionStatus.ACTIVE
             session.actual_start = now
             session.checkin_method = method
@@ -187,13 +195,24 @@ def _apply(request, resolution, room, method, reason=""):
     elif o == R.WRONG_ROOM:  # confirmed room change (FAC-10)
         if session.status not in (SessionStatus.SCHEDULED, SessionStatus.ACTIVE):
             return _stale_context(room)
+        if Session.objects.filter(room=room, status=SessionStatus.ACTIVE,
+                                  room_released_at__isnull=True,
+                                  schedule__term=active_term).exclude(faculty=user).exists():
+            return {"resolution": R.Resolution(R.MOVE_OCCUPIED, session.pk), "room": room}
         old = session.room.code
-        session.room = room
-        session.save(update_fields=["room"])
-        audit("session.room_changed", old_room=old, new_room=room.code)
+        with transaction.atomic():
+            # Before the anchor moves: same-room siblings are found through the
+            # room it is leaving. Left behind, they would lose the merge and be
+            # swept Absent.
+            siblings = propagate_merged_room(session, room, user)
+            session.room = room
+            session.save(update_fields=["room"])
+            audit("session.room_changed", old_room=old, new_room=room.code)
+        also = f" with {len(siblings)} merged section(s)" if siblings else ""
         notify(role=Role.IFO_ADMIN, type="room_event", title="Room change",
                body=f"{user.get_full_name() or user.username} moved "
-                    f"{session.schedule.course_code} from {old} to {room.code}.")
+                    f"{session.schedule.course_code}{also} from {old} to "
+                    f"{room.code}.")
     elif o == R.ROOM_OCCUPIED:  # confirmed force handover (FAC-09)
         if session.status != SessionStatus.SCHEDULED:
             return _stale_context(room)
@@ -218,6 +237,7 @@ def _apply(request, resolution, room, method, reason=""):
             prior.actual_end = now
             prior.save(update_fields=["status", "actual_end"])
             propagate_merged_completed(prior, now, user)
+            close_finished_sessions_for(user, now)
             session.status = SessionStatus.ACTIVE
             session.actual_start = now
             session.checkin_method = CheckinMethod.FORCE_HANDOVER
@@ -237,6 +257,7 @@ def _apply(request, resolution, room, method, reason=""):
 # --- views ------------------------------------------------------------------
 @faculty_required
 @require_http_methods(["POST"])
+@serialized_write
 def resolve(request):
     payload = request.POST.get("payload", "")
     room, method = _room_from_payload(request, payload)
@@ -270,10 +291,13 @@ def resolve(request):
             salt=CONFIRM_SALT)
     elif resolution.session_id:
         # Idempotency: same user+session+minute returns without reapplying (SCAN-06).
-        idem = f"scan-idem:{request.user.pk}:{resolution.session_id}:{now:%Y%m%d%H%M}"
-        if cache.get(idem) != resolution.outcome:
-            ctx = _apply(request, resolution, room, method)
-            cache.set(idem, resolution.outcome, timeout=120)
+        idem = f"scan-idem:{request.user.pk}:{resolution.session_id}:{resolution.outcome}:{now:%Y%m%d%H%M}"
+        if cache.add(idem, True, timeout=120):
+            try:
+                ctx = _apply(request, resolution, room, method)
+            except Exception:
+                cache.delete(idem)
+                raise
         else:
             ctx["session"] = Session.objects.filter(
                 pk=resolution.session_id,
@@ -285,6 +309,7 @@ def resolve(request):
 
 @faculty_required
 @require_http_methods(["POST"])
+@serialized_write
 def confirm(request):
     try:
         data = signing.loads(request.POST.get("token", ""), salt=CONFIRM_SALT,
@@ -297,6 +322,8 @@ def confirm(request):
     room = Room.objects.filter(pk=data.get("room_id")).first()
     if room is None:
         return HttpResponseBadRequest("Confirmation room no longer exists.")
+    if room.out_of_service:
+        return HttpResponse("This room is out of service. Scan another room.", status=409)
     resolution = R.Resolution(data["outcome"], data["session_id"],
                               prior_session_id=data.get("prior_session_id"))
     current = _current_resolution(request.user, room, timezone.now())
@@ -328,13 +355,12 @@ def confirm(request):
     ):
         return HttpResponse("This confirmation was already used.", status=409)
 
-    ctx = _apply(
-        request,
-        resolution,
-        room,
-        data["method"],
-        reason=reason,
-    )
+    claim_key = f"scan-confirm-used:{request.user.pk}:{nonce}"
+    try:
+        ctx = _apply(request, resolution, room, data["method"], reason=reason)
+    except Exception:
+        cache.delete(claim_key)
+        raise
     if ctx.get("error") == "stale-confirmation":
         return HttpResponse(
             "The session changed. Scan the room again.",

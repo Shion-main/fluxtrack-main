@@ -198,6 +198,7 @@ urlpatterns = [
     path("notifications/push/key", push.vapid_public_key, name="push_key"),
     # PWA shell
     path("manifest.webmanifest", views.manifest),
+    path("checker/offline", views.checker_offline, name="checker_offline"),
     path("sw.js", views.service_worker),
     path("icon-<int:size>.png", views.icon),
 ]

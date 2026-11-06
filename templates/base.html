@@ -1,5 +1,5 @@
 {% load static %}<!doctype html>
-<html lang="en" class="uk-theme-neutral uk-radii-md uk-shadows-sm uk-font-sm">
+<html data-account-id="{% if request.user.is_authenticated %}{{ request.user.pk }}{% endif %}" lang="en" class="uk-theme-neutral uk-radii-md uk-shadows-sm uk-font-sm">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">

@@ -6,6 +6,7 @@ from django.utils import timezone
 
 from accounts.models import Role
 from ops.notify import notify
+from ops.locking import serialized_write
 from ops.occupancy import release_room
 from scheduling.models import (
     AcademicTerm,
@@ -99,6 +100,7 @@ def _validate_term(term, *, allow_draft):
         raise MaterializationError("term status cannot be materialized")
 
 
+@serialized_write
 def materialize_term(term, *, start, days, allow_draft=False):
     """Create dated sessions for one explicit term.
 
@@ -106,6 +108,8 @@ def materialize_term(term, *, start, days, allow_draft=False):
     locked DRAFT with ``allow_draft=True`` so readiness setup can commit atomically
     with the status change.
     """
+    if term is not None and term.pk is not None:
+        term.refresh_from_db()
     _validate_term(term, allow_draft=allow_draft)
     if days < 1:
         raise MaterializationError("materialization days must be positive")

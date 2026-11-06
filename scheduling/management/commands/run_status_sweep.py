@@ -15,7 +15,8 @@ Usage:
 from django.core.management.base import BaseCommand
 
 from ops.guard_alerts import notify_floor_guards
-from scheduling.jobs import detect_room_conflicts, sweep_no_shows
+from scheduling.jobs import (close_unfinished_sessions, detect_room_conflicts,
+                             sweep_no_shows)
 
 
 class Command(BaseCommand):
@@ -24,8 +25,10 @@ class Command(BaseCommand):
     def handle(self, *args, **o):
         events = []
         marked = sweep_no_shows(collect=events)
+        closed = close_unfinished_sessions()
         flagged = detect_room_conflicts(collect=events)
         guards = notify_floor_guards(events)
         self.stdout.write(self.style.SUCCESS(
-            f"Sweep: marked {marked} absent -> flagged {flagged} conflicts "
+            f"Sweep: marked {marked} absent -> closed {closed} unfinished "
+            f"-> flagged {flagged} conflicts "
             f"-> notified {guards} guards."))

@@ -40,12 +40,12 @@ import secrets
 
 from django.contrib.auth import get_user_model
 from django.core.management.base import BaseCommand, CommandError
-from django.db import transaction
 from django.utils.text import slugify
 
 from accounts.models import Role
 from campus.codes import generate_manual_code
 from campus.models import Building, Floor, Room
+from ops.locking import serialized_write
 from scheduling import xlsx
 from scheduling.importing import (classify_room, modality_for_room,
                                   normalize_name_key, parse_meetings, reconcile)
@@ -137,8 +137,12 @@ class Command(BaseCommand):
         filtered = bool(o["building"]) or o["floor"] is not None
         name_cache = {}  # normalized-name key -> User (blank-email dedup, D7)
 
-        @transaction.atomic
+        @serialized_write
         def run():
+            # Parsing may take time; recheck lifecycle state after acquiring the
+            # same database lock as schedule, booking and term writers.
+            nonlocal term
+            term = self._resolve_term(str(term.pk))
             for r in data:
                 if o["limit"] and stats["sections"] >= o["limit"]:
                     break
