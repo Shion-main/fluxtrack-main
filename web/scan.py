@@ -108,6 +108,13 @@ def _move_blocked(session, room, now, term):
     )
 
 
+def _owned_session(user, session_id):
+    """The user's own session in the active term, for an outcome card to show."""
+    return Session.objects.filter(
+        pk=session_id, faculty=user, schedule__term=get_active_term(),
+    ).select_related("schedule", "room").first()
+
+
 def _current_resolution(user, room, now):
     """Resolve one faculty scan against current authoritative state."""
     active_term = get_active_term()
@@ -312,6 +319,7 @@ def resolve(request):
     ctx = {"resolution": resolution, "room": room}
     if resolution.needs_confirm:
         # Two-step: sign the resolution; apply only on /scan/confirm (SCAN-04).
+        ctx["session"] = _owned_session(request.user, resolution.session_id)
         ctx["confirm_token"] = signing.dumps(
             {"outcome": resolution.outcome, "session_id": resolution.session_id,
              "prior_session_id": resolution.prior_session_id, "room_id": room.pk,
@@ -328,11 +336,7 @@ def resolve(request):
                 cache.delete(idem)
                 raise
         else:
-            ctx["session"] = Session.objects.filter(
-                pk=resolution.session_id,
-                faculty=request.user,
-                schedule__term=get_active_term(),
-            ).first()
+            ctx["session"] = _owned_session(request.user, resolution.session_id)
     return render(request, "faculty/_outcome.html", ctx)
 
 

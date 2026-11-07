@@ -148,6 +148,17 @@ class FacultyScanSafetyTests(TestCase):
         self.assertEqual(resolve_response.status_code, 403)
         self.assertEqual(deep_link_response.status_code, 403)
 
+    def test_wrong_room_prompt_names_the_scheduled_room(self):
+        self.client.force_login(self.faculty)
+
+        response = self.client.post("/scan/resolve", {"payload": "101102"})
+
+        self.assertContains(
+            response,
+            f"Your session is scheduled in {self.room_a.code}, "
+            f"but you scanned {self.room_b.code}.",
+        )
+
     def test_confirmation_is_rejected_when_session_state_changed(self):
         token = self._wrong_room_token()
         self.session.status = SessionStatus.CANCELLED

@@ -789,7 +789,11 @@ def online_open(request, session_id):
 # = the .ft-pill--* status chip (see static/faculty/faculty.css).
 _CARD_STYLES = {
     "idle": {"card": "ft-card--neutral", "pill": "ft-pill ft-pill--upcoming",
-             "icon": "circle", "label": "No session"},
+             "icon": "circle", "label": "Not started"},
+    # "Class ended", not "Done": this class was never checked, and a Checker
+    # must not read the card as already covered.
+    "finished": {"card": "ft-card--neutral", "pill": "ft-pill ft-pill--done",
+                 "icon": "log-out", "label": "Class ended"},
     "active-unverified": {"card": "ft-card--warn", "pill": "ft-pill ft-pill--late",
                           "icon": "clock", "label": "Needs check"},
     "verified": {"card": "ft-card--ok", "pill": "ft-pill ft-pill--active",
@@ -816,6 +820,8 @@ def _card_state(actions, status):
         return "verified-empty"
     if status == SessionStatus.ACTIVE:
         return "active-unverified"
+    if status == SessionStatus.COMPLETED:
+        return "finished"
     return "idle"                                    # scheduled / not yet started
 
 

@@ -668,6 +668,7 @@ a.ft-card:active { transform: translateY(1px); }
   background: var(--amber-tint); color: var(--amber);
   border-radius: var(--r-card); padding: 11px 14px; font-size: .86rem; font-weight: 600;
 }
+.ft-banner.hidden { display: none; }
 .ft-banner uk-icon, .ft-banner svg { width: 16px; height: 16px; flex: none; }
 
 /* Danger button (Send flag / not present) */

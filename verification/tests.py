@@ -873,6 +873,28 @@ class FloorBoardTests(_CheckerFixtureMixin, TestCase):
         self.assertContains(r, f2f.room.code)
         self.assertNotContains(r, online.room.code)
 
+    def test_finished_class_reads_as_ended_not_no_session(self):
+        # The class happened, so "No session" is false. It must also not read
+        # as checked: "Done" would suggest a Checker had already covered it.
+        checker = self._checker()
+        self._active_floor_assignment(checker, self.floor)
+        self._session(self._room(), status=SessionStatus.COMPLETED)
+        self.client.force_login(checker)
+
+        r = self.client.get("/checker/floor/rows")
+        self.assertContains(r, "Class ended")
+        self.assertNotContains(r, "No session")
+
+    def test_unstarted_class_reads_as_not_started_not_no_session(self):
+        checker = self._checker()
+        self._active_floor_assignment(checker, self.floor)
+        self._session(self._room(), status=SessionStatus.SCHEDULED, start_delta_min=60)
+        self.client.force_login(checker)
+
+        r = self.client.get("/checker/floor/rows")
+        self.assertContains(r, "Not started")
+        self.assertNotContains(r, "No session")
+
     def test_board_scoped_to_active_floor(self):
         # A session on a floor the checker is NOT assigned to does not appear.
         checker = self._checker()

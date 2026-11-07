@@ -256,6 +256,21 @@ class ResponsiveRoleShellTests(TestCase):
         ):
             self.assertIn(f'<span class="ft-tab__label">{label}</span>', source)
 
+    def test_hidden_offline_banner_stays_hidden_on_the_checker_scan_page(self):
+        # offline_queue.js shows and hides this banner with the `hidden` class,
+        # and .ft-banner's own display:flex used to win, so online Checkers saw
+        # "Offline". There is no browser in this suite, so this pins the rule
+        # that makes `hidden` win; the browser check is recorded in the vault.
+        template = (
+            self.root / "templates/checker/scan.html"
+        ).read_text(encoding="utf-8")
+        source = (
+            self.root / "static/faculty/faculty.css"
+        ).read_text(encoding="utf-8")
+
+        self.assertIn('id="offline-banner" class="hidden ft-banner"', template)
+        self.assertRegex(source, r"\.ft-banner\.hidden\s*\{\s*display:\s*none;?\s*\}")
+
     def test_shared_role_css_is_mobile_first_with_tablet_and_desktop_layouts(self):
         source = (
             self.root / "static/faculty/faculty.css"
