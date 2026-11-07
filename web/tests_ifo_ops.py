@@ -297,6 +297,18 @@ class _BookingBase(_IfoOpsBase):
         return self.client.post(reverse("ifo_booking_create"),
                                 self._payload(**over))
 
+    def _book_over_the_session(self):
+        """Book inside the session, with both pinned to mid-morning.
+
+        A window built from "now" wraps past midnight just after 00:00, and the
+        form then refuses it for a reason these tests are not about.
+        """
+        start = self._aware(self.session.date, 10)
+        Session.objects.filter(pk=self.session.pk).update(
+            scheduled_start=start, scheduled_end=start + timedelta(hours=1))
+        return self._create(date=self.session.date.isoformat(),
+                            start_time="10:00", end_time="10:30")
+
     def _aware(self, day, hour, minute=0):
         return timezone.make_aware(
             datetime.combine(day, timezone.datetime.min.time().replace(
@@ -332,11 +344,7 @@ class BookingCreateTests(_BookingBase):
     def test_a_booking_over_a_scheduled_class_is_refused(self):
         """The session fixture is SCHEDULED, non-Online, un-released -- an
         occupant by ops/availability.py's own definition."""
-        start = timezone.localtime(self.session.scheduled_start)
-        resp = self.client.post(reverse("ifo_booking_create"), self._payload(
-            date=self.session.date.isoformat(),
-            start_time=start.strftime("%H:%M"),
-            end_time=(start + timedelta(minutes=30)).strftime("%H:%M")))
+        resp = self._book_over_the_session()
         self.assertEqual(resp.status_code, 400)
         self.assertContains(resp, "not free", status_code=400)
         self.assertEqual(Booking.objects.count(), 0)
@@ -384,11 +392,7 @@ class BookingCreateTests(_BookingBase):
         self.session.declared_modality = Modality.ONLINE
         self.session.save(update_fields=["declared_modality"])
 
-        start = timezone.localtime(self.session.scheduled_start)
-        resp = self.client.post(reverse("ifo_booking_create"), self._payload(
-            date=self.session.date.isoformat(),
-            start_time=start.strftime("%H:%M"),
-            end_time=(start + timedelta(minutes=30)).strftime("%H:%M")))
+        resp = self._book_over_the_session()
         self.assertEqual(resp.status_code, 200)
         self.assertEqual(Booking.objects.count(), 1)
 

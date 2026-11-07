@@ -191,6 +191,7 @@ from zoneinfo import ZoneInfo  # noqa: E402
 
 from django.contrib.auth import get_user_model  # noqa: E402
 from django.test import TestCase, TransactionTestCase  # noqa: E402
+from django.utils.timezone import localdate  # noqa: E402
 
 from campus.models import Building, Floor, Room  # noqa: E402
 from scheduling.models import AcademicTerm, Schedule, Session  # noqa: E402
@@ -216,7 +217,7 @@ def make_session(scheduled_start, scheduled_end=None):
                                   faculty=fac, room=room, day_of_week=0,
                                   start_time=time(8, 0), end_time=time(9, 30))
     return Session.objects.create(schedule=sch, faculty=fac, room=room,
-                                  date=scheduled_start.date(),
+                                  date=localdate(scheduled_start),
                                   scheduled_start=scheduled_start,
                                   scheduled_end=scheduled_end or scheduled_start)
 
