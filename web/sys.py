@@ -47,7 +47,7 @@ def jobs(request):
     # a row every sweep interval, so the history is the fastest-growing table in
     # the product -- and "the last 25 runs" is useless for the one question this
     # surface exists to answer: when did this job START failing.
-    pager = paginate(request, JobRun.objects.all(), per_page=50)
+    pager = paginate(request, JobRun.objects.all())
     recent = [{"run": r, "duration": _duration_s(r)} for r in pager["page"].object_list]
     return render(request, "sys/jobs.html",
                   {"latest": latest, "recent": recent, **pager})

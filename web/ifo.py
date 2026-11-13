@@ -54,7 +54,7 @@ from verification.models import (Assignment, AssignmentScope, AssignmentType,
                                  DutyRole)
 from verification.services import (AssignmentAlreadyEnded,
                                    assign_online_sessions, end_assignment)
-from web.pagination import paginate
+from web.pagination import DEFAULT_PER_PAGE, paginate
 from web.parsing import is_id, safe_parse_date, safe_parse_time
 from web.room_state import (ROOM_PROBLEM_STATES, ROOM_STATE_ORDER, occupies,
                             room_tile, room_timetable)
@@ -255,7 +255,7 @@ def _directory_context(request):
     """Build a paginated inventory and derive status only for visible rooms."""
     filters = _directory_filters(request)
     rooms = _directory_room_query(filters)
-    page_ctx = paginate(request, rooms, per_page=50)
+    page_ctx = paginate(request, rooms)
     visible_rooms = list(page_ctx["page"].object_list)
 
     now = timezone.now()
@@ -1055,7 +1055,7 @@ def session_release(request, pk):
 # out agreeing and silently drifts. `ops/availability.py` is not modified by
 # this plan and must not be.
 
-BOOKING_PAGE_SIZE = 25
+BOOKING_PAGE_SIZE = DEFAULT_PER_PAGE
 
 
 def _booking_form_ctx(*, error=None, created=None, cancelled=None, form=None):
@@ -1563,10 +1563,31 @@ def _active_assignments():
             .order_by("role", "scope", "user__last_name"))
 
 
+def _roster_ctx(request):
+    """The active roster, filtered by duty role and scope, paged at 50 (D10).
+
+    Used by the page and by every htmx redraw after a create or an end, so the
+    roster under the form is always the same table."""
+    roster = _active_assignments()
+    role = request.GET.get("role") or ""
+    if role in dict(DutyRole.choices):
+        roster = roster.filter(role=role)
+    else:
+        role = ""
+    scope = request.GET.get("scope") or ""
+    if scope in dict(AssignmentScope.choices):
+        roster = roster.filter(scope=scope)
+    else:
+        scope = ""
+    pg = paginate(request, roster)
+    return {**pg, "assignments": pg["page"].object_list,
+            "roster_filters": {"role": role, "scope": scope}}
+
+
 @ifo_required
 def assignments_list(request):
     """IFO-06: active duty roster + the create form (non-admin UI)."""
-    ctx = {"assignments": _active_assignments(), **_assignment_form_ctx()}
+    ctx = {**_roster_ctx(request), **_assignment_form_ctx()}
     return render(request, "ifo/assignments.html", ctx)
 
 
@@ -1640,7 +1661,7 @@ def assignment_create(request):
         error = "No active term. Import a term first."
 
     if error:
-        ctx = {"assignments": _active_assignments(), "error": error,
+        ctx = {**_roster_ctx(request), "error": error,
                **_assignment_form_ctx()}
         return render(request, "ifo/_assignment_form.html", ctx, status=400)
 
@@ -1671,7 +1692,7 @@ def assignment_create(request):
             assign_online_sessions(d)
             d += timedelta(days=1)
 
-    ctx = {"assignments": _active_assignments(), "created": a,
+    ctx = {**_roster_ctx(request), "created": a,
            **_assignment_form_ctx()}
     return render(request, "ifo/_assignment_form.html", ctx)
 
@@ -1693,7 +1714,7 @@ def assignment_end(request, pk):
     except AssignmentAlreadyEnded:
         ctx["error"] = "That posting has already ended."
         status = 400
-    ctx["assignments"] = _active_assignments()
+    ctx.update(_roster_ctx(request))
     return render(request, "ifo/_assignment_form.html", ctx, status=status)
 
 
@@ -2156,7 +2177,7 @@ def _suspension_qs(term):
 def suspensions_list(request):
     """IFO class-suspension console: declare form + active/past suspensions."""
     term = _active_term_or_none()
-    pager = paginate(request, _suspension_qs(term), per_page=25)
+    pager = paginate(request, _suspension_qs(term))
     flash = request.session.pop("ifo_flash", None)
     return render(request, "ifo/suspensions.html", {
         "term": term, "buildings": Building.objects.order_by("code"),
@@ -2180,7 +2201,7 @@ def suspension_create(request):
               "reason": (request.POST.get("reason") or "").strip()}
 
     def fail(msg):
-        pager = paginate(request, _suspension_qs(term), per_page=25)
+        pager = paginate(request, _suspension_qs(term))
         return render(request, "ifo/suspensions.html", {
             "term": term, "buildings": Building.objects.order_by("code"),
             "today": timezone.localdate(), "error": msg, "form": fields,
@@ -2240,8 +2261,10 @@ def breaks_list(request):
     term = _active_term_or_none()
     breaks = term.breaks.order_by("-start_date") if term else AcademicBreak.objects.none()
     flash = request.session.pop("ifo_flash", None)
+    pg = paginate(request, breaks)              # 15 rows per page (D10)
     return render(request, "ifo/breaks.html", {
-        "term": term, "breaks": breaks, "form": {}, "flash": flash,
+        **pg,
+        "term": term, "breaks": pg["page"].object_list, "form": {}, "flash": flash,
         "today": timezone.localdate()})
 
 
@@ -2305,7 +2328,7 @@ def break_delete(request, pk):
 # documented best-effort (the audit row marks it a manual correction, not a scan),
 # and it is refused on anything not currently ABSENT.
 
-CORRECTIONS_PAGE_SIZE = 25
+CORRECTIONS_PAGE_SIZE = DEFAULT_PER_PAGE
 CORRECTIONS_WINDOW_DAYS = 30
 
 

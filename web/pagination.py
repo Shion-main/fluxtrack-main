@@ -18,7 +18,7 @@ set (HR-03). The page bounds the screen, not the data. ASCII-only.
 """
 from django.core.paginator import EmptyPage, PageNotAnInteger, Paginator
 
-DEFAULT_PER_PAGE = 50
+DEFAULT_PER_PAGE = 15   # rows or cards per page (user rule, 2026-11-13; was 50)
 
 
 def paginate(request, object_list, per_page=DEFAULT_PER_PAGE, param="page"):

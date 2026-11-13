@@ -19,7 +19,7 @@ from django.views.decorators.http import require_http_methods
 
 from accounts.models import Role
 from ops.models import NotificationMute
-from web.pagination import paginate
+from web.pagination import DEFAULT_PER_PAGE, paginate
 from ops.notifications import (NotificationCategory, _mark_read, unread_count,
                                visible_qs)
 
@@ -27,7 +27,7 @@ from ops.notifications import (NotificationCategory, _mark_read, unread_count,
 # presentation limits, not tunable business policy (grace/rate/horizon/poll),
 # so they live as module constants (Convention #Constants), not SystemSetting.
 PREVIEW_LIMIT = 5
-LIST_LIMIT = 50
+LIST_LIMIT = DEFAULT_PER_PAGE
 
 _FLOOR_HOME_BY_ROLE = {
     Role.FACULTY: "/faculty/home",

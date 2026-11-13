@@ -180,8 +180,10 @@ def schedule(request):
     control -- the check-in action and modality live on Home."""
     now = timezone.localtime()
     today_cards, week_cards, today = _faculty_cards(request.user, now)
+    pg = paginate(request, week_cards)          # 15 rows per page (D10)
     return render(request, "faculty/schedule.html", {
-        "today_cards": today_cards, "week_cards": week_cards,
+        **pg,
+        "today_cards": today_cards, "week_cards": pg["page"].object_list,
         "today": today, "greeting": _greeting(now),
         "term_available": get_active_term() is not None,
     })
@@ -492,17 +494,27 @@ def modality_new(request):
     return redirect("faculty_modality_mine")
 
 
-def _modality_mine_ctx(user, *, error=None):
-    """Context for the 'my requests' list: only the requester's tickets (D-12)."""
-    requests = (ModalityShiftRequest.objects.filter(requester=user)
-                .select_related("dean", "department")
+def _modality_mine_ctx(request, *, error=None):
+    """Context for the 'my requests' list: only the requester's tickets (D-12).
+
+    Filterable by status and paged at 50 rows (D10); the list grows all term."""
+    requests = (ModalityShiftRequest.objects.filter(requester=request.user)
+                .select_related("dean", "department", "decided_by")
                 .prefetch_related(
                     "items__schedule",
                     "items__preferred_room",
                     "items__assigned_room",
                 )
                 .order_by("-created_at"))
-    return {"requests": requests, "error": error,
+    status = request.GET.get("status") or ""
+    if status in dict(ModalityShiftStatus.choices):
+        requests = requests.filter(status=status)
+    else:
+        status = ""
+    pg = paginate(request, requests)
+    return {**pg, "requests": pg["page"].object_list, "error": error,
+            "filters": {"status": status},
+            "status_choices": ModalityShiftStatus.choices,
             "PENDING": ModalityShiftStatus.PENDING}
 
 
@@ -516,7 +528,7 @@ def modality_mine(request):
     rejected/denied, and a Withdraw control only while PENDING (D-10).
     """
     return render(request, "faculty/modality_mine.html",
-                  _modality_mine_ctx(request.user))
+                  _modality_mine_ctx(request))
 
 
 @faculty_required
@@ -536,7 +548,7 @@ def modality_withdraw(request, pk):
         withdraw_modality_shift(req, request.user)
     except ModalityShiftError as exc:
         error = str(exc)
-    ctx = _modality_mine_ctx(request.user, error=error)
+    ctx = _modality_mine_ctx(request, error=error)
     return render(request, "faculty/modality_mine.html", ctx,
                   status=400 if error else 200)
 

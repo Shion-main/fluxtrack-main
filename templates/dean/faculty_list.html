@@ -1,42 +1,71 @@
 {% extends "dean/_console.html" %}
+{% comment %}Department faculty roster. A table on desktop, labelled cards on a
+phone (.tbl--stack), searchable, paged at 50 rows (D10). ASCII-only.{% endcomment %}
 {% block title %}Faculty - FluxTrack{% endblock %}
 {% block console_title %}Faculty{% endblock %}
 {% block page_title %}Department faculty{% endblock %}
 {% block page_desc %}<p class="ui-pagehead__desc">Open a faculty profile to review their schedule and manage exceptional modality changes.</p>{% endblock %}
-{% block page_actions %}<span class="uk-badge uk-badge-secondary">{{ paginator.count }} active</span>{% endblock %}
+{% block page_actions %}<span class="uk-badge uk-badge-secondary">{{ paginator.count }} {% if filters.q %}found{% else %}active{% endif %}</span>{% endblock %}
 {% block console %}
+<details class="ui-filterbar" open>
+  <summary><uk-icon icon="sliders-horizontal"></uk-icon> Filters</summary>
+  <form method="get">
+    <div class="ui-filterbar__body">
+      <label class="ui-field">
+        <span class="ui-field__label">Search</span>
+        <input type="search" name="q" class="uk-input" placeholder="Name or email"
+               value="{{ filters.q }}" autocomplete="off">
+      </label>
+      <button type="submit" class="uk-btn uk-btn-primary">Apply</button>
+      <a href="{% url 'dean_faculty' %}" class="uk-btn uk-btn-ghost">Reset</a>
+    </div>
+  </form>
+</details>
+
 {% if faculty_members %}
-<div class="dn-faculty-grid">
+<div class="table-wrap">
+<table class="tbl tbl--stack tbl--tight" aria-label="Department faculty">
+  <thead><tr><th>Faculty</th><th class="tbl__break"></th><th>Email</th><th class="tbl__actions tbl__desk"><span class="sr-only">Open</span></th></tr></thead>
+  <tbody>
   {% for faculty in faculty_members %}
-  <a class="dn-faculty-card" href="{% url 'dean_faculty_detail' faculty.pk %}">
-    {% if faculty.profile_photo %}
-    <img class="dn-faculty-card__photo"
-         src="{% url 'profile_photo' user_id=faculty.pk %}"
-         alt="Profile photo of {{ faculty.get_full_name|default:faculty.username }}">
-    {% else %}
-    <span class="dn-faculty-card__photo dn-faculty-card__photo--empty"
-          aria-hidden="true">
-      {{ faculty.first_name|default:faculty.username|slice:":1"|upper }}{{ faculty.last_name|slice:":1"|upper }}
-    </span>
-    {% endif %}
-    <span class="dn-faculty-card__body">
-      <strong>{{ faculty.get_full_name|default:faculty.username }}</strong>
-      <span>{{ faculty.email|default:faculty.username }}</span>
-      <span class="dn-faculty-card__action">View profile and schedule</span>
-    </span>
-    <uk-icon icon="chevron-right" class="dn-faculty-card__chevron"></uk-icon>
-  </a>
+  <tr>
+    <td data-label="Faculty">
+      <a class="dn-person" href="{% url 'dean_faculty_detail' faculty.pk %}">
+        {% if faculty.profile_photo %}
+        <img class="dn-person__photo" src="{% url 'profile_photo' user_id=faculty.pk %}"
+             alt="Profile photo of {{ faculty.get_full_name|default:faculty.username }}">
+        {% else %}
+        <span class="dn-person__photo dn-person__photo--empty" aria-hidden="true">{{ faculty.first_name|default:faculty.username|slice:":1"|upper }}{{ faculty.last_name|slice:":1"|upper }}</span>
+        {% endif %}
+        <strong>{{ faculty.get_full_name|default:faculty.username }}</strong>
+      </a>
+    </td>
+    <td class="tbl__break" aria-hidden="true"></td>
+    <td data-label="Email" class="tbl__sub">{{ faculty.email|default:faculty.username }}</td>
+    <td class="tbl__actions tbl__desk" data-label="">
+      <a class="uk-btn uk-btn-default uk-btn-sm" href="{% url 'dean_faculty_detail' faculty.pk %}"
+         aria-label="View profile and schedule of {{ faculty.get_full_name|default:faculty.username }}">
+        View profile <uk-icon icon="chevron-right" class="size-4"></uk-icon></a>
+    </td>
+  </tr>
   {% endfor %}
+  </tbody>
+</table>
 </div>
 {% include "_pager.html" %}
 {% else %}
 <div class="dn-empty">
   <uk-icon icon="users"></uk-icon>
   <div>
+    {% if filters.q %}
+    <p class="font-semibold">No faculty match "{{ filters.q }}"</p>
+    <p class="uk-text-small uk-text-muted">Try part of a first name, last name or email.</p>
+    {% else %}
     <p class="font-semibold">No faculty assigned</p>
     <p class="uk-text-small uk-text-muted">
     No active faculty members are assigned to your department.
     </p>
+    {% endif %}
   </div>
 </div>
 {% endif %}

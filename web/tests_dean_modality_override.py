@@ -204,7 +204,7 @@ class DeanModalityOverrideViewTests(TestCase):
         self.assertContains(response, "Avery Santos")
         self.assertContains(
             response, f'/profile/photo/{self.fx.faculty.pk}')
-        self.assertContains(response, 'class="dn-faculty-card')
+        self.assertContains(response, 'class="dn-person__photo"')
 
     def test_faculty_detail_shows_profile_recurring_schedule_and_upcoming_session(self):
         _move_to_tomorrow(self.fx.competitor)
@@ -251,7 +251,7 @@ class DeanModalityOverrideViewTests(TestCase):
         self.assertContains(response, ">Blended<")
         self.assertContains(response, ">Online<")
         self.assertNotContains(response, "Unknown modality")
-        self.assertContains(response, 'class="dn-session__controls"')
+        self.assertContains(response, 'data-bulk-session')
 
     def test_faculty_detail_uses_one_change_form_for_single_or_multiple_sessions(self):
         self.client.force_login(self.fx.dean)

@@ -28,30 +28,35 @@
     <div class="ft-sec">
       <div class="ft-sec__title">Next 7 days</div>
     </div>
-    <div class="ft-list">
+    {% if week_cards %}
+    <div class="table-wrap">
+    <table class="tbl tbl--stack tbl--tight" aria-label="Classes in the next 7 days">
+      <thead><tr><th>Class</th><th>Modality</th><th class="tbl__break"></th><th>Day</th><th>Time</th><th>Room</th></tr></thead>
+      <tbody>
       {% for c in week_cards %}
-      <div class="ft-row">
-        <div class="ft-row__top">
-          <span class="ft-row__time">{{ c.rep.date|date:"D, M j" }} · {{ c.rep.scheduled_start|time:"g:i" }} - {{ c.rep.scheduled_end|time:"g:i A" }}</span>
-          {% if c.rep.status == "cancelled" %}<span class="ft-pill ft-pill--absent" style="margin-left:auto">Cancelled</span>
-          {% elif c.merged %}<span class="ft-pill ft-pill--merged" style="margin-left:auto"><uk-icon icon="layers"></uk-icon> Merged · {{ c.count }}</span>
+      <tr>
+        <td data-label="Class">
+          <strong>{% if c.merged %}{% for s in c.sessions %}{{ s.schedule.course_code }} · {{ s.schedule.section }}{% if not forloop.last %} + {% endif %}{% endfor %}{% else %}{{ c.rep.schedule.course_code }} · {{ c.rep.schedule.section }}{% endif %}</strong>
+          {% if c.rep.status == "cancelled" and c.rep.cancelled_reason %}<div class="uk-text-muted">{{ c.rep.cancelled_reason }}</div>{% endif %}
+        </td>
+        <td data-label="Modality">
+          {% if c.rep.status == "cancelled" %}<span class="ft-pill ft-pill--absent">Cancelled</span>
+          {% elif c.merged %}<span class="ft-pill ft-pill--merged"><uk-icon icon="layers"></uk-icon> Merged · {{ c.count }}</span>
           {% else %}{% include "_modality_badge.html" with modality=c.modality %}{% endif %}
-        </div>
-        {% if c.merged %}
-        <div class="ft-row__title">{% for s in c.sessions %}{{ s.schedule.course_code }} · {{ s.schedule.section }}{% if not forloop.last %} + {% endif %}{% endfor %}</div>
-        <div class="ft-row__meta"><uk-icon icon="map-pin"></uk-icon> {{ c.rooms_label }}</div>
-        {% else %}
-        <div class="ft-row__title">{{ c.rep.schedule.course_code }} · {{ c.rep.schedule.section }}</div>
-        <div class="ft-row__meta"><uk-icon icon="map-pin"></uk-icon> {{ c.rooms_label }}</div>
-        {% endif %}
-        {% if c.rep.status == "cancelled" and c.rep.cancelled_reason %}
-        <div class="ft-row__meta"><uk-icon icon="circle-alert"></uk-icon> {{ c.rep.cancelled_reason }}</div>
-        {% endif %}
-      </div>
-      {% empty %}
-      <div class="ft-row"><div class="ft-row__meta" style="margin:0"><uk-icon icon="calendar"></uk-icon> No additional classes in the next 7 days.</div></div>
+        </td>
+        <td class="tbl__break" aria-hidden="true"></td>
+        <td data-label="Day" class="tbl__sub whitespace-nowrap">{{ c.rep.date|date:"D, M j" }}</td>
+        <td data-label="Time" class="tbl__sub whitespace-nowrap">{{ c.rep.scheduled_start|time:"g:i" }} - {{ c.rep.scheduled_end|time:"g:i A" }}</td>
+        <td data-label="Room" class="tbl__sub">{{ c.rooms_label }}</td>
+      </tr>
       {% endfor %}
+      </tbody>
+    </table>
     </div>
+    {% include "_pager.html" %}
+    {% else %}
+    <div class="ft-row"><div class="ft-row__meta" style="margin:0"><uk-icon icon="calendar"></uk-icon> No additional classes in the next 7 days.</div></div>
+    {% endif %}
   </div>
 </div>
 {% endblock %}

@@ -4,8 +4,8 @@ IFO-06 assignment create form + active duty roster. htmx swaps this partial into
 renders inline. Franken UI (uk-*). Use {% comment %} not {# #} so Django does not
 parse the {% %} tags inside the header (03-02 parse-error lesson).
 {% endcomment %}
-<div class="grid gap-6 lg:grid-cols-2">
-  <div class="uk-card uk-card-body">
+<div class="grid gap-6">
+  <div class="uk-card uk-card-body ifo-assign-form">
     <h2 class="uk-h3 mb-3">New assignment</h2>
 
     {% if error %}
@@ -96,30 +96,72 @@ parse the {% %} tags inside the header (03-02 parse-error lesson).
   </div>
 
   <div class="uk-card uk-card-body">
-    <h2 class="uk-h3 mb-3">Active roster</h2>
-    {% for a in assignments %}
-    <div class="flex items-center gap-3 py-2 border-b border-border last:border-0">
-      <uk-icon icon="{% if a.scope == 'online' %}wifi{% else %}map-pin{% endif %}" class="size-4 text-muted-foreground"></uk-icon>
-      <div class="min-w-0">
-        <p class="font-semibold truncate">{{ a.user.get_full_name|default:a.user.username }}</p>
-        <p class="uk-text-small uk-text-muted">
-          {{ a.get_role_display }} &middot; {{ a.get_type_display }}
-          {% if a.date %}&middot; {{ a.date|date:"M j" }}{% if a.start_time %} {{ a.start_time|time:"g:i A" }}{% endif %}{% if a.end_time %} to {{ a.end_time|time:"g:i A" }}{% endif %}{% endif %}
-          {% if a.scope == 'floor' %}&middot;
-            {% for f in a.floors.all %}{{ f.building.code }} F{{ f.number }}{% if not forloop.last %}, {% endif %}{% empty %}(no floor){% endfor %}
-          {% endif %}
-        </p>
-      </div>
-      <span class="uk-label {% if a.scope == 'online' %}uk-label-primary{% else %}uk-label-secondary{% endif %} ml-auto">{{ a.get_scope_display }}</span>
-      <form hx-post="/ifo/assignments/{{ a.id }}/end" hx-target="#assignment-panel" hx-swap="innerHTML"
-            hx-confirm="End this posting now? {{ a.user.get_full_name|default:a.user.username }} goes off duty immediately.">
-        {% csrf_token %}
-        <button type="submit" class="uk-btn uk-btn-ghost uk-btn-sm"
-                aria-label="End posting for {{ a.user.get_full_name|default:a.user.username }}">End</button>
-      </form>
+    <div class="ifo-roster__head">
+      <h2 class="uk-h3">Active roster</h2>
+      <span class="uk-badge uk-badge-secondary">{{ paginator.count }} posting{{ paginator.count|pluralize }}</span>
     </div>
-    {% empty %}
-    <p class="uk-text-muted uk-text-small">No active assignments yet.</p>
-    {% endfor %}
+    <details class="ui-filterbar" open>
+      <summary><uk-icon icon="sliders-horizontal"></uk-icon> Filters</summary>
+      <form method="get" action="/ifo/assignments">
+        <div class="ui-filterbar__body">
+          <label class="ui-field">
+            <span class="ui-field__label">Duty</span>
+            <select name="role" class="uk-select">
+              <option value="">Checkers and Guards</option>
+              {% for value, label in roles %}<option value="{{ value }}" {% if roster_filters.role == value %}selected{% endif %}>{{ label }}</option>{% endfor %}
+            </select>
+          </label>
+          <label class="ui-field">
+            <span class="ui-field__label">Scope</span>
+            <select name="scope" class="uk-select">
+              <option value="">Floor and online</option>
+              {% for value, label in scopes %}<option value="{{ value }}" {% if roster_filters.scope == value %}selected{% endif %}>{{ label }}</option>{% endfor %}
+            </select>
+          </label>
+          <button type="submit" class="uk-btn uk-btn-primary">Apply</button>
+          <a href="/ifo/assignments" class="uk-btn uk-btn-ghost">Reset</a>
+        </div>
+      </form>
+    </details>
+    {% if assignments %}
+    <div class="table-wrap">
+    <table class="tbl tbl--stack tbl--tight" aria-label="Active duty roster">
+      <thead><tr>
+        <th>Person</th><th>Duty</th><th class="tbl__break"></th><th>Type</th><th>When</th><th>Where</th>
+        <th class="tbl__actions"><span class="sr-only">End posting</span></th>
+      </tr></thead>
+      <tbody>
+      {% for a in assignments %}
+      <tr>
+        <td data-label="Person"><strong>{{ a.user.get_full_name|default:a.user.username }}</strong></td>
+        <td data-label="Duty">{{ a.get_role_display }}</td>
+        <td class="tbl__break" aria-hidden="true"></td>
+        <td data-label="Type" class="tbl__sub">{{ a.get_type_display }}</td>
+        <td data-label="When" class="tbl__sub">
+          {% if a.date %}{{ a.date|date:"M j" }}{% if a.start_time %} {{ a.start_time|time:"g:i A" }}{% endif %}{% if a.end_time %} to {{ a.end_time|time:"g:i A" }}{% endif %}
+          {% else %}<span class="uk-text-muted">Every day</span>{% endif %}
+        </td>
+        <td data-label="Where" class="tbl__sub">
+          {% if a.scope == 'online' %}<span class="pill pill--info"><uk-icon icon="wifi"></uk-icon> Online duty</span>
+          {% else %}<span class="pill pill--neutral"><uk-icon icon="map-pin"></uk-icon> {% for f in a.floors.all %}{{ f.building.code }} F{{ f.number }}{% if not forloop.last %}, {% endif %}{% empty %}(no floor){% endfor %}</span>{% endif %}
+        </td>
+        <td data-label="" class="tbl__actions">
+          <form hx-post="/ifo/assignments/{{ a.id }}/end" hx-target="#assignment-panel" hx-swap="innerHTML"
+                hx-confirm="End this posting now? {{ a.user.get_full_name|default:a.user.username }} goes off duty immediately.">
+            {% csrf_token %}
+            <button type="submit" class="uk-btn uk-btn-default uk-btn-sm"
+                    aria-label="End posting for {{ a.user.get_full_name|default:a.user.username }}">
+              <uk-icon icon="circle-stop" class="size-4"></uk-icon> End</button>
+          </form>
+        </td>
+      </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    </div>
+    {% include "_pager.html" %}
+    {% else %}
+    <p class="uk-text-muted uk-text-small">{% if roster_filters.role or roster_filters.scope %}No active postings match these filters.{% else %}No active assignments yet.{% endif %}</p>
+    {% endif %}
   </div>
 </div>

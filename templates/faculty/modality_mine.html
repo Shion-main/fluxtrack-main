@@ -33,86 +33,86 @@ ASCII-only.
       <a class="ft-chip" href="/faculty/modality/new"><uk-icon icon="plus"></uk-icon> New</a>
     </div>
 
-    <div class="ft-list">
+    <details class="ui-filterbar" open>
+      <summary><uk-icon icon="sliders-horizontal"></uk-icon> Filters</summary>
+      <form method="get">
+        <div class="ui-filterbar__body">
+          <label class="ui-field">
+            <span class="ui-field__label">Status</span>
+            <select name="status" class="uk-select">
+              <option value="">All requests</option>
+              {% for value, label in status_choices %}
+              <option value="{{ value }}" {% if filters.status == value %}selected{% endif %}>{{ label }}</option>
+              {% endfor %}
+            </select>
+          </label>
+          <button type="submit" class="uk-btn uk-btn-primary">Apply</button>
+          <a href="/faculty/modality/mine" class="uk-btn uk-btn-ghost">Reset</a>
+        </div>
+      </form>
+    </details>
+
+    {% if requests %}
+    <div class="table-wrap">
+    <table class="tbl tbl--stack" aria-label="Your modality-shift requests">
+      <thead><tr>
+        <th>Request</th><th>Status</th><th>Dates</th><th>Classes</th><th>Details</th>
+        <th class="tbl__actions"><span class="sr-only">Withdraw</span></th>
+      </tr></thead>
+      <tbody>
       {% for r in requests %}
-      <div class="ft-row">
-        <div class="ft-row__top">
-          <span class="ft-row__title">
-            {% if r.is_dean_override %}Dean override{% else %}Modality shift{% endif %}
-          </span>
-          {% if r.status == "pending" %}<span class="ft-pill ft-pill--pending" style="margin-left:auto">Pending</span>
-          {% elif r.status == "approved" %}<span class="ft-pill ft-pill--approved" style="margin-left:auto"><uk-icon icon="check"></uk-icon> Approved</span>
-          {% elif r.status == "rejected" %}<span class="ft-pill ft-pill--absent" style="margin-left:auto">Rejected</span>
-          {% elif r.status == "denied" %}<span class="ft-pill ft-pill--absent" style="margin-left:auto">Denied</span>
-          {% else %}<span class="ft-pill ft-pill--done" style="margin-left:auto">Withdrawn</span>{% endif %}
-        </div>
-
-        <div class="ft-row__meta">
-          {% include "_modality_badge.html" with modality=r.target_modality %}
-        </div>
-
-        <div class="ft-row__meta">
-          <uk-icon icon="calendar"></uk-icon>
+      <tr data-request="{{ r.pk }}">
+        <td data-label="Request">
+          <strong>{% if r.is_dean_override %}Dean override{% else %}Modality shift{% endif %}</strong>
+          <div class="mt-1">{% include "_modality_badge.html" with modality=r.target_modality %}{% if r.is_time_move %} <span class="pill pill--neutral">time-move</span>{% endif %}</div>
+        </td>
+        <td data-label="Status">
+          {% if r.status == "pending" %}<span class="ft-pill ft-pill--pending">Pending</span>
+          {% elif r.status == "approved" %}<span class="ft-pill ft-pill--approved"><uk-icon icon="check"></uk-icon> Approved</span>
+          {% elif r.status == "rejected" %}<span class="ft-pill ft-pill--absent">Rejected</span>
+          {% elif r.status == "denied" %}<span class="ft-pill ft-pill--absent">Denied</span>
+          {% else %}<span class="ft-pill ft-pill--done">Withdrawn</span>{% endif %}
+        </td>
+        <td data-label="Dates" class="whitespace-nowrap">
           {{ r.window_start|date:"M j" }}{% if r.window_end != r.window_start %} - {{ r.window_end|date:"M j, Y" }}{% else %}, {{ r.window_start|date:"Y" }}{% endif %}
-          {% if r.is_time_move %}<span>·</span> time-move{% endif %}
-        </div>
-
-        <div class="ft-row__meta" style="margin-top:2px">
-          <uk-icon icon="book-open"></uk-icon>
+        </td>
+        <td data-label="Classes">
           {% for item in r.items.all %}{{ item.schedule.course_code }}-{{ item.schedule.section }}{% if not forloop.last %}, {% endif %}{% empty %}(no classes){% endfor %}
-        </div>
-
-        <div class="ft-row__meta" style="margin-top:6px">
-          <uk-icon icon="message-square"></uk-icon>
-          {{ r.request_reason|default:"No rationale recorded." }}
-        </div>
-
-        {% for item in r.items.all %}
-          {% if item.new_start_time and item.new_end_time %}
-          <div class="ft-row__meta" style="margin-top:2px">
-            <uk-icon icon="clock"></uk-icon>
-            {{ item.schedule.course_code }}-{{ item.schedule.section }}:
-            {{ item.new_start_time|time:"g:i A" }}-{{ item.new_end_time|time:"g:i A" }}
-          </div>
+        </td>
+        <td data-label="Details" class="tbl__wide">
+          <div>{{ r.request_reason|default:"No rationale recorded." }}</div>
+          {% for item in r.items.all %}
+            {% if item.new_start_time and item.new_end_time %}<div class="uk-text-muted">{{ item.schedule.course_code }}-{{ item.schedule.section }}: {{ item.new_start_time|time:"g:i A" }}-{{ item.new_end_time|time:"g:i A" }}</div>{% endif %}
+            {% if item.preferred_room %}<div class="uk-text-muted">Preferred: {{ item.preferred_room.code }}</div>{% endif %}
+            {% if item.assigned_room %}<div class="uk-text-muted">Assigned: {{ item.assigned_room.code }}</div>{% endif %}
+          {% endfor %}
+          {% if r.decided_by and r.decided_at %}
+          <div class="uk-text-muted">Decided by {{ r.decided_by.get_full_name|default:r.decided_by.username }} on {{ r.decided_at|date:"M j, Y g:i A" }}</div>
           {% endif %}
-          {% if item.preferred_room %}
-          <div class="ft-row__meta" style="margin-top:2px">
-            <uk-icon icon="map-pin"></uk-icon> Preferred: {{ item.preferred_room.code }}
-          </div>
+          {% if r.decision_reason and r.status == "rejected" or r.decision_reason and r.status == "denied" %}
+          <div class="uk-text-muted">Decision: {{ r.decision_reason }}</div>
           {% endif %}
-          {% if item.assigned_room %}
-          <div class="ft-row__meta" style="margin-top:2px">
-            <uk-icon icon="map-pin"></uk-icon> Assigned: {{ item.assigned_room.code }}
-          </div>
+        </td>
+        <td data-label="" class="tbl__actions">
+          {% if r.status == "pending" %}
+          <form method="post" action="/faculty/modality/{{ r.pk }}/withdraw"
+                onsubmit="return window.confirm('Withdraw this pending request?');">
+            {% csrf_token %}
+            <button type="submit" class="ft-btn-ghost-sm"><uk-icon icon="x"></uk-icon> Withdraw</button>
+          </form>
           {% endif %}
-        {% endfor %}
-
-        {% if r.decided_by and r.decided_at %}
-        <div class="ft-row__meta" style="margin-top:2px">
-          <uk-icon icon="user-check"></uk-icon>
-          Decided by {{ r.decided_by.get_full_name|default:r.decided_by.username }}
-          on {{ r.decided_at|date:"M j, Y g:i A" }}
-        </div>
-        {% endif %}
-
-        {% if r.decision_reason and r.status == "rejected" or r.decision_reason and r.status == "denied" %}
-        <div class="ft-row__meta" style="margin-top:2px"><uk-icon icon="message-square"></uk-icon> {{ r.decision_reason }}</div>
-        {% endif %}
-
-        {% if r.status == "pending" %}
-        <form method="post" action="/faculty/modality/{{ r.pk }}/withdraw"
-              onsubmit="return window.confirm('Withdraw this pending request?');"
-              style="margin-top:12px">
-          {% csrf_token %}
-          <button type="submit" class="ft-btn-ghost-sm"><uk-icon icon="x"></uk-icon> Withdraw</button>
-        </form>
-        {% endif %}
-      </div>
-      {% empty %}
-      <div class="ft-row"><div class="ft-row__meta" style="margin:0">
-        <uk-icon icon="inbox"></uk-icon> No requests yet. Tap New to request a modality shift.</div></div>
+        </td>
+      </tr>
       {% endfor %}
+      </tbody>
+    </table>
     </div>
+    {% include "_pager.html" %}
+    {% else %}
+    <div class="ft-row"><div class="ft-row__meta" style="margin:0">
+      <uk-icon icon="inbox"></uk-icon>
+      {% if filters.status %}No requests with this status.{% else %}No requests yet. Tap New to request a modality shift.{% endif %}</div></div>
+    {% endif %}
   </div>
 </div>
 {% endblock %}

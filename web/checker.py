@@ -750,7 +750,9 @@ def online_list(request):
                     .order_by("scheduled_start"))
         if (s.declared_modality or s.schedule.modality) == Modality.ONLINE
         and not s.verified_by_checker]
-    return render(request, "checker/online_list.html", {"sessions": sessions})
+    pg = paginate(request, sessions)            # 15 rows per page (D10)
+    return render(request, "checker/online_list.html",
+                  {**pg, "sessions": pg["page"].object_list})
 
 
 @checker_required
@@ -831,8 +833,11 @@ def _card_state(actions, status):
 def floor_board(request):
     """CHK-07 board shell — mirrors ifo.live. The poll interval is policy-driven
     (settings.FLUXTRACK_POLICY[poll_interval_seconds]); NEVER hardcoded."""
-    return render(request, "checker/floor.html",
-                  {"poll_ms": settings.FLUXTRACK_POLICY["poll_interval_seconds"] * 1000})
+    state = request.GET.get("state") or ""
+    return render(request, "checker/floor.html", {
+        "poll_ms": settings.FLUXTRACK_POLICY["poll_interval_seconds"] * 1000,
+        "state_choices": [(k, v["label"]) for k, v in _CARD_STYLES.items()],
+        "state": state if state in _CARD_STYLES else ""})
 
 
 @checker_required
@@ -872,8 +877,13 @@ def floor_rows(request):
 
     total = len(board)
     coverage = round(100 * verified / total) if total else 100
-    # Shared 50-row pager (D10) on the room cards; coverage and the priority
-    # queue still count the whole floor.
+    # The room table can be narrowed by state (the filter lives in the board
+    # shell and rides along in the poll URL). Coverage and the priority queue
+    # still count the whole floor, so a filter never changes the numbers.
+    state = request.GET.get("state") or ""
+    if state in _CARD_STYLES:
+        cards = [c for c in cards if c["state"] == state]
+    # Shared 50-row pager (D10) on the room table.
     pg = paginate(request, cards)
     return render(request, "checker/_floor_rows.html", {
         **pg, "cards": pg["page"].object_list, "queue": queue, "coverage": coverage,

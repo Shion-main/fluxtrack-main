@@ -133,20 +133,19 @@ class FacultyHistoryScopeTests(TestCase):
         self.assertEqual(len(second), 2)
         self.assertTrue(first.isdisjoint(second))
 
-    def test_history_renders_real_session_cards_without_a_table_fallback(self):
-        """Every viewport gets purpose-built cards; width must not revive a table."""
+    def test_history_is_a_table_on_desktop_and_cards_on_a_phone(self):
+        """D15 (2026-11-13): a list that can run past a screen is a table on
+        desktop and a labelled card on a phone (.tbl--stack)."""
         body = self.client.get("/faculty/history").content.decode()
 
-        self.assertIn('class="ft-history-cards"', body)
-        self.assertNotIn("<table", body)
-        self.assertNotIn("ft-history-wrap", body)
+        self.assertIn('class="tbl tbl--stack"', body)
+        self.assertNotIn("ft-history-card", body)
         self.assertEqual(
             set(re.findall(r'data-history-session="(\d+)"', body)),
             {str(self.mine.pk)},
         )
-        self.assertIn('class="ft-history-card__course"', body)
-        for label in ("Scheduled", "Actual start", "Checker review"):
-            self.assertIn(f"<dt>{label}</dt>", body)
+        for label in ("Class", "Scheduled", "Actual start", "Checker review"):
+            self.assertIn(f'data-label="{label}"', body)
 
 
 class FacultyHistoryFlagTests(TestCase):

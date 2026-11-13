@@ -29,7 +29,7 @@ from web.pagination import DEFAULT_PER_PAGE, paginate
 class PaginateHelperTests(TestCase):
     def setUp(self):
         self.rf = RequestFactory()
-        self.items = list(range(1, 121))  # 120 items -> 3 pages at 50
+        self.items = list(range(1, 2 * DEFAULT_PER_PAGE + 11))  # 3 pages: full, full, 10
 
     def _ctx(self, query=""):
         return paginate(self.rf.get(f"/x?{query}"), self.items)
@@ -43,8 +43,8 @@ class PaginateHelperTests(TestCase):
     def test_page_param_selects_the_page(self):
         ctx = self._ctx("page=2")
         self.assertEqual(ctx["page"].number, 2)
-        self.assertEqual(ctx["page"].start_index(), 51)
-        self.assertEqual(ctx["page"].end_index(), 100)
+        self.assertEqual(ctx["page"].start_index(), DEFAULT_PER_PAGE + 1)
+        self.assertEqual(ctx["page"].end_index(), 2 * DEFAULT_PER_PAGE)
 
     def test_non_integer_page_falls_back_to_first(self):
         self.assertEqual(self._ctx("page=banana")["page"].number, 1)
@@ -125,7 +125,7 @@ class HrPaginationTests(TestCase):
     def test_first_page_is_bounded_and_reports_the_true_total(self):
         resp = self.client.get(reverse("hr_attendance"))
         self.assertEqual(resp.status_code, 200)
-        self.assertEqual(len(resp.context["sessions"]), 50)
+        self.assertEqual(len(resp.context["sessions"]), DEFAULT_PER_PAGE)
         self.assertEqual(resp.context["paginator"].count, 65)
         self.assertContains(resp, "of <b>65</b>", html=False)
 
@@ -147,7 +147,7 @@ class HrPaginationTests(TestCase):
     def test_stale_page_beyond_the_end_does_not_error(self):
         resp = self.client.get(reverse("hr_attendance"), {"page": 999})
         self.assertEqual(resp.status_code, 200)
-        self.assertEqual(resp.context["page"].number, 2)
+        self.assertEqual(resp.context["page"].number, resp.context["paginator"].num_pages)
 
     def test_export_is_not_paginated(self):
         """Paging bounds the screen, not the data (HR-03)."""

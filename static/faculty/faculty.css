@@ -887,20 +887,21 @@ input[type="file"].ft-control::file-selector-button:hover { border-color: hsl(va
    (2) the per-room page's weekly grid + its footnote.
    No border-left accent stripes; colour comes from tokens.css, never a literal.
    -------------------------------------------------------------------------- */
-.gd-roomlink { display: block; text-decoration: none; color: inherit; }
-/* Affordance is not colour alone: the chevron below is the persistent visual
-   cue, and the row lifts on hover/focus the way .ft-row already does. */
-.gd-roomlink:hover { border-color: hsl(var(--primary)); }
-.gd-roomlink:focus-visible {
-  outline: none; border-color: hsl(var(--primary));
+/* Floor-monitor table links: the room code opens that room's schedule, the
+   name opens that person's day. Affordance is not colour alone: the chevron is
+   the persistent cue, and the text underlines on hover/focus. */
+.gd-roomlink, .gd-person {
+  display: inline-flex; align-items: center; gap: 4px; min-height: 32px;
+  color: hsl(var(--foreground)); font-weight: 600; text-decoration: none;
+}
+.gd-roomlink:hover, .gd-person:hover { text-decoration: underline; text-underline-offset: 4px; }
+.gd-roomlink:focus-visible, .gd-person:focus-visible {
+  outline: none; border-radius: var(--radius-sm);
   box-shadow: 0 0 0 3px hsl(var(--ring) / .5);
 }
-.gd-roomlink__go { margin-left: auto; display: inline-flex; align-items: center; }
-.gd-roomlink__go uk-icon, .gd-roomlink__go svg {
-  width: 15px; height: 15px; color: hsl(var(--muted-foreground)); vertical-align: -3px;
+.gd-roomlink uk-icon, .gd-roomlink svg {
+  width: 15px; height: 15px; color: hsl(var(--muted-foreground));
 }
-/* .ft-card__meta is the flex row the chevron sits at the end of. */
-.gd-roomlink .ft-card__meta { display: flex; align-items: center; gap: 5px; flex-wrap: wrap; }
 
 .gd-room__grid { margin-top: 2px; }
 .gd-room__note { margin-top: 10px; font-size: .8rem; color: hsl(var(--muted-foreground)); }

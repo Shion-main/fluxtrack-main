@@ -10,7 +10,31 @@ in place. ASCII-only.
 {% block console_title %}Approvals{% endblock %}
 {% block page_title %}Approvals{% endblock %}
 {% block page_desc %}<p class="ui-pagehead__desc">Pending modality-shift requests from your department. Approve or reject with a reason.</p>{% endblock %}
+{% block page_actions %}<span class="uk-badge uk-badge-secondary">{{ paginator.count }} pending</span>{% endblock %}
 {% block console %}
+<details class="ui-filterbar" open>
+  <summary><uk-icon icon="sliders-horizontal"></uk-icon> Filters</summary>
+  <form method="get">
+    <div class="ui-filterbar__body">
+      <label class="ui-field">
+        <span class="ui-field__label">Faculty</span>
+        <input type="search" name="q" class="uk-input" placeholder="Name or username"
+               value="{{ filters.q }}" autocomplete="off">
+      </label>
+      <label class="ui-field">
+        <span class="ui-field__label">Requested modality</span>
+        <select name="modality" class="uk-select">
+          <option value="">Any modality</option>
+          {% for value, label in modality_choices %}
+          <option value="{{ value }}" {% if filters.modality == value %}selected{% endif %}>{{ label }}</option>
+          {% endfor %}
+        </select>
+      </label>
+      <button type="submit" class="uk-btn uk-btn-primary">Apply</button>
+      <a href="{% url 'dean_queue' %}" class="uk-btn uk-btn-ghost">Reset</a>
+    </div>
+  </form>
+</details>
 <div id="dean-queue-panel">
   {% include "dean/_queue.html" %}
 </div>

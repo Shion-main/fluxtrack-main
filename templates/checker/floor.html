@@ -22,6 +22,25 @@ the partial.
       <div class="ft-greet__date">Your assigned floor, refreshing live. Absent sessions are left out.</div>
     </div>
 
+    <details class="ui-filterbar" open>
+      <summary><uk-icon icon="sliders-horizontal"></uk-icon> Filters</summary>
+      <form method="get">
+        <div class="ui-filterbar__body">
+          <label class="ui-field">
+            <span class="ui-field__label">Room state</span>
+            <select name="state" class="uk-select">
+              <option value="">Every state</option>
+              {% for value, label in state_choices %}
+              <option value="{{ value }}" {% if state == value %}selected{% endif %}>{{ label }}</option>
+              {% endfor %}
+            </select>
+          </label>
+          <button type="submit" class="uk-btn uk-btn-primary">Apply</button>
+          <a href="/checker/floor" class="uk-btn uk-btn-ghost">Reset</a>
+        </div>
+      </form>
+    </details>
+
     <div id="floor-rows" class="js-poll ft-board-grid" aria-live="polite" aria-busy="true"
          hx-get="/checker/floor/rows{% if request.GET %}?{{ request.GET.urlencode }}{% endif %}" hx-trigger="load, every {{ poll_ms }}ms" hx-swap="innerHTML">
       <div aria-hidden="true">

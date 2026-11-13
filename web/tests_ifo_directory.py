@@ -188,7 +188,8 @@ class RoomsDirectoryTests(TestCase):
         with CaptureQueriesContext(connection) as queries:
             response = self.client.get("/ifo/rooms", {"view": "directory"})
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(len(response.context["directory_rows"]), 50)
+        from web.pagination import DEFAULT_PER_PAGE
+        self.assertEqual(len(response.context["directory_rows"]), DEFAULT_PER_PAGE)
         self.assertLessEqual(
             len(queries), 20,
             "Directory must batch relations/status instead of querying per row.",

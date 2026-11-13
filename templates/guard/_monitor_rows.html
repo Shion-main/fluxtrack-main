@@ -16,22 +16,21 @@ label (WCAG 1.4.1). Off-duty renders a calm "not on duty" card. ASCII-only.{% en
   <span class="ft-chip" style="pointer-events:none">{{ faculty_pg.paginator.count }} today</span>
 </div>
 {% if faculty_today %}
-<div class="ft-list">
+<div class="table-wrap">
+<table class="tbl tbl--stack tbl--tight" aria-label="Faculty on your floor today">
+  <thead><tr><th>Faculty</th><th class="tbl__break"></th><th>Hours on this floor</th><th>Classes</th><th class="tbl__actions"><span class="sr-only">Open</span></th></tr></thead>
+  <tbody>
   {% for item in faculty_today %}
-  <a href="{% url 'guard_faculty_day' item.faculty.pk %}"
-     class="ft-row" aria-label="View today's schedule for {{ item.faculty.get_full_name|default:item.faculty.username }}">
-    <div class="ft-row__top">
-      <uk-icon icon="user"></uk-icon>
-      <span class="ft-row__title">{{ item.faculty.get_full_name|default:item.faculty.username }}</span>
-      <uk-icon icon="chevron-right" style="margin-left:auto"></uk-icon>
-    </div>
-    <div class="ft-row__meta">
-      <span><uk-icon icon="calendar-clock"></uk-icon>
-        {{ item.first_start|time:"g:i A" }}-{{ item.last_end|time:"g:i A" }}</span>
-      <span>{{ item.session_count }} class{{ item.session_count|pluralize:"es" }}</span>
-    </div>
-  </a>
+  <tr>
+    <td data-label="Faculty"><a class="gd-person" href="{% url 'guard_faculty_day' item.faculty.pk %}">{{ item.faculty.get_full_name|default:item.faculty.username }}</a></td>
+    <td class="tbl__break" aria-hidden="true"></td>
+    <td data-label="Hours on this floor" class="tbl__sub whitespace-nowrap">{{ item.first_start|time:"g:i A" }}-{{ item.last_end|time:"g:i A" }}</td>
+    <td data-label="Classes" class="tbl__sub">{{ item.session_count }} class{{ item.session_count|pluralize:"es" }}</td>
+    <td data-label="" class="tbl__actions"><uk-icon icon="chevron-right" aria-hidden="true"></uk-icon></td>
+  </tr>
   {% endfor %}
+  </tbody>
+</table>
 </div>
 {% with p=faculty_pg %}{% include "_pager.html" with page=p.page paginator=p.paginator page_range=p.page_range querystring=p.querystring page_param=p.page_param %}{% endwith %}
 {% else %}
@@ -41,39 +40,44 @@ label (WCAG 1.4.1). Off-duty renders a calm "not on duty" card. ASCII-only.{% en
 </div>
 {% endif %}
 
-{% if sessions %}
+{% if sessions or request.GET.status %}
 <div class="ft-sec">
   <div class="ft-sec__title">Rooms today</div>
   <span class="ft-chip" style="pointer-events:none">{{ rooms_pg.paginator.count }} session{{ rooms_pg.paginator.count|pluralize }}</span>
 </div>
-<div class="ft-list">
-  {% comment %}GRD-02 entry point: the card itself is the link to that room's
-  schedule, so "something looks wrong in that room" is one tap from the answer.
-  A plain navigation link, NOT an htmx swap -- this partial is re-swapped on
-  every poll, and a control that swaps into its own polled region would be
-  destroyed mid-tap.{% endcomment %}
+{% comment %}GRD-02 entry point: the room code is the link to that room's
+schedule, so "something looks wrong in that room" is one tap from the answer.
+A plain navigation link, NOT an htmx swap -- this partial is re-swapped on
+every poll, and a control that swaps into its own polled region would be
+destroyed mid-tap.{% endcomment %}
+{% if sessions %}
+<div class="table-wrap">
+<table class="tbl tbl--stack tbl--tight" aria-label="Rooms on your floor today">
+  <thead><tr><th>Room</th><th>Status</th><th class="tbl__break"></th><th>Starts</th><th>Class</th><th>Faculty</th><th>Checker</th></tr></thead>
+  <tbody>
   {% for se in sessions %}
-  <a href="/guard/rooms/{{ se.room.code }}" class="gd-roomlink ft-card
-    {% if se.status == 'active' %}ft-card--ok{% elif se.status == 'absent' %}ft-card--bad{% elif se.status == 'completed' or se.status == 'cancelled' %}ft-card--neutral{% else %}ft-card--info{% endif %}"
-    data-state="{{ se.status }}">
-    <div class="ft-card__head">
-      {% if se.status == 'active' %}<uk-icon icon="check-circle"></uk-icon><span class="ft-pill ft-pill--active">In session</span>
-      {% elif se.status == 'absent' %}<uk-icon icon="x"></uk-icon><span class="ft-pill ft-pill--absent">Absent</span>
-      {% elif se.status == 'completed' %}<uk-icon icon="check"></uk-icon><span class="ft-pill ft-pill--done">Done</span>
-      {% elif se.status == 'cancelled' %}<uk-icon icon="x"></uk-icon><span class="ft-pill ft-pill--done">Cancelled</span>
-      {% else %}<uk-icon icon="clock"></uk-icon><span class="ft-pill ft-pill--upcoming">Scheduled</span>{% endif %}
-      <span class="ft-card__room">{% include "_room_code.html" with room=se.room %}</span>
-    </div>
-    <div class="ft-card__meta">
-      {{ se.scheduled_start|time:"g:i A" }} &middot; {{ se.schedule.course_code }}-{{ se.schedule.section }}
-      &middot; {{ se.faculty.last_name|default:se.faculty.username }}
-      {% if se.verified_by_checker %}&middot; <uk-icon icon="shield-check" style="vertical-align:-2px;width:13px;height:13px"></uk-icon> verified{% endif %}
-      <span class="gd-roomlink__go"><uk-icon icon="chevron-right"></uk-icon><span class="sr-only">View this room's schedule</span></span>
-    </div>
-  </a>
+  <tr data-state="{{ se.status }}">
+    <td data-label="Room"><a class="gd-roomlink" href="/guard/rooms/{{ se.room.code }}">{% include "_room_code.html" with room=se.room %} <uk-icon icon="chevron-right" aria-hidden="true"></uk-icon><span class="sr-only">View this room's schedule</span></a></td>
+    <td data-label="Status">
+      {% if se.status == 'active' %}<span class="ft-pill ft-pill--active"><uk-icon icon="check-circle"></uk-icon> In session</span>
+      {% elif se.status == 'absent' %}<span class="ft-pill ft-pill--absent"><uk-icon icon="x"></uk-icon> Absent</span>
+      {% elif se.status == 'completed' %}<span class="ft-pill ft-pill--done"><uk-icon icon="check"></uk-icon> Done</span>
+      {% elif se.status == 'cancelled' %}<span class="ft-pill ft-pill--done"><uk-icon icon="x"></uk-icon> Cancelled</span>
+      {% else %}<span class="ft-pill ft-pill--upcoming"><uk-icon icon="clock"></uk-icon> Scheduled</span>{% endif %}
+    </td>
+    <td class="tbl__break" aria-hidden="true"></td>
+    <td data-label="Starts" class="tbl__sub whitespace-nowrap">{{ se.scheduled_start|time:"g:i A" }}</td>
+    <td data-label="Class" class="tbl__sub">{{ se.schedule.course_code }}-{{ se.schedule.section }}</td>
+    <td data-label="Faculty" class="tbl__sub">{{ se.faculty.last_name|default:se.faculty.username }}</td>
+    <td data-label="Checker" class="tbl__sub">{% if se.verified_by_checker %}<span class="ft-pill ft-pill--done"><uk-icon icon="shield-check"></uk-icon> Verified</span>{% else %}<span class="uk-text-muted">Not yet</span>{% endif %}</td>
+  </tr>
   {% endfor %}
+  </tbody>
+</table>
 </div>
+{% endif %}
 {% with p=rooms_pg %}{% include "_pager.html" with page=p.page paginator=p.paginator page_range=p.page_range querystring=p.querystring page_param=p.page_param %}{% endwith %}
+{% if not sessions %}<p class="ft-help">No rooms with this status right now.</p>{% endif %}
 {% else %}
 <div class="ft-card ft-card--neutral">
   <div class="ft-card__meta" style="display:flex;align-items:center;gap:8px;margin:0">

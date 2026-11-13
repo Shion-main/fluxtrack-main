@@ -717,8 +717,8 @@ class GuardSurfaceTests(TestCase):
         faculty_url = reverse("guard_faculty_day", args=(self.faculty.pk,))
         self.assertContains(resp, faculty_url, count=1)
         self.assertContains(
-            resp, '<span class="ft-row__title">Ana Reyes</span>', count=1,
-            html=True)
+            resp, f'<a class="gd-person" href="{faculty_url}">Ana Reyes</a>',
+            count=1, html=True)
         self.assertNotContains(
             resp, reverse("guard_faculty_day", args=(off_floor.pk,)))
 

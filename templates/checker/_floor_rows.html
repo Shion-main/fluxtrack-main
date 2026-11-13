@@ -40,22 +40,32 @@ card.style.card = .ft-card--* accent, card.style.pill = .ft-pill--* chip.
 </div>
 {% endif %}
 
-{# --- Room cards, color-coded by verification state --- #}
-<div class="ft-list">
+{# --- Room table: a table on desktop, labelled cards on a phone --- #}
+{% if cards %}
+<div class="table-wrap">
+<table class="tbl tbl--stack tbl--tight" aria-label="Rooms on your floor">
+  <thead><tr><th>Room</th><th>State</th><th class="tbl__break"></th><th>Starts</th><th>Class</th><th>Faculty</th><th class="tbl__actions"><span class="sr-only">Scan</span></th></tr></thead>
+  <tbody>
   {% for card in cards %}
-  <a href="/checker/scan" class="ft-card {{ card.style.card }}" data-state="{{ card.state }}">
-    <div class="ft-card__head">
-      <uk-icon icon="{{ card.style.icon }}"></uk-icon>
-      <span class="{{ card.style.pill }}">{{ card.style.label }}</span>
-      <span class="ft-card__room">{{ card.session.room.code }}</span>
-    </div>
-    <div class="ft-card__meta">
-      {{ card.session.schedule.course_code }}-{{ card.session.schedule.section }}
-      · {{ card.session.faculty.last_name|default:card.session.faculty.username }}
-    </div>
-  </a>
+  <tr data-state="{{ card.state }}" data-room="{{ card.session.room.code }}">
+    <td data-label="Room"><strong>{{ card.session.room.code }}</strong></td>
+    <td data-label="State"><span class="{{ card.style.pill }}"><uk-icon icon="{{ card.style.icon }}"></uk-icon> {{ card.style.label }}</span></td>
+    <td class="tbl__break" aria-hidden="true"></td>
+    <td data-label="Starts" class="tbl__sub whitespace-nowrap">{{ card.session.scheduled_start|time:"g:i A" }}</td>
+    <td data-label="Class" class="tbl__sub">{{ card.session.schedule.course_code }}-{{ card.session.schedule.section }}</td>
+    <td data-label="Faculty" class="tbl__sub">{{ card.session.faculty.last_name|default:card.session.faculty.username }}</td>
+    <td data-label="" class="tbl__actions">
+      <a href="/checker/scan" class="uk-btn uk-btn-default uk-btn-sm" aria-label="Scan {{ card.session.room.code }}">
+        <uk-icon icon="scan-line" class="size-4"></uk-icon> Scan</a>
+    </td>
+  </tr>
   {% endfor %}
+  </tbody>
+</table>
 </div>
+{% else %}
+<p class="ft-help">No rooms in this state right now.</p>
+{% endif %}
 {% include "_pager.html" %}
 {% else %}
 <div class="ft-card ft-card--neutral" style="text-align:center">

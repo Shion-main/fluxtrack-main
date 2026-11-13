@@ -18,77 +18,74 @@ tags in this header (03-02 parse-error lesson). Franken UI (uk-*). ASCII-only.
 </div>
 {% endif %}
 
-{% for r in requests %}
-<div class="uk-card uk-card-body mb-3">
-  <div class="flex items-start justify-between gap-3">
-    <div class="min-w-0">
-      <div class="flex items-center gap-2">
-        <p class="font-semibold">Modality shift</p>
-        {% include "_modality_badge.html" with modality=r.target_modality %}
+{% if requests %}
+<div class="table-wrap">
+<table class="tbl tbl--stack dn-queue" aria-label="Pending modality-shift requests">
+  <thead><tr>
+    <th>Faculty</th><th>Change</th><th>Dates</th><th>Classes</th><th>Faculty reason</th>
+    <th class="tbl__actions">Decision</th>
+  </tr></thead>
+  <tbody>
+  {% for r in requests %}
+  <tr data-request="{{ r.pk }}">
+    <td data-label="Faculty"><strong>{{ r.requester.get_full_name|default:r.requester.username }}</strong></td>
+    <td data-label="Change">
+      {% include "_modality_badge.html" with modality=r.target_modality %}
+      {% if r.is_time_move %}<span class="pill pill--neutral">time-move</span>{% endif %}
+    </td>
+    <td data-label="Dates" class="whitespace-nowrap">
+      {{ r.window_start|date:"M j" }}{% if r.window_end != r.window_start %} - {{ r.window_end|date:"M j, Y" }}{% else %}, {{ r.window_start|date:"Y" }}{% endif %}
+    </td>
+    <td data-label="Classes" class="tbl__wide">
+      {% for item in r.items.all %}
+      <div class="dn-queue__item">
+        <span class="font-medium">{{ item.schedule.course_code }}-{{ item.schedule.section }}</span>
+        <span class="uk-text-muted">{{ item.schedule.get_day_of_week_display|slice:":3" }}
+          {{ item.schedule.start_time|time:"g:i A" }}-{{ item.schedule.end_time|time:"g:i A" }}
+          &middot; {% include "_room_code.html" with room=item.schedule.room %}</span>
+        {% if item.new_start_time and item.new_end_time %}
+        <span class="uk-text-muted block">New time: {{ item.new_start_time|time:"g:i A" }}-{{ item.new_end_time|time:"g:i A" }}</span>
+        {% endif %}
+        {% if item.preferred_room %}
+        <span class="uk-text-muted block">Preferred room: {{ item.preferred_room.code }}</span>
+        {% endif %}
       </div>
-      <p class="uk-text-small uk-text-muted">
-        {{ r.requester.get_full_name|default:r.requester.username }}</p>
-      <p class="uk-text-small uk-text-muted">
-        {{ r.window_start|date:"M j" }}
-        {% if r.window_end != r.window_start %}- {{ r.window_end|date:"M j, Y" }}
-        {% else %}, {{ r.window_start|date:"Y" }}{% endif %}
-        {% if r.is_time_move %}&middot; time-move{% endif %}
-      </p>
-      <p class="uk-text-small mt-2">
-        <strong>Faculty reason:</strong> {{ r.request_reason|default:"No rationale recorded." }}
-      </p>
-    </div>
-    <span class="uk-label uk-label-primary">Pending</span>
-  </div>
-
-  <div class="uk-text-small mt-2 flex flex-col gap-2">
-    {% for item in r.items.all %}
-    <div>
-      <span class="font-semibold">
-        {{ item.schedule.course_code }}-{{ item.schedule.section }}</span>
-      <span class="uk-text-muted">
-        {{ item.schedule.get_day_of_week_display }}
-        {{ item.schedule.start_time|time:"g:i A" }}-{{ item.schedule.end_time|time:"g:i A" }}
-        &middot; {% include "_room_code.html" with room=item.schedule.room %}</span>
-      {% if item.new_start_time and item.new_end_time %}
-      <span class="uk-text-muted block">
-        New time: {{ item.new_start_time|time:"g:i A" }}-{{ item.new_end_time|time:"g:i A" }}</span>
-      {% endif %}
-      {% if item.preferred_room %}
-      <span class="uk-text-muted block">
-        Preferred room: {{ item.preferred_room.code }}</span>
-      {% endif %}
-    </div>
-    {% empty %}
-    <span class="uk-text-muted">(no classes)</span>
-    {% endfor %}
-  </div>
-
-  <div class="flex flex-wrap items-end gap-2 mt-3">
-    <form hx-post="/dean/requests/{{ r.pk }}/approve"
-          hx-target="#dean-queue-panel" hx-swap="innerHTML"
-          method="post" action="/dean/requests/{{ r.pk }}/approve"
-          onsubmit="return window.confirm('Approve this request and apply all listed schedule and room changes?');">
-      {% csrf_token %}
-      <button type="submit" class="uk-btn uk-btn-primary uk-btn-sm">
-        <uk-icon icon="check" class="size-4"></uk-icon> Approve</button>
-    </form>
-    <form hx-post="/dean/requests/{{ r.pk }}/reject"
-          hx-target="#dean-queue-panel" hx-swap="innerHTML"
-          method="post" action="/dean/requests/{{ r.pk }}/reject"
-          class="flex items-end gap-2">
-      {% csrf_token %}
-      <div>
-        <label class="uk-form-label" for="reason-{{ r.pk }}">Reason</label>
-        <input id="reason-{{ r.pk }}" type="text" name="reason"
-               class="uk-input uk-form-sm h-9" placeholder="Reason for rejection">
+      {% empty %}
+      <span class="uk-text-muted">(no classes)</span>
+      {% endfor %}
+    </td>
+    <td data-label="Faculty reason" class="tbl__wide">{{ r.request_reason|default:"No rationale recorded." }}</td>
+    <td data-label="" class="tbl__actions">
+      <div class="dn-queue__actions">
+        <form hx-post="/dean/requests/{{ r.pk }}/approve"
+              hx-target="#dean-queue-panel" hx-swap="innerHTML"
+              method="post" action="/dean/requests/{{ r.pk }}/approve"
+              onsubmit="return window.confirm('Approve this request and apply all listed schedule and room changes?');">
+          {% csrf_token %}
+          <button type="submit" class="uk-btn uk-btn-primary uk-btn-sm w-full">
+            <uk-icon icon="check" class="size-4"></uk-icon> Approve</button>
+        </form>
+        <form hx-post="/dean/requests/{{ r.pk }}/reject"
+              hx-target="#dean-queue-panel" hx-swap="innerHTML"
+              method="post" action="/dean/requests/{{ r.pk }}/reject"
+              class="dn-queue__reject">
+          {% csrf_token %}
+          <input id="reason-{{ r.pk }}" type="text" name="reason"
+                 class="uk-input uk-form-sm" placeholder="Reason for rejection"
+                 aria-label="Reason for rejecting {{ r.requester.get_full_name|default:r.requester.username }}'s request">
+          <button type="submit" class="uk-btn uk-btn-secondary uk-btn-sm">
+            <uk-icon icon="x" class="size-4"></uk-icon> Reject</button>
+        </form>
       </div>
-      <button type="submit" class="uk-btn uk-btn-secondary uk-btn-sm">
-        <uk-icon icon="x" class="size-4"></uk-icon> Reject</button>
-    </form>
-  </div>
+    </td>
+  </tr>
+  {% endfor %}
+  </tbody>
+</table>
 </div>
-{% empty %}
+{% include "_pager.html" %}
+{% else %}
 <p class="uk-text-small uk-text-muted">
-  No pending modality-shift requests for your department.</p>
-{% endfor %}
+  {% if filters.q or filters.modality %}No pending requests match these filters.
+  {% else %}No pending modality-shift requests for your department.{% endif %}</p>
+{% endif %}

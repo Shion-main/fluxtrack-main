@@ -35,10 +35,12 @@ class ParsingHelperTests(SimpleTestCase):
         self.assertEqual(safe_parse_date("2026-02-28"), date(2026, 2, 28))
         self.assertIsNone(safe_parse_date(BAD_DATE))
         self.assertIsNone(safe_parse_date("not a date"))
+        self.assertIsNone(safe_parse_date(None))   # an absent GET param
 
     def test_safe_parse_time(self):
         self.assertEqual(safe_parse_time("08:30").hour, 8)
         self.assertIsNone(safe_parse_time("25:99"))
+        self.assertIsNone(safe_parse_time(None))
 
 
 class Base(TestCase):

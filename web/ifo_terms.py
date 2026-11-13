@@ -2,6 +2,7 @@
 
 from django.contrib import messages
 from django.db.models import Case, Count, IntegerField, Value, When
+from web.pagination import paginate
 from django.shortcuts import get_object_or_404, redirect, render
 from django.views.decorators.http import require_http_methods
 
@@ -78,8 +79,11 @@ def terms_list(request):
     # the newest draft.
     focus = (AcademicTerm.objects.filter(status=AcademicTerm.Status.ACTIVE).first()
              or AcademicTerm.objects.filter(status=AcademicTerm.Status.DRAFT).order_by("-pk").first())
+    pg = paginate(request, terms)               # 15 rows per page (D10)
     return render(request, "ifo/terms.html", {
-        "terms": terms, "focus_term": focus, "steps": term_steps(focus) if focus else []})
+        **pg,
+        "terms": pg["page"].object_list, "focus_term": focus,
+        "steps": term_steps(focus) if focus else []})
 
 
 @ifo_required

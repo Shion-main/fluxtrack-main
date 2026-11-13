@@ -21,6 +21,7 @@ from django.contrib.auth import get_user_model
 from django.contrib.auth.decorators import login_required
 from django.core.exceptions import PermissionDenied
 from django.core.files.storage import default_storage
+from django.db.models import Q
 from django.http import Http404, HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
@@ -54,7 +55,7 @@ from scheduling.services import (
 )
 from scheduling.term_scope import get_active_term
 from web.pagination import paginate
-from web.parsing import is_id
+from web.parsing import is_id, safe_parse_date
 from web.reporting_common import reporting_range as _reporting_range, selected_report_scope
 
 
@@ -74,15 +75,17 @@ def _posted_session_pk(request):
     return raw if is_id(raw) else 0
 
 
-def _queue_ctx(user, *, error=None, message=None):
+def _queue_ctx(request, *, error=None, message=None):
     """Context for the department-scoped pending-approval queue (D-12).
 
     Scoped strictly to PENDING requests of the Dean's OWN department -- a request
     routed to another department is NEVER listed (MOD-02/D-09). Each row carries
     the requester, target modality, window, affected schedules (with any bundled
     time-move) and the faculty's preferred room, prefetched so the template makes
-    no per-row queries.
+    no per-row queries. Filters (faculty name, target modality) and the shared
+    50-row pager (D10) read the querystring, so a filtered page is linkable.
     """
+    user = request.user
     requests = (
         ModalityShiftRequest.objects
         .filter(status=ModalityShiftStatus.PENDING, department=user.department)
@@ -90,7 +93,22 @@ def _queue_ctx(user, *, error=None, message=None):
         .prefetch_related("items__schedule__room", "items__preferred_room")
         .order_by("created_at")
     )
-    return {"requests": requests, "error": error, "message": message}
+    q = (request.GET.get("q") or "").strip()
+    if q:
+        requests = requests.filter(
+            Q(requester__first_name__icontains=q)
+            | Q(requester__last_name__icontains=q)
+            | Q(requester__username__icontains=q))
+    modality = request.GET.get("modality") or ""
+    if modality in dict(Modality.choices):
+        requests = requests.filter(target_modality=modality)
+    else:
+        modality = ""
+    pg = paginate(request, requests)
+    return {**pg, "requests": pg["page"].object_list,
+            "filters": {"q": q, "modality": modality},
+            "modality_choices": Modality.choices,
+            "error": error, "message": message}
 
 
 @dean_required
@@ -100,7 +118,7 @@ def queue(request):
     Read-only list behind the dean_required gate; the decision actions are the
     separate POST-only approve/reject views. Requests from any other department
     are excluded server-side (never merely hidden)."""
-    return render(request, "dean/queue.html", _queue_ctx(request.user))
+    return render(request, "dean/queue.html", _queue_ctx(request))
 
 
 @dean_required
@@ -130,7 +148,7 @@ def approve(request, pk):
                        or "No room available that day - request denied.")
         else:
             message = "Request approved."
-    ctx = _queue_ctx(request.user, error=error, message=message)
+    ctx = _queue_ctx(request, error=error, message=message)
     return render(request, "dean/_queue.html", ctx,
                   status=400 if error else 200)
 
@@ -158,17 +176,25 @@ def reject(request, pk):
             error = str(exc)
         else:
             message = "Request rejected."
-    ctx = _queue_ctx(request.user, error=error, message=message)
+    ctx = _queue_ctx(request, error=error, message=message)
     return render(request, "dean/_queue.html", ctx,
                   status=400 if error else 200)
 
 
-def _override_sessions(user, faculty):
-    """Upcoming scheduled sessions for one faculty member in the Dean's scope."""
+def _override_sessions(request, faculty, schedules):
+    """Upcoming scheduled sessions for one faculty member in the Dean's scope.
+
+    Filtered by class and date range from the querystring and paged at 50 rows
+    (D10). This replaces a silent ``[:100]`` cap: a term holds far more than a
+    hundred sessions, and the Dean had no way to reach the rest.
+    Returns (pager context, filters).
+    """
+    user = request.user
     term = get_active_term()
+    filters = {"schedule": "", "date_from": "", "date_to": ""}
     if user.department_id is None or faculty is None or term is None:
-        return []
-    sessions = list(
+        return paginate(request, []), filters
+    sessions = (
         Session.objects
         .filter(
             faculty__department_id=user.department_id,
@@ -178,20 +204,33 @@ def _override_sessions(user, faculty):
             scheduled_end__gt=timezone.now(),
         )
         .select_related("faculty", "schedule", "room__floor__building")
-        .order_by("date", "scheduled_start")[:100]
+        .order_by("date", "scheduled_start")
     )
+    raw_schedule = request.GET.get("schedule")
+    if is_id(raw_schedule) and any(str(s.pk) == raw_schedule for s in schedules):
+        sessions = sessions.filter(schedule_id=int(raw_schedule))
+        filters["schedule"] = raw_schedule
+    date_from = safe_parse_date(request.GET.get("from") or "")
+    if date_from:
+        sessions = sessions.filter(date__gte=date_from)
+        filters["date_from"] = date_from.isoformat()
+    date_to = safe_parse_date(request.GET.get("to") or "")
+    if date_to:
+        sessions = sessions.filter(date__lte=date_to)
+        filters["date_to"] = date_to.isoformat()
+    pg = paginate(request, sessions)
     labels = dict(Modality.choices)
-    for session in sessions:
+    for session in pg["page"].object_list:
         effective = session.declared_modality or session.schedule.modality
         session.effective_modality = effective
         session.effective_modality_label = labels[effective]
-    return sessions
+    return pg, filters
 
 
 @dean_required
 @require_http_methods(["GET"])
 def faculty_list(request):
-    """Active faculty in the Dean's own department."""
+    """Active faculty in the Dean's own department, searchable by name or email."""
     faculty_members = (
         get_user_model().objects.filter(
             role=Role.FACULTY,
@@ -201,10 +240,16 @@ def faculty_list(request):
         if request.user.department_id is not None
         else get_user_model().objects.none()
     )
+    q = (request.GET.get("q") or "").strip()
+    if q:
+        faculty_members = faculty_members.filter(
+            Q(first_name__icontains=q) | Q(last_name__icontains=q)
+            | Q(username__icontains=q) | Q(email__icontains=q))
     pg = paginate(request, faculty_members)
     return render(request, "dean/faculty_list.html", {
         **pg,
         "faculty_members": pg["page"].object_list,
+        "filters": {"q": q},
     })
 
 
@@ -289,10 +334,17 @@ def faculty_detail(request, faculty_id):
                     )
                 else:
                     message = "Modality changed successfully."
+    recurring_schedules = list(recurring_schedules)
+    pg, filters = _override_sessions(request, faculty, recurring_schedules)
+    schedule_pg = paginate(request, recurring_schedules, param="spage")
     return render(request, "dean/faculty_detail.html", {
+        **pg,
         "faculty": faculty,
-        "recurring_schedules": recurring_schedules,
-        "sessions": _override_sessions(request.user, faculty),
+        "recurring_schedules": recurring_schedules,      # the class filter needs all
+        "schedule_rows": schedule_pg["page"].object_list,
+        "schedule_pg": schedule_pg,
+        "sessions": pg["page"].object_list,
+        "filters": filters,
         "modality_choices": Modality.choices,
         "error": error,
         "message": message,

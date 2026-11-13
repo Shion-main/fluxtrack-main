@@ -14,7 +14,7 @@ def safe_parse_date(raw):
     """The date in ``raw``, or None for any bad input."""
     try:
         return parse_date(raw)
-    except ValueError:
+    except (TypeError, ValueError):   # a missing value is bad input too
         return None
 
 
@@ -22,7 +22,7 @@ def safe_parse_time(raw):
     """The time in ``raw``, or None for any bad input."""
     try:
         return parse_time(raw)
-    except ValueError:
+    except (TypeError, ValueError):   # a missing value is bad input too
         return None
 
 

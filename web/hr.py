@@ -39,7 +39,7 @@ from scheduling.models import Session
 from scheduling.report_render import csv_safe
 from scheduling.reporting import session_minutes_late
 from verification.models import CheckerValidation, ValidationAction
-from web.pagination import paginate
+from web.pagination import DEFAULT_PER_PAGE, paginate
 from web.parsing import is_id
 from web.reporting_common import selected_report_scope, status_label
 
@@ -48,7 +48,7 @@ from web.reporting_common import selected_report_scope, status_label
 # seeing everything, the wrong property for a payroll source of truth. The CSV
 # export still streams the full filtered set (HR-03); paging bounds the screen,
 # not the data.
-HR_PAGE_SIZE = 50
+HR_PAGE_SIZE = DEFAULT_PER_PAGE
 
 # CSV column contract (HR-03 payroll export). One constant so the header row and
 # every streamed data row can never drift.

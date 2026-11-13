@@ -74,8 +74,9 @@ title on a phone). Then, as needed:
 
 - `.ui-filterbar` for GET filters: open on desktop, folded behind "Filters" on a phone.
 - `.ui-stats` / `.ui-stat` for figures: equal-height cards, label, one value, one short note. Explanations go in a `.ui-explain` disclosure under the row.
-- `.tbl.tbl--stack` for tables: every `<td>` carries `data-label`; below 640px each row becomes a labelled card.
-- `_pager.html` (50 rows, D10) under every list that can grow past a screen. Live boards carry the page in their poll URL.
+- **A list that can run past a screen is a table** (rule of 2026-11-13): `.tbl.tbl--stack` -- a table on desktop, and below 640px each row becomes a labelled card (every `<td>` carries `data-label`). It keeps the row actions the list had and gets a `.ui-filterbar` with the filters a reader needs. Applies on the floor shell too. Faculty history follows it too (user ruling, 2026-11-13).
+- `.tbl--tight` (add to `.tbl--stack`) for boards and scan-first lists: the phone card is two lines with no field labels -- identifying cell, status and the row action, then the `.tbl__sub` cells joined by a dot. An empty `<td class="tbl__break">` (and a matching `<th>`) marks the line break; it is hidden on desktop. `.tbl__desk` cells show on desktop only. Used by the Checker floor board, Guard monitor, Faculty schedule, Dean roster and recurring schedule, and the IFO duty roster.
+- `_pager.html` under every list that can grow past a screen: **at most 15 rows or cards per page** (D10, `web/pagination.py` DEFAULT_PER_PAGE; views must not override it upward). Live boards carry the page in their poll URL.
 - `.ui-empty` for empty states, `.ui-steps` for multi-step processes (term set-up), `uk-alert` / `uk-badge` variants for status.
 
 ## Do and don't

@@ -76,12 +76,26 @@ def _poll_ms():
     return int(get_policy("poll_interval_seconds")) * 1000
 
 
+# Room-status filter on the floor monitor: value -> label, in board order.
+_MONITOR_STATUSES = {
+    SessionStatus.ACTIVE: "In session",
+    SessionStatus.SCHEDULED: "Scheduled",
+    SessionStatus.ABSENT: "Absent",
+    SessionStatus.COMPLETED: "Done",
+    SessionStatus.CANCELLED: "Cancelled",
+}
+
+
 @guard_required
 @require_http_methods(["GET"])
 def monitor(request):
     """GRD-01 floor monitor shell (navy floor family). The polled body is
     guard/_monitor_rows.html; on-duty state is re-derived server-side per poll."""
-    return render(request, "guard/monitor.html", {"poll_ms": _poll_ms()})
+    status = request.GET.get("status") or ""
+    return render(request, "guard/monitor.html", {
+        "poll_ms": _poll_ms(),
+        "status_choices": list(_MONITOR_STATUSES.items()),
+        "status": status if status in _MONITOR_STATUSES else ""})
 
 
 @guard_required
@@ -129,6 +143,12 @@ def monitor_rows(request):
                 row["last_end"] = session.scheduled_end
     # Shared 50-row pager (D10), one per list; the full page passes the page
     # numbers back through the poll URL, so a refresh stays on the same page.
+    # The room list can be narrowed by status (the filter lives in the page
+    # shell and rides along in the poll URL). The faculty list is never
+    # narrowed: it answers "who is on my floor today", not "which rooms".
+    status = request.GET.get("status") or ""
+    if status in _MONITOR_STATUSES:
+        sessions = [s for s in sessions if s.status == status]
     faculty_pg = paginate(request, faculty_today, param="page")
     rooms_pg = paginate(request, sessions, param="rpage")
     return render(request, "guard/_monitor_rows.html",

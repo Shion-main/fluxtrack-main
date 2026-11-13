@@ -24,7 +24,8 @@
       <td data-label="Schedules">{{ term.schedule_count }}</td><td data-label="Sessions">{{ term.session_count }}</td>
       <td class="uk-text-right" data-label=""><a href="{% url 'ifo_term_detail' term.pk %}" class="uk-btn uk-btn-ghost uk-btn-sm">Inspect</a></td>
     </tr>{% endfor %}</tbody>
-  </table></div>
+  </table>
+{% include "_pager.html" %}</div>
   {% else %}<p class="uk-text-muted">No academic terms exist yet.</p>{% endif %}
 </div>
 {% endblock %}

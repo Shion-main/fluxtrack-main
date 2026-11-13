@@ -88,45 +88,23 @@
   max-width: 65ch; margin: 5px 0 0; color: hsl(var(--muted-foreground));
   font-size: .9rem; line-height: 1.55;
 }
-.dn-faculty-grid {
-  display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px;
+/* Person cell in a desk table: avatar + name, the whole cell one link. */
+.dn-person {
+  display: inline-flex; align-items: center; gap: 10px; min-width: 0;
+  color: hsl(var(--foreground)); text-decoration: none;
 }
-.dn-faculty-card {
-  min-width: 0; min-height: 112px; padding: 18px;
-  display: flex; align-items: center; gap: 14px;
-  border: 1px solid hsl(var(--border)); border-radius: 14px;
-  background: hsl(var(--background)); color: hsl(var(--foreground));
-  text-decoration: none;
-  transition: border-color .15s ease, box-shadow .15s ease, transform .15s ease;
-}
-.dn-faculty-card:hover {
-  border-color: hsl(var(--primary) / .35);
-  box-shadow: var(--shadow-sm);
-  transform: translateY(-1px);
-}
-.dn-faculty-card:focus-visible {
-  outline: none; box-shadow: 0 0 0 3px hsl(var(--ring) / .28);
-}
-.dn-faculty-card__photo {
-  width: 58px; height: 58px; flex: none; border-radius: 50%;
+.dn-person strong { font-weight: 600; }
+.dn-person:hover strong { text-decoration: underline; text-underline-offset: 4px; }
+.dn-person:focus-visible { outline: none; border-radius: var(--radius-sm); box-shadow: 0 0 0 3px hsl(var(--ring) / .5); }
+.dn-person__photo {
+  width: 32px; height: 32px; flex: none; border-radius: 50%;
   object-fit: cover; background: hsl(var(--muted));
 }
-.dn-faculty-card__photo--empty {
+.dn-person__photo--empty {
   display: grid; place-items: center;
   background: hsl(var(--primary)); color: hsl(var(--primary-foreground));
-  font-size: .9rem; font-weight: 700;
+  font-size: .7rem; font-weight: 700;
 }
-.dn-faculty-card__body { min-width: 0; display: block; flex: 1; }
-.dn-faculty-card__body strong,
-.dn-faculty-card__body span { display: block; overflow: hidden; text-overflow: ellipsis; }
-.dn-faculty-card__body strong { white-space: nowrap; font-size: .95rem; font-weight: 650; }
-.dn-faculty-card__body > span {
-  margin-top: 2px; white-space: nowrap; color: hsl(var(--muted-foreground)); font-size: .78rem;
-}
-.dn-faculty-card__body .dn-faculty-card__action {
-  margin-top: 8px; color: hsl(var(--primary)); font-size: .76rem; font-weight: 650;
-}
-.dn-faculty-card__chevron { width: 17px; height: 17px; flex: none; color: hsl(var(--muted-foreground)); }
 .dn-empty {
   min-height: 180px; padding: 28px; display: grid; place-items: center;
   align-content: center; gap: 10px; text-align: center;
@@ -183,24 +161,26 @@
   max-width: 65ch; margin: 4px 0 0; color: hsl(var(--muted-foreground));
   font-size: .82rem; line-height: 1.5;
 }
-.dn-schedule-list { border: 1px solid hsl(var(--border)); border-radius: 14px; overflow: hidden; }
-.dn-schedule {
-  min-height: 72px; padding: 14px 16px; display: grid;
-  grid-template-columns: minmax(12rem, 1.2fr) minmax(13rem, 1fr) auto;
-  align-items: center; gap: 16px; background: hsl(var(--background));
-  border-bottom: 1px solid hsl(var(--border));
+/* Select column of the upcoming-sessions table. */
+.tbl__check { width: 1%; }
+.dn-check {
+  display: inline-flex; align-items: center; gap: 8px; min-height: 32px; margin: 0;
+  cursor: pointer; color: hsl(var(--primary)); font-size: .75rem; font-weight: 600;
 }
-.dn-schedule:last-child { border-bottom: 0; }
-.dn-schedule strong, .dn-schedule span { display: block; }
-.dn-schedule strong { font-size: .88rem; font-weight: 650; }
-.dn-schedule > div > span { margin-top: 2px; color: hsl(var(--muted-foreground)); font-size: .78rem; }
-.dn-schedule__place, .dn-session__place {
-  display: flex; align-items: center; gap: 6px; color: hsl(var(--muted-foreground));
-  font-size: .8rem;
-}
-.dn-schedule__place uk-icon, .dn-schedule__place svg,
-.dn-session__place uk-icon, .dn-session__place svg { width: 15px; height: 15px; flex: none; }
-.dn-session-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+.dn-check input { width: 17px; height: 17px; accent-color: hsl(var(--primary)); }
+.dn-check input:focus-visible { outline: 2px solid hsl(var(--ring)); outline-offset: 2px; }
+.dn-check__text { display: none; }
+.dn-session-table tbody tr:has(input:checked) { background: hsl(var(--primary) / .05); }
+/* Approval queue rows: compact class list and the two decisions side by side. */
+.dn-queue__item + .dn-queue__item { margin-top: 6px; }
+.dn-queue__item .uk-text-muted { display: block; font-size: .8rem; }
+.dn-queue td { vertical-align: top; }
+.dn-queue__actions { display: grid; gap: 8px; min-width: 15rem; white-space: normal; }
+.dn-queue__reject { display: flex; gap: 8px; }
+.dn-queue__reject .uk-input { flex: 1; min-width: 0; }
+/* IFO duty roster: the create form keeps a readable width above the table. */
+.ifo-assign-form { max-width: 48rem; }
+.ifo-roster__head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
 .dn-change-flow { display: grid; gap: 16px; }
 .dn-change-panel {
   display: grid;
@@ -255,37 +235,6 @@
 }
 .dn-change-panel__reason { min-width: 0; }
 .dn-change-panel > button { min-height: 46px; }
-.dn-session {
-  min-width: 0; padding: 18px; border: 1px solid hsl(var(--border));
-  border-radius: 14px; background: hsl(var(--background));
-  transition: border-color .15s ease, background-color .15s ease;
-}
-.dn-session:has(input:checked) {
-  border-color: hsl(var(--primary)); background: hsl(var(--primary) / .035);
-}
-.dn-session:has(input:focus-visible) {
-  outline: 2px solid hsl(var(--ring)); outline-offset: 2px;
-}
-.dn-session__top { min-width: 0; }
-.dn-session__controls {
-  min-height: 44px; display: flex; align-items: center;
-  justify-content: space-between; gap: 12px;
-}
-.dn-session__controls > .modality-badge { flex: none; }
-.dn-session__top > strong, .dn-session__top > span { display: block; }
-.dn-session__top > strong { margin-top: 4px; font-size: .92rem; font-weight: 650; }
-.dn-session__top > span {
-  margin-top: 3px; color: hsl(var(--muted-foreground)); font-size: .78rem;
-}
-.dn-session__select {
-  width: fit-content; min-height: 44px; margin: 0;
-  display: flex; align-items: center; gap: 7px; cursor: pointer;
-  color: hsl(var(--primary)); font-size: .75rem; font-weight: 650;
-}
-.dn-session__select input { width: 17px; height: 17px; accent-color: hsl(var(--primary)); }
-.dn-session__select input:focus-visible { outline: 2px solid hsl(var(--ring)); outline-offset: 2px; }
-.dn-session__place { margin: 11px 0 0; }
-
 /* --- Below 1024px: the sidebar is a shadcn Sheet (modal drawer) ---------- */
 @media (max-width: 1023.98px) {
   .cns__side {
@@ -315,36 +264,27 @@
   .cns__actions #notif-bell-toggle { min-height: var(--touch); }
   .cns__bar { padding: 0 16px; }
   .cns__body { padding: 20px 16px; }
-  .dn-faculty-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .dn-schedule { grid-template-columns: 1fr auto; }
-  .dn-schedule__place { grid-column: 1 / -1; }
   .dn-change-panel { grid-template-columns: 1fr; }
   .dn-change-panel__head { grid-column: auto; }
   .dn-change-panel > button { width: fit-content; }
-  .dn-session-grid { grid-template-columns: 1fr; }
 }
 
 @media (max-width: 639.98px) {
   .dn-pagehead { align-items: flex-start; margin-bottom: 18px; }
   .dn-pagehead__copy { font-size: .84rem; }
-  .dn-faculty-grid { grid-template-columns: 1fr; gap: 10px; }
-  .dn-faculty-card { min-height: 96px; padding: 14px; }
-  .dn-faculty-card__photo { width: 52px; height: 52px; }
   .dn-profile { align-items: flex-start; flex-wrap: wrap; padding: 16px; }
   .dn-profile__photo { width: 64px; height: 64px; }
   .dn-profile__identity { flex: 1; }
   .dn-profile__scorecard { width: 100%; margin-left: 0; }
   .dn-section { margin-top: 28px; }
   .dn-section__head { gap: 10px; }
-  .dn-schedule { grid-template-columns: 1fr; gap: 9px; }
-  .dn-schedule__place { grid-column: auto; }
-  .dn-schedule > .modality-badge { width: fit-content; }
   .dn-change-panel { padding: 14px; }
+  .dn-check__text { display: inline; }
+  .dn-queue__actions { min-width: 0; }
   .dn-change-panel__head { align-items: flex-start; }
   .dn-modality-options { grid-template-columns: 1fr; }
   .dn-modality-option { justify-content: flex-start; }
   .dn-change-panel > button { width: 100%; }
-  .dn-session { padding: 15px; }
 }
 
 @media (max-width: 639.98px) {
@@ -360,18 +300,16 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .cns__side, .cns__scrim, .cns__link, .dn-faculty-card, .dn-session {
+  .cns__side, .cns__scrim, .cns__link {
     transition: none;
   }
-  .dn-faculty-card:hover { transform: none; }
 }
 
 .cns__body .ui-pagehead__actions:empty { display: none; }
 
-/* Between 1024 and 1280 the sidebar leaves too little room for two session
-   columns or the three-column change panel; stack them. */
+/* Between 1024 and 1280 the sidebar leaves too little room for the
+   three-column change panel; stack it. */
 @media (max-width: 1279.98px) {
-  .dn-session-grid { grid-template-columns: 1fr; }
   .dn-change-panel { grid-template-columns: 1fr; }
   .dn-change-panel__head { grid-column: auto; }
   .dn-change-panel > button { width: fit-content; }

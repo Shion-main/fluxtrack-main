@@ -29,91 +29,74 @@ text label. ASCII-only (no em dash).
       <div class="ft-greet__date">Your own session records. Read-only.</div>
     </div>
 
-    <form class="ft-form ft-history-filter" method="get"
-          action="{% url 'faculty_history' %}">
-      <div class="ft-history-filter__fields">
-        <div class="ft-field ft-history-filter__term">
-          <label class="ft-field__label" for="hist-term">Term</label>
-          <select class="ft-control" id="hist-term" name="term">
-            <option value="">All terms</option>
-            {% for t in term_choices %}
-            <option value="{{ t.id }}" {% if filters.term == t.id|stringformat:'s' %}selected{% endif %}>{{ t.name }}</option>
-            {% endfor %}
-          </select>
+    <details class="ui-filterbar" open>
+      <summary><uk-icon icon="sliders-horizontal"></uk-icon> Filters</summary>
+      <form method="get" action="{% url 'faculty_history' %}">
+        <div class="ui-filterbar__body">
+          <label class="ui-field">
+            <span class="ui-field__label">Term</span>
+            <select class="uk-select" name="term">
+              <option value="">All terms</option>
+              {% for t in term_choices %}
+              <option value="{{ t.id }}" {% if filters.term == t.id|stringformat:'s' %}selected{% endif %}>{{ t.name }}</option>
+              {% endfor %}
+            </select>
+          </label>
+          <label class="ui-field">
+            <span class="ui-field__label">From</span>
+            <input class="uk-input" type="date" name="from" value="{{ filters.date_from }}">
+          </label>
+          <label class="ui-field">
+            <span class="ui-field__label">To</span>
+            <input class="uk-input" type="date" name="to" value="{{ filters.date_to }}">
+          </label>
+          <button class="uk-btn uk-btn-primary" type="submit">Apply</button>
+          <a class="uk-btn uk-btn-ghost" href="{% url 'faculty_history' %}">Reset</a>
         </div>
-        <div class="ft-field">
-          <label class="ft-field__label" for="hist-from">From</label>
-          <input class="ft-control" type="date" id="hist-from" name="from"
-                 value="{{ filters.date_from }}">
-        </div>
-        <div class="ft-field">
-          <label class="ft-field__label" for="hist-to">To</label>
-          <input class="ft-control" type="date" id="hist-to" name="to"
-                 value="{{ filters.date_to }}">
-        </div>
-      </div>
-      <div class="ft-history-filter__actions">
-        <button class="ft-btn-navy" type="submit">
-          <uk-icon icon="filter"></uk-icon> Apply filters</button>
-        <a class="ft-btn-soft" href="{% url 'faculty_history' %}">Reset</a>
-      </div>
-      {% if filters.note %}
-      <p class="ft-help" role="status" data-note="filter">
-        <uk-icon icon="alert-triangle"></uk-icon> {{ filters.note }}</p>
-      {% endif %}
-    </form>
+        {% if filters.note %}
+        <p class="ui-field__desc ui-filterbar__note" role="status" data-note="filter">{{ filters.note }}</p>
+        {% endif %}
+      </form>
+    </details>
 
     {% if sessions %}
-    <div class="ft-history-cards" aria-label="Attendance records">
+    <div class="table-wrap">
+    <table class="tbl tbl--stack" aria-label="Attendance records">
+      <thead><tr>
+        <th>Class</th><th>Date</th><th>Status</th><th>Scheduled</th><th>Actual start</th><th>Checker review</th>
+      </tr></thead>
+      <tbody>
       {% for s in sessions %}
-      <article class="ft-history-card" data-history-session="{{ s.pk }}"
-               aria-label="{{ s.schedule.course_code }} {{ s.schedule.section }} attendance on {{ s.date|date:'F j, Y' }}">
-        <div class="ft-history-card__top">
-          <div class="ft-history-card__identity">
-            <h2 class="ft-history-card__course">{{ s.schedule.course_code }} · {{ s.schedule.section }}</h2>
-            <time class="ft-history-card__date" datetime="{{ s.date|date:'Y-m-d' }}">
-              <uk-icon icon="calendar-days"></uk-icon>
-              {{ s.date|date:"D, M j, Y" }}
-            </time>
-          </div>
-          <div class="ft-history-card__status">
-            {% if s.present_label == "Present" %}
-            <span class="ft-pill ft-pill--active"><uk-icon icon="check"></uk-icon> Present</span>
-            {% elif s.present_label == "Absent" %}
-            <span class="ft-pill ft-pill--absent"><uk-icon icon="x"></uk-icon> Absent</span>
-            {% elif s.present_label == "Cancelled" %}
-            <span class="ft-pill ft-pill--done"><uk-icon icon="x"></uk-icon> Cancelled</span>
-            {% else %}
-            <span class="ft-pill ft-pill--upcoming"><uk-icon icon="clock"></uk-icon> Scheduled</span>
-            {% endif %}
-          </div>
-        </div>
-
-        <dl class="ft-history-card__facts">
-          <div>
-            <dt>Scheduled</dt>
-            <dd>{{ s.scheduled_start|time:"g:i A" }}</dd>
-          </div>
-          <div>
-            <dt>Actual start</dt>
-            <dd>{% if s.actual_start %}{{ s.actual_start|time:"g:i A" }}{% else %}<span aria-label="No actual start recorded">Not recorded</span>{% endif %}</dd>
-          </div>
-          <div class="ft-history-card__review">
-            <dt>Checker review</dt>
-            <dd>
-              {% if s.is_flagged %}
-              <span class="ft-pill ft-pill--absent" data-flag="1">
-                <uk-icon icon="flag"></uk-icon> {{ s.flag_reason|default:"Flagged" }}</span>
-              {% elif s.is_verified %}
-              <span class="ft-pill ft-pill--done"><uk-icon icon="check-check"></uk-icon> Verified</span>
-              {% else %}
-              <span class="ft-pill ft-pill--upcoming"><uk-icon icon="circle"></uk-icon> Not checked</span>
-              {% endif %}
-            </dd>
-          </div>
-        </dl>
-      </article>
+      <tr data-history-session="{{ s.pk }}">
+        <td data-label="Class"><strong>{{ s.schedule.course_code }} &middot; {{ s.schedule.section }}</strong></td>
+        <td data-label="Date" class="whitespace-nowrap"><time datetime="{{ s.date|date:'Y-m-d' }}">{{ s.date|date:"D, M j, Y" }}</time></td>
+        <td data-label="Status">
+          {% if s.present_label == "Present" %}
+          <span class="ft-pill ft-pill--active"><uk-icon icon="check"></uk-icon> Present</span>
+          {% elif s.present_label == "Absent" %}
+          <span class="ft-pill ft-pill--absent"><uk-icon icon="x"></uk-icon> Absent</span>
+          {% elif s.present_label == "Cancelled" %}
+          <span class="ft-pill ft-pill--done"><uk-icon icon="x"></uk-icon> Cancelled</span>
+          {% else %}
+          <span class="ft-pill ft-pill--upcoming"><uk-icon icon="clock"></uk-icon> Scheduled</span>
+          {% endif %}
+        </td>
+        <td data-label="Scheduled" class="whitespace-nowrap">{{ s.scheduled_start|time:"g:i A" }}</td>
+        <td data-label="Actual start" class="whitespace-nowrap">{% if s.actual_start %}{{ s.actual_start|time:"g:i A" }}{% else %}<span class="uk-text-muted" aria-label="No actual start recorded">Not recorded</span>{% endif %}</td>
+        <td data-label="Checker review">
+          {% if s.is_flagged %}
+          <span class="ft-pill ft-pill--absent" data-flag="1">
+            <uk-icon icon="flag"></uk-icon> {{ s.flag_reason|default:"Flagged" }}</span>
+          {% elif s.is_verified %}
+          <span class="ft-pill ft-pill--done"><uk-icon icon="check-check"></uk-icon> Verified</span>
+          {% else %}
+          <span class="ft-pill ft-pill--upcoming"><uk-icon icon="circle"></uk-icon> Not checked</span>
+          {% endif %}
+        </td>
+      </tr>
       {% endfor %}
+      </tbody>
+    </table>
     </div>
 
     {% include "_pager.html" %}

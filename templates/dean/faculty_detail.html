@@ -40,6 +40,7 @@
   </a>
 </section>
 
+
 <section class="dn-section">
   <div class="dn-section__head">
     <div>
@@ -51,25 +52,24 @@
     </span>
   </div>
   {% if recurring_schedules %}
-  <div class="dn-schedule-list">
-    {% for schedule in recurring_schedules %}
-    <article class="dn-schedule">
-      <div>
-        <strong>{{ schedule.course_code }}-{{ schedule.section }}</strong>
-        <span>
-          {{ schedule.get_day_of_week_display }} &middot;
-          {{ schedule.start_time|time:"g:i A" }}-{{ schedule.end_time|time:"g:i A" }}
-        </span>
-      </div>
-      <div class="dn-schedule__place">
-        <uk-icon icon="map-pin"></uk-icon>
-        {{ schedule.room.floor.building.code }} &middot;
-        Floor {{ schedule.room.floor.number }} &middot; {{ schedule.room.code }}
-      </div>
-      {% include "_modality_badge.html" with modality=schedule.modality %}
-    </article>
+  <div class="table-wrap">
+  <table class="tbl tbl--stack tbl--tight" aria-label="Recurring schedule">
+    <thead><tr><th>Class</th><th>Modality</th><th class="tbl__break"></th><th>Day</th><th>Time</th><th>Room</th></tr></thead>
+    <tbody>
+    {% for schedule in schedule_rows %}
+    <tr>
+      <td data-label="Class"><strong>{{ schedule.course_code }}-{{ schedule.section }}</strong></td>
+      <td data-label="Modality">{% include "_modality_badge.html" with modality=schedule.modality %}</td>
+      <td class="tbl__break" aria-hidden="true"></td>
+      <td data-label="Day" class="tbl__sub">{{ schedule.get_day_of_week_display }}</td>
+      <td data-label="Time" class="tbl__sub whitespace-nowrap">{{ schedule.start_time|time:"g:i A" }}-{{ schedule.end_time|time:"g:i A" }}</td>
+      <td data-label="Room" class="tbl__sub">{{ schedule.room.floor.building.code }} &middot; Floor {{ schedule.room.floor.number }} &middot; {{ schedule.room.code }}</td>
+    </tr>
     {% endfor %}
+    </tbody>
+  </table>
   </div>
+  {% with p=schedule_pg %}{% include "_pager.html" with page=p.page paginator=p.paginator page_range=p.page_range querystring=p.querystring page_param=p.page_param %}{% endwith %}
   {% else %}
   <div class="dn-empty dn-empty--compact">
     <uk-icon icon="calendar-x"></uk-icon>
@@ -78,16 +78,43 @@
   {% endif %}
 </section>
 
-<section class="dn-section">
+<section class="dn-section" id="upcoming">
   <div class="dn-section__head">
     <div>
       <h2>Upcoming sessions</h2>
       <p>Select one or more sessions to change their modality.</p>
     </div>
     <span class="uk-badge uk-badge-secondary">
-      {{ sessions|length }} session{{ sessions|length|pluralize }}
+      {{ paginator.count }} session{{ paginator.count|pluralize }}
     </span>
   </div>
+
+  <details class="ui-filterbar" open>
+    <summary><uk-icon icon="sliders-horizontal"></uk-icon> Filters</summary>
+    <form method="get" action="#upcoming">
+      <div class="ui-filterbar__body">
+        <label class="ui-field">
+          <span class="ui-field__label">Class</span>
+          <select name="schedule" class="uk-select">
+            <option value="">All classes</option>
+            {% for s in recurring_schedules %}
+            <option value="{{ s.pk }}" {% if filters.schedule == s.pk|stringformat:'s' %}selected{% endif %}>{{ s.course_code }}-{{ s.section }} &middot; {{ s.get_day_of_week_display|slice:":3" }} {{ s.start_time|time:"g:i A" }}</option>
+            {% endfor %}
+          </select>
+        </label>
+        <label class="ui-field">
+          <span class="ui-field__label">From</span>
+          <input type="date" name="from" class="uk-input" value="{{ filters.date_from }}">
+        </label>
+        <label class="ui-field">
+          <span class="ui-field__label">To</span>
+          <input type="date" name="to" class="uk-input" value="{{ filters.date_to }}">
+        </label>
+        <button type="submit" class="uk-btn uk-btn-primary">Apply</button>
+        <a href="{% url 'dean_faculty_detail' faculty.pk %}#upcoming" class="uk-btn uk-btn-ghost">Reset</a>
+      </div>
+    </form>
+  </details>
 
   {% if sessions %}
   <form method="post" class="dn-change-flow"
@@ -99,7 +126,7 @@
       <div class="dn-change-panel__head">
         <div>
           <h3 id="change-modality-heading">Choose the new modality</h3>
-          <p>The same modality and reason will apply to every selected session.</p>
+          <p>The same modality and reason will apply to every selected session on this page.</p>
         </div>
         <span class="dn-change-panel__count" aria-live="polite">
           <b data-bulk-count>0</b> selected
@@ -130,38 +157,40 @@
       </button>
     </section>
 
-    <div class="dn-session-grid">
+    <div class="table-wrap">
+    <table class="tbl tbl--stack dn-session-table" aria-label="Upcoming sessions">
+      <thead><tr>
+        <th class="tbl__check"><label class="dn-check"><input type="checkbox" data-bulk-all aria-label="Select every session on this page"></label></th>
+        <th>Date</th><th>Time</th><th>Class</th><th>Room</th><th>Modality</th>
+      </tr></thead>
+      <tbody>
       {% for session in sessions %}
-      <article class="dn-session">
-        <div class="dn-session__top">
-          <div class="dn-session__controls">
-            <label class="dn-session__select">
-              <input type="checkbox" name="sessions" value="{{ session.pk }}"
-                     data-bulk-session>
-              Select session
-            </label>
-            {% include "_modality_badge.html" with modality=session.effective_modality %}
-          </div>
-          <strong>{{ session.schedule.course_code }}-{{ session.schedule.section }}</strong>
-          <span>
-            {{ session.date|date:"l, M j, Y" }} &middot;
-            {{ session.scheduled_start|time:"g:i A" }}-{{ session.scheduled_end|time:"g:i A" }}
-          </span>
-        </div>
-        <p class="dn-session__place">
-          <uk-icon icon="map-pin"></uk-icon>
-          {{ session.room.floor.building.code }} &middot;
-          Floor {{ session.room.floor.number }} &middot; {{ session.room.code }}
-        </p>
-      </article>
+      <tr>
+        <td class="tbl__check" data-label="">
+          <label class="dn-check">
+            <input type="checkbox" name="sessions" value="{{ session.pk }}" data-bulk-session
+                   aria-label="Select {{ session.schedule.course_code }}-{{ session.schedule.section }} on {{ session.date|date:'M j' }}">
+            <span class="dn-check__text">Select</span>
+          </label>
+        </td>
+        <td data-label="Date" class="whitespace-nowrap">{{ session.date|date:"D, M j, Y" }}</td>
+        <td data-label="Time" class="whitespace-nowrap">{{ session.scheduled_start|time:"g:i A" }}-{{ session.scheduled_end|time:"g:i A" }}</td>
+        <td data-label="Class"><strong>{{ session.schedule.course_code }}-{{ session.schedule.section }}</strong></td>
+        <td data-label="Room">{{ session.room.floor.building.code }} &middot; Floor {{ session.room.floor.number }} &middot; {{ session.room.code }}</td>
+        <td data-label="Modality">{% include "_modality_badge.html" with modality=session.effective_modality %}</td>
+      </tr>
       {% endfor %}
+      </tbody>
+    </table>
     </div>
   </form>
+  {% include "_pager.html" %}
   {% else %}
   <div class="dn-empty dn-empty--compact">
     <uk-icon icon="calendar-check"></uk-icon>
     <p class="uk-text-small uk-text-muted">
-      No upcoming scheduled sessions are available to override.
+      {% if filters.schedule or filters.date_from or filters.date_to %}No upcoming sessions match these filters.
+      {% else %}No upcoming scheduled sessions are available to override.{% endif %}
     </p>
   </div>
   {% endif %}
@@ -170,6 +199,7 @@
 <script>
   (function () {
     var boxes = Array.from(document.querySelectorAll("[data-bulk-session]"));
+    var all = document.querySelector("[data-bulk-all]");
     var count = document.querySelector("[data-bulk-count]");
     var submit = document.querySelector("[data-bulk-submit]");
     var submitLabel = document.querySelector("[data-bulk-submit-label]");
@@ -177,12 +207,20 @@
       var selected = boxes.filter(function (box) { return box.checked; }).length;
       count.textContent = selected;
       submit.disabled = selected === 0;
+      if (all) {
+        all.checked = selected > 0 && selected === boxes.length;
+        all.indeterminate = selected > 0 && selected < boxes.length;
+      }
       if (selected === 1) submitLabel.textContent = "Change 1 session";
       else if (selected > 1) submitLabel.textContent = "Change " + selected + " sessions";
       else submitLabel.textContent = "Change selected sessions";
     }
     boxes.forEach(function (box) {
       box.addEventListener("change", updateBulkState);
+    });
+    if (all) all.addEventListener("change", function () {
+      boxes.forEach(function (box) { box.checked = all.checked; });
+      updateBulkState();
     });
     updateBulkState();
   })();

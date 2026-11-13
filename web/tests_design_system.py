@@ -468,7 +468,7 @@ class PaginationTests(TestCase):
         body = self.client.get("/notifications").content.decode()
         self.assertIn('aria-label="Pagination"', body)
         self.assertIn("Showing <b>1</b>", body)
-        body2 = self.client.get("/notifications?page=2").content.decode()
+        body2 = self.client.get("/notifications?page=99").content.decode()  # clamps to the last page
         self.assertIn("Notice 00", body2)       # the oldest rows are reachable now
         self.assertNotIn("Notice 54", body2)
 

@@ -200,6 +200,34 @@
   .table-scroll-hint:has(+ .table-wrap > .tbl--stack) { display: none; }
 }
 
+/* --- .tbl--tight: the compact phone card for boards and scan-first lists ----
+   Add to a .tbl--stack table. Below 640px each row is a two-line card with no
+   field labels: line 1 = the identifying cell(s) + status + the row action,
+   line 2 = the .tbl__sub cells joined by a dot. An empty <td class="tbl__break">
+   marks where line 2 starts; it is hidden at desktop widths, where the row is
+   an ordinary table row. .tbl__desk cells exist only on desktop (for example a
+   "View" button whose job the linked name already does on a phone). */
+.tbl .tbl__break { display: none; }
+@media (max-width: 639.98px) {
+  .tbl--tight tbody { gap: 8px; }
+  .tbl--tight tbody tr,
+  .tbl--tight tbody tr:last-child {
+    display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; padding: 12px 14px;
+  }
+  .tbl--tight td,
+  .tbl--tight td:first-child,
+  .tbl--tight td:last-child { width: auto; }
+  .tbl--tight td::before { display: none; }
+  .tbl--tight td.tbl__actions { order: 2; margin-left: auto; }
+  .tbl--tight td.tbl__break { display: block; order: 3; flex-basis: 100%; height: 0; }
+  .tbl--tight td.tbl__sub { order: 4; font-size: .8125rem; color: hsl(var(--muted-foreground)); }
+  .tbl--tight td.tbl__sub + td.tbl__sub::before {
+    content: "\00b7"; display: inline; margin-right: 10px; font-size: inherit; color: inherit;
+  }
+  .tbl--tight td.tbl__desk { display: none; }
+  .tbl--tight td:first-child a { display: inline-flex; align-items: center; min-height: var(--touch); }
+}
+
 /* Status pill = shadcn Badge (MMCM status variants); one definition for every
    desk table cell. */
 .pill {
