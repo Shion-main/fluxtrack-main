@@ -1,0 +1,36 @@
+{% comment %}Role hub body, shared by the console and the plain fallback. ASCII-only.{% endcomment %}
+<div class="ui-pagehead">
+  <div>
+    <h1 class="ui-pagehead__title">{{ user.get_full_name|default:user.username }}</h1>
+    <p class="ui-pagehead__desc">{{ user.get_role_display }}{% if user.department %} &middot; {{ user.department.name }}{% endif %}</p>
+  </div>
+</div>
+  <nav class="flex flex-col gap-2" aria-label="Your surfaces">
+    {% for card in surfaces %}
+    {% if card.href == "#" %}
+    <div class="flex items-center gap-4 rounded-md border border-border p-4 min-h-14 opacity-60"
+         aria-disabled="true">
+      <uk-icon icon="{{ card.icon }}" class="size-5 text-muted-foreground shrink-0"></uk-icon>
+      <div class="min-w-0">
+        <div class="font-semibold">{{ card.title }}</div>
+        <div class="uk-text-small uk-text-muted">{{ card.desc }}</div>
+      </div>
+      <span class="uk-badge uk-badge-secondary ml-auto shrink-0">Soon</span>
+    </div>
+    {% else %}
+    <a href="{{ card.href }}"
+       class="flex items-center gap-4 rounded-md border border-border p-4 min-h-14 hover:bg-muted transition-colors">
+      <uk-icon icon="{{ card.icon }}" class="size-5 text-muted-foreground shrink-0"></uk-icon>
+      <div class="min-w-0">
+        <div class="font-semibold">{{ card.title }}</div>
+        <div class="uk-text-small uk-text-muted">{{ card.desc }}</div>
+      </div>
+      <uk-icon icon="chevron-right" class="size-4 text-muted-foreground ml-auto shrink-0"></uk-icon>
+    </a>
+    {% endif %}
+    {% empty %}
+    <div class="rounded-md border border-border p-6 text-center">
+      <p class="uk-text-muted mb-0">No surfaces are assigned to your account yet. Contact the IFO if you expect access here.</p>
+    </div>
+    {% endfor %}
+  </nav>

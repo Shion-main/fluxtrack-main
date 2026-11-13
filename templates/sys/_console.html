@@ -1,0 +1,21 @@
+{% extends "_console.html" %}
+{% comment %}System administrator console: the shared console shell with the
+SysAdmin navigation (overview hub, job monitor, Django admin, audit log). The
+admin links leave the console for Django admin, which carries its own MMCM
+branding. ASCII-only.{% endcomment %}
+{% block console_navlabel %}System administration{% endblock %}
+{% block console_nav %}
+  <a href="/" class="cns__link {% if un == 'home' %}is-active{% endif %}"
+     {% if un == 'home' %}aria-current="page"{% endif %}>
+    <uk-icon icon="layout-grid"></uk-icon> Overview</a>
+  <a href="{% url 'sys_jobs' %}" class="cns__link {% if un == 'sys_jobs' %}is-active{% endif %}"
+     {% if un == 'sys_jobs' %}aria-current="page"{% endif %}>
+    <uk-icon icon="activity"></uk-icon> Job monitor</a>
+  <a href="{% url 'notifications' %}" class="cns__link {% if un == 'notifications' or un == 'notif_settings' %}is-active{% endif %}"
+     {% if un == 'notifications' or un == 'notif_settings' %}aria-current="page"{% endif %}>
+    <uk-icon icon="bell"></uk-icon> Notifications</a>
+
+  <div class="cns__sec">Django admin</div>
+  <a href="/admin/" class="cns__link"><uk-icon icon="settings"></uk-icon> Users and settings</a>
+  <a href="/admin/ops/auditlog/" class="cns__link"><uk-icon icon="list"></uk-icon> Audit log</a>
+{% endblock %}

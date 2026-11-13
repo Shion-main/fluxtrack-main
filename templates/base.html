@@ -17,6 +17,8 @@
        Franken (to win the admin override) and BEFORE faculty.css (which reads it). -->
   <link rel="stylesheet" href="{% static 'css/tokens.css' %}"/>
   <link rel="stylesheet" href="{% static 'css/app.css' %}"/>
+  <!-- shadcn components tuned to spec + the ones Franken lacks (ui-*). -->
+  <link rel="stylesheet" href="{% static 'css/ui.css' %}"/>
   <link rel="stylesheet" href="{% static 'faculty/faculty.css' %}"/>
   <script src="{% static 'vendor/franken-ui/2.1.2/core.iife.js' %}" defer></script>
   <script src="{% static 'vendor/franken-ui/2.1.2/icon.iife.js' %}" defer></script>
@@ -103,7 +105,7 @@
     <header class="border-b border-border sticky top-0 z-30 bg-background">
       <div class="uk-container max-w-5xl h-14 flex items-center gap-3">
         <a href="/" class="font-semibold">FluxTrack</a>
-        <span class="uk-label uk-label-secondary">{{ user.get_role_display }}</span>
+        <span class="uk-badge uk-badge-secondary">{{ user.get_role_display }}</span>
         <nav class="ml-auto flex items-center gap-1">
           {% if user.is_superuser or user.role == "system_admin" %}<a href="/admin/" class="uk-btn uk-btn-ghost uk-btn-sm">Admin</a>{% endif %}
           <a href="{% url 'profile' %}" class="uk-btn uk-btn-ghost uk-btn-sm">
@@ -125,6 +127,21 @@
   {% comment %}One failure surface for every htmx-powered action. Validation
   responses (400) deliberately swap inline and do not reach this listener; real
   transport/server failures stay out of target content and are announced here.{% endcomment %}
+  {% comment %}Filter bars (.ui-filterbar) start open so the page works without
+  JS; on a phone they fold behind a "Filters" button so results come first.{% endcomment %}
+  <script>
+    (function () {
+      var phone = window.matchMedia("(max-width: 639.98px)");
+      function sync() {
+        /* Fold on a phone; reopen when the screen widens (rotation, resize),
+           because the "Filters" button is hidden from 640px up. */
+        document.querySelectorAll("details.ui-filterbar").forEach(function (d) { d.open = !phone.matches; });
+      }
+      if (phone.matches) sync();
+      if (phone.addEventListener) phone.addEventListener("change", sync);
+      else if (phone.addListener) phone.addListener(sync);
+    })();
+  </script>
   <div id="htmx-failure" class="system-alert" role="alert" aria-live="assertive" hidden>
     <uk-icon icon="circle-alert" aria-hidden="true"></uk-icon>
     <div>

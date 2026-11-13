@@ -417,8 +417,10 @@ def _scoped_sessions(*, term, start, end, department=None, as_of=None, faculty=N
     return qs
 
 
-def _name(first, last):
-    return f"{first} {last}".strip()
+def _name(first, last, username=""):
+    """Display name for a faculty row; the username when both names are blank,
+    so a report row is never an empty link (seen on the IFO dashboard)."""
+    return f"{first or ''} {last or ''}".strip() or (username or "")
 
 
 def _verified_map(qs):
@@ -515,7 +517,7 @@ def faculty_attendance(*, term, start, end, department=None, as_of=None):
         term=term, start=start, end=end, department=department, as_of=as_of)
 
     status_rows = (
-        qs.values("faculty_id", "faculty__first_name", "faculty__last_name")
+        qs.values("faculty_id", "faculty__first_name", "faculty__last_name", "faculty__username")
         .annotate(
             scheduled=_scheduled_count(),
             held=Count("id", filter=Q(status__in=HELD_STATUSES)),
@@ -536,7 +538,7 @@ def faculty_attendance(*, term, start, end, department=None, as_of=None):
         rows.append(
             FacultyRow(
                 faculty_id=fid,
-                name=_name(r["faculty__first_name"], r["faculty__last_name"]),
+                name=_name(r["faculty__first_name"], r["faculty__last_name"], r["faculty__username"]),
                 scheduled=r["scheduled"],
                 held=r["held"],
                 absent=r["absent"],
@@ -709,7 +711,7 @@ def faculty_scorecard(*, term, faculty, start, end, as_of=None):
 
     return Scorecard(
         faculty_id=faculty.id,
-        name=_name(faculty.first_name, faculty.last_name),
+        name=_name(faculty.first_name, faculty.last_name, faculty.username),
         scheduled=agg["scheduled"] or 0,
         held=agg["held"] or 0,
         absent=agg["absent"] or 0,

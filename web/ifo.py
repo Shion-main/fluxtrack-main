@@ -431,8 +431,12 @@ def room_detail(request, code):
         if occupies(s, room)][:10]
     if not room.is_virtual:
         schedules = [s for s in schedules if s.modality != Modality.ONLINE]
+    # Shared 50-row pager (D10) on the "Classes in this room" list; the weekly
+    # grid above still shows the whole week.
+    room_classes_pg = paginate(request, schedules)
     return render(request, "ifo/room_detail.html", {
         "room": room, "schedules": schedules, "upcoming": upcoming, "term": term,
+        "room_classes_pg": room_classes_pg,
         "timetable": room_timetable(room, term),
         "flash": request.session.pop("ifo_flash", None),
         "printed_on": timezone.localtime(),

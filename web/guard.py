@@ -18,6 +18,8 @@ from django.db.models import Q
 from django.http import Http404
 from django.shortcuts import get_object_or_404, render
 from django.utils import timezone
+
+from web.pagination import paginate
 from django.views.decorators.http import require_http_methods
 
 from accounts.models import Role
@@ -125,8 +127,14 @@ def monitor_rows(request):
                 row["first_start"] = session.scheduled_start
             if session.scheduled_end > row["last_end"]:
                 row["last_end"] = session.scheduled_end
+    # Shared 50-row pager (D10), one per list; the full page passes the page
+    # numbers back through the poll URL, so a refresh stays on the same page.
+    faculty_pg = paginate(request, faculty_today, param="page")
+    rooms_pg = paginate(request, sessions, param="rpage")
     return render(request, "guard/_monitor_rows.html",
-                  {"sessions": sessions, "faculty_today": faculty_today,
+                  {"sessions": rooms_pg["page"].object_list,
+                   "faculty_today": faculty_pg["page"].object_list,
+                   "faculty_pg": faculty_pg, "rooms_pg": rooms_pg,
                    "on_duty": bool(floor_ids),
                    "now": timezone.localtime(now)})
 

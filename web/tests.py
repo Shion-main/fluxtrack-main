@@ -1076,11 +1076,16 @@ class ConsoleChromeTests(TestCase):
                     self.skipTest(f"{path} -> {resp.status_code}")
                 self.assertEqual(self._headers(resp), 1, f"{path} chrome")
 
-    def test_non_console_page_keeps_the_global_header(self):
-        """The negative half: suppression must not leak to ordinary pages.
+    def test_shared_desk_page_keeps_one_header_and_real_navigation(self):
+        """The negative half: suppression must not strip a page's navigation.
 
         Without this, 'delete the global header everywhere' would pass the two
-        tests above while stripping the only navigation a non-console page has.
+        tests above while stripping the only navigation a page has.
+
+        Updated 2026-11-08 (unified responsive UI, Task 5): shared desk pages
+        such as /notifications used to keep the legacy global header; they now
+        render inside the role's console. The intent is unchanged: exactly one
+        header, and the role's navigation is present.
         """
         self.client.force_login(self.ifo)
         resp = self.client.get("/notifications")
@@ -1088,5 +1093,6 @@ class ConsoleChromeTests(TestCase):
             self.skipTest(f"/notifications -> {resp.status_code}")
         body = resp.content.decode("utf-8", "replace")
         self.assertEqual(body.count("<header"), 1)
-        self.assertIn("sticky top-0", body)
-        self.assertNotIn('<header class="cns__bar"', body)
+        self.assertIn('<header class="cns__bar"', body)
+        self.assertIn('class="cns__link', body)
+        self.assertIn('href="/ifo/rooms"', body)

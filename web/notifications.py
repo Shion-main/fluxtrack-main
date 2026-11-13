@@ -19,6 +19,7 @@ from django.views.decorators.http import require_http_methods
 
 from accounts.models import Role
 from ops.models import NotificationMute
+from web.pagination import paginate
 from ops.notifications import (NotificationCategory, _mark_read, unread_count,
                                visible_qs)
 
@@ -74,11 +75,12 @@ def dropdown(request):
 @login_required
 def list_page(request):
     """Full-page history over the recent visible rows, THEN mark read (D-03)."""
-    rows = list(visible_qs(request.user)[:LIST_LIMIT])
+    pg = paginate(request, visible_qs(request.user), per_page=LIST_LIMIT)
+    rows = list(pg["page"].object_list)
     response = render(
         request,
         "notifications/list.html",
-        _page_context(request.user, rows=rows),
+        _page_context(request.user, rows=rows, **pg),
     )
     _mark_read(request.user.notifications.filter(id__in=[n.id for n in rows]))
     return response

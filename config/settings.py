@@ -128,6 +128,8 @@ TEMPLATES = [
                 # Global notification bell context (NOTIF-01): poll_ms + unread
                 # count + VAPID public key on every page, both shells (D-02).
                 "web.context.notifications",
+                # Which console shell a desk role renders inside (one rule).
+                "web.context.role_console",
             ],
         },
     },

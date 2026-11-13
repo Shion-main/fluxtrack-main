@@ -8,8 +8,9 @@ in place. ASCII-only.
 {% endcomment %}
 {% block title %}Approval queue - FluxTrack{% endblock %}
 {% block console_title %}Approvals{% endblock %}
+{% block page_title %}Approvals{% endblock %}
+{% block page_desc %}<p class="ui-pagehead__desc">Pending modality-shift requests from your department. Approve or reject with a reason.</p>{% endblock %}
 {% block console %}
-<p class="uk-text-muted mb-6">Pending modality-shift requests from your department. Approve or reject with a reason (MOD-02).</p>
 <div id="dean-queue-panel">
   {% include "dean/_queue.html" %}
 </div>

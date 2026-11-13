@@ -418,3 +418,14 @@ class CrossTermLeakageTests(TestCase):
             start=self.fx.week_start, end=self.fx.sun)
         self.assertEqual(summary.scheduled, 8)
         self.assertEqual(card.scheduled, 8)
+
+
+class FacultyNameFallbackTests(SimpleTestCase):
+    """A faculty account with no first/last name must still be named on reports
+    (the IFO dashboard showed a blank row, only a chevron, before 2026-11-08)."""
+
+    def test_blank_names_fall_back_to_username(self):
+        from scheduling.reporting import _name
+        self.assertEqual(_name("", "", "jdelacruz"), "jdelacruz")
+        self.assertEqual(_name("Ana", "Reyes", "areyes"), "Ana Reyes")
+        self.assertEqual(_name(None, None, "nobody"), "nobody")

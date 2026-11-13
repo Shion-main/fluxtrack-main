@@ -11,11 +11,11 @@
 .skel-stack { display: flex; flex-direction: column; gap: 10px; }
 .skel {
   position: relative; overflow: hidden;
-  background: #e4e9f2; border-radius: 8px;
+  background: hsl(var(--muted)); border-radius: var(--radius-md);
 }
 .skel::after {
   content: ""; position: absolute; inset: 0; transform: translateX(-100%);
-  background: linear-gradient(90deg, transparent, rgba(255,255,255,.65), transparent);
+  background: linear-gradient(90deg, transparent, var(--glass), transparent);
   animation: skel-shimmer 1.3s ease-in-out infinite;
 }
 .skel-row  { height: 46px; }
@@ -41,9 +41,9 @@
 .skip-link {
   position: fixed; top: 8px; left: 8px; z-index: 100;
   transform: translateY(-150%); transition: transform .15s ease;
-  background: var(--brand-navy, #001c43); color: #fff;
+  background: hsl(var(--primary)); color: hsl(var(--primary-foreground));
   padding: 10px 16px; border-radius: 8px; font-size: .9rem; font-weight: 600;
-  text-decoration: none; box-shadow: 0 6px 20px -6px rgba(0,28,67,.5);
+  text-decoration: none; box-shadow: var(--shadow-lg);
 }
 .skip-link:focus { transform: translateY(0); outline: none; }
 @media (prefers-reduced-motion: reduce) { .skip-link { transition: none; } }
@@ -57,8 +57,8 @@
   left: 50%; transform: translateX(-50%);
   width: min(calc(100% - 32px), 30rem); padding: 12px;
   display: flex; align-items: flex-start; gap: 10px;
-  background: var(--red-wash); color: var(--red);
-  border: 1px solid var(--red-tint); border-radius: 14px;
+  background: hsl(var(--destructive-muted) / .4); color: hsl(var(--destructive-text));
+  border: 1px solid hsl(var(--destructive-muted)); border-radius: 14px;
 }
 .system-alert[hidden] { display: none; }
 .system-alert > uk-icon, .system-alert > svg {
@@ -72,17 +72,17 @@
   border: 0; border-radius: 10px; background: transparent; color: inherit;
   cursor: pointer; font: inherit; font-size: .82rem; font-weight: 650;
 }
-.system-alert button:hover { background: var(--red-tint); }
+.system-alert button:hover { background: hsl(var(--destructive-muted)); }
 .system-alert button:focus-visible { outline: 2px solid currentColor; outline-offset: 2px; }
 
 /* --- Responsive table wrapper ----------------------------------------------
    Dense admin tables scroll horizontally inside their card instead of forcing
    the whole page to overflow on narrow viewports. */
-.table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+.table-wrap { position: relative; overflow-x: auto; -webkit-overflow-scrolling: touch; }  /* relative: absolutely-positioned .sr-only cells must not escape the scroll box */
 .table-scroll-hint {
   display: none; margin: -8px 0 10px;
   align-items: center; gap: 6px;
-  color: var(--ft-muted); font-size: .8rem;
+  color: hsl(var(--muted-foreground)); font-size: .8rem;
 }
 .table-scroll-hint uk-icon,
 .table-scroll-hint svg { width: 15px; height: 15px; flex: none; }
@@ -136,65 +136,102 @@
    real layout bug, whereas with the pager capping pages at 50 rows the header
    only leaves the screen for the last half-screen of a page.
    ========================================================================== */
-.tbl { width: 100%; border-collapse: collapse; font-size: .875rem; }
+.tbl { width: 100%; border-collapse: collapse; font-size: .875rem; line-height: 1.25rem; }
 .tbl thead th {
-  padding: 9px 12px; text-align: left; white-space: nowrap;
+  height: 2.5rem; padding: 0 .5rem; text-align: left; vertical-align: middle; white-space: nowrap;
   background: hsl(var(--background));
   box-shadow: inset 0 -1px 0 hsl(var(--border));
-  font-size: .75rem; font-weight: 650; letter-spacing: .03em; text-transform: uppercase;
-  color: var(--ft-muted);
+  font-size: .875rem; font-weight: 500; color: hsl(var(--muted-foreground));
 }
-.tbl tbody tr { border-bottom: 1px solid var(--line); }
+.tbl thead th:first-child, .tbl td:first-child { padding-left: .75rem; }
+.tbl thead th:last-child, .tbl td:last-child { padding-right: .75rem; }
+.tbl tbody tr { border-bottom: 1px solid hsl(var(--border)); transition: background-color .15s ease; }
 .tbl tbody tr:last-child { border-bottom: 0; }
-.tbl tbody tr:hover { background: var(--neutral-wash); }
-.tbl td { padding: 9px 12px; color: var(--body); vertical-align: middle; }
+.tbl tbody tr:hover { background: hsl(var(--muted) / .5); }
+.tbl td { padding: .5rem; color: hsl(var(--foreground)); vertical-align: middle; }
 
 /* Column roles. */
-.tbl__id { color: var(--ink); font-weight: 600; }
-.tbl__meta { color: var(--ft-muted); font-size: .8rem; }
+.tbl__id { color: hsl(var(--foreground)); font-weight: 500; }
+.tbl__meta { color: hsl(var(--muted-foreground)); font-size: .8rem; }
 /* A child row inside a flat parent/child table (the IFO utilization rollup:
    building rows followed by their own floor rows). One indent plus a lighter
    weight, rather than a nested table -- nesting fights this whole stack, and the
    indent alone already reads as "belongs to the row above". */
-.tbl__sub { padding-left: 30px; font-weight: 500; color: var(--body); }
+.tbl__sub { padding-left: 30px; font-weight: 500; color: hsl(var(--foreground)); }
 .tbl__num, .tbl th.tbl__num { text-align: right; font-variant-numeric: tabular-nums; }
-.tbl__time { white-space: nowrap; font-variant-numeric: tabular-nums; color: var(--ft-muted); }
+.tbl__time { white-space: nowrap; font-variant-numeric: tabular-nums; color: hsl(var(--muted-foreground)); }
 .tbl__mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .82rem; }
 .tbl__actions { text-align: right; white-space: nowrap; }
 .tbl a { color: inherit; }
 .tbl tbody tr a:hover { text-decoration: underline; }
 
-/* Status pill, one definition instead of an inline style per table cell. */
+/* --- .tbl--stack: below 640px each row becomes a labelled card ------------
+   Every <td> carries data-label="<column>"; the header row is visually hidden
+   (kept for screen readers) and each cell prints its label above the value.
+   Pair with .table-wrap; the wrapper stops scrolling once rows stack. */
+@media (max-width: 639.98px) {
+  .tbl--stack thead {
+    position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+    overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0;
+  }
+  .tbl--stack, .tbl--stack tbody, .tbl--stack tr, .tbl--stack td { display: block; width: 100%; }
+  .tbl--stack tbody { display: grid; gap: 12px; }
+  .tbl--stack tbody tr,
+  .tbl--stack tbody tr:last-child {
+    display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px 12px;
+    padding: 14px 16px; border: 1px solid hsl(var(--border)); border-radius: var(--radius-xl);
+    background: hsl(var(--card)); box-shadow: var(--shadow-sm);
+  }
+  .tbl--stack tbody tr:hover { background: hsl(var(--card)); }
+  .tbl--stack td,
+  .tbl--stack td:first-child,
+  .tbl--stack td:last-child { padding: 0; min-width: 0; text-align: left; white-space: normal; overflow-wrap: anywhere; }
+  .tbl--stack td::before {
+    content: attr(data-label);
+    display: block; margin-bottom: 2px;
+    font-size: .75rem; font-weight: 500; color: hsl(var(--muted-foreground));
+  }
+  .tbl--stack td:first-child { grid-column: 1 / -1; }
+  .tbl--stack td:first-child::before { display: none; }
+  .tbl--stack td.tbl__wide, .tbl--stack td.tbl__actions { grid-column: 1 / -1; }
+  .tbl--stack td[data-label=""]::before { display: none; }
+  .table-wrap:has(> .tbl--stack) { overflow: visible; }
+  .table-wrap:has(> .tbl--stack) + .table-scroll-hint,
+  .table-scroll-hint:has(+ .table-wrap > .tbl--stack) { display: none; }
+}
+
+/* Status pill = shadcn Badge (MMCM status variants); one definition for every
+   desk table cell. */
 .pill {
   display: inline-flex; align-items: center; gap: 4px;
-  padding: 2px 8px; border-radius: 999px;
-  font-size: .74rem; font-weight: 650; white-space: nowrap;
+  padding: 2px 8px; border-radius: var(--radius-md); border: 1px solid transparent;
+  font-size: .75rem; line-height: 1rem; font-weight: 500; white-space: nowrap;
 }
 .pill uk-icon, .pill svg { width: 12px; height: 12px; }
-.pill--ok      { background: var(--green-tint);  color: var(--green); }
-.pill--bad     { background: var(--red-tint);    color: var(--red); }
-.pill--warn    { background: var(--amber-tint);  color: var(--amber); }
-.pill--info    { background: var(--navy-tint);   color: var(--navy); }
-.pill--neutral { background: var(--panel-2);     color: var(--ft-muted); }
+.pill--ok      { background: hsl(var(--success-muted));  color: hsl(var(--success)); }
+.pill--bad     { background: hsl(var(--destructive-muted));    color: hsl(var(--destructive-text)); }
+.pill--warn    { background: hsl(var(--warning-muted));  color: hsl(var(--warning)); }
+.pill--info    { background: hsl(var(--accent));   color: hsl(var(--primary)); }
+.pill--neutral { background: hsl(var(--muted));     color: hsl(var(--muted-foreground)); }
 
-/* Structured modality badge, shared by every role and layout family. */
+/* Modality badge = shadcn Badge, shared by every role and layout family. */
 .modality-badge {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-height: 24px;
-  padding: 3px 9px;
-  border-radius: 999px;
-  font-size: .74rem;
-  font-weight: 650;
-  line-height: 1.2;
+  padding: 2px 8px;
+  border-radius: var(--radius-md);
+  border: 1px solid transparent;
+  font-size: .75rem;
+  font-weight: 500;
+  line-height: 1rem;
   white-space: nowrap;
   vertical-align: middle;
 }
-.modality-badge--f2f     { background: var(--navy-tint); color: var(--navy); }
-.modality-badge--blended { background: var(--purple-tint); color: var(--purple); }
-.modality-badge--online  { background: var(--info-bg); color: var(--info-ink); }
-.modality-badge--unknown { background: var(--panel-2); color: var(--ft-muted); }
+.modality-badge--f2f     { background: hsl(var(--accent)); color: hsl(var(--primary)); }
+.modality-badge--blended { background: hsl(var(--virtual-muted)); color: hsl(var(--virtual)); }
+.modality-badge--online  { background: hsl(var(--info-muted)); color: hsl(var(--info)); }
+.modality-badge--unknown { background: hsl(var(--muted)); color: hsl(var(--muted-foreground)); }
 
 /* --- Room code + virtual marker ---------------------------------------------
    Rendered by templates/_room_code.html. A V-prefixed code only reads as
@@ -205,7 +242,7 @@
 .rm { display: inline-flex; align-items: baseline; gap: 5px; }
 .rm__v {
   flex: none; padding: 1px 6px; border-radius: 999px;
-  background: var(--purple-tint); color: var(--purple);
+  background: hsl(var(--virtual-muted)); color: hsl(var(--virtual));
   font-size: .62rem; font-weight: 700; letter-spacing: .04em; text-transform: uppercase;
   white-space: nowrap;
 }
@@ -215,32 +252,34 @@
   display: flex; flex-wrap: wrap; align-items: center; gap: 12px;
   margin-top: 14px;
 }
-.pgr__count { font-size: .82rem; color: var(--ft-muted); font-variant-numeric: tabular-nums; }
-.pgr__count b { color: var(--body); font-weight: 650; }
+.pgr__count { font-size: .82rem; color: hsl(var(--muted-foreground)); font-variant-numeric: tabular-nums; }
+.pgr__count b { color: hsl(var(--foreground)); font-weight: 650; }
 .pgr__count--solo { margin-top: 12px; }
 .pgr__nav { margin-left: auto; display: flex; align-items: center; gap: 3px; }
 .pgr__n, .pgr__step {
-  display: inline-grid; place-items: center; min-width: 32px; height: 32px;
-  padding: 0 7px; border-radius: 7px; text-decoration: none;
-  font-size: .82rem; font-weight: 550; font-variant-numeric: tabular-nums;
-  color: var(--body); border: 1px solid transparent;
-  transition: background-color .14s ease, border-color .14s ease;
+  display: inline-grid; place-items: center; min-width: 36px; height: 36px;
+  padding: 0 8px; border-radius: var(--radius-md); text-decoration: none;
+  font-size: .875rem; font-weight: 500; font-variant-numeric: tabular-nums;
+  color: hsl(var(--foreground)); border: 1px solid transparent;
+  transition: background-color .15s ease, border-color .15s ease;
 }
-.pgr__n:hover, .pgr__step:hover { background: hsl(var(--muted)); }
-.pgr__n:focus-visible, .pgr__step:focus-visible { outline: none; box-shadow: 0 0 0 2px hsl(var(--ring)); }
+.pgr__n:hover, .pgr__step:hover { background: hsl(var(--accent)); color: hsl(var(--accent-foreground)); }
+.pgr__n:focus-visible, .pgr__step:focus-visible { outline: none; border-color: hsl(var(--ring)); box-shadow: 0 0 0 3px hsl(var(--ring) / .5); }
+/* shadcn Pagination: the current page is an outline button, not a filled one. */
 .pgr__n.is-on {
-  background: hsl(var(--primary)); border-color: hsl(var(--primary));
-  color: hsl(var(--primary-foreground)); font-weight: 650;
+  background: hsl(var(--background)); border-color: hsl(var(--border));
+  color: hsl(var(--foreground)); box-shadow: var(--shadow-xs);
 }
 .pgr__step uk-icon, .pgr__step svg { width: 16px; height: 16px; }
-.pgr__step.is-off { color: var(--line); pointer-events: none; }
-.pgr__gap { padding: 0 2px; color: var(--ft-muted); font-size: .82rem; }
+.pgr__step.is-off { color: hsl(var(--muted-foreground)); opacity: .5; pointer-events: none; }
+.pgr__gap { padding: 0 2px; color: hsl(var(--muted-foreground)); font-size: .82rem; }
 
-@media (max-width: 640px) {
+@media (max-width: 639.98px) {
   .table-scroll-hint { display: flex; }
   .pgr__nav { margin-left: 0; }
   /* Numbered pages are a fiddly tap target on a phone; prev/next is enough. */
   .pgr__n:not(.is-on) { display: none; }
+  .pgr__n, .pgr__step { min-width: var(--touch); height: var(--touch); }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -260,8 +299,7 @@
    either use a shipped class or add the missing one here. */
 .z-30 { z-index: 30; }
 .z-40 { z-index: 40; }
-.shadow-lg { box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.10),
-                         0 4px 6px -4px rgb(0 0 0 / 0.10); }
+.shadow-lg { box-shadow: var(--shadow-lg); }
 .opacity-60 { opacity: 0.6; }
 .transition-colors { transition: color .15s ease, background-color .15s ease,
                                  border-color .15s ease; }
@@ -280,4 +318,9 @@
 .booking-grid { display: grid; gap: 1.5rem; }
 @media (min-width: 1024px) {
   .booking-grid { grid-template-columns: minmax(0, 22rem) minmax(0, 1fr); }
+}
+
+/* Anything marked .no-print stays on screen only (back links, export buttons). */
+@media print {
+  .no-print { display: none !important; }
 }

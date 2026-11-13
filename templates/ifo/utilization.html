@@ -20,6 +20,9 @@ anything with. ASCII-only.{% endcomment %}
 {% endblock %}
 {% block title %}Room utilization - FluxTrack{% endblock %}
 {% block console_title %}Room utilization{% endblock %}
+{% block page_title %}Room utilization{% endblock %}
+{% block page_desc %}<p class="ui-pagehead__desc">Where and when physical room capacity sits idle. Virtual rooms are
+  excluded &mdash; an online class occupies no room. Point-in-time; refresh with Apply.</p>{% endblock %}
 {% block page_actions %}
 <button type="button" class="uk-btn uk-btn-secondary uk-btn-sm no-print" onclick="window.print()">
   <uk-icon icon="printer" class="size-4"></uk-icon> Print</button>
@@ -27,20 +30,20 @@ anything with. ASCII-only.{% endcomment %}
   <uk-icon icon="chevron-left" class="size-4"></uk-icon> Dashboard</a>
 {% endblock %}
 {% block console %}
-<p class="uk-text-muted mb-6">
-  Where and when physical room capacity sits idle (IFO-09). Virtual rooms are
-  excluded &mdash; an online class occupies no room. Point-in-time; refresh with Apply.</p>
 
-<form method="get" class="uk-card uk-card-body mb-6 no-print" id="util-filters">
-  <div class="flex flex-wrap items-end gap-4">
+<details class="ui-filterbar no-print" open>
+<summary><uk-icon icon="sliders-horizontal"></uk-icon> Filters</summary>
+<form method="get" id="util-filters">
+  <div class="ui-filterbar__body">
     {% include "reports/_term_filter.html" %}
-    <button type="submit" class="uk-btn uk-btn-primary uk-btn-sm">Apply</button>
-    <a href="/ifo/utilization{% if scope.term %}?term={{ scope.term.pk }}{% endif %}" class="uk-btn uk-btn-ghost uk-btn-sm">Reset</a>
+    <button type="submit" class="uk-btn uk-btn-primary">Apply</button>
+    <a href="/ifo/utilization{% if scope.term %}?term={{ scope.term.pk }}{% endif %}" class="uk-btn uk-btn-ghost">Reset</a>
   </div>
   {% if range_note %}
-  <p class="uk-text-small mt-2" style="color:var(--amber)">{{ range_note }}</p>
+  <p class="ui-field__desc ui-filterbar__note">{{ range_note }}</p>
   {% endif %}
 </form>
+</details>
 
 {% comment %}Print-only masthead: on paper there is no console bar to say what
 this sheet is or what window it covers.{% endcomment %}
@@ -108,7 +111,7 @@ this sheet is or what window it covers.{% endcomment %}
     <div class="px-4 pb-4">{% include "reports/_error_card.html" %}</div>
   {% else %}
   <div class="table-wrap">
-    <table class="tbl">
+    <table class="tbl tbl--stack">
       <thead>
         <tr>
           <th scope="col">Scope</th>
@@ -126,15 +129,15 @@ this sheet is or what window it covers.{% endcomment %}
           {% comment %}One indent class expresses the parent/child relation. A
           nested table would fight the .tbl stack for no gain.{% endcomment %}
           <th scope="row" class="tbl__id{% if r.level == 'floor' %} tbl__sub{% endif %}">{{ r.label }}</th>
-          <td class="tbl__num">{{ r.room_count }}</td>
-          <td class="tbl__num">{{ r.used_hours }}</td>
-          <td class="tbl__num">{{ r.booked_hours }}</td>
-          <td class="tbl__num">{{ r.available_hours }}</td>
-          <td class="tbl__num">{{ r.wasted_hours }}</td>
-          <td class="tbl__num"><span class="pill pill--info">{{ r.utilization_pct }}%</span></td>
+          <td class="tbl__num" data-label="Scope">{{ r.room_count }}</td>
+          <td class="tbl__num" data-label="Rooms">{{ r.used_hours }}</td>
+          <td class="tbl__num" data-label="Used h">{{ r.booked_hours }}</td>
+          <td class="tbl__num" data-label="Booked h">{{ r.available_hours }}</td>
+          <td class="tbl__num" data-label="Available h">{{ r.wasted_hours }}</td>
+          <td class="tbl__num" data-label="Reclaimable h"><span class="pill pill--info">{{ r.utilization_pct }}%</span></td>
         </tr>
         {% empty %}
-        <tr><td colspan="7" class="uk-text-muted">
+        <tr><td colspan="7" class="uk-text-muted" data-label="">
           No physical rooms are recorded, so there is nothing to roll up. Add rooms
           under <a href="/ifo/rooms">Rooms</a>.</td></tr>
         {% endfor %}
@@ -165,7 +168,7 @@ this sheet is or what window it covers.{% endcomment %}
     <div class="px-4 pb-4">{% include "reports/_error_card.html" %}</div>
   {% else %}
   <div class="table-wrap">
-    <table class="tbl">
+    <table class="tbl tbl--stack">
       <thead>
         <tr>
           <th scope="col">Room</th>
@@ -183,16 +186,16 @@ this sheet is or what window it covers.{% endcomment %}
         <tr>
           <th scope="row" class="tbl__id">
             <a href="/ifo/rooms/{{ r.code }}">{{ r.code }}</a></th>
-          <td>{{ r.building_name|default:r.building_code }}</td>
-          <td class="tbl__num">{{ r.floor_number }}</td>
-          <td class="tbl__num">{{ r.capacity }}</td>
-          <td class="tbl__num">{{ r.session_count }}</td>
-          <td class="tbl__num">{{ r.used_hours }}</td>
-          <td class="tbl__num">{{ r.wasted_hours }}</td>
-          <td class="tbl__num"><span class="pill pill--info">{{ r.utilization_pct }}%</span></td>
+          <td data-label="Room">{{ r.building_name|default:r.building_code }}</td>
+          <td class="tbl__num" data-label="Building">{{ r.floor_number }}</td>
+          <td class="tbl__num" data-label="Floor">{{ r.capacity }}</td>
+          <td class="tbl__num" data-label="Seats">{{ r.session_count }}</td>
+          <td class="tbl__num" data-label="Sessions">{{ r.used_hours }}</td>
+          <td class="tbl__num" data-label="Used h">{{ r.wasted_hours }}</td>
+          <td class="tbl__num" data-label="Reclaimable h"><span class="pill pill--info">{{ r.utilization_pct }}%</span></td>
         </tr>
         {% empty %}
-        <tr><td colspan="8" class="uk-text-muted">
+        <tr><td colspan="8" class="uk-text-muted" data-label="">
           No physical rooms in range. If this is unexpected, the window may have no
           sessions rather than the campus being idle &mdash; widen the dates above.</td></tr>
         {% endfor %}
@@ -218,7 +221,7 @@ whole booking is reclaimable.{% endcomment %}
     <div class="px-4 pb-4">{% include "reports/_error_card.html" %}</div>
   {% else %}
   <div class="table-wrap">
-    <table class="tbl">
+    <table class="tbl tbl--stack">
       <thead>
         <tr>
           <th scope="col">Room</th>
@@ -232,12 +235,12 @@ whole booking is reclaimable.{% endcomment %}
         <tr>
           <th scope="row" class="tbl__id">
             <a href="/ifo/rooms/{{ r.code }}">{{ r.code }}</a></th>
-          <td>{{ r.building_name|default:r.building_code }}</td>
-          <td class="tbl__num">{{ r.floor_number }}</td>
-          <td class="tbl__num">{{ r.booked_hours }}</td>
+          <td data-label="Room">{{ r.building_name|default:r.building_code }}</td>
+          <td class="tbl__num" data-label="Building">{{ r.floor_number }}</td>
+          <td class="tbl__num" data-label="Floor">{{ r.booked_hours }}</td>
         </tr>
         {% empty %}
-        <tr><td colspan="4" class="uk-text-muted">
+        <tr><td colspan="4" class="uk-text-muted" data-label="">
           No rooms were booked and left completely unused in this window.</td></tr>
         {% endfor %}
       </tbody>
@@ -256,7 +259,7 @@ whole booking is reclaimable.{% endcomment %}
     <div class="px-4 pb-4">{% include "reports/_error_card.html" %}</div>
   {% else %}
   <div class="table-wrap">
-    <table class="tbl">
+    <table class="tbl tbl--stack">
       <thead>
         <tr>
           <th scope="col">Block</th>
@@ -271,14 +274,14 @@ whole booking is reclaimable.{% endcomment %}
         {% for b in saturation.0 %}
         <tr>
           <th scope="row" class="tbl__id">{{ b.block.start|time:"g:i A" }}</th>
-          <td class="tbl__num">{{ b.session_count }}</td>
-          <td class="tbl__num">{{ b.used_hours }}</td>
-          <td class="tbl__num">{{ b.available_hours }}</td>
-          <td>{% if b.peak_day_label %}{{ b.peak_day_label }}{% else %}<span class="uk-text-muted">unused</span>{% endif %}</td>
-          <td class="tbl__num"><span class="pill pill--info">{{ b.utilization_pct }}%</span></td>
+          <td class="tbl__num" data-label="Block">{{ b.session_count }}</td>
+          <td class="tbl__num" data-label="Sessions">{{ b.used_hours }}</td>
+          <td class="tbl__num" data-label="Used h">{{ b.available_hours }}</td>
+          <td data-label="Available h">{% if b.peak_day_label %}{{ b.peak_day_label }}{% else %}<span class="uk-text-muted">unused</span>{% endif %}</td>
+          <td class="tbl__num" data-label="Busiest day"><span class="pill pill--info">{{ b.utilization_pct }}%</span></td>
         </tr>
         {% empty %}
-        <tr><td colspan="6" class="uk-text-muted">
+        <tr><td colspan="6" class="uk-text-muted" data-label="">
           No block ladder for this term, so there are no blocks to rank. Import a
           timetable on <a href="/ifo/import">Import schedules</a>.</td></tr>
         {% endfor %}

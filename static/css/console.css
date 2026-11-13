@@ -1,66 +1,74 @@
 /* ============================================================================
-   FluxTrack — Admin console shell (IFO, and later Dean)
+   FluxTrack - Desk console shell (IFO, Dean, HR, SysAdmin)
    ----------------------------------------------------------------------------
-   A persistent left-sidebar desktop app-shell for the multi-surface admin
-   roles. Quiet shadcn-neutral (reads Franken tokens via hsl(var(--x))); the
-   current nav item uses --primary (MMCM navy) as the selection accent, per the
-   product register (accent = current selection, not decoration). Collapses to
-   an off-canvas drawer under 900px. ASCII-only.
+   The shadcn Sidebar layout, tailored to MMCM: a stock light sidebar (the user
+   ruled out a navy one), the crest + wordmark in its header, 32px menu items
+   with the current page on --sidebar-accent (navy text), and the account
+   menu in its footer. The main column has a 56px inset header (cns__bar).
+   Below 1024px the sidebar becomes a shadcn Sheet: an off-canvas modal drawer
+   (see the script in templates/_console.html). Reads only token roles.
+   ASCII-only.
    ========================================================================== */
 .cns { display: flex; min-height: 100dvh; }
 
-/* --- Sidebar --------------------------------------------------------------- */
+/* --- Sidebar (shadcn Sidebar spec) ---------------------------------------- */
 .cns__side {
-  width: 244px; flex: none;
-  background: hsl(var(--background));
-  border-right: 1px solid hsl(var(--border));
+  width: 16rem; flex: none;
+  background: hsl(var(--sidebar)); color: hsl(var(--sidebar-foreground));
+  border-right: 1px solid hsl(var(--sidebar-border));
   display: flex; flex-direction: column;
   position: sticky; top: 0; height: 100dvh;
 }
-.cns__brand { display: flex; align-items: center; gap: 9px; padding: 18px 18px 4px; text-decoration: none; color: hsl(var(--foreground)); }
-.cns__brand img { width: 26px; height: 26px; object-fit: contain; }
-.cns__brand b { font-weight: 750; letter-spacing: -.02em; font-size: 1.05rem; }
-.cns__role { padding: 2px 18px 14px; font-size: .78rem; color: hsl(var(--muted-foreground)); }
+.cns__brand { display: flex; align-items: center; min-height: 56px; padding: 8px 16px 0; }
+.cns__role { padding: 0 16px 8px 48px; margin-top: -8px; font-size: .75rem; color: hsl(var(--muted-foreground)); }
 
-.cns__nav { flex: 1; min-height: 0; overflow-y: auto; padding: 10px; display: flex; flex-direction: column; gap: 2px; }
-.cns__sec { padding: 14px 12px 6px; font-size: .68rem; font-weight: 700; letter-spacing: .09em; text-transform: uppercase; color: hsl(var(--muted-foreground)); }
-.cns__link {
-  display: flex; align-items: center; gap: 11px; min-height: 42px;
-  padding: 9px 12px; border-radius: 8px;
-  color: hsl(var(--foreground)); text-decoration: none; font-size: .9rem; font-weight: 550;
-  transition: background-color .14s ease;
+.cns__nav { flex: 1; min-height: 0; overflow-y: auto; padding: 8px; display: flex; flex-direction: column; gap: 4px; }
+.cns__sec {
+  display: flex; align-items: center; height: 32px; margin-top: 8px; padding: 0 8px;
+  font-size: .75rem; font-weight: 500; color: hsl(var(--sidebar-foreground) / .7);
 }
-.cns__link uk-icon, .cns__link svg { width: 18px; height: 18px; color: hsl(var(--muted-foreground)); flex: none; }
-.cns__link:hover { background: hsl(var(--muted)); }
-.cns__link:focus-visible { outline: none; box-shadow: 0 0 0 2px hsl(var(--ring)); }
-.cns__link.is-active { background: hsl(var(--primary)); color: hsl(var(--primary-foreground)); font-weight: 600; }
-.cns__link.is-active uk-icon, .cns__link.is-active svg { color: hsl(var(--primary-foreground)); }
+.cns__link {
+  display: flex; align-items: center; gap: 8px; min-height: 32px;
+  padding: 6px 8px; border-radius: var(--radius-md);
+  color: hsl(var(--sidebar-foreground)); text-decoration: none;
+  font-size: .875rem; line-height: 1.25rem; font-weight: 400;
+  transition: background-color .15s ease, color .15s ease;
+}
+.cns__link uk-icon, .cns__link svg { width: 16px; height: 16px; color: hsl(var(--muted-foreground)); flex: none; }
+.cns__link:hover { background: hsl(var(--sidebar-accent)); color: hsl(var(--sidebar-accent-foreground)); }
+.cns__link:focus-visible { outline: none; box-shadow: 0 0 0 2px hsl(var(--sidebar-ring)); }
+.cns__link.is-active {
+  background: hsl(var(--sidebar-accent)); color: hsl(var(--sidebar-accent-foreground)); font-weight: 500;
+}
+.cns__link.is-active uk-icon, .cns__link.is-active svg { color: hsl(var(--sidebar-primary)); }
 
-.cns__foot { border-top: 1px solid hsl(var(--border)); padding: 12px; display: flex; align-items: center; gap: 10px; }
-.cns__identity { min-width: 0; display: flex; align-items: center; gap: 10px; text-decoration: none; }
-.cns__avatar { width: 34px; height: 34px; border-radius: 50%; flex: none; display: grid; place-items: center;
-  background: hsl(var(--primary)); color: hsl(var(--primary-foreground)); font-size: .78rem; font-weight: 650; }
-.cns__who { min-width: 0; line-height: 1.2; }
-.cns__who b { display: block; font-size: .84rem; font-weight: 600; color: hsl(var(--foreground)); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.cns__who span { font-size: .74rem; color: hsl(var(--muted-foreground)); }
-.cns__signout { margin-left: auto; flex: none; display: grid; place-items: center; width: 34px; height: 34px; border-radius: 8px; color: hsl(var(--muted-foreground)); }
-.cns__signout:hover { background: hsl(var(--muted)); color: hsl(var(--foreground)); }
+.cns__foot { padding: 8px; display: flex; align-items: center; }
+.cns__foot .ui-acct { flex: 1; min-width: 0; }
+.cns__close { display: none; }
 
-/* --- Main region ----------------------------------------------------------- */
+/* --- Main column with the inset header ------------------------------------ */
 .cns__main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
 .cns__bar {
-  display: flex; align-items: center; gap: 12px;
-  padding: 13px 24px; min-height: 58px;
+  display: flex; align-items: center; gap: 8px;
+  padding: 0 24px; min-height: 56px;
   border-bottom: 1px solid hsl(var(--border));
   position: sticky; top: 0; z-index: 10;
-  background: hsl(var(--background) / .92);
-  -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px);
+  background: hsl(var(--background));
 }
-.cns__title { font-size: 1.15rem; font-weight: 700; letter-spacing: -.01em; color: hsl(var(--foreground)); }
-.cns__actions { margin-left: auto; display: flex; align-items: center; gap: 10px; }
-.cns__body { padding: 24px; width: 100%; max-width: 74rem; }
+/* The bar title is a quiet location label; the page's h1 lives in the body. */
+.cns__title {
+  min-width: 0; font-size: .875rem; font-weight: 500; color: hsl(var(--muted-foreground));
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.cns__actions { margin-left: auto; display: flex; flex-wrap: wrap; justify-content: flex-end; align-items: center; gap: 8px; }
+.cns__body { padding: 24px; width: 100%; max-width: 80rem; }
 
-.cns__ham { display: none; width: 40px; height: 40px; border-radius: 8px; place-items: center; border: 1px solid hsl(var(--border)); background: hsl(var(--background)); color: hsl(var(--foreground)); cursor: pointer; }
+.cns__ham {
+  display: none; width: 36px; height: 36px; flex: none; margin-left: -8px; border-radius: var(--radius-md);
+  place-items: center; border: 0; background: transparent; color: hsl(var(--foreground)); cursor: pointer;
+}
+.cns__ham:hover { background: hsl(var(--accent)); }
+.cns__ham:focus-visible { outline: none; box-shadow: 0 0 0 3px hsl(var(--ring) / .5); }
 .cns__ham uk-icon, .cns__ham svg { width: 20px; height: 20px; }
 .cns__scrim { display: none; }
 
@@ -93,7 +101,7 @@
 }
 .dn-faculty-card:hover {
   border-color: hsl(var(--primary) / .35);
-  box-shadow: 0 9px 24px -18px rgba(0, 28, 67, .55);
+  box-shadow: var(--shadow-sm);
   transform: translateY(-1px);
 }
 .dn-faculty-card:focus-visible {
@@ -150,7 +158,7 @@
   font-size: 1.1rem; font-weight: 700;
 }
 .dn-profile__identity { min-width: 0; }
-.dn-profile__identity h1 {
+.dn-profile__identity h2 {
   margin: 0; color: hsl(var(--foreground)); font-size: 1.35rem;
   font-weight: 740; letter-spacing: -.025em;
 }
@@ -278,25 +286,35 @@
 .dn-session__select input:focus-visible { outline: 2px solid hsl(var(--ring)); outline-offset: 2px; }
 .dn-session__place { margin: 11px 0 0; }
 
-/* --- Mobile: off-canvas drawer -------------------------------------------- */
-@media (max-width: 900px) {
+/* --- Below 1024px: the sidebar is a shadcn Sheet (modal drawer) ---------- */
+@media (max-width: 1023.98px) {
   .cns__side {
-    position: fixed; inset: 0 auto 0 0; z-index: 50; height: 100dvh;
-    transform: translateX(-100%); transition: transform .22s cubic-bezier(.22,1,.36,1);
-    box-shadow: 0 20px 50px -20px rgba(0,28,67,.5);
-    visibility: hidden; pointer-events: none;
+    position: fixed; inset: 0 auto 0 0; z-index: 50; height: 100dvh; width: min(18rem, 85vw);
+    background: hsl(var(--background));
+    transform: translateX(-100%); transition: transform .2s ease;
+    box-shadow: var(--shadow-lg);
+    visibility: hidden;
   }
-  .cns.is-open .cns__side {
-    transform: translateX(0); visibility: visible; pointer-events: auto;
+  .cns.is-open .cns__side { transform: none; visibility: visible; }
+  .cns__close {
+    display: grid; place-items: center; position: absolute; top: 8px; right: 8px;
+    width: var(--touch); height: var(--touch); border: 0; border-radius: var(--radius-md);
+    background: transparent; color: hsl(var(--muted-foreground)); cursor: pointer;
   }
-  .cns__scrim { position: fixed; inset: 0; z-index: 40; background: rgba(3,10,28,.45); opacity: 0; pointer-events: none; transition: opacity .2s ease; }
-  .cns.is-open .cns__scrim { display: block; opacity: 1; pointer-events: auto; }
-  .cns__ham { display: grid; width: 44px; height: 44px; }
-  .cns__link { min-height: 44px; }
-  .cns__signout { width: 44px; height: 44px; }
+  .cns__close:hover { background: hsl(var(--accent)); color: hsl(var(--accent-foreground)); }
+  .cns__close:focus-visible { outline: none; box-shadow: 0 0 0 3px hsl(var(--ring) / .5); }
+  .cns__close uk-icon, .cns__close svg { width: 18px; height: 18px; }
+  .cns__scrim {
+    display: block; position: fixed; inset: 0; z-index: 40; background: var(--overlay);
+    opacity: 0; pointer-events: none; transition: opacity .2s ease;
+  }
+  .cns.is-open .cns__scrim { opacity: 1; pointer-events: auto; }
+  .cns__ham { display: grid; width: var(--touch); height: var(--touch); }
+  .cns__link { min-height: var(--touch); }
   .cns__actions .uk-btn,
-  .cns__actions #notif-bell-toggle { min-height: 44px; }
-  .cns__body { padding: 18px 16px; }
+  .cns__actions #notif-bell-toggle { min-height: var(--touch); }
+  .cns__bar { padding: 0 16px; }
+  .cns__body { padding: 20px 16px; }
   .dn-faculty-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .dn-schedule { grid-template-columns: 1fr auto; }
   .dn-schedule__place { grid-column: 1 / -1; }
@@ -306,7 +324,7 @@
   .dn-session-grid { grid-template-columns: 1fr; }
 }
 
-@media (max-width: 620px) {
+@media (max-width: 639.98px) {
   .dn-pagehead { align-items: flex-start; margin-bottom: 18px; }
   .dn-pagehead__copy { font-size: .84rem; }
   .dn-faculty-grid { grid-template-columns: 1fr; gap: 10px; }
@@ -329,9 +347,32 @@
   .dn-session { padding: 15px; }
 }
 
+@media (max-width: 639.98px) {
+  .cns__body { padding: 16px; }
+}
+
+/* --- Print: the page content only, never the console chrome ---------------- */
+@media print {
+  .cns__side, .cns__bar, .cns__scrim, .cns__ham, .cns__close { display: none !important; }
+  .cns, .cns__main { display: block; min-height: 0; }
+  .cns__body { padding: 0; max-width: none; }
+  .cns__body:has(.pr-head) > .ui-pagehead { display: none; }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .cns__side, .cns__scrim, .cns__link, .dn-faculty-card, .dn-session {
     transition: none;
   }
   .dn-faculty-card:hover { transform: none; }
+}
+
+.cns__body .ui-pagehead__actions:empty { display: none; }
+
+/* Between 1024 and 1280 the sidebar leaves too little room for two session
+   columns or the three-column change panel; stack them. */
+@media (max-width: 1279.98px) {
+  .dn-session-grid { grid-template-columns: 1fr; }
+  .dn-change-panel { grid-template-columns: 1fr; }
+  .dn-change-panel__head { grid-column: auto; }
+  .dn-change-panel > button { width: fit-content; }
 }

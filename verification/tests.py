@@ -362,6 +362,42 @@ class CheckerScanDBTests(_CheckerFixtureMixin, TestCase):
         session.refresh_from_db()
         self.assertTrue(session.verified_by_checker)
 
+    def test_flag_form_posts_one_action_with_one_note(self):
+        """2026-11-08: the result card asks one decision at a time. Verify is one
+        tap; a problem is reported through ONE form (pick a reason, write one
+        note) inside a native "Report a problem" disclosure, not two forms with
+        two note boxes open at once."""
+        checker = self._checker()
+        self._active_floor_assignment(checker, self.floor)
+        room = self._room()
+        self._session(room)
+        self.client.force_login(checker)
+
+        body = self.client.post("/checker/resolve", {"payload": self._qr(room)}).content.decode()
+        self.assertIn('data-outcome="active-unverified"', body)
+        self.assertEqual(body.count("<textarea"), 1)
+        self.assertIn('value="flag_identity_mismatch"', body)
+        self.assertIn('value="flag_not_present"', body)
+        self.assertIn("<summary", body)
+        self.assertIn("Report a problem", body)
+        # No reason is pre-selected (final review, 2026-11-08): sending the
+        # wrong flag type to IFO and HR by default is worse than one extra tap.
+        self.assertNotRegex(body, r'type="radio" name="action"[^>]*checked')
+        self.assertRegex(body, r'type="radio" name="action" value="flag_identity_mismatch" required')
+
+    def test_flag_not_present_still_posts_through_the_merged_form(self):
+        checker = self._checker()
+        self._active_floor_assignment(checker, self.floor)
+        room = self._room()
+        session = self._session(room)
+        self.client.force_login(checker)
+        resp = self.client.post("/checker/action", {
+            "action": "flag_not_present", "room_id": room.id,
+            "session_id": session.id, "note": "Room empty at 10:40"},
+            HTTP_HX_REQUEST="true")
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, "Flag sent")
+
     def test_flag_requires_note(self):
         checker = self._checker()
         self._active_floor_assignment(checker, self.floor)

@@ -1,0 +1,13 @@
+{% extends "_console.html" %}
+{% comment %}HR console: the shared console shell with HR navigation. Leaf HR
+pages extend THIS (or get it via console_template) and fill console_title /
+page_actions / console. ASCII-only.{% endcomment %}
+{% block console_navlabel %}HR{% endblock %}
+{% block console_nav %}
+  <a href="{% url 'hr_attendance' %}" class="cns__link {% if un == 'hr_attendance' %}is-active{% endif %}"
+     {% if un == 'hr_attendance' %}aria-current="page"{% endif %}>
+    <uk-icon icon="clipboard-list"></uk-icon> Attendance</a>
+  <a href="{% url 'notifications' %}" class="cns__link {% if un == 'notifications' or un == 'notif_settings' %}is-active{% endif %}"
+     {% if un == 'notifications' or un == 'notif_settings' %}aria-current="page"{% endif %}>
+    <uk-icon icon="bell"></uk-icon> Notifications</a>
+{% endblock %}

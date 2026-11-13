@@ -1,4 +1,4 @@
-{% extends "base.html" %}
+{% extends console_template|default:"base.html" %}
 {% comment %}
 Role hub for multi-surface roles that don't yet have a persistent console
 (IFO, Dean, Guard, SysAdmin, break-glass superuser). Faculty/Checker/HR redirect
@@ -9,41 +9,7 @@ grid). Surfaces whose feature isn't built yet (href "#") render as disabled
 "Soon" rows. Neutral admin family (Franken tokens). ASCII-only.
 {% endcomment %}
 {% block title %}Home - FluxTrack{% endblock %}
-{% block content %}
-<div class="uk-container max-w-2xl pt-10 pb-16">
-  <header class="mb-7">
-    <h1 class="uk-h2 mb-1">{{ user.get_full_name|default:user.username }}</h1>
-    <p class="uk-text-muted">{{ user.get_role_display }}{% if user.department %} &middot; {{ user.department.name }}{% endif %}</p>
-  </header>
-
-  <nav class="flex flex-col gap-2" aria-label="Your surfaces">
-    {% for card in surfaces %}
-    {% if card.href == "#" %}
-    <div class="flex items-center gap-4 rounded-md border border-border p-4 min-h-14 opacity-60"
-         aria-disabled="true">
-      <uk-icon icon="{{ card.icon }}" class="size-5 text-muted-foreground shrink-0"></uk-icon>
-      <div class="min-w-0">
-        <div class="font-semibold">{{ card.title }}</div>
-        <div class="uk-text-small uk-text-muted">{{ card.desc }}</div>
-      </div>
-      <span class="uk-label uk-label-secondary ml-auto shrink-0">Soon</span>
-    </div>
-    {% else %}
-    <a href="{{ card.href }}"
-       class="flex items-center gap-4 rounded-md border border-border p-4 min-h-14 hover:bg-muted transition-colors">
-      <uk-icon icon="{{ card.icon }}" class="size-5 text-muted-foreground shrink-0"></uk-icon>
-      <div class="min-w-0">
-        <div class="font-semibold">{{ card.title }}</div>
-        <div class="uk-text-small uk-text-muted">{{ card.desc }}</div>
-      </div>
-      <uk-icon icon="chevron-right" class="size-4 text-muted-foreground ml-auto shrink-0"></uk-icon>
-    </a>
-    {% endif %}
-    {% empty %}
-    <div class="rounded-md border border-border p-6 text-center">
-      <p class="uk-text-muted mb-0">No surfaces are assigned to your account yet. Contact the IFO if you expect access here.</p>
-    </div>
-    {% endfor %}
-  </nav>
-</div>
-{% endblock %}
+{% block console_title %}Overview{% endblock %}
+{% block pagehead %}{% endblock %}
+{% block content %}{% if console_template %}{{ block.super }}{% else %}<div class="uk-container max-w-2xl pt-10 pb-16">{% include "web/_home_body.html" %}</div>{% endif %}{% endblock %}
+{% block console %}<div style="max-width:42rem">{% include "web/_home_body.html" %}</div>{% endblock %}

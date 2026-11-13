@@ -1,0 +1,29 @@
+{% comment %}One class row (time, status or modality, course, room), shared by the Schedule page and the Faculty home side list. Expects `c` (a _faculty_cards card). ASCII-only.{% endcomment %}
+<div class="ft-row">
+  <div class="ft-row__top">
+    <span class="ft-row__time">{{ c.rep.scheduled_start|time:"g:i" }} - {{ c.rep.scheduled_end|time:"g:i A" }}</span>
+    {% if c.rep.status == "active" %}<span class="ft-pill ft-pill--active" style="margin-left:auto"><span class="ft-dot"></span> In session</span>
+    {% elif c.rep.status == "completed" %}<span class="ft-pill ft-pill--done" style="margin-left:auto">Done</span>
+    {% elif c.rep.status == "absent" %}<span class="ft-pill ft-pill--absent" style="margin-left:auto">Absent</span>
+    {% elif c.rep.status == "cancelled" %}<span class="ft-pill ft-pill--absent" style="margin-left:auto">Cancelled</span>
+    {% else %}{% include "_modality_badge.html" with modality=c.modality %}{% endif %}
+  </div>
+
+  {% if c.merged %}
+  <div class="ft-row__title">{{ c.rep.schedule.course_code }} <span class="ft-pill ft-pill--merged" style="vertical-align:middle"><uk-icon icon="layers"></uk-icon> Merged · {{ c.count }}</span></div>
+  <div class="ft-row__sections">
+    {% for s in c.sessions %}
+    <div class="ft-subrow">
+      <span class="ft-subrow__sec">{{ s.schedule.course_code }} · {{ s.schedule.section }}</span>
+      <span class="ft-subrow__room"><uk-icon icon="map-pin"></uk-icon> {% include "_room_code.html" with room=s.room %} · {{ s.schedule.enrolled_count }}</span>
+    </div>
+    {% endfor %}
+  </div>
+  {% else %}
+  <div class="ft-row__title">{{ c.rep.schedule.course_code }} · {{ c.rep.schedule.section }}</div>
+  <div class="ft-row__meta"><uk-icon icon="map-pin"></uk-icon> {{ c.rooms_label }} <span>·</span> {{ c.students }} students</div>
+  {% endif %}
+  {% if c.rep.status == "cancelled" and c.rep.cancelled_reason %}
+  <div class="ft-row__meta"><uk-icon icon="circle-alert"></uk-icon> {{ c.rep.cancelled_reason }}</div>
+  {% endif %}
+</div>

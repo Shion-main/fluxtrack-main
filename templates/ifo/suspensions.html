@@ -5,12 +5,12 @@ faculty notify; this page only collects input and shows the outcome. Console
 uk-* vocabulary. Every control has a real <label for>. ASCII-only.{% endcomment %}
 {% block title %}Class suspensions - FluxTrack{% endblock %}
 {% block console_title %}Class suspensions{% endblock %}
-{% block console %}
-<p class="uk-text-muted mb-6 max-w-2xl">
-  Suspend classes for a day or a range -- a typhoon, an LGU declaration, flooding
+{% block page_title %}Class suspensions{% endblock %}
+{% block page_desc %}<p class="ui-pagehead__desc">Suspend classes for a day or a range &mdash; a typhoon, an LGU declaration, flooding
   in one building. Affected class sessions are cancelled (not marked Absent), and
   every affected faculty member is notified once. Lift a suspension if it is
-  called off, and the sessions come back.</p>
+  called off, and the sessions come back.</p>{% endblock %}
+{% block console %}
 
 {% if flash %}
 <div class="uk-alert uk-alert-success mb-4" role="status">
@@ -70,24 +70,24 @@ uk-* vocabulary. Every control has a real <label for>. ASCII-only.{% endcomment 
 
   <h2 class="uk-h4 mb-3">Suspensions</h2>
   {% if suspensions %}
-  <table class="uk-table uk-table-divider uk-table-small">
+  <table class="tbl tbl--stack">
     <thead><tr>
       <th>Dates</th><th>Scope</th><th>Reason</th><th>Status</th><th></th>
     </tr></thead>
     <tbody>
       {% for s in suspensions %}
       <tr>
-        <td>{{ s.start_date|date:"M j" }}{% if s.end_date != s.start_date %} - {{ s.end_date|date:"M j" }}{% endif %}</td>
-        <td>{% if s.building %}{{ s.building.code }}{% else %}<span class="uk-text-muted">Campus-wide</span>{% endif %}</td>
-        <td>{{ s.reason }}</td>
-        <td>
+        <td data-label="Dates">{{ s.start_date|date:"M j" }}{% if s.end_date != s.start_date %} - {{ s.end_date|date:"M j" }}{% endif %}</td>
+        <td data-label="Scope">{% if s.building %}{{ s.building.code }}{% else %}<span class="uk-text-muted">Campus-wide</span>{% endif %}</td>
+        <td data-label="Reason">{{ s.reason }}</td>
+        <td data-label="Status">
           {% if s.is_active %}
           <span class="uk-label uk-label-destructive">Active</span>
           {% else %}
           <span class="uk-label">Lifted</span>
           {% endif %}
         </td>
-        <td class="uk-text-right">
+        <td class="uk-text-right" data-label="">
           {% if s.is_active %}
           <form method="post" action="/ifo/suspensions/{{ s.id }}/lift" style="display:inline">
             {% csrf_token %}

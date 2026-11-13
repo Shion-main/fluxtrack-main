@@ -1,6 +1,7 @@
 {% extends "ifo/_console.html" %}
 {% block title %}{{ building.code }} - FluxTrack{% endblock %}
 {% block console_title %}Building {{ building.code }}{% endblock %}
+{% block page_title %}Building {{ building.code }}{% endblock %}
 {% block page_actions %}
 <a href="/ifo/rooms?view=directory&building={{ building.code }}" class="uk-btn uk-btn-ghost uk-btn-sm">
   <uk-icon icon="chevron-left" class="size-4"></uk-icon> Rooms & buildings</a>

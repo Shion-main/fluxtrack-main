@@ -22,6 +22,7 @@ colour alone. No border-left accent stripes. ASCII-only.
 {% endcomment %}
 {% block title %}Room conflicts - FluxTrack{% endblock %}
 {% block console_title %}Room conflicts{% endblock %}
+{% block page_title %}Room conflicts{% endblock %}
 
 {% block console %}
 <div class="max-w-5xl">
@@ -61,7 +62,7 @@ colour alone. No border-left accent stripes. ASCII-only.
 
     {% if row.sessions %}
     <div class="table-wrap mt-4">
-      <table class="tbl">
+      <table class="tbl tbl--stack">
         <thead>
           <tr>
             <th scope="col">Class</th>
@@ -74,16 +75,16 @@ colour alone. No border-left accent stripes. ASCII-only.
         <tbody>
           {% for s in row.sessions %}
           <tr data-session="{{ s.pk }}">
-            <td class="tbl__id">{{ s.schedule.course_code }}-{{ s.schedule.section }}</td>
-            <td>{{ s.faculty.get_full_name|default:s.faculty.username }}</td>
-            <td class="tbl__meta">
+            <td class="tbl__id" data-label="Class">{{ s.schedule.course_code }}-{{ s.schedule.section }}</td>
+            <td data-label="Faculty">{{ s.faculty.get_full_name|default:s.faculty.username }}</td>
+            <td class="tbl__meta" data-label="Scheduled">
               {{ s.date }} &middot;
               {{ s.scheduled_start|time:"g:i A" }}&ndash;{{ s.scheduled_end|time:"g:i A" }}</td>
-            <td class="tbl__meta">
+            <td class="tbl__meta" data-label="Status">
               <span class="inline-flex items-center gap-2">
                 <uk-icon icon="circle-dot" class="size-4"></uk-icon>
                 {{ s.get_status_display }}</span></td>
-            <td>
+            <td data-label="Release">
               <form method="post" action="/ifo/sessions/{{ s.pk }}/release"
                     hx-post="/ifo/sessions/{{ s.pk }}/release"
                     hx-target="#release-{{ s.pk }}" hx-swap="innerHTML">

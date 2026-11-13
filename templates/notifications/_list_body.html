@@ -1,0 +1,30 @@
+{% comment %}Body of the list page, shared by the floor shell, the desk console and the plain fallback. ASCII-only.{% endcomment %}
+{% if floor_shell %}<div class="ft-app">{% include "notifications/_floor_header.html" %}{% endif %}
+<div class="{% if floor_shell %}ft-page{% elif not console_template %}uk-container max-w-2xl pt-8 pb-16{% endif %}">
+  {% if floor_shell %}
+  <div class="ft-greet ft-notif-heading ft-notif-heading--list">
+    <div class="ft-greet__hi">Notifications</div>
+    <div class="ft-greet__date">Your recent updates and alerts.</div>
+    <a href="/notifications/settings" class="ft-chip">
+      <uk-icon icon="settings"></uk-icon> Settings
+    </a>
+  </div>
+  {% else %}
+  <div class="ui-pagehead">
+    <div>
+      <h1 class="ui-pagehead__title">Notifications</h1>
+      <p class="ui-pagehead__desc">Your recent notifications.</p>
+    </div>
+    <div class="ui-pagehead__actions">
+      <a href="/notifications/settings" class="uk-btn uk-btn-default uk-btn-sm">
+        <uk-icon icon="settings"></uk-icon> Settings</a>
+    </div>
+  </div>
+  {% endif %}
+
+  <div class="{% if floor_shell %}ft-card ft-card--neutral ft-notif-list{% else %}uk-card uk-card-body p-0{% endif %}">
+    {% include "notifications/_rows.html" %}
+  </div>
+  {% include "_pager.html" %}
+</div>
+{% if floor_shell %}</div>{% endif %}

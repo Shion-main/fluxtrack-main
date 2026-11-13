@@ -22,115 +22,98 @@ a 4+1 leaving one card stranded alone on a line. Attendance pills use the A-COLO
 thresholds via the --green/--amber/--red tokens, always paired with the numeric
 value so colour is never the only signal. ASCII-only.
 {% endcomment %}
-<div class="grid gap-4 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5">
+{% comment %}2026-11-08: the five figures are shadcn stat cards of equal height
+(.ui-stats). Each card is a label, one value and one short note; the Room
+Occupancy explanation that used to stretch its card to four paragraphs now
+sits under the row in "How room occupancy is counted". Every number and
+sentence is kept.{% endcomment %}
+<div class="ui-stats">
   {% if summary.1 %}
-    <div class="sm:col-span-2 md:col-span-2 lg:col-span-4">
-      {% include "reports/_error_card.html" %}
-    </div>
+    <div>{% include "reports/_error_card.html" %}</div>
   {% else %}
-    <div class="uk-card uk-card-body" data-kpi-card="faculty">
-      <div class="uk-text-small uk-text-muted flex items-center gap-1">
-        <uk-icon icon="users" class="size-4"></uk-icon> Faculty</div>
-      <div class="uk-h2 mt-1">{{ summary.0.faculty_count }}</div>
+    <div class="ui-stat" data-kpi-card="faculty">
+      <span class="ui-stat__label">Faculty</span>
+      <span class="ui-stat__value">{{ summary.0.faculty_count }}</span>
+      <span class="ui-stat__note">with classes in this range</span>
     </div>
   {% endif %}
 
   {% if occupancy.1 %}
     <div>{% include "reports/_error_card.html" %}</div>
   {% else %}
-    <div class="uk-card uk-card-body" data-kpi-card="occupancy">
-      <div class="uk-text-small uk-text-muted flex items-center gap-1">
-        <uk-icon icon="door-open" class="size-4"></uk-icon> Room Occupancy</div>
-      {% comment %}Used is the headline and the denominator lives in the caption,
-      unlike the Sessions card's "held / booked" pair. At a fifth of the row's
-      width a two-part value with decimals ("2707.9 / 3180.0") wraps mid-figure,
-      which reads as two unrelated numbers. Verified in the browser at 390 / 820 /
-      1440.{% endcomment %}
-      {% comment %}The figure is the drill-down link, forwarding the active range
-      exactly the way the faculty row links to the scorecard below: the card says
-      how much capacity is idle, and the only useful next question is WHERE, which
-      is the utilization page's whole job (IFO-09 tier T2).{% endcomment %}
+    <div class="ui-stat" data-kpi-card="occupancy">
+      <span class="ui-stat__label">Room Occupancy</span>
       {% if occupancy.0.used_hours or occupancy.0.wasted_hours %}
-      <div class="uk-h2 mt-1">
-        <a href="{% url 'ifo_utilization' %}?{{ scope_query }}">{{ occupancy.0.used_hours }}</a></div>
-      <div class="uk-text-small uk-text-muted">session-hours used of {{ occupancy.0.booked_hours }} booked</div>
-      {% comment %}Deliberately pill--info (neutral), NOT the ok/warn/bad ladder
-      the attendance pills use. Attendance has an agreed target; room utilization
-      does not, and the seeded campus baseline is ~26% because the 60/20/20
-      modality split leaves physical capacity genuinely idle. Painting the normal
-      state red would be a standing false alarm and would teach a reader to
-      distrust the figure -- the opposite of the point. Colour is still not the
-      only signal: the percentage is printed inside the pill.{% endcomment %}
-      <div class="mt-2">
-        <span class="pill pill--info">{{ occupancy.0.utilization_pct }}% of capacity</span>
-      </div>
-      <p class="uk-text-small uk-text-muted mt-2">{{ occupancy.0.wasted_hours }} room-hours were booked and unused &mdash; reclaimable as bookable slots.</p>
-      {% if occupancy.0.in_flight %}
-        <p class="uk-text-small uk-text-muted mt-1">{{ occupancy.0.in_flight }} session{{ occupancy.0.in_flight|pluralize }} still running, so not yet counted.</p>
-      {% endif %}
+      <a class="ui-stat__value" href="{% url 'ifo_utilization' %}?{{ scope_query }}">{{ occupancy.0.used_hours }} h</a>
+      <span class="ui-stat__note" title="session-hours used of {{ occupancy.0.booked_hours }} booked">session-hours used of {{ occupancy.0.booked_hours }} booked</span>
       {% elif occupancy.0.booked_hours %}
-      <div class="uk-h4 mt-2">Awaiting records</div>
-      <p class="uk-text-small uk-text-muted mt-1">
-        {{ occupancy.0.booked_hours }} room-hours are scheduled, but no completed
-        room-use or absence evidence is available yet.</p>
-      <a href="{% url 'ifo_utilization' %}?{{ scope_query }}"
-         class="uk-text-small inline-flex items-center gap-1 mt-2">
-        Review utilization window <uk-icon icon="chevron-right" class="size-4"></uk-icon></a>
+      <span class="ui-stat__value">Awaiting records</span>
+      <span class="ui-stat__note">{{ occupancy.0.booked_hours }} room-hours scheduled, no records yet</span>
       {% elif occupancy.0.in_flight %}
-      <div class="uk-h4 mt-2">Recording in progress</div>
-      <p class="uk-text-small uk-text-muted mt-1">
-        {{ occupancy.0.in_flight }} room session{{ occupancy.0.in_flight|pluralize }}
-        still running. Final occupancy appears after checkout.</p>
-      <a href="{% url 'ifo_utilization' %}?{{ scope_query }}"
-         class="uk-text-small inline-flex items-center gap-1 mt-2">
-        Review utilization window <uk-icon icon="chevron-right" class="size-4"></uk-icon></a>
+      <span class="ui-stat__value">Recording</span>
+      <span class="ui-stat__note">{{ occupancy.0.in_flight }} room session{{ occupancy.0.in_flight|pluralize }} still running</span>
       {% else %}
-      <div class="uk-h4 mt-2">Not started</div>
-      <p class="uk-text-small uk-text-muted mt-1">No physical-room bookings in this window.</p>
-      <a href="{% url 'ifo_utilization' %}?{{ scope_query }}"
-         class="uk-text-small inline-flex items-center gap-1 mt-2">
-        Review utilization window <uk-icon icon="chevron-right" class="size-4"></uk-icon></a>
+      <span class="ui-stat__value">Not started</span>
+      <span class="ui-stat__note">No physical-room bookings in this window</span>
       {% endif %}
     </div>
   {% endif %}
 
   {% if not summary.1 %}
-    <div class="uk-card uk-card-body" data-kpi-card="sessions">
-      <div class="uk-text-small uk-text-muted flex items-center gap-1">
-        <uk-icon icon="layers" class="size-4"></uk-icon> Sessions</div>
-      <div class="uk-h2 mt-1">{{ summary.0.held }}<span class="uk-text-muted uk-text-small"> / {{ summary.0.scheduled }}</span></div>
-      <div class="uk-text-small uk-text-muted">held / scheduled</div>
+    <div class="ui-stat" data-kpi-card="sessions">
+      <span class="ui-stat__label">Sessions</span>
+      <span class="ui-stat__value">{{ summary.0.held }} <span class="ui-stat__of">/ {{ summary.0.scheduled }}</span></span>
+      <span class="ui-stat__note">held / scheduled</span>
     </div>
-    <div class="uk-card uk-card-body" data-kpi-card="absences">
-      <div class="uk-text-small uk-text-muted flex items-center gap-1">
-        <uk-icon icon="calendar-x" class="size-4"></uk-icon> Absences</div>
-      <div class="uk-h2 mt-1">{{ summary.0.absent }}</div>
+    <div class="ui-stat" data-kpi-card="absences">
+      <span class="ui-stat__label">Absences</span>
+      <span class="ui-stat__value">{{ summary.0.absent }}</span>
+      <span class="ui-stat__note">in this range</span>
     </div>
-    <div class="uk-card uk-card-body" data-kpi-card="attendance">
-      <div class="uk-text-small uk-text-muted flex items-center gap-1">
-        <uk-icon icon="percent" class="size-4"></uk-icon> Attendance %</div>
-      {% if summary.0.held or summary.0.absent %}
-      {% with pct=summary.0.attendance_pct %}
-      <div class="mt-1">
-        <span class="uk-label" style="{% if pct >= 90 %}background:var(--green-tint);color:var(--green){% elif pct >= 75 %}background:var(--amber-tint);color:var(--amber){% else %}background:var(--red-tint);color:var(--red){% endif %};font-size:1.4rem;padding:2px 10px">{{ pct }}%</span>
-      </div>
-      {% endwith %}
-      {% else %}
-      <div class="mt-1">
-        <span class="uk-label uk-label-secondary" style="font-size:1rem;padding:5px 10px">Not started</span>
-      </div>
-      <div class="uk-text-small uk-text-muted mt-1">No completed sessions yet</div>
-      {% endif %}
+    {% if summary.0.held or summary.0.absent %}
+    {% with pct=summary.0.attendance_pct %}
+    <div class="ui-stat {% if pct >= 90 %}ui-stat--success{% elif pct >= 75 %}ui-stat--warning{% else %}ui-stat--destructive{% endif %}" data-kpi-card="attendance">
+      <span class="ui-stat__label">Attendance %</span>
+      <span class="ui-stat__value">{{ pct }}%</span>
+      <span class="ui-stat__note">{% if pct >= 90 %}on target{% elif pct >= 75 %}below the 90% target{% else %}well below target{% endif %}</span>
     </div>
+    {% endwith %}
+    {% else %}
+    <div class="ui-stat" data-kpi-card="attendance">
+      <span class="ui-stat__label">Attendance %</span>
+      <span class="ui-stat__value">Not started</span>
+      <span class="ui-stat__note">No completed sessions yet</span>
+    </div>
+    {% endif %}
   {% endif %}
 </div>
 
-<h3 class="uk-h4 mt-8 mb-2">Faculty</h3>
+{% if not occupancy.1 %}{% if occupancy.0.used_hours or occupancy.0.wasted_hours or occupancy.0.booked_hours or occupancy.0.in_flight %}
+<details class="ui-explain">
+  <summary>How room occupancy is counted</summary>
+  <div class="ui-explain__body">
+    {% if occupancy.0.used_hours or occupancy.0.wasted_hours %}
+    <p>{{ occupancy.0.used_hours }} session-hours used of {{ occupancy.0.booked_hours }} booked
+      <span class="pill pill--info">{{ occupancy.0.utilization_pct }}% of capacity</span></p>
+    <p>{{ occupancy.0.wasted_hours }} room-hours were booked and unused &mdash; reclaimable as bookable slots.</p>
+    {% elif occupancy.0.booked_hours %}
+    <p>{{ occupancy.0.booked_hours }} room-hours are scheduled, but no completed room-use or absence evidence is available yet.</p>
+    {% endif %}
+    {% if occupancy.0.in_flight %}
+    <p>{{ occupancy.0.in_flight }} session{{ occupancy.0.in_flight|pluralize }} still running, so not yet counted.</p>
+    {% endif %}
+    <p>Occupancy reads in session-hours from actual check-in and checkout times, not a count of bookings. There is no target for it: online and blended classes leave physical rooms idle by design.
+      <a href="{% url 'ifo_utilization' %}?{{ scope_query }}">See where rooms sit idle</a>.</p>
+  </div>
+</details>
+{% endif %}{% endif %}
+
+<h2 class="ui-section__title" style="margin:32px 0 12px">Faculty</h2>
 {% if rows.1 %}
   {% include "reports/_error_card.html" %}
 {% else %}
   <div class="uk-card uk-card-body p-0 table-wrap">
-    <table class="tbl">
+    <table class="tbl tbl--stack">
       <thead>
         <tr>
           <th scope="col">Faculty</th>
@@ -143,19 +126,19 @@ value so colour is never the only signal. ASCII-only.
       <tbody>
         {% for row in page.object_list %}
         <tr>
-          <td class="tbl__id">
+          <td class="tbl__id" data-label="Faculty">
             <a class="inline-flex items-center gap-1" href="{% url 'ifo_scorecard' row.faculty_id %}?{{ scope_query }}">
               {{ row.name }} <uk-icon icon="chevron-right" class="size-4"></uk-icon></a>
           </td>
-          <td class="tbl__num">{{ row.scheduled }}</td>
-          <td class="tbl__num">{{ row.held }}</td>
-          <td class="tbl__num">{{ row.absent }}</td>
-          <td class="tbl__num">
+          <td class="tbl__num" data-label="Scheduled">{{ row.scheduled }}</td>
+          <td class="tbl__num" data-label="Held">{{ row.held }}</td>
+          <td class="tbl__num" data-label="Absent">{{ row.absent }}</td>
+          <td class="tbl__num" data-label="Attendance">
             <span class="pill {% if row.attendance_pct >= 90 %}pill--ok{% elif row.attendance_pct >= 75 %}pill--warn{% else %}pill--bad{% endif %}">{{ row.attendance_pct }}%</span>
           </td>
         </tr>
         {% empty %}
-        <tr><td colspan="5" class="uk-text-muted">No attendance in this range. No sessions were scheduled for the selected dates. Adjust the range above.</td></tr>
+        <tr><td colspan="5" class="uk-text-muted" data-label="">No attendance in this range. No sessions were scheduled for the selected dates. Adjust the range above.</td></tr>
         {% endfor %}
       </tbody>
     </table>

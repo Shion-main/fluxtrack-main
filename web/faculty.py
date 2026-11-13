@@ -169,6 +169,7 @@ def home(request):
         "hero": hero, "hero_live": hero_live, "hero_is_today": hero_is_today,
         "hero_modality": hero["modality"] if hero else "", "modalities": Modality,
         "today_count": len(today_cards),
+        "today_cards": today_cards,
         "term_available": get_active_term() is not None,
     })
 

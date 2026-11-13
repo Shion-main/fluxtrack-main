@@ -27,7 +27,7 @@
     .ft-error__brand img { width: 32px; height: 32px; object-fit: contain; }
     .ft-error__panel {
       align-self: center; width: min(100%, 34rem); margin: 0 auto; padding: 30px;
-      background: #fff; color: var(--body); border-radius: 16px;
+      background: #fff; color: hsl(var(--foreground)); border-radius: 16px;
       box-shadow: 0 22px 54px -28px rgba(0,0,0,.72);
     }
     .ft-error__code {
@@ -35,7 +35,7 @@
       font-size: .78rem; font-weight: 750; letter-spacing: .08em;
     }
     .ft-error__panel h1 {
-      max-width: 20ch; margin: 0 0 12px; color: var(--ink);
+      max-width: 20ch; margin: 0 0 12px; color: hsl(var(--foreground));
       font-size: clamp(1.7rem, 6vw, 2.35rem); line-height: 1.1;
       letter-spacing: -.025em; text-wrap: balance;
     }
@@ -47,7 +47,7 @@
       font: inherit; font-size: .9rem; font-weight: 650; text-decoration: none; cursor: pointer;
     }
     .ft-error__primary { background: var(--brand-navy); color: #fff; border: 1px solid var(--brand-navy); }
-    .ft-error__secondary { background: #fff; color: var(--ink); border: 1px solid var(--line); }
+    .ft-error__secondary { background: #fff; color: hsl(var(--foreground)); border: 1px solid hsl(var(--border)); }
     .ft-error__primary:hover { background: #002a63; }
     .ft-error__secondary:hover { background: var(--panel); }
     .ft-error__primary:focus-visible, .ft-error__secondary:focus-visible,

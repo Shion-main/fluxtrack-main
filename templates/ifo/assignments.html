@@ -1,8 +1,9 @@
 {% extends "ifo/_console.html" %}
 {% block title %}Assignments · FluxTrack{% endblock %}
 {% block console_title %}Duty assignments{% endblock %}
+{% block page_title %}Duty assignments{% endblock %}
+{% block page_desc %}<p class="ui-pagehead__desc">Post Checkers and Guards to floors, or grant online duty. Granting online duty pre-assigns that date's online sessions automatically.</p>{% endblock %}
 {% block console %}
-<p class="uk-text-muted mb-6">Post Checkers and Guards to floors, or grant online duty (IFO-06). Granting online duty pre-assigns that date's online sessions automatically.</p>
 
 <div id="assignment-panel">
   {% include "ifo/_assignment_form.html" %}

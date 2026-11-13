@@ -3,7 +3,6 @@
 navigation (Oversight / Approvals / Faculty / Reports). Leaf Dean pages (dashboard / queue /
 reports) extend THIS and fill console_title / page_actions / console. The Dean is
 department-scoped server-side; no department control is exposed. ASCII-only.{% endcomment %}
-{% block console_home %}/dean/dashboard{% endblock %}
 {% block console_navlabel %}Dean{% endblock %}
 {% block console_nav %}
   <a href="/dean/dashboard" class="cns__link {% if un == 'dean_dashboard' %}is-active{% endif %}"

@@ -7,16 +7,19 @@ UNSCOPED -- IFO sees all departments and the roll-up. Calm Pattern-F empty state
 NO write controls. ASCII-only.{% endcomment %}
 {% block title %}Weekly Consolidated Report - FluxTrack{% endblock %}
 {% block console_title %}Weekly reports{% endblock %}
-{% block page_actions %}<span class="uk-label uk-label-secondary">All departments</span>{% endblock %}
+{% block page_title %}Weekly reports{% endblock %}
+{% block page_desc %}<p class="ui-pagehead__desc">Download the stored weekly attendance reports. Each department has its own report; the institution-wide roll-up covers every department. Read-only.</p>{% endblock %}
+{% block page_actions %}<span class="uk-badge uk-badge-secondary">All departments</span>{% endblock %}
 {% block console %}
-<p class="uk-text-muted mb-6">Download the stored weekly attendance reports (RPT-01/03). Each department has its own report; the institution-wide roll-up covers every department. Read-only.</p>
 
-<form method="get" class="uk-card uk-card-body mb-6">
-  <div class="flex flex-wrap items-end gap-4">
+<details class="ui-filterbar" open>
+<summary><uk-icon icon="sliders-horizontal"></uk-icon> Filters</summary>
+<form method="get">
+  <div class="ui-filterbar__body">
     {% include "reports/_term_filter.html" %}
     {% if weeks %}
-    <label class="flex flex-col gap-1">
-      <span class="uk-text-small uk-text-muted">Week of</span>
+    <label class="ui-field">
+      <span class="ui-field__label">Week of</span>
       <select name="week" class="uk-select" onchange="this.form.submit()">
         {% for w in weeks %}
         <option value="{{ w|date:'Y-m-d' }}" {% if w == week %}selected{% endif %}>{{ w|date:'M j, Y' }}</option>
@@ -24,13 +27,14 @@ NO write controls. ASCII-only.{% endcomment %}
       </select>
     </label>
     {% endif %}
-    <button type="submit" class="uk-btn uk-btn-primary uk-btn-sm">Apply</button>
+    <button type="submit" class="uk-btn uk-btn-primary">Apply</button>
   </div>
 </form>
+</details>
 
 {% if reports %}
 <div class="uk-card uk-card-body p-0 table-wrap">
-  <table class="tbl">
+  <table class="tbl tbl--stack">
     <thead>
       <tr>
         <th scope="col">Report</th>
@@ -41,15 +45,15 @@ NO write controls. ASCII-only.{% endcomment %}
     <tbody>
       {% for r in reports %}
       <tr>
-        <td class="tbl__id">
+        <td class="tbl__id" data-label="Report">
           {% if r.department %}
           {{ r.department.name }} <span class="tbl__meta">{{ r.department.code }}</span>
           {% else %}
           <span class="inline-flex items-center gap-1"><uk-icon icon="building-2" class="size-4"></uk-icon> All departments <span class="pill pill--info">Roll-up</span></span>
           {% endif %}
         </td>
-        <td class="tbl__time">{{ r.week_start|date:'M j, Y' }}</td>
-        <td class="tbl__actions">
+        <td class="tbl__time" data-label="Week of">{{ r.week_start|date:'M j, Y' }}</td>
+        <td class="tbl__actions" data-label="Download">
           <div class="flex items-center justify-end gap-2">
             <a href="{% url 'ifo_weekly_download' r.pk 'csv' %}?{{ scope_query }}&amp;week={{ r.week_start|date:'Y-m-d' }}" class="uk-btn uk-btn-secondary uk-btn-sm" download>
               <uk-icon icon="download" class="size-4"></uk-icon> Export CSV</a>

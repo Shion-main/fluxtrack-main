@@ -1,8 +1,10 @@
 {% extends "ifo/_console.html" %}
 {% block title %}{{ term.name }} - FluxTrack{% endblock %}
 {% block console_title %}{{ term.name }}{% endblock %}
+{% block page_title %}{{ term.name }}{% endblock %}
 {% block page_actions %}<a href="{% url 'ifo_terms' %}" class="uk-btn uk-btn-ghost uk-btn-sm">Back to terms</a>{% endblock %}
 {% block console %}
+{% include "ifo/_term_steps.html" %}
 <div class="max-w-3xl">
   {% if messages %}{% for message in messages %}<div class="uk-alert uk-alert-success mb-4" role="status"><p>{{ message }}</p></div>{% endfor %}{% endif %}
   <div class="uk-card uk-card-body mb-6">

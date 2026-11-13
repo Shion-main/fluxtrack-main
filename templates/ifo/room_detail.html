@@ -13,6 +13,10 @@ as every other room. ASCII-only.{% endcomment %}
 {% endblock %}
 {% block title %}{{ room.code }} - FluxTrack{% endblock %}
 {% block console_title %}{% include "_room_code.html" with room=room %}{% endblock %}
+{% block page_title %}{% include "_room_code.html" with room=room %}{% endblock %}
+{% block page_desc %}<p class="ui-pagehead__desc no-print"><a href="/ifo/rooms" class="inline-flex items-center gap-1"><uk-icon icon="chevron-left" class="size-4"></uk-icon> Rooms</a>
+  <span class="mx-2">&middot;</span>
+  {{ room.floor.building.name }} &middot; Floor {{ room.floor.number }}{% if room.name %} &middot; {{ room.name }}{% endif %}{% if room.capacity %} &middot; capacity {{ room.capacity }}{% endif %}</p>{% endblock %}
 {% block page_actions %}
 <button type="button" class="uk-btn uk-btn-secondary uk-btn-sm" onclick="window.print()">
   <uk-icon icon="printer" class="size-4"></uk-icon> Print</button>
@@ -29,10 +33,6 @@ decision belongs before it, not on it.{% endcomment %}
   <uk-icon icon="trash-2" class="size-4"></uk-icon> Delete</a>
 {% endblock %}
 {% block console %}
-<p class="uk-text-muted mb-6 no-print">
-  <a href="/ifo/rooms" class="inline-flex items-center gap-1"><uk-icon icon="chevron-left" class="size-4"></uk-icon> Rooms</a>
-  <span class="mx-2">&middot;</span>
-  {{ room.floor.building.name }} &middot; Floor {{ room.floor.number }}{% if room.name %} &middot; {{ room.name }}{% endif %}{% if room.capacity %} &middot; capacity {{ room.capacity }}{% endif %}</p>
 
 {% if flash %}
 <div class="uk-alert uk-alert-success mb-4 no-print" role="status">
@@ -63,9 +63,9 @@ schedules and history are untouched.{% endcomment %}
     <span class="uk-text-small">In service</span>
   </div>
   <form method="post" action="/ifo/rooms/{{ room.code }}/service"
-        class="flex items-end gap-3">
+        class="flex flex-wrap items-end gap-3">
     {% csrf_token %}
-    <div class="flex-1">
+    <div class="flex-1" style="min-width:12rem">
       <label class="uk-form-label" for="oos-reason">Take out of service <span class="uk-text-muted">(reason, optional)</span></label>
       <input id="oos-reason" type="text" name="reason" class="uk-input h-10"
              maxlength="200" placeholder="Under renovation" autocomplete="off">
@@ -162,15 +162,15 @@ future scheduled sessions; history is never rewritten.{% endcomment %}
       <uk-icon icon="plus" class="size-4"></uk-icon> New class</a>
   </div>
   {% if schedules %}
-  <table class="uk-table uk-table-divider uk-table-small">
+  <table class="tbl tbl--stack">
     <thead><tr><th>Class</th><th>Instructor</th><th>Day & time</th><th></th></tr></thead>
     <tbody>
-      {% for s in schedules %}
+      {% for s in room_classes_pg.page.object_list %}
       <tr>
-        <td class="font-medium">{{ s.course_code }}-{{ s.section }}</td>
-        <td>{{ s.faculty.get_full_name|default:s.faculty.username }}</td>
-        <td>{{ s.get_day_of_week_display }} {{ s.start_time|time:"g:i A" }}-{{ s.end_time|time:"g:i A" }}</td>
-        <td class="uk-text-right whitespace-nowrap">
+        <td class="font-medium" data-label="Class">{{ s.course_code }}-{{ s.section }}</td>
+        <td data-label="Instructor">{{ s.faculty.get_full_name|default:s.faculty.username }}</td>
+        <td data-label="Day & time">{{ s.get_day_of_week_display }} {{ s.start_time|time:"g:i A" }}-{{ s.end_time|time:"g:i A" }}</td>
+        <td class="uk-text-right whitespace-nowrap" data-label="">
           <a href="/ifo/schedules/{{ s.id }}/edit" class="uk-btn uk-btn-ghost uk-btn-sm">
             <uk-icon icon="pencil" class="size-4"></uk-icon> Edit</a>
           <form method="post" action="/ifo/schedules/{{ s.id }}/cancel"
@@ -185,6 +185,7 @@ future scheduled sessions; history is never rewritten.{% endcomment %}
       {% endfor %}
     </tbody>
   </table>
+  {% with p=room_classes_pg %}{% include "_pager.html" with page=p.page paginator=p.paginator page_range=p.page_range querystring=p.querystring page_param=p.page_param %}{% endwith %}
   {% else %}
   <p class="uk-text-muted uk-text-small">No recurring classes in this room this term.</p>
   {% endif %}
@@ -196,7 +197,7 @@ future scheduled sessions; history is never rewritten.{% endcomment %}
   <ul class="space-y-2">
     {% for se in upcoming %}
     <li class="flex items-center gap-3 uk-text-small">
-      <span class="uk-label uk-label-secondary">{{ se.date|date:"D M j" }}</span>
+      <span class="uk-badge uk-badge-secondary">{{ se.date|date:"D M j" }}</span>
       <span>{{ se.scheduled_start|time:"g:i A" }}</span>
       <span class="font-medium">{{ se.schedule.course_code }}-{{ se.schedule.section }}</span>
       <span class="uk-text-muted ml-auto">{{ se.get_status_display }}</span>

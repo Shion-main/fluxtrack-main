@@ -14,6 +14,30 @@ Colour is never the only signal (WCAG 1.4.1): each outcome card carries an icon
 and a text label as well as its .ft-outcome--ok / --bad family. No border-left
 accent stripes. ASCII-only.
 {% endcomment %}
+{% if console_template %}
+<div class="ui-photo">
+  {% if photo %}
+  <img class="ui-photo__img" src="{% url 'profile_photo' user_id=user.pk %}?v={{ photo_v }}"
+       alt="Your current profile photo">
+  {% else %}
+  <div class="ui-photo__ph" aria-hidden="true"><uk-icon icon="user"></uk-icon></div>
+  {% endif %}
+  <div>
+    <div class="ui-field__label">{% if photo %}Current photo{% else %}No photo yet{% endif %}</div>
+    <p class="ui-field__desc" style="margin-top:6px">{% if photo %}This picture identifies you across FluxTrack.{% else %}Upload a clear picture to complete your profile.{% endif %}</p>
+  </div>
+</div>
+{% if error %}
+<div class="uk-alert uk-alert-destructive" data-outcome="photo-error" style="margin-top:16px"><uk-icon icon="alert-triangle"></uk-icon>
+  <div><div class="uk-alert-title">Photo not accepted</div>
+  <div>{{ error }} Your file selection has not been cleared - pick a different photo and try again.</div></div>
+</div>
+{% elif saved %}
+<div class="uk-alert uk-alert-success" data-outcome="photo-saved" style="margin-top:16px"><uk-icon icon="check"></uk-icon>
+  <div><div class="uk-alert-title">Photo updated</div><div>Your new photo is saved.</div></div>
+</div>
+{% endif %}
+{% else %}
 <div class="ft-photo">
   {% if photo %}
   <img class="ft-photo__img" src="{% url 'profile_photo' user_id=user.pk %}?v={{ photo_v }}"
@@ -56,4 +80,5 @@ accent stripes. ASCII-only.
   <p class="ft-outcome__body">Your new photo is saved and is what Checkers will
     see from now on.</p>
 </div>
+{% endif %}
 {% endif %}

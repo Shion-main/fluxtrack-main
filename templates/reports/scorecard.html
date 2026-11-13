@@ -1,96 +1,94 @@
-{% extends "base.html" %}
+{% extends console_template|default:"ifo/_console.html" %}
 {% comment %}RPT-04 shared faculty scorecard (full page, A-DRILL). Standard Franken
 shell. Back button carries the active from/to range. On the safe_card error path it
 includes the shared reports/_error_card.html (never a 500). Created here and REUSED
 by the Dean surface (06-06). Attendance pill uses the A-COLOR tokens. ASCII-only.
 {% endcomment %}
 {% block title %}Attendance scorecard - FluxTrack{% endblock %}
-{% block content %}
-<div class="uk-container max-w-4xl pt-8 pb-16">
-  <div class="flex items-center gap-2 mb-4">
-    <a href="{{ back_url|default:'/ifo/dashboard' }}?{% if scope_query %}{{ scope_query }}{% else %}from={{ date_from|date:'Y-m-d' }}&to={{ date_to|date:'Y-m-d' }}{% endif %}"
-       class="uk-btn uk-btn-ghost uk-btn-icon" aria-label="Back">
-      <uk-icon icon="arrow-left" class="size-5"></uk-icon></a>
-    <h1 class="uk-h3">Attendance scorecard &mdash; {{ faculty.get_full_name|default:faculty.username }}</h1>
+{% block console_title %}Attendance scorecard{% endblock %}
+{% block page_title %}{{ faculty.get_full_name|default:faculty.username }}{% endblock %}
+{% block page_desc %}<p class="ui-pagehead__desc"><a href="{{ back_url|default:'/ifo/dashboard' }}?{% if scope_query %}{{ scope_query }}{% else %}from={{ date_from|date:'Y-m-d' }}&to={{ date_to|date:'Y-m-d' }}{% endif %}" class="uk-link-muted no-print">&larr; Back to the report</a> &middot; Attendance scorecard</p>{% endblock %}
+{% block page_actions %}
     {% if export_csv_url %}
     <a href="{{ export_csv_url }}?{% if scope_query %}{{ scope_query }}{% else %}from={{ date_from|date:'Y-m-d' }}&to={{ date_to|date:'Y-m-d' }}{% endif %}"
-       class="uk-btn uk-btn-primary uk-btn-sm ml-auto" download>
-      <uk-icon icon="download" class="size-4"></uk-icon> Export CSV</a>
+       class="uk-btn uk-btn-primary uk-btn-sm no-print" download>
+      <uk-icon icon="download"></uk-icon> Export CSV</a>
     {% endif %}
-  </div>
+{% endblock %}
+{% block console %}
+<div>
   {% if range_note %}
-  <p class="uk-text-small mb-4" style="color:var(--amber)">{{ range_note }}</p>
+  <div class="uk-alert uk-alert-warning" style="margin-bottom:16px">{{ range_note }}</div>
   {% endif %}
 
   {% if card.1 %}
     {% include "reports/_error_card.html" %}
   {% else %}
-    <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-4 mb-8">
-      <div class="uk-card uk-card-body">
-        <div class="uk-text-small uk-text-muted flex items-center gap-1">
-          <uk-icon icon="layers" class="size-4"></uk-icon> Sessions</div>
-        <div class="uk-h2 mt-1">{{ card.0.held }}<span class="uk-text-muted uk-text-small"> / {{ card.0.scheduled }}</span></div>
-        <div class="uk-text-small uk-text-muted">held / scheduled</div>
-      </div>
-      <div class="uk-card uk-card-body">
-        <div class="uk-text-small uk-text-muted flex items-center gap-1">
-          <uk-icon icon="percent" class="size-4"></uk-icon> Attendance %</div>
-        {% if card.0.held or card.0.absent %}
-        {% with pct=card.0.attendance_pct %}
-        <div class="mt-1"><span class="uk-label" style="{% if pct >= 90 %}background:var(--green-tint);color:var(--green){% elif pct >= 75 %}background:var(--amber-tint);color:var(--amber){% else %}background:var(--red-tint);color:var(--red){% endif %};font-size:1.4rem;padding:2px 10px">{{ pct }}%</span></div>
-        {% endwith %}
-        {% else %}
-        <div class="mt-1">
-          <span class="uk-label uk-label-secondary" style="font-size:1rem;padding:5px 10px">Not started</span>
-        </div>
-        <div class="uk-text-small uk-text-muted mt-1">No completed sessions yet</div>
-        {% endif %}
-      </div>
-      <div class="uk-card uk-card-body">
-        <div class="uk-text-small uk-text-muted flex items-center gap-1">
-          <uk-icon icon="calendar-x" class="size-4"></uk-icon> Absences</div>
-        <div class="uk-h2 mt-1">{{ card.0.absent }}</div>
-      </div>
-      <div class="uk-card uk-card-body">
-        <div class="uk-text-small uk-text-muted">Early ends</div>
-        <div class="uk-h2 mt-1">{{ card.0.early_ends }}</div>
-      </div>
-      {% comment %}A3 / D-01..D-03 lateness card: average minutes late over held
+    <div class="ui-stats" style="margin-bottom:32px">
+    <div class="ui-stat">
+      <span class="ui-stat__label">Sessions</span>
+      <span class="ui-stat__value">{{ card.0.held }} <span class="ui-stat__of">/ {{ card.0.scheduled }}</span></span>
+      <span class="ui-stat__note">held / scheduled</span>
+    </div>
+    {% if card.0.held or card.0.absent %}
+    {% with pct=card.0.attendance_pct %}
+    <div class="ui-stat {% if pct >= 90 %}ui-stat--success{% elif pct >= 75 %}ui-stat--warning{% else %}ui-stat--destructive{% endif %}">
+      <span class="ui-stat__label">Attendance %</span>
+      <span class="ui-stat__value">{{ pct }}%</span>
+      <span class="ui-stat__note">{% if pct >= 90 %}on target{% elif pct >= 75 %}below the 90% target{% else %}well below target{% endif %}</span>
+    </div>
+    {% endwith %}
+    {% else %}
+    <div class="ui-stat">
+      <span class="ui-stat__label">Attendance %</span>
+      <span class="ui-stat__value">Not started</span>
+      <span class="ui-stat__note">No completed sessions yet</span>
+    </div>
+    {% endif %}
+    <div class="ui-stat">
+      <span class="ui-stat__label">Absences</span>
+      <span class="ui-stat__value">{{ card.0.absent }}</span>
+      <span class="ui-stat__note">in this range</span>
+    </div>
+    <div class="ui-stat">
+      <span class="ui-stat__label">Early ends</span>
+      <span class="ui-stat__value">{{ card.0.early_ends }}</span>
+      <span class="ui-stat__note">checked out before the scheduled end</span>
+    </div>
+    {% comment %}A3 / D-01..D-03 lateness card: average minutes late over held
       sessions, with the chronic-late verdict shown ONLY at >= 5 held sessions
       (D-02 floor -- never a chronic verdict for a faculty with too few held
       sessions to evaluate). The "Chronic" pill is always paired with the numeric
       average, so colour is never the only signal.{% endcomment %}
-      <div class="uk-card uk-card-body">
-        <div class="uk-text-small uk-text-muted flex items-center gap-1">
-          <uk-icon icon="clock" class="size-4"></uk-icon> Avg min late</div>
-        <div class="uk-h2 mt-1">{{ card.0.minutes_late_avg }}{% if card.0.held >= 5 and card.0.chronic_late %}
-          <span class="uk-label ml-1" style="background:var(--amber-tint);color:var(--amber)">Chronic</span>{% endif %}
-        </div>
-        <div class="uk-text-small uk-text-muted">minutes late per held session</div>
-      </div>
+    <div class="ui-stat">
+      <span class="ui-stat__label">Avg min late</span>
+      <span class="ui-stat__value">{{ card.0.minutes_late_avg }}{% if card.0.held >= 5 and card.0.chronic_late %}
+        <span class="uk-badge uk-badge-warning" style="vertical-align:middle">Chronic</span>{% endif %}</span>
+      <span class="ui-stat__note">minutes late per held session</span>
+    </div>
     </div>
 
-    <h3 class="uk-h4 mb-2">Effective modality</h3>
+    <h2 class="ui-section__title" style="margin:0 0 12px">Effective modality</h2>
     <div class="uk-card uk-card-body mb-8">
       {% for label, n in modality_items %}
       <div class="flex items-center justify-between {% if not forloop.first %}border-t border-border pt-2 mt-2{% endif %}">
         <span>{{ label }}</span>
-        <span class="uk-label uk-label-secondary">{{ n }} held</span>
+        <span class="uk-badge uk-badge-secondary">{{ n }} held</span>
       </div>
       {% empty %}
       <p class="uk-text-muted">No held sessions in this range.</p>
       {% endfor %}
     </div>
 
-    <h3 class="uk-h4 mb-2">Absences</h3>
+    <h2 class="ui-section__title" style="margin:0 0 12px">Absences</h2>
     <div class="uk-card uk-card-body p-0 table-wrap">
-      <table class="tbl">
+      <table class="tbl tbl--stack">
         <thead><tr><th scope="col">Course</th><th scope="col">Section</th><th scope="col">Date</th></tr></thead>
         <tbody>
           {% for a in card.0.absences %}
-          <tr><td class="tbl__id">{{ a.course_code }}</td><td>{{ a.section }}</td><td class="tbl__time">{{ a.date|date:'M j, Y' }}</td></tr>
+          <tr><td class="tbl__id" data-label="Course">{{ a.course_code }}</td><td data-label="Section">{{ a.section }}</td><td class="tbl__time" data-label="Date">{{ a.date|date:'M j, Y' }}</td></tr>
           {% empty %}
-          <tr><td colspan="3" class="uk-text-muted">No absences in this range.</td></tr>
+          <tr><td colspan="3" class="uk-text-muted" data-label="">No absences in this range.</td></tr>
           {% endfor %}
         </tbody>
       </table>

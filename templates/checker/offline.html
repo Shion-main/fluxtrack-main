@@ -1,8 +1,59 @@
 {% load static %}<!doctype html>
-<html lang="en" data-offline-shell><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>FluxTrack offline capture</title>
-<style>body{font:18px system-ui;max-width:36rem;margin:2rem auto;padding:1rem}input,textarea,button{display:block;margin:1rem 0;padding:.7rem;width:100%;box-sizing:border-box}.hidden{display:none}</style>
+<html lang="en" data-offline-shell><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"><title>FluxTrack offline capture</title>
+<meta name="theme-color" content="#001c43">
+{% comment %}Self-contained on purpose: the service worker serves this page when
+the network is gone, so it cannot depend on the app stylesheets. The colours
+below are the MMCM/shadcn roles copied from static/css/tokens.css (navy
+primary #001c43, border, muted text); keep them in step by hand. Every id and
+the data-offline-shell hook are read by static/checker/offline_queue.js and the
+script at the bottom -- do not rename them. ASCII-only.{% endcomment %}
+<style>
+  *, *::before, *::after { box-sizing: border-box; }
+  body { margin: 0; font: 16px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; color: #0f172a; background: #f5f7fb; -webkit-font-smoothing: antialiased; }
+  .bar { display: flex; align-items: center; gap: 10px; min-height: 56px; padding: 8px 16px; padding-top: max(8px, env(safe-area-inset-top)); background: #001c43; color: #fafafa; }
+  .bar img { width: 26px; height: 26px; }
+  .bar b { font-weight: 600; letter-spacing: -.01em; }
+  .bar .tag { margin-left: auto; padding: 2px 8px; border-radius: 6px; border: 1px solid rgba(250,250,250,.2); font-size: 12px; font-weight: 500; }
+  main { max-width: 32rem; margin: 0 auto; padding: 20px 16px calc(32px + env(safe-area-inset-bottom)); }
+  h1 { margin: 0 0 4px; font-size: 1.5rem; line-height: 2rem; font-weight: 600; letter-spacing: -.025em; }
+  .lede { margin: 0 0 16px; font-size: .875rem; color: #57627a; }
+  .card { background: #fff; border: 1px solid #e3e6ec; border-radius: 14px; box-shadow: 0 1px 3px rgba(0,0,0,.1), 0 1px 2px -1px rgba(0,0,0,.1); padding: 20px 16px; }
+  #account-label { margin: 0 0 16px; padding: 10px 12px; border-radius: 8px; background: #eef1f7; font-size: .875rem; color: #001c43; }
+  #account-label:empty { display: none; }
+  #offline-banner { margin: 0 0 16px; padding: 12px 16px; border-radius: 10px; border: 1px solid rgba(160,78,8,.25); background: #fef3dc; color: #a04e08; font-size: .875rem; font-weight: 500; }
+  #offline-banner p { margin: 0; }
+  #offline-banner p:empty { display: none; }
+  #offline-banner:has(p:empty) { display: none; }
+  form { display: grid; gap: 16px; }
+  label { display: grid; gap: 8px; font-size: .875rem; font-weight: 500; }
+  input, select, textarea { width: 100%; min-height: 44px; padding: 0 12px; font: inherit; font-size: 1rem; color: inherit; background: #fff; border: 1px solid #e3e6ec; border-radius: 8px; box-shadow: 0 1px 2px rgba(0,0,0,.05); }
+  textarea { min-height: 88px; padding: 10px 12px; resize: vertical; }
+  #payload { text-align: center; letter-spacing: .3em; font-weight: 600; font-size: 1.25rem; }
+  input:focus, select:focus, textarea:focus, button:focus-visible, a:focus-visible { outline: none; border-color: #072d6a; box-shadow: 0 0 0 3px rgba(7,45,106,.5); }
+  button { min-height: 44px; border: 0; border-radius: 8px; background: #001c43; color: #fafafa; font: inherit; font-size: .9375rem; font-weight: 500; cursor: pointer; box-shadow: 0 1px 2px rgba(0,0,0,.05); }
+  button:hover { background: rgba(0,28,67,.9); }
+  .hint { margin: -8px 0 0; font-size: .8125rem; font-weight: 400; color: #57627a; }
+  #status { margin: 16px 0 0; min-height: 1.5rem; font-size: .9375rem; font-weight: 500; color: #0b6b45; }
+  #status:empty { display: none; }
+  .reconnect { display: flex; align-items: center; justify-content: center; min-height: 44px; margin-top: 16px; border: 1px solid #e3e6ec; border-radius: 8px; background: #fff; color: #0f172a; font-size: .9375rem; font-weight: 500; text-decoration: none; }
+  .hidden { display: none; }
+</style>
 <script src="{% static 'checker/offline_queue.js' %}" defer></script></head><body>
-<h1>Offline room capture</h1><p>Record a room observation for the last account used on this device. Reconnect and sign into that same account to sync. Live attendance is unavailable.</p>
+<header class="bar"><img src="/icon-192.png" alt="" width="26" height="26"><b>FluxTrack</b><span class="tag">Offline</span></header>
+<main>
+<h1>Offline room capture</h1>
+<p class="lede">Record a room observation for the last account used on this device. Reconnect and sign into that same account to sync. Live attendance is unavailable.</p>
 <p id="account-label"></p><div id="offline-banner"><p id="offline-banner-text"></p></div>
-<form id="capture"><label>Six-digit room code or QR link<input id="payload" required></label><label>Observation<select id="action"><option value="verified">Verify present</option><option value="verified_empty">Confirm empty</option><option value="flag_not_present">Flag not present</option></select></label><label>Note<textarea id="note" maxlength="255"></textarea></label><button>Save observation</button></form><p id="status" role="status"></p><a href="/login">Reconnect and sign in</a>
+<div class="card">
+<form id="capture">
+  <label>Six-digit room code or QR link<input id="payload" required inputmode="numeric" autocomplete="off"></label>
+  <label>Observation<select id="action"><option value="verified">Verify present</option><option value="verified_empty">Confirm empty</option><option value="flag_not_present">Flag not present</option></select></label>
+  <label>Note<textarea id="note" maxlength="255" placeholder="Required when you flag"></textarea></label>
+  <p class="hint">A note is required to flag. Verify and Confirm empty need none.</p>
+  <button>Save observation</button>
+</form>
+<p id="status" role="status"></p>
+</div>
+<a class="reconnect" href="/login">Reconnect and sign in</a>
+</main>
 <script>document.addEventListener('DOMContentLoaded',function(){const q=window.FluxTrackOfflineQueue;document.getElementById('account-label').textContent=q&&q.ownerLabel?'Device account label: '+q.ownerLabel+' (confirmed at sync)':'No saved account. Reconnect and open the checker scan page before capturing.';});document.getElementById('capture').addEventListener('submit', async function(e){e.preventDefault();const status=document.getElementById('status');const action=document.getElementById('action').value;const note=document.getElementById('note').value.trim();if(action==='flag_not_present'&&!note){status.textContent='A note is required to flag.';return;}try{await window.FluxTrackOfflineQueue.enqueue({payload:document.getElementById('payload').value,action:action,note:note});status.textContent='Saved on this device. Sign in as the original account to sync.';this.reset();}catch(error){status.textContent='Cannot save: '+error.message;}});</script></body></html>

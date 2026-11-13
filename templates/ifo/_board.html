@@ -11,7 +11,7 @@ are the client-side filter index. ASCII-only.
 <div class="flex items-center justify-between gap-3 mb-4">
   <p class="uk-text-small uk-text-muted">
     {% if totals.problems %}
-      <strong style="color:var(--red)">{{ totals.problems }}</strong> room{{ totals.problems|pluralize }} need{{ totals.problems|pluralize:"s," }} attention
+      <strong style="color:hsl(var(--destructive-text))">{{ totals.problems }}</strong> room{{ totals.problems|pluralize }} need{{ totals.problems|pluralize:"s," }} attention
       &middot; {{ totals.rooms }} shown
     {% else %}
       No rooms need attention &middot; {{ totals.rooms }} room{{ totals.rooms|pluralize }} shown
@@ -65,7 +65,7 @@ are the client-side filter index. ASCII-only.
       {% if t.session %}
       <span class="tile__who">{{ t.session.faculty.last_name|default:t.session.faculty.username }}</span>
       {% elif t.state == "free" and t.next %}
-      <span class="tile__who" style="color:var(--ft-muted);font-weight:500">
+      <span class="tile__who" style="color:hsl(var(--muted-foreground));font-weight:500">
         next {{ t.next.faculty.last_name|default:t.next.faculty.username }}</span>
       {% endif %}
 

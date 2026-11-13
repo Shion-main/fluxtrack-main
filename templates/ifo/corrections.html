@@ -5,13 +5,13 @@ with a mandatory reason, fully audited. This is the surface the faculty refusal
 message now points to. Console uk-* vocabulary, ASCII-only.{% endcomment %}
 {% block title %}Corrections - FluxTrack{% endblock %}
 {% block console_title %}Absent corrections{% endblock %}
-{% block console %}
-<p class="uk-text-muted mb-6 max-w-3xl">
-  Absent is final by design -- it is official evidence, not a draft. When it is
+{% block page_title %}Absent corrections{% endblock %}
+{% block page_desc %}<p class="ui-pagehead__desc">Absent is final by design &mdash; it is official evidence, not a draft. When it is
   genuinely wrong (a checker could not reach the room, a device clock was off),
   an IFO admin can reinstate the session as held. Every correction needs a reason
   and is recorded in the audit log. Showing sessions marked Absent in the last
-  {{ since|timesince }}.</p>
+  {{ since|timesince }}.</p>{% endblock %}
+{% block console %}
 
 {% if flash %}
 <div class="uk-alert uk-alert-success mb-4" role="status">
@@ -29,18 +29,18 @@ message now points to. Console uk-* vocabulary, ASCII-only.{% endcomment %}
 </form>
 
 {% if sessions %}
-<table class="uk-table uk-table-divider uk-table-small">
+<table class="tbl tbl--stack">
   <thead><tr>
     <th>Date</th><th>Faculty</th><th>Class</th><th>Room</th><th>Reinstate</th>
   </tr></thead>
   <tbody>
     {% for s in sessions %}
     <tr>
-      <td>{{ s.date|date:"M j" }}</td>
-      <td>{{ s.faculty.get_full_name|default:s.faculty.username }}</td>
-      <td>{{ s.schedule.course_code }} {{ s.schedule.section }}</td>
-      <td>{{ s.room.code }}</td>
-      <td>
+      <td data-label="Date">{{ s.date|date:"M j" }}</td>
+      <td data-label="Faculty">{{ s.faculty.get_full_name|default:s.faculty.username }}</td>
+      <td data-label="Class">{{ s.schedule.course_code }} {{ s.schedule.section }}</td>
+      <td data-label="Room">{{ s.room.code }}</td>
+      <td data-label="Reinstate">
         <form method="post" action="/ifo/sessions/{{ s.id }}/reinstate"
               class="flex items-center gap-2">
           {% csrf_token %}

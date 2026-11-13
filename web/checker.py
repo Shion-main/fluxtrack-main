@@ -27,6 +27,8 @@ from django.db import IntegrityError, transaction
 from django.http import Http404, JsonResponse
 from django.shortcuts import render
 from django.utils import timezone
+
+from web.pagination import paginate
 from django.utils.dateparse import parse_datetime
 from django.views.decorators.http import require_http_methods
 
@@ -870,6 +872,9 @@ def floor_rows(request):
 
     total = len(board)
     coverage = round(100 * verified / total) if total else 100
+    # Shared 50-row pager (D10) on the room cards; coverage and the priority
+    # queue still count the whole floor.
+    pg = paginate(request, cards)
     return render(request, "checker/_floor_rows.html", {
-        "cards": cards, "queue": queue, "coverage": coverage,
+        **pg, "cards": pg["page"].object_list, "queue": queue, "coverage": coverage,
         "verified": verified, "total": total, "now": timezone.localtime(now)})
