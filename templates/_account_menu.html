@@ -1,0 +1,22 @@
+{% comment %}The one account menu (shadcn Dropdown menu on a native details, so it
+works without JS). Include with up=1 to open upward (console sidebar foot).
+Avatar initials, name, role and department; Profile, Notification settings,
+Sign out. ASCII-only.{% endcomment %}
+<details class="ui-acct{% if up %} ui-acct--up{% endif %}">
+  <summary aria-label="Account menu for {{ user.get_full_name|default:user.username }}">
+    <span class="ui-acct__trigger">
+      <span class="ui-acct__avatar" aria-hidden="true">{{ user.first_name|default:user.username|slice:":1"|upper }}{{ user.last_name|slice:":1"|upper }}</span>
+      {% if wide %}<span class="ui-acct__who"><b>{{ user.get_full_name|default:user.username }}</b><span>{% if user.department %}{{ user.department.name }}{% else %}{{ user.get_role_display }}{% endif %}</span></span>{% endif %}
+    </span>
+  </summary>
+  <div class="ui-acct__menu" role="menu">
+    <div class="ui-acct__label">{{ user.get_full_name|default:user.username }}
+      <span class="ui-acct__sub">{{ user.get_role_display }}{% if user.department %} &middot; {{ user.department.name }}{% endif %}</span>
+    </div>
+    <div class="ui-acct__sep" role="separator"></div>
+    <a class="ui-acct__item" role="menuitem" href="{% url 'profile' %}"><uk-icon icon="user"></uk-icon> Profile</a>
+    <a class="ui-acct__item" role="menuitem" href="{% url 'notif_settings' %}"><uk-icon icon="bell"></uk-icon> Notification settings</a>
+    <div class="ui-acct__sep" role="separator"></div>
+    <a class="ui-acct__item" role="menuitem" href="/logout"><uk-icon icon="log-out"></uk-icon> Sign out</a>
+  </div>
+</details>

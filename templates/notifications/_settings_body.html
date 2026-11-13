@@ -1,0 +1,54 @@
+{% comment %}Body of the settings page, shared by the floor shell, the desk console and the plain fallback. ASCII-only.{% endcomment %}
+{% if floor_shell %}<div class="ft-app">{% include "notifications/_floor_header.html" %}{% endif %}
+<div class="{% if floor_shell %}ft-page{% elif not console_template %}uk-container max-w-2xl pt-8 pb-16{% endif %}">
+  {% if floor_shell %}
+  <div class="ft-greet ft-notif-heading ft-notif-heading--settings">
+    <a href="/notifications" class="ft-appbar__back" aria-label="Back to notifications">
+      <uk-icon icon="arrow-left"></uk-icon>
+    </a>
+    <div>
+      <div class="ft-greet__hi">Notification settings</div>
+      <div class="ft-greet__date">Choose which notification groups to mute.</div>
+    </div>
+  </div>
+  {% else %}
+  <ol class="ui-crumbs"><li><a href="/notifications">Notifications</a></li><li><span aria-current="page">Settings</span></li></ol>
+  <div class="ui-pagehead">
+    <div>
+      <h1 class="ui-pagehead__title">Notification settings</h1>
+      <p class="ui-pagehead__desc">Choose which notification groups to mute.</p>
+    </div>
+  </div>
+  {% endif %}
+
+  <div id="mute-controls" class="{% if floor_shell %}ft-card ft-card--neutral ft-settings{% else %}uk-card uk-card-body{% endif %}">
+    {% for g in groups %}
+    <form method="post" action="/notifications/mute"
+          hx-post="/notifications/mute" hx-target="#mute-controls"
+          hx-select="#mute-controls" hx-swap="outerHTML"
+          class="{% if floor_shell %}ft-setting-row{% else %}flex items-center justify-between py-3 border-b border-border last:border-0{% endif %}">
+      {% csrf_token %}
+      <input type="hidden" name="category" value="{{ g.value }}">
+      <div>
+        <div class="{% if floor_shell %}ft-setting-row__title{% else %}font-medium{% endif %}">{{ g.label }}</div>
+        <div class="{% if floor_shell %}ft-help{% else %}uk-text-muted uk-text-small{% endif %}">{% if g.muted %}Muted{% else %}On{% endif %}</div>
+      </div>
+      <button type="submit"
+              class="{% if floor_shell %}ft-setting-action{% if not g.muted %} is-on{% endif %}{% else %}uk-btn uk-btn-sm {% if g.muted %}uk-btn-default{% else %}uk-btn-primary{% endif %}{% endif %}">
+        {% if g.muted %}Unmute{% else %}Mute{% endif %}
+      </button>
+    </form>
+    {% endfor %}
+  </div>
+
+  <div class="{% if floor_shell %}ft-card ft-card--neutral ft-push-settings{% else %}uk-card uk-card-body mt-4{% endif %}">
+    <div class="{% if floor_shell %}ft-setting-row__title{% else %}font-medium mb-1{% endif %}">Push notifications</div>
+    <p class="{% if floor_shell %}ft-help{% else %}uk-text-muted uk-text-small mb-3{% endif %}">Enable browser push for key alerts.</p>
+    {% comment %}push.js (05-05) populates this with the state-driven control:
+    Enable / Turn off / a passive "blocked" note. The VAPID key + CSRF token are
+    read from these data attributes so the settings control works on its own.{% endcomment %}
+    <div id="push-controls"
+         data-vapid-key="{{ vapid_public_key }}" data-csrftoken="{{ csrf_token }}"></div>
+  </div>
+</div>
+{% if floor_shell %}</div>{% endif %}

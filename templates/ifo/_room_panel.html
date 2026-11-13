@@ -64,13 +64,13 @@ keeps polling). ASCII-only.
       {% endif %}
 
       {% elif tile.next %}
-      <div class="now__who" style="color:var(--body);font-weight:550">No class in here right now</div>
+      <div class="now__who" style="color:hsl(var(--foreground));font-weight:550">No class in here right now</div>
       <div class="now__course">Next: {{ tile.next.schedule.course_code }}-{{ tile.next.schedule.section }}
         at {{ tile.next.scheduled_start|time:"g:i A" }}
         ({{ tile.next.faculty.last_name|default:tile.next.faculty.username }})</div>
 
       {% else %}
-      <div class="now__who" style="color:var(--body);font-weight:550">
+      <div class="now__who" style="color:hsl(var(--foreground));font-weight:550">
         {% if tile.count %}Done for today{% else %}Nothing scheduled today{% endif %}</div>
       <div class="now__course">
         {% if tile.count %}All {{ tile.count }} of today's classes have finished.

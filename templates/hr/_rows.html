@@ -15,18 +15,18 @@ ASCII-only.{% endcomment %}
   {% comment %}Second lines render only when they carry something. A column of 50
   identical "--" placeholders is pure noise that makes the real values harder to
   find -- absence of the line IS the absence of the value.{% endcomment %}
-  <td>
+  <td data-label="Faculty">
     <div class="tbl__id">{{ s.faculty.get_full_name|default:s.faculty.username }}</div>
     {% if s.faculty.department %}<div class="tbl__meta">{{ s.faculty.department.code }}</div>{% endif %}
   </td>
-  <td>
+  <td data-label="Course">
     <div>{{ s.schedule.course_code }}</div>
     <div class="tbl__meta">{{ s.schedule.section }}</div>
   </td>
-  <td class="tbl__time">{{ s.date|date:'Y-m-d' }}</td>
-  <td class="tbl__time">{{ s.scheduled_start|date:'H:i' }}</td>
-  <td class="tbl__time">{% if s.actual_start %}{{ s.actual_start|date:'H:i' }}{% else %}--{% endif %}</td>
-  <td>
+  <td class="tbl__time" data-label="Date">{{ s.date|date:'Y-m-d' }}</td>
+  <td class="tbl__time" data-label="Scheduled">{{ s.scheduled_start|date:'H:i' }}</td>
+  <td class="tbl__time" data-label="Actual">{% if s.actual_start %}{{ s.actual_start|date:'H:i' }}{% else %}--{% endif %}</td>
+  <td data-label="Status">
     {% if s.present_label == 'Present' %}
     <span class="pill pill--ok">Present</span>
     {% elif s.present_label == 'Absent' %}

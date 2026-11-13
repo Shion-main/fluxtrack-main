@@ -1,4 +1,4 @@
-{% extends "base.html" %}
+{% extends console_template|default:"base.html" %}
 {% comment %}Owns its chrome (see base.html global_header).{% endcomment %}
 {% block global_header %}{% endblock %}
 {% load static %}
@@ -32,27 +32,10 @@ Navy .ft-* shell (Faculty/Guard vocabulary); Franken uk-* belongs to IFO/Dean.
 No border-left accent stripes. ASCII-only.
 {% endcomment %}
 {% block title %}Profile - FluxTrack{% endblock %}
-{% block content %}
+{% block content %}{% if console_template %}{{ block.super }}{% else %}
 <div class="ft-app">
 
-  <header class="ft-top">
-    <a href="/" class="ft-top__brand">
-      <img class="ft-top__crest" src="{% static 'brand/mmcm-crest.png' %}" alt="">
-      <span class="ft-top__mark">FluxTrack</span>
-    </a>
-    <div class="relative inline-flex" style="margin-left:auto">{% include "notifications/_bell.html" %}</div>
-    <details class="ft-acct" style="margin-left:0">
-      <summary class="ft-top__avatar" aria-label="Account and sign out">{{ user.first_name|default:user.username|slice:":1"|upper }}{{ user.last_name|slice:":1"|upper }}</summary>
-      <div class="ft-acct__menu">
-        <div class="ft-acct__who">
-          <b>{{ user.get_full_name|default:user.username }}</b>
-          <span>{{ user.get_role_display }}{% if user.department %} &middot; {{ user.department.name }}{% endif %}</span>
-        </div>
-        <a class="ft-acct__item" href="{% url 'profile' %}"><uk-icon icon="user"></uk-icon> Profile</a>
-        <a class="ft-acct__item" href="/logout"><uk-icon icon="log-out"></uk-icon> Sign out</a>
-      </div>
-    </details>
-  </header>
+  {% include "_floor_top.html" with home="/" %}
 
   <div class="ft-page">
     <div class="ft-greet">
@@ -97,36 +80,7 @@ No border-left accent stripes. ASCII-only.
         {% endif %}
       </p>
 
-      {% comment %}The small region the upload targets. Rendered server-side on
-      first load so the page is complete without htmx.{% endcomment %}
-      <div id="photo-status" role="status" aria-live="polite">
-        {% include "faculty/_photo_status.html" %}
-      </div>
-
-      {% comment %}hx-encoding is load-bearing -- see the header comment.{% endcomment %}
-      <form class="ft-form" hx-post="{% url 'profile_photo_upload' %}"
-            hx-encoding="multipart/form-data"
-            hx-target="#photo-status" hx-swap="innerHTML"
-            hx-indicator="#photo-spinner">
-        {% csrf_token %}
-        <div class="ft-form__group">
-          <label class="ft-label" for="p-photo">Choose a new photo</label>
-          <input id="p-photo" class="ft-control" type="file" name="photo" required
-                 accept="image/jpeg,image/png"
-                 aria-describedby="p-photo-help">
-          <p class="ft-help" id="p-photo-help">
-            JPEG or PNG, up to {{ max_mb }} MB. It is resized to {{ target_px }}px
-            and re-saved on the server, which also removes any location data your
-            camera stored in the file.
-          </p>
-        </div>
-        <div>
-          <button class="ft-btn-navy" type="submit">
-            <uk-icon icon="upload"></uk-icon> Upload photo</button>
-          <span id="photo-spinner" class="htmx-indicator ft-help">
-            <uk-icon icon="loader"></uk-icon> Processing your photo...</span>
-        </div>
-      </form>
+      {% include "faculty/_photo_form.html" %}
     </div>
 
     {% if user.role == "faculty" %}
@@ -177,5 +131,47 @@ No border-left accent stripes. ASCII-only.
         <uk-icon icon="bell"></uk-icon> Notification preferences</a>
     </div>
   </div>
+</div>
+{% endif %}{% endblock %}
+{% block console_title %}Profile{% endblock %}
+{% block pagehead %}{% endblock %}
+{% block console %}
+<div class="ui-pagehead">
+  <div>
+    <h1 class="ui-pagehead__title">Profile</h1>
+    <p class="ui-pagehead__desc">Your account details, identity photo and notification preferences.</p>
+  </div>
+</div>
+<div class="grid gap-6" style="max-width:42rem">
+  <section class="uk-card">
+    <div class="uk-card-header"><h2 class="uk-card-title">Account information</h2></div>
+    <div class="uk-card-body">
+      <dl class="ui-desc">
+        <div><dt>Name</dt><dd>{{ user.get_full_name|default:user.username }}</dd></div>
+        <div><dt>Username</dt><dd>{{ user.username }}</dd></div>
+        <div><dt>Role</dt><dd>{{ user.get_role_display }}</dd></div>
+        <div><dt>Department</dt><dd>{{ user.department.name|default:"No department assigned" }}</dd></div>
+        <div><dt>Email</dt><dd>{{ user.email|default:"No email address recorded" }}</dd></div>
+      </dl>
+    </div>
+  </section>
+  <section class="uk-card">
+    <div class="uk-card-header">
+      <h2 class="uk-card-title">Identity photo</h2>
+      <p class="ui-section__desc" style="margin-top:6px">Add a clear, current head-and-shoulders picture so your FluxTrack account is easy to recognize.</p>
+    </div>
+    <div class="uk-card-body">
+      {% include "faculty/_photo_form.html" with desk=1 %}
+    </div>
+  </section>
+  <section class="uk-card">
+    <div class="uk-card-header">
+      <h2 class="uk-card-title">Notifications</h2>
+      <p class="ui-section__desc" style="margin-top:6px">Choose which notification groups to mute, and turn browser push on or off.</p>
+    </div>
+    <div class="uk-card-footer">
+      <a class="uk-btn uk-btn-default" href="{% url 'notif_settings' %}"><uk-icon icon="bell"></uk-icon> Notification preferences</a>
+    </div>
+  </section>
 </div>
 {% endblock %}

@@ -6,33 +6,37 @@ Pattern-C CSV/PDF export anchors to dean_report_export. Server-scoped to the Dea
 department -- no department control is exposed. NO write controls. ASCII-only.{% endcomment %}
 {% block title %}Department reporting - FluxTrack{% endblock %}
 {% block console_title %}Reports{% endblock %}
-{% block page_actions %}{% if department %}<span class="uk-label uk-label-secondary">{{ department.code }}</span>{% endif %}{% endblock %}
+{% block page_title %}Reports{% endblock %}
+{% block page_desc %}<p class="ui-pagehead__desc">Per-faculty attendance for your department over a selectable range. Read-only.</p>{% endblock %}
+{% block page_actions %}{% if department %}<span class="uk-badge uk-badge-secondary">{{ department.code }}</span>{% endif %}{% endblock %}
 {% block console %}
-<p class="uk-text-muted mb-6">Per-faculty attendance for your department over a selectable range (DEAN-02). Read-only.</p>
 
-<form method="get" class="uk-card uk-card-body mb-6">
-  <div class="flex flex-wrap items-end gap-4">
+<details class="ui-filterbar" open>
+<summary><uk-icon icon="sliders-horizontal"></uk-icon> Filters</summary>
+<form method="get">
+  <div class="ui-filterbar__body">
     {% include "reports/_term_filter.html" %}
-    <button type="submit" class="uk-btn uk-btn-primary uk-btn-sm">Apply</button>
-    <a href="/dean/reports{% if scope.term %}?term={{ scope.term.pk }}{% endif %}" class="uk-btn uk-btn-ghost uk-btn-sm">Reset</a>
-    <span class="grow"></span>
+    <button type="submit" class="uk-btn uk-btn-primary">Apply</button>
+    <a href="/dean/reports{% if scope.term %}?term={{ scope.term.pk }}{% endif %}" class="uk-btn uk-btn-ghost">Reset</a>
+    <span class="ui-filterbar__grow"></span>
     <a href="/dean/reports/export/csv?{{ scope_query }}"
-       class="uk-btn uk-btn-secondary uk-btn-sm" download>
+       class="uk-btn uk-btn-secondary" download>
       <uk-icon icon="download" class="size-4"></uk-icon> Export CSV</a>
     <a href="/dean/reports/export/pdf?{{ scope_query }}"
-       class="uk-btn uk-btn-primary uk-btn-sm" download>
+       class="uk-btn uk-btn-primary" download>
       <uk-icon icon="file-text" class="size-4"></uk-icon> Download PDF</a>
   </div>
   {% if range_note %}
-  <p class="uk-text-small mt-2" style="color:var(--amber)">{{ range_note }}</p>
+  <p class="ui-field__desc ui-filterbar__note">{{ range_note }}</p>
   {% endif %}
 </form>
+</details>
 
 {% if rows.1 %}
   {% include "reports/_error_card.html" %}
 {% else %}
 <div class="uk-card uk-card-body p-0 table-wrap">
-  <table class="tbl">
+  <table class="tbl tbl--stack">
     <thead>
       <tr>
         <th scope="col">Faculty</th>
@@ -45,19 +49,19 @@ department -- no department control is exposed. NO write controls. ASCII-only.{%
     <tbody>
       {% for row in page.object_list %}
       <tr>
-        <td class="tbl__id">
+        <td class="tbl__id" data-label="Faculty">
           <a class="inline-flex items-center gap-1" href="{% url 'dean_scorecard' row.faculty_id %}?{{ scope_query }}">
             {{ row.name }} <uk-icon icon="chevron-right" class="size-4"></uk-icon></a>
         </td>
-        <td class="tbl__num">{{ row.scheduled }}</td>
-        <td class="tbl__num">{{ row.held }}</td>
-        <td class="tbl__num">{{ row.absent }}</td>
-        <td class="tbl__num">
+        <td class="tbl__num" data-label="Scheduled">{{ row.scheduled }}</td>
+        <td class="tbl__num" data-label="Held">{{ row.held }}</td>
+        <td class="tbl__num" data-label="Absent">{{ row.absent }}</td>
+        <td class="tbl__num" data-label="Attendance">
           <span class="pill {% if row.attendance_pct >= 90 %}pill--ok{% elif row.attendance_pct >= 75 %}pill--warn{% else %}pill--bad{% endif %}">{{ row.attendance_pct }}%</span>
         </td>
       </tr>
       {% empty %}
-      <tr><td colspan="5" class="uk-text-muted">No attendance in this range. No sessions were scheduled for the selected department and dates. Adjust the range above.</td></tr>
+      <tr><td colspan="5" class="uk-text-muted" data-label="">No attendance in this range. No sessions were scheduled for the selected department and dates. Adjust the range above.</td></tr>
       {% endfor %}
     </tbody>
   </table>

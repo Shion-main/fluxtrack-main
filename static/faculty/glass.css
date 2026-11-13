@@ -1,0 +1,563 @@
+/* Faculty Liquid Glass layer (plan 2026-11-08-faculty-liquid-glass).
+ *
+ * Loaded ONLY on Faculty pages (base.html adds html.ft-glass and this file when
+ * user.role is faculty). It restyles the shared floor classes from faculty.css,
+ * which Checker and Guard still use, so EVERY rule here is scoped under
+ * html.ft-glass; web/tests_faculty_glass.py fails on any unscoped selector.
+ *
+ * Colours come from tokens.css only (--glass-*, --glow-*, shadcn roles).
+ * Order matters: the look first, then the fallbacks and reduced-motion rules
+ * LAST so they win over the glass at equal specificity. ASCII-only comments.
+ */
+
+/* Cross-page transitions: both pages must opt in, and only Faculty pages load
+   this file, so Checker and Guard never animate. */
+@view-transition { navigation: auto; }
+
+/* ==========================================================================
+   Direction A: Frosted light (phones first)
+   ========================================================================== */
+html.ft-glass {
+  --glass-bar-h: 64px;
+  --glass-gap: 12px;
+  --glass-r-card: calc(var(--radius) * 2.2);
+  --glass-r-hero: calc(var(--radius) * 3);
+  --glass-ease: cubic-bezier(.22, 1, .36, 1);   /* ease-out-quint: settles without overshoot */
+}
+
+html.ft-glass body {
+  font-family: var(--font-ios);
+  background: hsl(var(--glass-base));
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Soft navy and red light far behind the content. */
+html.ft-glass .ft-app {
+  background:
+    radial-gradient(18rem 15rem at 92% 4%, hsl(var(--glow-red) / var(--glow-red-alpha)), transparent 70%),
+    radial-gradient(22rem 19rem at -6% 26%, hsl(var(--glow-navy) / var(--glow-navy-alpha)), transparent 70%),
+    radial-gradient(21rem 18rem at 104% 68%, hsl(var(--glow-blue) / var(--glow-blue-alpha)), transparent 70%),
+    radial-gradient(18rem 16rem at 8% 98%, hsl(var(--glow-red) / calc(var(--glow-red-alpha) * .6)), transparent 70%),
+    hsl(var(--glass-base));
+  color: hsl(var(--foreground));
+}
+
+/* --- Top bar: transparent at rest, frosted once the page scrolls ---------- */
+html.ft-glass .ft-top {
+  position: sticky; top: 0; z-index: 30;
+  max-width: none;
+  padding: calc(env(safe-area-inset-top, 0px) + 6px) max(16px, calc((100% - 26rem) / 2 + 16px)) 6px;
+  background: transparent;
+  border-bottom: 1px solid transparent;
+  transition: background-color .25s ease, border-color .25s ease;
+}
+/* Spec goal 4: once the large title scrolls under the bar, a small copy fades
+   in at the centre of the bar (glass.js adds .ft-top__title and .is-titled). */
+html.ft-glass .ft-top__title {
+  position: absolute; left: 50%; top: calc(env(safe-area-inset-top, 0px) + 28px);
+  max-width: 46%; overflow: hidden; white-space: nowrap; text-overflow: ellipsis;
+  font-size: 1.0625rem; font-weight: 600; letter-spacing: -.01em;
+  color: hsl(var(--foreground));
+  opacity: 0; pointer-events: none;
+  transform: translate(-50%, -50%) translateY(4px);
+  transition: opacity .2s ease, transform .3s var(--glass-ease);
+}
+html.ft-glass .ft-top.is-titled .ft-top__title { opacity: 1; transform: translate(-50%, -50%); }
+html.ft-glass .ft-top .ui-brand__word { transition: opacity .2s ease; }
+html.ft-glass .ft-top.is-titled .ui-brand__word { opacity: 0; }
+html.ft-glass .ft-top.is-scrolled {
+  background: hsl(var(--glass-fill) / var(--glass-strong-alpha));
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(180%);
+  backdrop-filter: blur(var(--glass-blur)) saturate(180%);
+  border-bottom-color: hsl(var(--glass-edge) / .7);
+  box-shadow: 0 1px 0 hsl(var(--border) / .6);
+}
+html.ft-glass .ft-top .ui-acct__avatar { box-shadow: inset 0 1px 0 hsl(var(--glass-edge) / .35), var(--glass-shadow-sm); }
+html.ft-glass .ft-top #notif-bell-toggle {
+  width: 40px; height: 40px; border-radius: 50%;
+  background: hsl(var(--glass-fill) / var(--glass-alpha));
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(180%);
+  backdrop-filter: blur(var(--glass-blur)) saturate(180%);
+  border: 1px solid hsl(var(--glass-edge) / .7);
+  box-shadow: inset 0 1px 0 hsl(var(--glass-edge) / .9), var(--glass-shadow-sm);
+}
+
+/* --- Large title (Home puts the date above the greeting; see below) ------- */
+html.ft-glass .ft-greet { margin: 4px 4px 18px; }
+html.ft-glass .ft-greet__date { color: hsl(var(--muted-foreground)); }
+html.ft-glass .ft-greet__hi { font-size: 2rem; line-height: 1.1; font-weight: 700; letter-spacing: -.025em; }
+
+/* --- Section header and chip ------------------------------------------------ */
+html.ft-glass .ft-sec { margin: 26px 6px 10px; }
+html.ft-glass .ft-sec__title { font-size: 1.25rem; font-weight: 700; letter-spacing: -.02em; }
+html.ft-glass .ft-chip {
+  min-height: 34px; padding: 4px 12px; border-radius: 999px;
+  background: hsl(var(--glass-fill) / var(--glass-alpha));
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(180%);
+  backdrop-filter: blur(var(--glass-blur)) saturate(180%);
+  border: 1px solid hsl(var(--glass-edge) / .7);
+  box-shadow: inset 0 1px 0 hsl(var(--glass-edge) / .9), var(--glass-shadow-sm);
+  color: hsl(var(--primary)); font-weight: 600;
+}
+
+/* --- The navy glass check-in card ------------------------------------------ */
+html.ft-glass .ft-hero {
+  overflow: hidden;
+  border-radius: var(--glass-r-hero);
+  padding: 20px 18px;
+  background: hsl(var(--primary) / var(--glass-hero-alpha));
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(160%);
+  backdrop-filter: blur(var(--glass-blur)) saturate(160%);
+  border: 1px solid hsl(var(--glass-edge) / .22);
+  box-shadow: inset 0 1px 0 hsl(var(--glass-edge) / .32), var(--glass-shadow);
+}
+html.ft-glass .ft-hero::before {
+  content: ""; position: absolute; inset: 0; pointer-events: none;
+  background: radial-gradient(16rem 7rem at 18% -10%, hsl(var(--glass-edge) / .12), transparent 70%);
+}
+html.ft-glass .ft-hero > * { position: relative; }
+html.ft-glass .ft-hero__status,
+html.ft-glass .ft-hero__when {
+  border-radius: 999px; padding: 4px 10px;
+  background: hsl(var(--glass-edge) / .12); border: 1px solid hsl(var(--glass-edge) / .2);
+  color: hsl(var(--primary-foreground));
+}
+html.ft-glass .ft-hero__status.is-live {
+  color: hsl(var(--success-muted));
+  background: hsl(var(--success) / .3); border-color: hsl(var(--success-muted) / .3);
+}
+html.ft-glass .ft-hero__when { margin: -6px 0 16px; }
+html.ft-glass .ft-hero__title { font-size: 2.1rem; font-weight: 700; letter-spacing: -.03em; margin-bottom: 16px; }
+html.ft-glass .ft-hero__title .sub { color: hsl(var(--primary-foreground) / .86); }
+html.ft-glass .ft-eyebrow,
+html.ft-glass .ft-seg-label,
+html.ft-glass .ft-hero__hint,
+html.ft-glass .ft-hero__link,
+html.ft-glass .ft-or { color: hsl(var(--primary-foreground) / .86); }
+html.ft-glass .ft-hero__link:hover { color: hsl(var(--primary-foreground)); }
+html.ft-glass .ft-meta { display: flex; flex-wrap: wrap; gap: 8px; }
+html.ft-glass .ft-meta__item {
+  border-radius: 999px; padding: 6px 11px;
+  background: hsl(var(--glass-edge) / .12); border: 1px solid hsl(var(--glass-edge) / .18);
+  color: hsl(var(--primary-foreground)); font-size: .8125rem; font-weight: 500;
+}
+html.ft-glass .ft-meta__item uk-icon,
+html.ft-glass .ft-meta__item svg { color: hsl(var(--primary-foreground) / .86); width: 15px; height: 15px; }
+/* Scoped to the check-in card: the request form's light segmented control
+   (.ft-seg--light on a white sheet) must keep its dark ink. */
+html.ft-glass .ft-hero .ft-seg { border-radius: 999px; padding: 3px; background: hsl(var(--glass-edge) / .12); border: 1px solid hsl(var(--glass-edge) / .16); }
+html.ft-glass .ft-hero .ft-seg__opt { border-radius: 999px; color: hsl(var(--primary-foreground) / .86); }
+html.ft-glass .ft-hero .ft-seg__opt:hover { color: hsl(var(--primary-foreground)); }
+html.ft-glass .ft-hero .ft-seg__opt.is-active { background: hsl(var(--background)); color: hsl(var(--primary)); box-shadow: var(--glass-shadow-sm); }
+html.ft-glass .ft-cta {
+  min-height: 52px; border-radius: 999px;
+  font-size: 1.0625rem; font-weight: 600;
+  box-shadow: inset 0 1px 0 hsl(var(--glass-edge)), var(--glass-shadow-sm);
+  transition: transform .35s var(--glass-ease), box-shadow .2s ease, background-color .2s ease;
+}
+html.ft-glass .ft-cta--ghost {
+  background: hsl(var(--glass-edge) / .1); border-color: hsl(var(--glass-edge) / .24);
+  box-shadow: inset 0 1px 0 hsl(var(--glass-edge) / .2);
+}
+html.ft-glass .ft-cta--ghost:hover { background: hsl(var(--glass-edge) / .18); }
+html.ft-glass .ft-input-nv { border-radius: 999px; padding: 0 16px; }
+
+/* --- Frosted cards and lists (dense content: the strong, near-opaque glass) --- */
+/* No backdrop-filter here: behind a 0.86 fill over a soft gradient the blur
+   is invisible, and one blur layer per row stutters long lists on cheap
+   phones. Blur stays on the floating chrome only (tested). */
+html.ft-glass .ft-row,
+html.ft-glass .ft-card {
+  border-radius: var(--glass-r-card);
+  background: hsl(var(--glass-fill) / var(--glass-strong-alpha));
+  border: 1px solid hsl(var(--glass-edge) / .75);
+  box-shadow: inset 0 1px 0 hsl(var(--glass-edge) / .95), var(--glass-shadow-sm);
+}
+html.ft-glass .ft-row { transition: transform .35s var(--glass-ease), box-shadow .2s ease; }
+html.ft-glass a.ft-row:hover { border-color: hsl(var(--glass-edge)); box-shadow: inset 0 1px 0 hsl(var(--glass-edge)), var(--glass-shadow); }
+html.ft-glass .ft-pill { border-radius: 999px; padding: 3px 10px; }
+
+/* --- Floating glass tab bar and the separate Scan button ------------------- */
+html.ft-glass .ft-tabbar {
+  position: fixed; z-index: 40;
+  left: var(--glass-gap); right: var(--glass-gap); top: auto;
+  bottom: calc(env(safe-area-inset-bottom, 0px) + var(--glass-gap));
+  width: auto; padding: 0;
+  display: flex; align-items: center; justify-content: center; gap: 10px;
+  background: none; border: 0; box-shadow: none;
+  -webkit-backdrop-filter: none; backdrop-filter: none;
+  pointer-events: none;
+  transform-origin: 50% 100%;
+  transition: transform .4s var(--glass-ease);
+}
+html.ft-glass .ft-tabbar > * { pointer-events: auto; }
+html.ft-glass .ft-tabbar__row {
+  flex: 1 1 auto; min-width: 0; max-width: 26rem; margin: 0;
+  height: var(--glass-bar-h); padding: 0 5px;
+  display: flex; flex-direction: row; align-items: center; justify-content: space-between; gap: 0;
+  border-radius: 999px;
+  background: hsl(var(--glass-fill) / var(--glass-strong-alpha));
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(180%);
+  backdrop-filter: blur(var(--glass-blur)) saturate(180%);
+  border: 1px solid hsl(var(--glass-edge) / .7);
+  box-shadow: inset 0 1px 0 hsl(var(--glass-edge) / .9), inset 0 -1px 0 hsl(var(--glass-edge) / .25), var(--glass-shadow);
+  container: ftbar / inline-size;
+}
+html.ft-glass .ft-tab {
+  /* Sized by the label, not equal shares: "Attendance" needs more room than
+     "Home", and equal fifths clipped it at 390px. */
+  flex: 1 1 auto; min-width: 0; width: auto; padding: 0 4px;
+  height: calc(var(--glass-bar-h) - 10px);
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px;
+  border-radius: 999px;
+  color: hsl(var(--muted-foreground));
+  transition: transform .35s var(--glass-ease), background-color .2s ease, color .2s ease;
+}
+html.ft-glass .ft-tab:hover { background: hsl(var(--primary) / .05); color: hsl(var(--foreground)); }
+html.ft-glass .ft-tab.is-active {
+  view-transition-name: ft-active-tab;   /* the capsule slides between pages */
+  color: hsl(var(--primary-foreground));
+  background: hsl(var(--primary));
+  box-shadow: inset 0 1px 0 hsl(var(--glass-edge) / .25), var(--glass-shadow-sm);
+}
+html.ft-glass .ft-tab uk-icon,
+html.ft-glass .ft-tab svg { width: 23px; height: 23px; }
+html.ft-glass .ft-tab__label { display: none; }
+html.ft-glass .ft-tab__short {
+  display: block;
+  font-size: 11px; line-height: 1.1; font-weight: 600; letter-spacing: -.01em;
+  white-space: nowrap; max-width: 100%; overflow: hidden; text-overflow: ellipsis;
+}
+html.ft-glass .ft-scanbtn {
+  flex: none;
+  /* 54px on a 360px phone, 64px from 427px: frees room for five labels. */
+  width: clamp(52px, 15vw, var(--glass-bar-h)); height: clamp(52px, 15vw, var(--glass-bar-h));
+  min-width: var(--touch);
+  display: grid; place-items: center;
+  border-radius: 50%;
+  color: hsl(var(--primary));
+  background: hsl(var(--glass-fill) / var(--glass-strong-alpha));
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(180%);
+  backdrop-filter: blur(var(--glass-blur)) saturate(180%);
+  border: 1px solid hsl(var(--glass-edge) / .7);
+  box-shadow: inset 0 1px 0 hsl(var(--glass-edge) / .9), var(--glass-shadow);
+  transition: transform .35s var(--glass-ease);
+}
+html.ft-glass .ft-scanbtn uk-icon,
+html.ft-glass .ft-scanbtn svg { width: 26px; height: 26px; }
+
+/* A narrow bar (360-375px phones) tightens the tabs so all five labels still
+   fit, as the plan asks. Measured on the bar, not the screen. */
+@container ftbar (max-width: 279.98px) {
+  html.ft-glass .ft-tab { padding: 0 2px; }
+  html.ft-glass .ft-tab.is-active { padding: 0 6px; }
+  html.ft-glass .ft-tab__short { letter-spacing: -.02em; }
+}
+
+/* Shrinks while scrolling down (glass.js adds .is-compact). */
+/* Scaled, not resized: transform animates on the compositor, height would
+   re-lay out the bar every frame. Phones only (glass.js). */
+@media (max-width: 767.98px) {
+  html.ft-glass .ft-tabbar.is-compact { transform: scale(.84); }
+  html.ft-glass .ft-tabbar.is-compact .ft-tab__short { display: none; }
+}
+
+/* Pages keep their last row above the floating bar. */
+html.ft-glass body:has(.ft-tabbar) .ft-page {
+  padding-bottom: calc(var(--glass-bar-h) + var(--glass-gap) + env(safe-area-inset-bottom, 0px) + 28px);
+}
+
+/* --- Touch feedback and focus on glass ---------------------------------------- */
+html.ft-glass .ft-cta:active,
+html.ft-glass a.ft-row:active,
+html.ft-glass .ft-chip:active,
+html.ft-glass .ft-tab:active,
+html.ft-glass .ft-scanbtn:active,
+html.ft-glass .ft-btn-navy:active { transform: scale(.96); }
+html.ft-glass .ft-tab:focus-visible,
+html.ft-glass .ft-scanbtn:focus-visible,
+html.ft-glass .ft-chip:focus-visible,
+html.ft-glass a.ft-row:focus-visible {
+  outline: 2px solid hsl(var(--ring)); outline-offset: 2px; box-shadow: none;
+}
+/* States the glass base rules (0,2,1) would otherwise erase: faculty.css draws
+   them at (0,2,0) with box-shadow/background, which glass overrides. Tested:
+   every such faculty.css state needs a matching rule here. */
+html.ft-glass .ft-cta:focus-visible,
+html.ft-glass .ft-btn-navy:focus-visible,
+html.ft-glass .ft-btn-soft:focus-visible,
+html.ft-glass .ft-btn-ghost-sm:focus-visible,
+html.ft-glass .ft-setting-action:focus-visible,
+html.ft-glass .ft-key:focus-visible {
+  outline: 2px solid hsl(var(--ring)); outline-offset: 2px;
+}
+/* A navy ring would vanish on the navy check-in card. */
+html.ft-glass .ft-hero .ft-cta:focus-visible,
+html.ft-glass .ft-hero .ft-btn-navy:focus-visible { outline-color: hsl(var(--primary-foreground)); }
+html.ft-glass .ft-chip:hover { background: hsl(var(--glass-fill)); color: hsl(var(--primary)); }
+
+/* ==========================================================================
+   Every other Faculty screen
+   ========================================================================== */
+/* Buttons: filled and tinted capsules, as in iOS. */
+html.ft-glass .ft-btn-navy {
+  border-radius: 999px; min-height: 50px;
+  font-size: 1rem; font-weight: 600;
+  box-shadow: inset 0 1px 0 hsl(var(--glass-edge) / .18), var(--glass-shadow-sm);
+  transition: transform .35s var(--glass-ease), background-color .2s ease;
+}
+html.ft-glass .ft-btn-soft,
+html.ft-glass .ft-btn-ghost-sm,
+html.ft-glass .ft-setting-action {
+  border-radius: 999px;
+  background: hsl(var(--glass-fill) / var(--glass-strong-alpha));
+  border: 1px solid hsl(var(--glass-edge) / .8);
+  box-shadow: inset 0 1px 0 hsl(var(--glass-edge)), var(--glass-shadow-sm);
+}
+html.ft-glass .ft-btn-soft:hover,
+html.ft-glass .ft-btn-ghost-sm:hover { background: hsl(var(--glass-fill)); }
+html.ft-glass .ft-setting-action.is-on { background: hsl(var(--primary)); border-color: hsl(var(--primary)); color: hsl(var(--primary-foreground)); }
+
+/* Fields: rounded and near-opaque, like iOS text fields. */
+html.ft-glass .ft-control {
+  min-height: 48px; border-radius: calc(var(--radius) * 1.4);
+  background: hsl(var(--glass-fill) / var(--glass-strong-alpha));
+  border-color: hsl(var(--border));
+  box-shadow: inset 0 1px 2px hsl(var(--foreground) / .04);
+}
+html.ft-glass .ft-control:focus {
+  outline: none; border-color: hsl(var(--ring));
+  box-shadow: 0 0 0 3px hsl(var(--ring) / .35);
+}
+html.ft-glass .ft-control[aria-invalid="true"] {
+  border-color: hsl(var(--destructive));
+  box-shadow: 0 0 0 3px hsl(var(--destructive) / .2);
+}
+html.ft-glass .ft-input-nv { min-height: 48px; }
+
+/* Grouped surfaces: filters, fieldsets, summaries, outcomes, settings. */
+html.ft-glass .ft-history-filter__fields,
+html.ft-glass .ft-fieldset,
+html.ft-glass .ft-sub,
+html.ft-glass .ft-summary,
+html.ft-glass .ft-pick__card,
+html.ft-glass .ft-history-card,
+html.ft-glass .ft-settings,
+html.ft-glass .ft-notif-list,
+html.ft-glass .ft-outcome {
+  border-radius: var(--glass-r-card);
+  background: hsl(var(--glass-fill) / var(--glass-strong-alpha));
+  box-shadow: inset 0 1px 0 hsl(var(--glass-edge) / .95), var(--glass-shadow-sm);
+}
+/* Outcome cards keep their state-tinted borders from faculty.css. */
+html.ft-glass .ft-history-filter__fields,
+html.ft-glass .ft-fieldset,
+html.ft-glass .ft-sub,
+html.ft-glass .ft-summary,
+html.ft-glass .ft-pick__card,
+html.ft-glass .ft-history-card { border: 1px solid hsl(var(--glass-edge) / .75); }
+html.ft-glass .ft-note,
+html.ft-glass .ft-alert-error { border-radius: var(--glass-r-card); }
+
+/* Inset grouped list: cards inside a card become divided rows. */
+html.ft-glass .ft-card .ft-row,
+html.ft-glass .ft-card .ft-card {
+  background: transparent; border: 0; border-radius: 0; box-shadow: none;
+  -webkit-backdrop-filter: none; backdrop-filter: none;
+  padding: 12px 2px;
+}
+html.ft-glass .ft-card .ft-list { gap: 0; }
+html.ft-glass .ft-card .ft-row + .ft-row,
+html.ft-glass .ft-card .ft-card + .ft-card { border-top: 1px solid hsl(var(--border) / .8); }
+
+/* Large titles on every page; the uppercase date line is for Home only. */
+html.ft-glass .ft-greet__date { text-transform: none; letter-spacing: 0; font-size: .9375rem; font-weight: 400; margin: 4px 0 0; }
+html.ft-glass .ft-page:has(.ft-home-grid) .ft-greet { display: flex; flex-direction: column-reverse; }
+html.ft-glass .ft-page:has(.ft-home-grid) .ft-greet__date {
+  margin: 0 0 2px; font-size: .8125rem; font-weight: 600; letter-spacing: .04em; text-transform: uppercase;
+}
+html.ft-glass .ft-notif-heading .ft-chip { min-height: 40px; }
+
+/* Sub-flows (request form, manual code entry): a frosted navigation bar. */
+html.ft-glass .ft-appbar {
+  position: sticky; top: 0; z-index: 30;
+  padding-top: calc(env(safe-area-inset-top, 0px) + 8px);
+  background: hsl(var(--glass-fill) / var(--glass-strong-alpha));
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(180%);
+  backdrop-filter: blur(var(--glass-blur)) saturate(180%);
+  border-bottom: 1px solid hsl(var(--glass-edge) / .7);
+}
+html.ft-glass .ft-appbar__back { border-radius: 50%; }
+html.ft-glass .ft-manual { background: hsl(var(--glass-base)); }
+html.ft-glass .ft-steps__bar { border-radius: 999px; }
+
+/* Manual room code: separate rounded boxes and capsule keys. */
+html.ft-glass .ft-otp { gap: 8px; }
+html.ft-glass .ft-otp__box,
+html.ft-glass .ft-otp__box:first-child,
+html.ft-glass .ft-otp__box:last-child {
+  border-left-width: 1px; border-radius: calc(var(--radius) * 1.4);
+  background: hsl(var(--glass-fill) / var(--glass-strong-alpha));
+}
+html.ft-glass .ft-key {
+  border-radius: 999px;
+  background: hsl(var(--glass-fill) / var(--glass-strong-alpha));
+  border-color: hsl(var(--glass-edge) / .8);
+  box-shadow: inset 0 1px 0 hsl(var(--glass-edge)), var(--glass-shadow-sm);
+  transition: transform .3s var(--glass-ease), background-color .15s ease;
+}
+html.ft-glass .ft-key:hover { background: hsl(var(--glass-fill)); }
+html.ft-glass .ft-key:active { transform: scale(.94); }
+html.ft-glass .ft-key--action { background: transparent; border-color: transparent; box-shadow: none; }
+
+/* Scan: rounder sheet and camera window. */
+html.ft-glass .ft-scan__sheet { border-radius: 0 0 var(--glass-r-hero) var(--glass-r-hero); }
+html.ft-glass .ft-viewfinder__cam { border-radius: var(--glass-r-hero); }
+html.ft-glass .ft-bracket { border-width: 4px; }
+html.ft-glass .ft-photo__img,
+html.ft-glass .ft-photo__ph { box-shadow: var(--glass-shadow-sm); }
+
+/* ==========================================================================
+   Tablet and computer: the glass bar floats at the top centre (iPad style)
+   --------------------------------------------------------------------------
+   These blocks also override every property the faculty.css side rail sets at
+   64rem (tested), because Checker and Guard keep that rail.
+   ========================================================================== */
+@media (min-width: 48rem) {
+  html.ft-glass .ft-top {
+    min-height: calc(var(--glass-bar-h) + 8px);
+    padding: calc(env(safe-area-inset-top, 0px) + 6px) max(28px, calc((100% - 60rem) / 2 + 28px)) 6px;
+  }
+  html.ft-glass .ft-tabbar {
+    top: calc(env(safe-area-inset-top, 0px) + 6px); bottom: auto;
+    left: 50%; right: auto; width: auto; padding: 0;
+    transform: translateX(-50%);
+    background: none; border-top: 0; box-shadow: none;
+    -webkit-backdrop-filter: none; backdrop-filter: none;
+  }
+  html.ft-glass .ft-tabbar__row {
+    /* The phone's narrow-bar container query needs inline-size containment,
+       which would collapse this shrink-to-fit bar to zero width. */
+    container-type: normal;
+    flex: none; width: auto; max-width: none; margin: 0;
+    height: 60px; padding: 0 5px;
+    flex-direction: row; align-items: center; gap: 2px;
+    background: hsl(var(--glass-fill) / var(--glass-strong-alpha));
+    border: 1px solid hsl(var(--glass-edge) / .7);
+    border-radius: 999px;
+    box-shadow: inset 0 1px 0 hsl(var(--glass-edge) / .9), var(--glass-shadow);
+  }
+  html.ft-glass .ft-tabbar__role { display: none; color: inherit; font-size: inherit; font-weight: inherit; padding: 0; }
+  html.ft-glass .ft-tab { flex: none; width: auto; min-width: 64px; height: 50px; padding: 0 10px; }
+  html.ft-glass .ft-scanbtn { width: 56px; height: 56px; }
+  html.ft-glass .ft-top__title { display: none; }
+  html.ft-glass .ft-top.is-titled .ui-brand__word { opacity: 1; }
+  html.ft-glass body:has(.ft-tabbar) .ft-page { padding-left: 28px; padding-bottom: 48px; }
+}
+
+@media (min-width: 64rem) {
+  html.ft-glass .ft-top { padding-inline: max(32px, calc((100% - 72rem) / 2 + 32px)); }
+  html.ft-glass .ft-tab {
+    flex-direction: row; justify-content: center; gap: 7px;
+    width: auto; min-width: 0; height: 46px; padding: 0 16px;
+    border-radius: 999px;
+  }
+  html.ft-glass .ft-tab uk-icon,
+  html.ft-glass .ft-tab svg { width: 18px; height: 18px; }
+  html.ft-glass .ft-tab__short { font-size: .875rem; }
+  html.ft-glass body:has(.ft-tabbar) .ft-page { padding-left: 32px; padding-bottom: 56px; }
+  html.ft-glass .ft-home-grid {
+    grid-template-columns: minmax(0, 27rem) minmax(0, 1fr);
+    gap: 28px; align-items: start;
+  }
+}
+
+/* ==========================================================================
+   Motion (cross-page View Transitions; glass.js drives the scroll states)
+   ========================================================================== */
+/* The bars stay put while the page under them changes. */
+html.ft-glass .ft-top { view-transition-name: ft-top; }
+html.ft-glass .ft-tabbar { view-transition-name: ft-tabbar; }
+html.ft-glass::view-transition-group(ft-top),
+html.ft-glass::view-transition-group(ft-tabbar) { animation-duration: 0s; }
+
+/* The active-tab lens glides from the old tab to the new one. */
+html.ft-glass::view-transition-group(ft-active-tab) {
+  animation-duration: .45s;
+  animation-timing-function: var(--glass-ease);
+}
+
+/* The page itself: a short fade and lift, like an iPhone push. */
+html.ft-glass::view-transition-old(root) { animation: ft-page-out .2s ease both; }
+html.ft-glass::view-transition-new(root) { animation: ft-page-in .38s var(--glass-ease) both; }
+@keyframes ft-page-out { to { opacity: 0; transform: translateY(-6px); } }
+@keyframes ft-page-in { from { opacity: 0; transform: translateY(12px); } }
+
+/* The new-request form rises like a sheet. */
+html.ft-glass .ft-sheet-page { animation: ft-sheet-in .5s var(--glass-ease) both; }
+@keyframes ft-sheet-in { from { opacity: .3; transform: translateY(48px); } to { opacity: 1; transform: none; } }
+
+/* ==========================================================================
+   Fallbacks LAST (they must win over the glass above)
+   ========================================================================== */
+
+/* No blur support: solid surfaces, same layout. */
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  html.ft-glass .ft-top.is-scrolled,
+  html.ft-glass .ft-tabbar__row,
+  html.ft-glass .ft-scanbtn,
+  html.ft-glass .ft-chip,
+  html.ft-glass .ft-row,
+  html.ft-glass .ft-card,
+  html.ft-glass .ft-top #notif-bell-toggle,
+  html.ft-glass .ft-appbar,
+  html.ft-glass .ft-outcome,
+  html.ft-glass .ft-history-filter__fields,
+  html.ft-glass .ft-history-card,
+  html.ft-glass .ft-settings,
+  html.ft-glass .ft-notif-list,
+  html.ft-glass .ft-pick__card,
+  html.ft-glass .ft-summary {
+    background: hsl(var(--card));
+  }
+  html.ft-glass .ft-hero { background: hsl(var(--primary)); }
+}
+
+/* The user asks for less see-through. */
+@media (prefers-reduced-transparency: reduce) {
+  html.ft-glass .ft-top.is-scrolled,
+  html.ft-glass .ft-tabbar__row,
+  html.ft-glass .ft-scanbtn,
+  html.ft-glass .ft-chip,
+  html.ft-glass .ft-row,
+  html.ft-glass .ft-card,
+  html.ft-glass .ft-top #notif-bell-toggle,
+  html.ft-glass .ft-appbar,
+  html.ft-glass .ft-outcome,
+  html.ft-glass .ft-history-filter__fields,
+  html.ft-glass .ft-history-card,
+  html.ft-glass .ft-settings,
+  html.ft-glass .ft-notif-list,
+  html.ft-glass .ft-pick__card,
+  html.ft-glass .ft-summary {
+    background: hsl(var(--card));
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
+  html.ft-glass .ft-hero {
+    background: hsl(var(--primary));
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
+}
+
+/* Reduced motion: nothing animates; the state classes still toggle. */
+@media (prefers-reduced-motion: reduce) {
+  @view-transition { navigation: none; }
+  html.ft-glass *,
+  html.ft-glass *::before,
+  html.ft-glass *::after {
+    animation: none !important;
+    transition: none !important;
+  }
+}

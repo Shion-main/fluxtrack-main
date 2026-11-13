@@ -74,7 +74,12 @@ def _creation_preflight(request, fields):
 @require_http_methods(["GET"])
 def terms_list(request):
     terms = _term_queryset().order_by(_STATUS_ORDER, "-start_date", "-pk")
-    return render(request, "ifo/terms.html", {"terms": terms})
+    # The tracker follows the term the IFO is working on: the active one, else
+    # the newest draft.
+    focus = (AcademicTerm.objects.filter(status=AcademicTerm.Status.ACTIVE).first()
+             or AcademicTerm.objects.filter(status=AcademicTerm.Status.DRAFT).order_by("-pk").first())
+    return render(request, "ifo/terms.html", {
+        "terms": terms, "focus_term": focus, "steps": term_steps(focus) if focus else []})
 
 
 @ifo_required
@@ -140,6 +145,7 @@ def term_detail(request, pk):
     return render(request, "ifo/term_detail.html", {
         "term": term,
         "actions": actions,
+        "steps": term_steps(term),
     })
 
 
@@ -229,3 +235,38 @@ def term_close(request, pk):
 @require_http_methods(["GET", "POST"])
 def term_reopen(request, pk):
     return _term_action(request, pk, "reopen")
+
+
+
+_STEP_LABELS = (("create", "Create draft"), ("import", "Import schedules"),
+                ("check", "Check readiness"), ("activate", "Activate"),
+                ("close", "Close and archive"))
+
+
+def term_steps(term):
+    """Where a term sits in its lifecycle, for the step tracker on the term pages.
+
+    Display only: derived from data that already exists (the term's status and
+    whether it has any schedules) and never gates an action that is reachable
+    today. Returns [{key, label, state, href}] with state done/current/todo.
+    """
+    if term.status == AcademicTerm.Status.ARCHIVED:
+        current = len(_STEP_LABELS)                      # everything done
+    elif term.status == AcademicTerm.Status.ACTIVE:
+        current = 4                                       # close
+    elif term.schedules.exists():
+        current = 2                                       # check readiness
+    else:
+        current = 1                                       # import schedules
+    hrefs = {
+        "create": f"/ifo/terms/{term.pk}",
+        "import": "/ifo/import",
+        "check": f"/ifo/terms/{term.pk}/activate",
+        "activate": f"/ifo/terms/{term.pk}/activate",
+        "close": f"/ifo/terms/{term.pk}/close",
+    }
+    return [
+        {"key": key, "label": label, "href": hrefs[key],
+         "state": "done" if i < current else ("current" if i == current else "todo")}
+        for i, (key, label) in enumerate(_STEP_LABELS)
+    ]

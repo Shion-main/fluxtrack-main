@@ -6,20 +6,24 @@ Apply, not continuously polled). Unscoped -- IFO sees all departments (IFO-09). 
 weekly consolidated report now lives in the sidebar (Weekly reports). ASCII-only.{% endcomment %}
 {% block title %}Reporting - FluxTrack{% endblock %}
 {% block console_title %}Reporting{% endblock %}
-{% block page_actions %}<span class="uk-label uk-label-secondary">All departments</span>{% endblock %}
+{% block page_title %}Reporting{% endblock %}
+{% block page_desc %}<p class="ui-pagehead__desc">Attendance summary over a selectable range. Point-in-time &mdash; refresh with Apply.</p>{% endblock %}
+{% block page_actions %}<span class="uk-badge uk-badge-secondary">All departments</span>{% endblock %}
 {% block console %}
-<p class="uk-text-muted mb-6">Attendance summary over a selectable range (IFO-09). Point-in-time &mdash; refresh with Apply.</p>
 
-<form method="get" class="uk-card uk-card-body mb-6">
-  <div class="flex flex-wrap items-end gap-4">
+<details class="ui-filterbar" open>
+<summary><uk-icon icon="sliders-horizontal"></uk-icon> Filters</summary>
+<form method="get">
+  <div class="ui-filterbar__body">
     {% include "reports/_term_filter.html" %}
-    <button type="submit" class="uk-btn uk-btn-primary uk-btn-sm">Apply</button>
-    <a href="/ifo/dashboard{% if scope.term %}?term={{ scope.term.pk }}{% endif %}" class="uk-btn uk-btn-ghost uk-btn-sm">Reset</a>
+    <button type="submit" class="uk-btn uk-btn-primary">Apply</button>
+    <a href="/ifo/dashboard{% if scope.term %}?term={{ scope.term.pk }}{% endif %}" class="uk-btn uk-btn-ghost">Reset</a>
   </div>
   {% if range_note %}
-  <p class="uk-text-small mt-2" style="color:var(--amber)">{{ range_note }}</p>
+  <p class="ui-field__desc ui-filterbar__note">{{ range_note }}</p>
   {% endif %}
 </form>
+</details>
 
 <div id="report-panel">
   {% include "ifo/_cards.html" %}

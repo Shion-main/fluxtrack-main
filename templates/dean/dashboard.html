@@ -6,55 +6,58 @@ latest-weekly-report card with a calm Pattern-F empty state. NO write controls.
 ASCII-only.{% endcomment %}
 {% block title %}Department oversight - FluxTrack{% endblock %}
 {% block console_title %}Department oversight{% endblock %}
-{% block page_actions %}{% if department %}<span class="uk-label uk-label-secondary">{{ department.code }}</span>{% endif %}{% endblock %}
+{% block page_title %}Department oversight{% endblock %}
+{% block page_desc %}<p class="ui-pagehead__desc">Attendance summary for your department this week. Read-only.</p>{% endblock %}
+{% block page_actions %}{% if department %}<span class="uk-badge uk-badge-secondary">{{ department.code }}</span>{% endif %}{% endblock %}
 {% block console %}
-<p class="uk-text-muted mb-6">Attendance summary for your department this week (DEAN-04). Read-only.</p>
 
-<form method="get" class="uk-card uk-card-body mb-6">
-  <div class="flex flex-wrap items-end gap-4">
+<details class="ui-filterbar" open>
+<summary><uk-icon icon="sliders-horizontal"></uk-icon> Filters</summary>
+<form method="get">
+  <div class="ui-filterbar__body">
     {% include "reports/_term_filter.html" %}
-    <button type="submit" class="uk-btn uk-btn-primary uk-btn-sm">Apply</button>
-    <a href="/dean/dashboard{% if scope.term %}?term={{ scope.term.pk }}{% endif %}" class="uk-btn uk-btn-ghost uk-btn-sm">Reset</a>
+    <button type="submit" class="uk-btn uk-btn-primary">Apply</button>
+    <a href="/dean/dashboard{% if scope.term %}?term={{ scope.term.pk }}{% endif %}" class="uk-btn uk-btn-ghost">Reset</a>
   </div>
-  {% if range_note %}<p class="uk-text-small mt-2" style="color:var(--amber)">{{ range_note }}</p>{% endif %}
+  {% if range_note %}<p class="ui-field__desc ui-filterbar__note">{{ range_note }}</p>{% endif %}
 </form>
+</details>
 
 {% if summary.1 %}
   {% include "reports/_error_card.html" %}
 {% else %}
-  <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-    <div class="uk-card uk-card-body">
-      <div class="uk-text-small uk-text-muted flex items-center gap-1">
-        <uk-icon icon="users" class="size-4"></uk-icon> Faculty</div>
-      <div class="uk-h2 mt-1">{{ summary.0.faculty_count }}</div>
+  <div class="ui-stats">
+    <div class="ui-stat">
+      <span class="ui-stat__label">Faculty</span>
+      <span class="ui-stat__value">{{ summary.0.faculty_count }}</span>
+      <span class="ui-stat__note">in your department</span>
     </div>
-    <div class="uk-card uk-card-body">
-      <div class="uk-text-small uk-text-muted flex items-center gap-1">
-        <uk-icon icon="layers" class="size-4"></uk-icon> Sessions</div>
-      <div class="uk-h2 mt-1">{{ summary.0.held }}<span class="uk-text-muted uk-text-small"> / {{ summary.0.scheduled }}</span></div>
-      <div class="uk-text-small uk-text-muted">held / scheduled</div>
+    <div class="ui-stat">
+      <span class="ui-stat__label">Sessions</span>
+      <span class="ui-stat__value">{{ summary.0.held }} <span class="ui-stat__of">/ {{ summary.0.scheduled }}</span></span>
+      <span class="ui-stat__note">held / scheduled</span>
     </div>
-    <div class="uk-card uk-card-body">
-      <div class="uk-text-small uk-text-muted flex items-center gap-1">
-        <uk-icon icon="calendar-x" class="size-4"></uk-icon> Absences</div>
-      <div class="uk-h2 mt-1">{{ summary.0.absent }}</div>
+    <div class="ui-stat">
+      <span class="ui-stat__label">Absences</span>
+      <span class="ui-stat__value">{{ summary.0.absent }}</span>
+      <span class="ui-stat__note">in this range</span>
     </div>
-    <div class="uk-card uk-card-body">
-      <div class="uk-text-small uk-text-muted flex items-center gap-1">
-        <uk-icon icon="percent" class="size-4"></uk-icon> Attendance %</div>
-      {% if summary.0.held or summary.0.absent %}
-      {% with pct=summary.0.attendance_pct %}
-      <div class="mt-1">
-        <span class="uk-label" style="{% if pct >= 90 %}background:var(--green-tint);color:var(--green){% elif pct >= 75 %}background:var(--amber-tint);color:var(--amber){% else %}background:var(--red-tint);color:var(--red){% endif %};font-size:1.4rem;padding:2px 10px">{{ pct }}%</span>
-      </div>
-      {% endwith %}
-      {% else %}
-      <div class="mt-1">
-        <span class="uk-label uk-label-secondary" style="font-size:1rem;padding:5px 10px">Not started</span>
-      </div>
-      <div class="uk-text-small uk-text-muted mt-1">No completed sessions yet</div>
-      {% endif %}
+    {% if summary.0.held or summary.0.absent %}
+    {% with pct=summary.0.attendance_pct %}
+    <div class="ui-stat {% if pct >= 90 %}ui-stat--success{% elif pct >= 75 %}ui-stat--warning{% else %}ui-stat--destructive{% endif %}">
+      <span class="ui-stat__label">Attendance %</span>
+      <span class="ui-stat__value">{{ pct }}%</span>
+      <span class="ui-stat__note">{% if pct >= 90 %}on target{% elif pct >= 75 %}below the 90% target{% else %}well below target{% endif %}</span>
     </div>
+    {% endwith %}
+    {% else %}
+    <div class="ui-stat">
+      <span class="ui-stat__label">Attendance %</span>
+      <span class="ui-stat__value">Not started</span>
+      <span class="ui-stat__note">No completed sessions yet</span>
+    </div>
+    {% endif %}
+  </div>
   </div>
 {% endif %}
 

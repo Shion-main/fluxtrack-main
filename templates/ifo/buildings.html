@@ -4,12 +4,12 @@ rooms are managed from a building's detail page. Console uk-* vocabulary, real
 labels, PROTECT-aware bottom-up deletion (rooms -> floor -> building). ASCII-only.{% endcomment %}
 {% block title %}Buildings - FluxTrack{% endblock %}
 {% block console_title %}Buildings{% endblock %}
-{% block console %}
-<p class="uk-text-muted mb-6 max-w-2xl">
-  The campus structure rooms hang off. Add a building here, then open it to add
+{% block page_title %}Buildings{% endblock %}
+{% block page_desc %}<p class="ui-pagehead__desc">The campus structure rooms hang off. Add a building here, then open it to add
   floors; rooms are placed on floors from the Rooms page. A building cannot be
-  deleted until its floors and rooms are removed -- nothing is cascaded away
-  silently.</p>
+  deleted until its floors and rooms are removed &mdash; nothing is cascaded away
+  silently.</p>{% endblock %}
+{% block console %}
 
 {% if flash %}
 <div class="uk-alert uk-alert-success mb-4" role="status">

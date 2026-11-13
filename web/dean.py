@@ -201,8 +201,10 @@ def faculty_list(request):
         if request.user.department_id is not None
         else get_user_model().objects.none()
     )
+    pg = paginate(request, faculty_members)
     return render(request, "dean/faculty_list.html", {
-        "faculty_members": faculty_members,
+        **pg,
+        "faculty_members": pg["page"].object_list,
     })
 
 

@@ -6,21 +6,21 @@ change propagates to future scheduled sessions only. Console uk-* vocabulary, re
 labels, ASCII-only.{% endcomment %}
 {% block title %}{% if is_edit %}Edit class{% else %}New class{% endif %} - FluxTrack{% endblock %}
 {% block console_title %}{% if is_edit %}Edit {{ schedule.course_code }}-{{ schedule.section }}{% else %}New class{% endif %}{% endblock %}
+{% block page_title %}{% if is_edit %}Edit {{ schedule.course_code }}-{{ schedule.section }}{% else %}New class{% endif %}{% endblock %}
+{% block page_desc %}<p class="ui-pagehead__desc">{% if is_edit %}
+  Change the instructor, room, time, or enrolment. Only upcoming (still
+  scheduled) sessions are moved to match &mdash; classes that already met keep
+  their attendance record. The meeting day cannot be changed here.
+  {% else %}
+  Add a class to the active term. Its upcoming sessions are created
+  immediately so it is checkable right away.
+  {% endif %}</p>{% endblock %}
 {% block page_actions %}
 <a href="/ifo/rooms" class="uk-btn uk-btn-ghost uk-btn-sm">
   <uk-icon icon="chevron-left" class="size-4"></uk-icon> Rooms</a>
 {% endblock %}
 {% block console %}
 <div class="max-w-2xl">
-  <p class="uk-text-muted mb-6">
-    {% if is_edit %}
-      Change the instructor, room, time, or enrolment. Only upcoming (still
-      scheduled) sessions are moved to match -- classes that already met keep
-      their attendance record. The meeting day cannot be changed here.
-    {% else %}
-      Add a class to the active term. Its upcoming sessions are created
-      immediately so it is checkable right away.
-    {% endif %}</p>
 
   <div class="uk-card uk-card-body">
     {% if error %}

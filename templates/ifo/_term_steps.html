@@ -1,0 +1,16 @@
+{% comment %}Term lifecycle step tracker (shadcn-style steps). Display only: the
+current step links to the page that does it; nothing here gates an action.
+Expects `steps` from web.ifo_terms.term_steps. ASCII-only.{% endcomment %}
+{% if steps %}
+<nav class="uk-card uk-card-body" aria-label="Term set-up steps{% if term_name %} for {{ term_name }}{% endif %}" style="margin-bottom:24px">
+  {% if term_name %}<p class="ui-field__desc" style="margin-bottom:12px">{{ term_name }}</p>{% endif %}
+  <ol class="ui-steps">
+    {% for s in steps %}
+    <li class="ui-step{% if s.state == 'done' %} is-done{% elif s.state == 'current' %} is-current{% endif %}"{% if s.state == 'current' %} aria-current="step"{% endif %}>
+      {% if s.state == 'current' %}<a href="{{ s.href }}">{{ s.label }}</a>{% else %}<span>{{ s.label }}</span>{% endif %}
+      {% if s.state == 'done' %}<span class="sr-only">(done)</span>{% endif %}
+    </li>
+    {% endfor %}
+  </ol>
+</nav>
+{% endif %}

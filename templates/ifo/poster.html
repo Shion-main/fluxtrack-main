@@ -1,11 +1,12 @@
-{% extends "base.html" %}
+{% extends "ifo/_console.html" %}
 {% block title %}{{ room.code }} poster{% endblock %}
-{% block head %}
+{% block head %}{{ block.super }}
 <style>
   @media print {
     /* Strip the app chrome — print only the poster content. */
     body { background: #fff !important; }
-    body > header, .no-print { display: none !important; }
+    body > header, .no-print, .cns__side, .cns__bar, .cns__scrim, .cns__body > .ui-pagehead { display: none !important; }
+    .cns__body { padding: 0 !important; max-width: none !important; }
     main { margin: 0 !important; padding: 0 !important; }
     #poster {
       border: none !important;
@@ -17,8 +18,10 @@
   }
 </style>
 {% endblock %}
-{% block content %}
-<div class="uk-container max-w-md pt-10 pb-16 text-center">
+{% block console_title %}Room poster{% endblock %}
+{% block page_title %}Room poster{% endblock %}
+{% block console %}
+<div class="text-center" style="max-width:28rem;margin:0 auto">
   <div id="poster" class="uk-card uk-card-body">
     <p class="uk-text-muted uk-text-small">{{ room.floor.building.name }} · Floor {{ room.floor.number }}</p>
     <h1 class="text-4xl font-bold my-2">{{ room.code }}</h1>

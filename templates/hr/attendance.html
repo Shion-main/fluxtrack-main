@@ -1,4 +1,4 @@
-{% extends "base.html" %}
+{% extends "hr/_console.html" %}
 {% comment %}HR-01/HR-02/HR-03 session-level attendance list (read-only, HR-01).
 Standard Franken shell, max-w-5xl. Pattern-A GET filter bar (Faculty / Department /
 Term selects + From/To date range + free-text search, Apply/Reset), a dense
@@ -6,18 +6,18 @@ uk-table of sessions (A-TABLE), Pattern-C Export CSV anchor, and Pattern-F empty
 no-results states. HR is cross-department by design, so Department is a FILTER, not
 a scope boundary. NO write controls exist on this surface. ASCII-only.{% endcomment %}
 {% block title %}HR attendance - FluxTrack{% endblock %}
-{% block content %}
-<div class="uk-container max-w-5xl pt-8 pb-16">
-  <div class="flex items-center gap-2 mb-1">
-    <h1 class="uk-h2">Attendance</h1>
-    <span class="uk-label uk-label-secondary">Session-level</span>
-  </div>
-  <p class="uk-text-muted mb-6">Verified session records across all departments -- filter and export for payroll (HR-01/02/03). Read-only.</p>
+{% block console_title %}Attendance{% endblock %}
+{% block page_title %}Attendance{% endblock %}
+{% block page_desc %}<p class="ui-pagehead__desc">Verified session records across all departments &mdash; filter and export for payroll. Read-only.</p>{% endblock %}
+{% block console %}
+<div>
 
-  <form method="get" class="uk-card uk-card-body mb-6">
-    <div class="flex flex-wrap items-end gap-4">
-      <label class="flex flex-col gap-1">
-        <span class="uk-text-small uk-text-muted">Faculty</span>
+  <details class="ui-filterbar" open>
+<summary><uk-icon icon="sliders-horizontal"></uk-icon> Filters</summary>
+<form method="get">
+    <div class="ui-filterbar__body">
+      <label class="ui-field">
+        <span class="ui-field__label">Faculty</span>
         <select name="faculty" class="uk-select">
           <option value="">All faculty</option>
           {% for f in faculty_choices %}
@@ -25,8 +25,8 @@ a scope boundary. NO write controls exist on this surface. ASCII-only.{% endcomm
           {% endfor %}
         </select>
       </label>
-      <label class="flex flex-col gap-1">
-        <span class="uk-text-small uk-text-muted">Department</span>
+      <label class="ui-field">
+        <span class="ui-field__label">Department</span>
         <select name="department" class="uk-select">
           <option value="">All departments</option>
           {% for d in department_choices %}
@@ -35,26 +35,24 @@ a scope boundary. NO write controls exist on this surface. ASCII-only.{% endcomm
         </select>
       </label>
       {% include "reports/_term_filter.html" %}
-      <label class="flex flex-col gap-1">
-        <span class="uk-text-small uk-text-muted">Search</span>
-        <span class="inline-flex items-center gap-1">
-          <uk-icon icon="search" class="size-4 uk-text-muted"></uk-icon>
-          <input type="search" name="q" class="uk-input" placeholder="Faculty or course" value="{{ filters.q }}">
-        </span>
+      <label class="ui-field">
+        <span class="ui-field__label">Search</span>
+        <input type="search" name="q" class="uk-input" placeholder="Faculty or course" value="{{ filters.q }}">
       </label>
-      <button type="submit" class="uk-btn uk-btn-primary uk-btn-sm">Apply</button>
-      <a href="{{ reset_url }}" class="uk-btn uk-btn-ghost uk-btn-sm">Reset</a>
-      <span class="grow"></span>
+      <button type="submit" class="uk-btn uk-btn-primary">Apply</button>
+      <a href="{{ reset_url }}" class="uk-btn uk-btn-ghost">Reset</a>
+      <span class="ui-filterbar__grow"></span>
       {% if export_url %}
       <a href="{{ export_url }}"
-         class="uk-btn uk-btn-secondary uk-btn-sm" download>
+         class="uk-btn uk-btn-secondary" download>
         <uk-icon icon="download" class="size-4"></uk-icon> Export CSV</a>
       {% endif %}
     </div>
     {% if filters.note %}
-    <p class="uk-text-small mt-2" style="color:var(--amber)">{{ filters.note }}</p>
+    <p class="ui-field__desc ui-filterbar__note">{{ filters.note }}</p>
     {% endif %}
   </form>
+</details>
 
   {% if scope.error %}
   <div class="uk-alert uk-alert-warning mb-6" role="alert">
@@ -72,7 +70,7 @@ a scope boundary. NO write controls exist on this surface. ASCII-only.{% endcomm
     Swipe the table to see Actual time and Status.
   </p>
   <div class="uk-card uk-card-body p-0 table-wrap">
-    <table class="tbl">
+    <table class="tbl tbl--stack">
       <thead>
         <tr>
           <th scope="col">Faculty</th>

@@ -1,20 +1,10 @@
 {% extends "dean/_console.html" %}
 {% block title %}Faculty - FluxTrack{% endblock %}
 {% block console_title %}Faculty{% endblock %}
+{% block page_title %}Department faculty{% endblock %}
+{% block page_desc %}<p class="ui-pagehead__desc">Open a faculty profile to review their schedule and manage exceptional modality changes.</p>{% endblock %}
+{% block page_actions %}<span class="uk-badge uk-badge-secondary">{{ paginator.count }} active</span>{% endblock %}
 {% block console %}
-<div class="dn-pagehead">
-  <div>
-    <h1 class="dn-pagehead__title">Department faculty</h1>
-    <p class="dn-pagehead__copy">
-      Open a faculty profile to review their schedule and manage exceptional
-      modality changes.
-    </p>
-  </div>
-  <span class="uk-label uk-label-secondary">
-    {{ faculty_members|length }} active
-  </span>
-</div>
-
 {% if faculty_members %}
 <div class="dn-faculty-grid">
   {% for faculty in faculty_members %}
@@ -38,6 +28,7 @@
   </a>
   {% endfor %}
 </div>
+{% include "_pager.html" %}
 {% else %}
 <div class="dn-empty">
   <uk-icon icon="users"></uk-icon>

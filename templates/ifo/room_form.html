@@ -14,6 +14,14 @@ stripes. Every control has a real <label for>. ASCII-only.
 {% endcomment %}
 {% block title %}{% if is_edit %}Edit {{ room.code }}{% else %}New room{% endif %} - FluxTrack{% endblock %}
 {% block console_title %}{% if is_edit %}Edit room{% else %}New room{% endif %}{% endblock %}
+{% block page_title %}{% if is_edit %}Edit room{% else %}New room{% endif %}{% endblock %}
+{% block page_desc %}<p class="ui-pagehead__desc">{% if is_edit %}
+  Change what this room is called, how many it seats, or which floor it is
+  on. Its QR poster and six-digit code are not affected.
+  {% else %}
+  Add a room that the offering import did not create. It becomes scannable
+  immediately &mdash; a QR token and a six-digit manual code are generated for it.
+  {% endif %}</p>{% endblock %}
 {% block page_actions %}
 <a href="/ifo/rooms" class="uk-btn uk-btn-ghost uk-btn-sm">
   <uk-icon icon="chevron-left" class="size-4"></uk-icon> Rooms</a>
@@ -21,15 +29,6 @@ stripes. Every control has a real <label for>. ASCII-only.
 
 {% block console %}
 <div class="max-w-2xl">
-  <p class="uk-text-muted mb-6">
-    {% if is_edit %}
-      Change what this room is called, how many it seats, or which floor it is
-      on. Its QR poster and six-digit code are not affected.
-    {% else %}
-      Add a room that the offering import did not create. It becomes scannable
-      immediately -- a QR token and a six-digit manual code are generated for it.
-    {% endif %}
-  </p>
 
   <div class="uk-card uk-card-body">
     {% if error %}

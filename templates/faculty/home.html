@@ -6,26 +6,7 @@
 {% block content %}
 <div class="ft-app">
 
-  <header class="ft-top">
-    <a href="/faculty/home" class="ft-top__brand">
-      <img class="ft-top__crest" src="{% static 'brand/mmcm-crest.png' %}" alt="">
-      <span class="ft-top__mark">FluxTrack</span>
-    </a>
-    {% comment %}Notification bell mounted in the faculty navy ft-top (D-01),
-    beside the account avatar; same partial the Franken shell mounts.{% endcomment %}
-    <div class="relative inline-flex" style="margin-left:auto">{% include "notifications/_bell.html" %}</div>
-    <details class="ft-acct" style="margin-left:0">
-      <summary class="ft-top__avatar" aria-label="Account and sign out">{{ user.first_name|default:user.username|slice:":1"|upper }}{{ user.last_name|slice:":1"|upper }}</summary>
-      <div class="ft-acct__menu">
-        <div class="ft-acct__who">
-          <b>{{ user.get_full_name|default:user.username }}</b>
-          <span>{{ user.get_role_display }}{% if user.department %} · {{ user.department.name }}{% endif %}</span>
-        </div>
-        <a class="ft-acct__item" href="{% url 'profile' %}"><uk-icon icon="user"></uk-icon> Profile</a>
-        <a class="ft-acct__item" href="/logout"><uk-icon icon="log-out"></uk-icon> Sign out</a>
-      </div>
-    </details>
-  </header>
+  {% include "_floor_top.html" with home="/faculty/home" %}
 
   <div class="ft-page">
     <div class="ft-greet">
@@ -33,6 +14,8 @@
       <div class="ft-greet__date">{{ today|date:"l, F j" }}</div>
     </div>
 
+    <div class="ft-home-grid">
+    <div class="ft-home-grid__main">
     {% if hero %}
     <section class="ft-hero">
       <div class="ft-hero__top">
@@ -121,13 +104,26 @@
       <a class="ft-hero__link" href="/faculty/schedule">View schedule</a>
     </section>
     {% endif %}
+    </div>
 
+    <div class="ft-home-grid__side">
     {% if today_count %}
     <div class="ft-sec">
       <div class="ft-sec__title">Today</div>
       <a class="ft-chip" href="/faculty/schedule">{{ today_count }} class{{ today_count|pluralize:"es" }} <uk-icon icon="chevron-right"></uk-icon></a>
     </div>
     {% endif %}
+    {% if today_cards %}
+    {% comment %}Desktop only: today's classes beside the hero. Phones keep the
+    short home and reach the list through the chip above.{% endcomment %}
+    <div class="ft-list ft-home-grid__list">
+      {% for c in today_cards %}
+      {% include "faculty/_class_row.html" %}
+      {% endfor %}
+    </div>
+    {% endif %}
+    </div>
+    </div>
   </div>
 </div>
 {% endblock %}

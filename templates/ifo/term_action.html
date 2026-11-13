@@ -1,6 +1,7 @@
 {% extends "ifo/_console.html" %}
 {% block title %}{{ action_label }} - FluxTrack{% endblock %}
 {% block console_title %}{{ action_label }}{% endblock %}
+{% block page_title %}{{ action_label }}{% endblock %}
 {% block page_actions %}<a href="{% url 'ifo_term_detail' term.pk %}" class="uk-btn uk-btn-ghost uk-btn-sm">Back to {{ term.name }}</a>{% endblock %}
 {% block console %}
 <div class="max-w-3xl">

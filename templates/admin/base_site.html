@@ -1,0 +1,55 @@
+{% extends "admin/base.html" %}
+{% load static %}
+{% comment %}Django admin in MMCM colours (navy header, crest, MMCM red for
+delete). Only the light theme's colour variables are set; Django's own dark
+theme is left as shipped. ASCII-only.{% endcomment %}
+{% block title %}{% if subtitle %}{{ subtitle }} | {% endif %}{{ title }} | FluxTrack administration{% endblock %}
+{% block extrastyle %}{{ block.super }}
+<style>
+  html[data-theme="light"] {
+    --primary: #001c43;
+    --secondary: #0a1f44;
+    --accent: #f2b8bb;
+    --header-bg: #001c43;
+    --header-color: #e6ecf5;
+    --header-link-color: #ffffff;
+    --breadcrumbs-bg: #0a1f44;
+    --link-fg: #1c3a86;
+    --link-hover-color: #001c43;
+    --link-selected-fg: #001c43;
+    --button-bg: #001c43;
+    --button-hover-bg: #0a2a5c;
+    --default-button-bg: #0a1f44;
+    --default-button-hover-bg: #001c43;
+    --delete-button-bg: #ba1a1a;
+    --delete-button-hover-bg: #a01414;
+    --selected-row: #eef1f7;
+  }
+  @media (prefers-color-scheme: light) {
+    html:not([data-theme="dark"]) {
+      --primary: #001c43;
+      --secondary: #0a1f44;
+      --accent: #f2b8bb;
+      --header-bg: #001c43;
+      --header-color: #e6ecf5;
+      --header-link-color: #ffffff;
+      --breadcrumbs-bg: #0a1f44;
+      --link-fg: #1c3a86;
+      --link-hover-color: #001c43;
+      --link-selected-fg: #001c43;
+      --button-bg: #001c43;
+      --button-hover-bg: #0a2a5c;
+      --default-button-bg: #0a1f44;
+      --default-button-hover-bg: #001c43;
+      --delete-button-bg: #ba1a1a;
+      --delete-button-hover-bg: #a01414;
+      --selected-row: #eef1f7;
+    }
+  }
+</style>
+{% endblock %}
+{% block branding %}
+<div id="site-name"><a href="{% url 'admin:index' %}"><img src="{% static 'brand/mmcm-crest.png' %}" alt="" width="28" height="28" style="vertical-align:middle;margin-right:8px">FluxTrack administration</a></div>
+{% if user.is_anonymous %}{% include "admin/color_theme_toggle.html" %}{% endif %}
+{% endblock %}
+{% block nav-global %}{% endblock %}

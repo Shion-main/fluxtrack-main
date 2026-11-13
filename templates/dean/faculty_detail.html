@@ -1,6 +1,7 @@
 {% extends "dean/_console.html" %}
 {% block title %}{{ faculty.get_full_name|default:faculty.username }} - FluxTrack{% endblock %}
 {% block console_title %}Faculty profile{% endblock %}
+{% block page_title %}Faculty profile{% endblock %}
 {% block console %}
 <a class="dn-back" href="{% url 'dean_faculty' %}">
   <uk-icon icon="arrow-left"></uk-icon> All faculty
@@ -28,7 +29,7 @@
   </span>
   {% endif %}
   <div class="dn-profile__identity">
-    <h1>{{ faculty.get_full_name|default:faculty.username }}</h1>
+    <h2>{{ faculty.get_full_name|default:faculty.username }}</h2>
     <p>{{ faculty.email|default:"No email address recorded" }}</p>
     <span>{{ faculty.department.name }}</span>
   </div>
@@ -45,7 +46,7 @@
       <h2>Recurring schedule</h2>
       <p>The faculty member's active teaching assignments for the current term.</p>
     </div>
-    <span class="uk-label uk-label-secondary">
+    <span class="uk-badge uk-badge-secondary">
       {{ recurring_schedules|length }} class{{ recurring_schedules|length|pluralize:"es" }}
     </span>
   </div>
@@ -83,7 +84,7 @@
       <h2>Upcoming sessions</h2>
       <p>Select one or more sessions to change their modality.</p>
     </div>
-    <span class="uk-label uk-label-secondary">
+    <span class="uk-badge uk-badge-secondary">
       {{ sessions|length }} session{{ sessions|length|pluralize }}
     </span>
   </div>

@@ -130,27 +130,34 @@ WHICH room/session only; the server never trusts them for gating. Navy family:
     <button class="ft-btn-navy" type="submit"><uk-icon icon="check"></uk-icon> Verify present</button>
   </form>
 
-  {# Note-required flags #}
-  <form class="ft-outcome__form" hx-post="/checker/action" hx-target="#outcome" hx-swap="innerHTML">
-    {% csrf_token %}
-    <input type="hidden" name="action" value="flag_identity_mismatch">
-    <input type="hidden" name="room_id" value="{{ room.id }}">
-    <input type="hidden" name="session_id" value="{{ session.id }}">
-    <label class="ft-label" for="note-mismatch">Flag: identity mismatch</label>
-    <textarea id="note-mismatch" name="note" class="ft-control" required maxlength="255"
-              placeholder="Briefly say what you saw (sent to IFO and HR)"></textarea>
-    <button class="ft-btn-danger" type="submit"><uk-icon icon="flag"></uk-icon> Send flag</button>
-  </form>
-
-  <form class="ft-outcome__form" hx-post="/checker/action" hx-target="#outcome" hx-swap="innerHTML">
-    {% csrf_token %}
-    <input type="hidden" name="action" value="flag_not_present">
-    <input type="hidden" name="room_id" value="{{ room.id }}">
-    <input type="hidden" name="session_id" value="{{ session.id }}">
-    <label class="ft-label" for="note-absent">Flag: not present</label>
-    <textarea id="note-absent" name="note" class="ft-control" required maxlength="255"
-              placeholder="Briefly say what you saw (sent to IFO and HR)"></textarea>
-    <button class="ft-btn-danger" type="submit"><uk-icon icon="flag"></uk-icon> Send flag</button>
-  </form>
+  {% comment %}One decision at a time (2026-11-08): Verify is the one-tap path.
+  A problem is reported through ONE form -- pick the reason, write one note --
+  inside a native <details>, so it opens without JavaScript and posts the same
+  action / note / room_id / session_id the two old forms did.{% endcomment %}
+  <details class="ft-decide__problem">
+    <summary class="ft-decide__summary"><uk-icon icon="flag"></uk-icon> Report a problem<uk-icon class="ft-decide__chev" icon="chevron-down"></uk-icon></summary>
+    <form class="ft-outcome__form ft-decide" method="post" action="/checker/action" hx-post="/checker/action" hx-target="#outcome" hx-swap="innerHTML">
+      {% csrf_token %}
+      <input type="hidden" name="room_id" value="{{ room.id }}">
+      <input type="hidden" name="session_id" value="{{ session.id }}">
+      <fieldset class="ft-decide__reasons">
+        <legend class="ft-label">What is wrong?</legend>
+        <label class="ft-decide__choice">
+          <input type="radio" name="action" value="flag_identity_mismatch" required>
+          <span><span class="ft-choice__title">Different person</span>
+            <span class="ft-choice__meta">The person teaching is not the faculty in the photo.</span></span>
+        </label>
+        <label class="ft-decide__choice">
+          <input type="radio" name="action" value="flag_not_present">
+          <span><span class="ft-choice__title">Faculty not present</span>
+            <span class="ft-choice__meta">No one is teaching this class in the room.</span></span>
+        </label>
+      </fieldset>
+      <label class="ft-label" for="flag-note">Note</label>
+      <textarea id="flag-note" name="note" class="ft-control" required maxlength="255"
+                placeholder="Briefly say what you saw (sent to IFO and HR)"></textarea>
+      <button class="ft-btn-danger" type="submit"><uk-icon icon="flag"></uk-icon> Send flag</button>
+    </form>
+  </details>
 </div>
 {% endif %}

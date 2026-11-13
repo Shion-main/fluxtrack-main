@@ -1,19 +1,17 @@
-{% extends "base.html" %}
+{% extends "sys/_console.html" %}
 {% comment %}SYS-04 scheduled-job status monitor (read-only). Standard Franken shell.
 Latest run per job (status pill: ok=green, failed=red, running=amber) + a short run
 history. Reads ops.JobRun; no write controls. ASCII-only.{% endcomment %}
 {% block title %}Job monitor - FluxTrack{% endblock %}
-{% block content %}
-<div class="uk-container max-w-4xl pt-8 pb-16">
-  <div class="flex items-center gap-2 mb-1 flex-wrap">
-    <h1 class="uk-h2">Job monitor</h1>
-    <span class="uk-label uk-label-secondary">Read-only</span>
-    <div class="ml-auto flex items-center gap-2">
-      <a href="/admin/" class="uk-btn uk-btn-secondary uk-btn-sm"><uk-icon icon="settings" class="size-4"></uk-icon> Admin</a>
-      <a href="/admin/ops/auditlog/" class="uk-btn uk-btn-ghost uk-btn-sm"><uk-icon icon="list" class="size-4"></uk-icon> Audit log</a>
-    </div>
-  </div>
-  <p class="uk-text-muted mb-6">Scheduled-job status from the dedicated scheduler: last run, success or failure, and rows affected (SYS-04).</p>
+{% block console_title %}Job monitor{% endblock %}
+{% block page_title %}Job monitor{% endblock %}
+{% block page_desc %}<p class="ui-pagehead__desc">Scheduled-job status from the dedicated scheduler: last run, success or failure, and rows affected.</p>{% endblock %}
+{% block page_actions %}
+      <a href="/admin/" class="uk-btn uk-btn-default uk-btn-sm"><uk-icon icon="settings"></uk-icon> Admin</a>
+      <a href="/admin/ops/auditlog/" class="uk-btn uk-btn-ghost uk-btn-sm"><uk-icon icon="list"></uk-icon> Audit log</a>
+{% endblock %}
+{% block console %}
+<div>
 
   {% if latest %}
   <div class="grid gap-3 sm:grid-cols-2 mb-8">
@@ -22,11 +20,11 @@ history. Reads ops.JobRun; no write controls. ASCII-only.{% endcomment %}
       <div class="flex items-center gap-2 mb-2">
         <span class="font-semibold font-mono">{{ item.run.job_name }}</span>
         {% if item.run.status == "ok" %}
-        <span class="uk-label ml-auto" style="background:var(--green-tint);color:var(--green)"><uk-icon icon="check" class="size-3"></uk-icon> OK</span>
+        <span class="uk-badge uk-badge-success ml-auto"><uk-icon icon="check"></uk-icon> OK</span>
         {% elif item.run.status == "failed" %}
-        <span class="uk-label ml-auto" style="background:var(--red-tint);color:var(--red)"><uk-icon icon="x" class="size-3"></uk-icon> Failed</span>
+        <span class="uk-badge uk-badge-destructive ml-auto"><uk-icon icon="x"></uk-icon> Failed</span>
         {% else %}
-        <span class="uk-label ml-auto" style="background:var(--amber-tint);color:var(--amber)"><uk-icon icon="loader" class="size-3"></uk-icon> Running</span>
+        <span class="uk-badge uk-badge-warning ml-auto"><uk-icon icon="loader"></uk-icon> Running</span>
         {% endif %}
       </div>
       <dl class="grid grid-cols-2 gap-x-3 gap-y-1 uk-text-small">
@@ -38,7 +36,7 @@ history. Reads ops.JobRun; no write controls. ASCII-only.{% endcomment %}
         <dd class="text-right">{{ item.run.rows_affected }}</dd>
       </dl>
       {% if item.run.status == "failed" and item.run.detail %}
-      <p class="uk-text-small mt-2" style="color:var(--red)">{{ item.run.detail|truncatechars:160 }}</p>
+      <p class="uk-text-small mt-2" style="color:hsl(var(--destructive-text))">{{ item.run.detail|truncatechars:160 }}</p>
       {% endif %}
     </div>
     {% endfor %}
@@ -46,7 +44,7 @@ history. Reads ops.JobRun; no write controls. ASCII-only.{% endcomment %}
 
   <h3 class="uk-h4 mb-2">Run history</h3>
   <div class="uk-card uk-card-body p-0 table-wrap">
-    <table class="tbl">
+    <table class="tbl tbl--stack">
       <thead>
         <tr>
           <th scope="col">Job</th>
@@ -59,18 +57,18 @@ history. Reads ops.JobRun; no write controls. ASCII-only.{% endcomment %}
       <tbody>
         {% for item in recent %}
         <tr>
-          <td class="tbl__id tbl__mono">{{ item.run.job_name }}</td>
-          <td class="tbl__time">{{ item.run.started_at|date:"M j, g:i:s A" }}</td>
-          <td>
+          <td class="tbl__id tbl__mono" data-label="Job">{{ item.run.job_name }}</td>
+          <td class="tbl__time" data-label="Started">{{ item.run.started_at|date:"M j, g:i:s A" }}</td>
+          <td data-label="Status">
             {% if item.run.status == "ok" %}<span class="pill pill--ok">OK</span>
             {% elif item.run.status == "failed" %}<span class="pill pill--bad">Failed</span>
             {% else %}<span class="pill pill--warn">Running</span>{% endif %}
             {% if item.run.status == "failed" and item.run.detail %}
-            <div class="tbl__meta" style="margin-top:3px;color:var(--red)">{{ item.run.detail|truncatechars:90 }}</div>
+            <div class="tbl__meta" style="margin-top:3px;color:hsl(var(--destructive-text))">{{ item.run.detail|truncatechars:90 }}</div>
             {% endif %}
           </td>
-          <td class="tbl__num">{% if item.duration != None %}{{ item.duration|floatformat:1 }}s{% else %}&mdash;{% endif %}</td>
-          <td class="tbl__num">{{ item.run.rows_affected }}</td>
+          <td class="tbl__num" data-label="Duration">{% if item.duration != None %}{{ item.duration|floatformat:1 }}s{% else %}&mdash;{% endif %}</td>
+          <td class="tbl__num" data-label="Rows">{{ item.run.rows_affected }}</td>
         </tr>
         {% endfor %}
       </tbody>

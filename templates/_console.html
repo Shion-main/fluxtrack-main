@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% load static %}
 {% comment %}
-Shared admin console shell (IFO, Dean). A persistent left-sidebar app-shell that
+Shared desk console shell (IFO, Dean, HR, SysAdmin). A persistent left-sidebar app-shell that
 role consoles specialize by filling {% block console_nav %} (and console_home /
 console_navlabel). Leaf pages then extend the role console and fill
 {% block console_title %}, the optional {% block page_actions %}, and
@@ -21,9 +21,9 @@ missed every page added after it was written.{% endcomment %}
 <div class="cns" id="cns">
   <div class="cns__scrim" data-cns-close></div>
 
-  <aside class="cns__side" id="cns-side">
-    <a href="{% block console_home %}/{% endblock %}" class="cns__brand">
-      <img src="{% static 'brand/mmcm-crest.png' %}" alt=""><b>FluxTrack</b></a>
+  <aside class="cns__side" id="cns-side" aria-label="Main menu">
+    <button type="button" class="cns__close" data-cns-close aria-label="Close menu"><uk-icon icon="x"></uk-icon></button>
+    <div class="cns__brand">{% include "_brand.html" with home="/" %}</div>
     <div class="cns__role">{% block console_role %}{{ user.get_role_display }}{% if user.department %} &middot; {{ user.department.code }}{% endif %}{% endblock %}</div>
 
     <nav class="cns__nav" aria-label="{% block console_navlabel %}Menu{% endblock %}">
@@ -31,49 +31,97 @@ missed every page added after it was written.{% endcomment %}
     </nav>
 
     <div class="cns__foot">
-      <a href="{% url 'profile' %}" class="cns__identity" aria-label="View profile">
-        <span class="cns__avatar">{{ user.first_name|default:user.username|slice:":1"|upper }}{{ user.last_name|slice:":1"|upper }}</span>
-        <span class="cns__who"><b>{{ user.get_full_name|default:user.username }}</b><span>{% if user.department %}{{ user.department.name }}{% else %}All departments{% endif %}</span></span>
-      </a>
-      <a href="/logout" class="cns__signout" aria-label="Sign out" title="Sign out"><uk-icon icon="log-out"></uk-icon></a>
+      {% include "_account_menu.html" with up=1 wide=1 %}
     </div>
   </aside>
 
-  <main class="cns__main">
+  <div class="cns__main" id="cns-main">
     <header class="cns__bar">
       <button type="button" class="cns__ham" data-cns-open
               aria-label="Open menu" aria-controls="cns-side" aria-expanded="false">
         <uk-icon icon="menu"></uk-icon></button>
       <span class="cns__title">{% block console_title %}{% endblock %}</span>
       <div class="cns__actions">
-        {% block page_actions %}{% endblock %}
         {% include "notifications/_bell.html" %}
       </div>
     </header>
     <div class="cns__body">
+      {% comment %}shadcn page anatomy: every desk page opens with one page
+      header -- title, an optional one-line description, and its actions, which
+      wrap under the title on a phone instead of crowding the 56px bar. Pages
+      fill page_title / page_desc / page_actions; a page that draws its own
+      header overrides the whole pagehead block.{% endcomment %}
+      {% block pagehead %}
+      <div class="ui-pagehead">
+        <div>
+          <h1 class="ui-pagehead__title">{% block page_title %}{% endblock %}</h1>
+          {% block page_desc %}{% endblock %}
+        </div>
+        <div class="ui-pagehead__actions">{% block page_actions %}{% endblock %}</div>
+      </div>
+      {% endblock %}
       {% block console %}{% endblock %}
     </div>
-  </main>
+  </div>
 </div>
 <script>
+  /* Below 1024px the sidebar is a shadcn Sheet: a modal drawer. While open it
+     is role="dialog" aria-modal="true", the main column is inert, the page
+     behind does not scroll, Tab stays inside the drawer, and Escape or the
+     scrim closes it and returns focus to the menu button. */
   (function () {
     var c = document.getElementById("cns");
-    var trigger = c && c.querySelector("[data-cns-open]");
     if (!c) return;
+    var side = document.getElementById("cns-side");
+    var main = document.getElementById("cns-main");
+    var trigger = c.querySelector("[data-cns-open]");
+    var drawerQuery = window.matchMedia("(max-width: 1023.98px)");
+    function focusables() {
+      return Array.prototype.filter.call(
+        side.querySelectorAll('a[href], button:not([disabled]), summary, input, select, textarea, [tabindex]:not([tabindex="-1"])'),
+        function (el) { return el.offsetParent !== null; });
+    }
     function setOpen(open) {
       c.classList.toggle("is-open", open);
       if (trigger) trigger.setAttribute("aria-expanded", open ? "true" : "false");
+      if (open) {
+        side.setAttribute("role", "dialog");
+        side.setAttribute("aria-modal", "true");
+        if (main) main.inert = true;
+        document.body.style.overflow = "hidden";
+        var first = focusables()[0];
+        if (first) first.focus();
+      } else {
+        side.removeAttribute("role");
+        side.removeAttribute("aria-modal");
+        if (main) main.inert = false;
+        document.body.style.overflow = "";
+      }
+    }
+    function close() {
+      if (!c.classList.contains("is-open")) return;
+      setOpen(false);
+      if (trigger) trigger.focus();
     }
     c.addEventListener("click", function (e) {
       if (e.target.closest("[data-cns-open]")) setOpen(true);
-      else if (e.target.closest("[data-cns-close]")) setOpen(false);
+      else if (e.target.closest("[data-cns-close]")) close();
     });
     document.addEventListener("keydown", function (e) {
-      if (e.key === "Escape" && c.classList.contains("is-open")) {
-        setOpen(false);
-        if (trigger) trigger.focus();
+      if (!c.classList.contains("is-open")) return;
+      if (e.key === "Escape") { close(); return; }
+      if (e.key === "Tab") {
+        var items = focusables();
+        if (!items.length) return;
+        var first = items[0], last = items[items.length - 1];
+        if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+        else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
       }
     });
+    /* Growing past 1024px with the drawer open must not leave the page locked. */
+    var onChange = function () { if (!drawerQuery.matches && c.classList.contains("is-open")) setOpen(false); };
+    if (drawerQuery.addEventListener) drawerQuery.addEventListener("change", onChange);
+    else if (drawerQuery.addListener) drawerQuery.addListener(onChange);
   })();
 </script>
 {% endwith %}

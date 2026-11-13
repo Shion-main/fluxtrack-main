@@ -17,12 +17,17 @@
   width: 100%; border-collapse: collapse;
   font-size: .8rem; table-layout: fixed;
 }
+/* On a phone the week keeps readable columns and scrolls sideways inside its
+   .table-wrap, instead of squeezing course codes into vertical letters. */
+@media screen and (max-width: 767.98px) {
+  .table-wrap > .tt { min-width: 44rem; }
+}
 .tt th, .tt td {
-  border: 1px solid var(--line);
+  border: 1px solid hsl(var(--border));
   padding: 6px 7px; vertical-align: top; text-align: left;
 }
 .tt thead th {
-  background: var(--panel-2); color: var(--ink);
+  background: hsl(var(--muted)); color: hsl(var(--foreground));
   font-size: .74rem; font-weight: 700; letter-spacing: .03em; text-transform: uppercase;
   text-align: center; white-space: nowrap;
 }
@@ -31,29 +36,29 @@
 .tt__time {
   width: 84px; white-space: nowrap; text-align: right !important;
   font-variant-numeric: tabular-nums;
-  background: var(--panel-2); color: var(--ft-muted);
+  background: hsl(var(--muted)); color: hsl(var(--muted-foreground));
   font-size: .75rem; font-weight: 600;
 }
 .tt tbody th.tt__time { font-weight: 650; }
 
-.tt__on { background: var(--navy-tint); }
+.tt__on { background: hsl(var(--accent)); }
 .tt__course {
-  display: block; font-weight: 700; color: var(--ink); font-size: .78rem;
+  display: block; font-weight: 700; color: hsl(var(--foreground)); font-size: .78rem;
   line-height: 1.25; overflow-wrap: anywhere;
 }
 /* Wraps rather than clips. Truncating a surname to "Mar-" in a 90px column
    tells the reader nothing; two short lines cost a few pixels and stay useful. */
 .tt__who {
-  display: block; margin-top: 2px; font-size: .72rem; color: var(--body);
+  display: block; margin-top: 2px; font-size: .72rem; color: hsl(var(--foreground));
   line-height: 1.3; overflow-wrap: anywhere;
 }
-.tt__tba { font-style: italic; color: var(--ft-muted); }
+.tt__tba { font-style: italic; color: hsl(var(--muted-foreground)); }
 .tt__mode {
   display: inline-block; margin-top: 3px; padding: 1px 6px; border-radius: 999px;
-  background: #fff; color: var(--purple); border: 1px solid #d5c4f0;
+  background: #fff; color: hsl(var(--virtual)); border: 1px solid #d5c4f0;
   font-size: .65rem; font-weight: 700;
 }
-.tt__off { text-align: center; color: var(--line); }
+.tt__off { text-align: center; color: hsl(var(--border)); }
 
 /* ----------------------------------------------------------------------------
    HEAT RAMP (ifo/_heatgrid.html)
@@ -84,7 +89,7 @@
    ramp has to stay visibly the top, or the grid loses its ordering. If you change
    a colour here, recompute the ratio and update this table.
    -------------------------------------------------------------------------- */
-.tt__h { text-align: center; vertical-align: middle; color: var(--ink); }
+.tt__h { text-align: center; vertical-align: middle; color: hsl(var(--foreground)); }
 .tt__pct {
   display: block; font-weight: 700; font-size: .78rem;
   font-variant-numeric: tabular-nums;
@@ -103,15 +108,15 @@
 
 .tt__cap {
   caption-side: top; text-align: left; padding: 0 0 8px;
-  font-size: .76rem; line-height: 1.5; color: var(--ft-muted);
+  font-size: .76rem; line-height: 1.5; color: hsl(var(--muted-foreground));
 }
 .tt__legend {
   display: flex; flex-wrap: wrap; align-items: center; gap: 8px;
-  margin-top: 10px; font-size: .72rem; color: var(--ft-muted);
+  margin-top: 10px; font-size: .72rem; color: hsl(var(--muted-foreground));
 }
 .tt__key {
   display: inline-block; width: 22px; height: 14px;
-  border: 1px solid var(--line); border-radius: 2px;
+  border: 1px solid hsl(var(--border)); border-radius: 2px;
 }
 
 .no-print { }

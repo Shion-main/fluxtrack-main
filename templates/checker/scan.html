@@ -10,24 +10,7 @@
 {% block content %}
 <div class="ft-app">
 
-  <header class="ft-top">
-    <a href="/checker/floor" class="ft-top__brand">
-      <img class="ft-top__crest" src="{% static 'brand/mmcm-crest.png' %}" alt="">
-      <span class="ft-top__mark">FluxTrack</span>
-    </a>
-    <div class="relative inline-flex" style="margin-left:auto">{% include "notifications/_bell.html" %}</div>
-    <details class="ft-acct" style="margin-left:0">
-      <summary class="ft-top__avatar" aria-label="Account and sign out">{{ user.first_name|default:user.username|slice:":1"|upper }}{{ user.last_name|slice:":1"|upper }}</summary>
-      <div class="ft-acct__menu">
-        <div class="ft-acct__who">
-          <b>{{ user.get_full_name|default:user.username }}</b>
-          <span>{{ user.get_role_display }}</span>
-        </div>
-        <a class="ft-acct__item" href="{% url 'profile' %}"><uk-icon icon="user"></uk-icon> Profile</a>
-        <a class="ft-acct__item" href="/logout"><uk-icon icon="log-out"></uk-icon> Sign out</a>
-      </div>
-    </details>
-  </header>
+  {% include "_floor_top.html" with home="/checker/floor" %}
 
   <div class="ft-page">
     <div id="offline-banner" class="hidden ft-banner" role="status" aria-live="polite" style="margin-bottom:14px">
@@ -40,7 +23,7 @@
       <div class="ft-greet__date">Scan the room QR or enter its six-digit code to verify.</div>
     </div>
 
-    <div class="ft-row" style="box-shadow:var(--shadow-card)">
+    <div class="ft-row" style="box-shadow:var(--shadow-sm)">
       <button id="cam-btn" class="ft-btn-navy" onclick="startCamera()">
         <uk-icon icon="camera"></uk-icon> Scan room QR</button>
       <div id="qr-reader" style="margin-top:12px"></div>
@@ -83,7 +66,7 @@
         <textarea id="offline-note" class="ft-control" maxlength="255"
                   placeholder="Briefly say what you saw (sent to IFO and HR)"></textarea>
       </div>
-      <p id="offline-unavailable-msg" class="hidden ft-help" style="color:var(--red)">
+      <p id="offline-unavailable-msg" class="hidden ft-help" style="color:hsl(var(--destructive-text))">
         Offline capture unavailable in this browser - reconnect and try again.</p>
       <p id="offline-capture-status" class="ft-help" style="margin-top:8px" role="alert"></p>
     </div>

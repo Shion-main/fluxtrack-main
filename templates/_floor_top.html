@@ -1,0 +1,10 @@
+{% comment %}Floor-role header (Faculty, Checker, Guard): shadcn inset header with
+the shared brand mark, the notification bell and the shared account menu.
+Include with home=<url>. Keeps the ft-top class (tests pin it). ASCII-only.{% endcomment %}
+<header class="ft-top">
+  {% include "_brand.html" with home=home %}
+  <div class="ft-top__actions">
+    {% include "notifications/_bell.html" %}
+    {% include "_account_menu.html" %}
+  </div>
+</header>

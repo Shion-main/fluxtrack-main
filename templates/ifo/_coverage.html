@@ -13,13 +13,13 @@ ladder (unlike the neutral occupancy pill) because D-04 DOES have a target: a
 checker-less floor is a genuine problem, so 0% should read red. Colour is never the
 only signal -- the percentage prints inside the pill. ASCII-only.{% endcomment %}
 <h3 class="uk-h4 mt-8 mb-2">Verification coverage</h3>
-<p class="uk-text-muted uk-text-small mb-4">Share of HELD sessions a checker physically verified, by building and weekday. Physical rooms only (A6).</p>
+<p class="uk-text-muted uk-text-small mb-4">Share of HELD sessions a checker physically verified, by building and weekday. Physical rooms only.</p>
 
 {% if coverage.1 %}
   {% include "reports/_error_card.html" %}
 {% else %}
   <div class="uk-card uk-card-body p-0 table-wrap" data-coverage-table>
-    <table class="tbl">
+    <table class="tbl tbl--stack">
       <thead>
         <tr>
           <th scope="col">Building</th>
@@ -32,16 +32,16 @@ only signal -- the percentage prints inside the pill. ASCII-only.{% endcomment %
       <tbody>
         {% for row in coverage.0 %}
         <tr>
-          <td>{{ row.building_name }} <span class="uk-text-muted uk-text-small">{{ row.building_code }}</span></td>
-          <td>{{ row.day_label }}</td>
-          <td class="tbl__num">{{ row.held }}</td>
-          <td class="tbl__num">{{ row.verified }}</td>
-          <td class="tbl__num">
+          <td data-label="Building">{{ row.building_name }} <span class="uk-text-muted uk-text-small">{{ row.building_code }}</span></td>
+          <td data-label="Day">{{ row.day_label }}</td>
+          <td class="tbl__num" data-label="Held">{{ row.held }}</td>
+          <td class="tbl__num" data-label="Verified">{{ row.verified }}</td>
+          <td class="tbl__num" data-label="Coverage">
             <span class="pill {% if row.pct >= 90 %}pill--ok{% elif row.pct >= 75 %}pill--warn{% else %}pill--bad{% endif %}">{{ row.pct }}%</span>
           </td>
         </tr>
         {% empty %}
-        <tr><td colspan="5" class="uk-text-muted">No held sessions in physical rooms for this range. Adjust the range above.</td></tr>
+        <tr><td colspan="5" class="uk-text-muted" data-label="">No held sessions in physical rooms for this range. Adjust the range above.</td></tr>
         {% endfor %}
       </tbody>
     </table>
@@ -59,7 +59,7 @@ only signal -- the percentage prints inside the pill. ASCII-only.{% endcomment %
       {% for f in zero_floors.0 %}
       <li class="flex items-center justify-between gap-4">
         <span class="flex items-center gap-2">
-          <uk-icon icon="triangle-alert" class="size-4" style="color:var(--amber)"></uk-icon>
+          <uk-icon icon="triangle-alert" class="size-4" style="color:hsl(var(--warning))"></uk-icon>
           {{ f.building_name }} <span class="uk-text-muted uk-text-small">{{ f.building_code }}</span> &mdash; Floor {{ f.floor_number }}</span>
         <span class="uk-text-small uk-text-muted">{{ f.held }} held, 0 verified</span>
       </li>
@@ -69,7 +69,7 @@ only signal -- the percentage prints inside the pill. ASCII-only.{% endcomment %
   {% else %}
   <div class="uk-card uk-card-body" data-zero-floors-empty>
     <p class="uk-text-muted flex items-center gap-2">
-      <uk-icon icon="check" class="size-4" style="color:var(--green)"></uk-icon>
+      <uk-icon icon="check" class="size-4" style="color:hsl(var(--success))"></uk-icon>
       Every floor with held sessions had at least one checker verification.</p>
   </div>
   {% endif %}

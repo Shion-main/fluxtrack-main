@@ -6,26 +6,7 @@
 {% block content %}
 <div class="ft-app">
 
-  <header class="ft-top">
-    <a href="/faculty/home" class="ft-top__brand">
-      <img class="ft-top__crest" src="{% static 'brand/mmcm-crest.png' %}" alt="">
-      <span class="ft-top__mark">FluxTrack</span>
-    </a>
-    {% comment %}Notification bell mounted in the faculty navy ft-top (D-01),
-    beside the account avatar; same partial the Franken shell mounts.{% endcomment %}
-    <div class="relative inline-flex" style="margin-left:auto">{% include "notifications/_bell.html" %}</div>
-    <details class="ft-acct" style="margin-left:0">
-      <summary class="ft-top__avatar" aria-label="Account and sign out">{{ user.first_name|default:user.username|slice:":1"|upper }}{{ user.last_name|slice:":1"|upper }}</summary>
-      <div class="ft-acct__menu">
-        <div class="ft-acct__who">
-          <b>{{ user.get_full_name|default:user.username }}</b>
-          <span>{{ user.get_role_display }}{% if user.department %} · {{ user.department.name }}{% endif %}</span>
-        </div>
-        <a class="ft-acct__item" href="{% url 'profile' %}"><uk-icon icon="user"></uk-icon> Profile</a>
-        <a class="ft-acct__item" href="/logout"><uk-icon icon="log-out"></uk-icon> Sign out</a>
-      </div>
-    </details>
-  </header>
+  {% include "_floor_top.html" with home="/faculty/home" %}
 
   <div class="ft-page">
     <div class="ft-greet">
@@ -38,34 +19,7 @@
     </div>
     <div class="ft-list">
       {% for c in today_cards %}
-      <div class="ft-row">
-        <div class="ft-row__top">
-          <span class="ft-row__time">{{ c.rep.scheduled_start|time:"g:i" }} - {{ c.rep.scheduled_end|time:"g:i A" }}</span>
-          {% if c.rep.status == "active" %}<span class="ft-pill ft-pill--active" style="margin-left:auto"><span class="ft-dot"></span> In session</span>
-          {% elif c.rep.status == "completed" %}<span class="ft-pill ft-pill--done" style="margin-left:auto">Done</span>
-          {% elif c.rep.status == "absent" %}<span class="ft-pill ft-pill--absent" style="margin-left:auto">Absent</span>
-          {% elif c.rep.status == "cancelled" %}<span class="ft-pill ft-pill--absent" style="margin-left:auto">Cancelled</span>
-          {% else %}{% include "_modality_badge.html" with modality=c.modality %}{% endif %}
-        </div>
-
-        {% if c.merged %}
-        <div class="ft-row__title">{{ c.rep.schedule.course_code }} <span class="ft-pill ft-pill--merged" style="vertical-align:middle"><uk-icon icon="layers"></uk-icon> Merged · {{ c.count }}</span></div>
-        <div class="ft-row__sections">
-          {% for s in c.sessions %}
-          <div class="ft-subrow">
-            <span class="ft-subrow__sec">{{ s.schedule.course_code }} · {{ s.schedule.section }}</span>
-            <span class="ft-subrow__room"><uk-icon icon="map-pin"></uk-icon> {% include "_room_code.html" with room=s.room %} · {{ s.schedule.enrolled_count }}</span>
-          </div>
-          {% endfor %}
-        </div>
-        {% else %}
-        <div class="ft-row__title">{{ c.rep.schedule.course_code }} · {{ c.rep.schedule.section }}</div>
-        <div class="ft-row__meta"><uk-icon icon="map-pin"></uk-icon> {{ c.rooms_label }} <span>·</span> {{ c.students }} students</div>
-        {% endif %}
-        {% if c.rep.status == "cancelled" and c.rep.cancelled_reason %}
-        <div class="ft-row__meta"><uk-icon icon="circle-alert"></uk-icon> {{ c.rep.cancelled_reason }}</div>
-        {% endif %}
-      </div>
+      {% include "faculty/_class_row.html" %}
       {% empty %}
       <div class="ft-row"><div class="ft-row__meta" style="margin:0"><uk-icon icon="coffee"></uk-icon> {% if term_available %}No classes today.{% else %}No active academic term. Contact the IFO if your schedule should be available.{% endif %}</div></div>
       {% endfor %}

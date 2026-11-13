@@ -13,7 +13,7 @@ label (WCAG 1.4.1). Off-duty renders a calm "not on duty" card. ASCII-only.{% en
 {% else %}
 <div class="ft-sec">
   <div class="ft-sec__title">Faculty on your floor</div>
-  <span class="ft-chip" style="pointer-events:none">{{ faculty_today|length }} today</span>
+  <span class="ft-chip" style="pointer-events:none">{{ faculty_pg.paginator.count }} today</span>
 </div>
 {% if faculty_today %}
 <div class="ft-list">
@@ -33,6 +33,7 @@ label (WCAG 1.4.1). Off-duty renders a calm "not on duty" card. ASCII-only.{% en
   </a>
   {% endfor %}
 </div>
+{% with p=faculty_pg %}{% include "_pager.html" with page=p.page paginator=p.paginator page_range=p.page_range querystring=p.querystring page_param=p.page_param %}{% endwith %}
 {% else %}
 <div class="ft-card ft-card--neutral">
   <div class="ft-card__meta" style="display:flex;align-items:center;gap:8px;margin:0">
@@ -43,7 +44,7 @@ label (WCAG 1.4.1). Off-duty renders a calm "not on duty" card. ASCII-only.{% en
 {% if sessions %}
 <div class="ft-sec">
   <div class="ft-sec__title">Rooms today</div>
-  <span class="ft-chip" style="pointer-events:none">{{ sessions|length }} session{{ sessions|length|pluralize }}</span>
+  <span class="ft-chip" style="pointer-events:none">{{ rooms_pg.paginator.count }} session{{ rooms_pg.paginator.count|pluralize }}</span>
 </div>
 <div class="ft-list">
   {% comment %}GRD-02 entry point: the card itself is the link to that room's
@@ -72,6 +73,7 @@ label (WCAG 1.4.1). Off-duty renders a calm "not on duty" card. ASCII-only.{% en
   </a>
   {% endfor %}
 </div>
+{% with p=rooms_pg %}{% include "_pager.html" with page=p.page paginator=p.paginator page_range=p.page_range querystring=p.querystring page_param=p.page_param %}{% endwith %}
 {% else %}
 <div class="ft-card ft-card--neutral">
   <div class="ft-card__meta" style="display:flex;align-items:center;gap:8px;margin:0">

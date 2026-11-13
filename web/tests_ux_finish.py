@@ -93,6 +93,10 @@ class FloorNotificationShellTests(TestCase):
                 self.client.logout()
 
     def test_admin_notification_page_keeps_the_desktop_shell(self):
+        """Updated 2026-11-08 (unified responsive UI, Task 5): the desktop
+        shell for an IFO admin is now the IFO console, not the legacy header
+        (whose role label this test used to look for). Intent unchanged: the
+        desk role gets the desktop shell, never the floor app."""
         user = get_user_model().objects.create(
             username="phase13_ifo", role=Role.IFO_ADMIN
         )
@@ -100,7 +104,8 @@ class FloorNotificationShellTests(TestCase):
 
         body = self.client.get(reverse("notifications")).content.decode()
 
-        self.assertIn("uk-label uk-label-secondary", body)
+        self.assertIn('<header class="cns__bar"', body)
+        self.assertEqual(body.count("<header"), 1)
         self.assertNotIn('class="ft-app', body)
 
 

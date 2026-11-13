@@ -2,7 +2,6 @@
 {% comment %}IFO console: the shared console shell with IFO navigation. Leaf IFO
 pages (live/rooms/assignments/dashboard/room_detail/weekly_reports) extend THIS
 and fill console_title / page_actions / console. ASCII-only.{% endcomment %}
-{% block console_home %}/ifo/rooms{% endblock %}
 {% block console_navlabel %}IFO{% endblock %}
 {% block console_nav %}
   <a href="/ifo/rooms" class="cns__link {% if un == 'ifo_rooms' or un == 'ifo_room_detail' or un == 'ifo_building_detail' %}is-active{% endif %}"

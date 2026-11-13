@@ -114,7 +114,7 @@ Faculty/Guard shells. No border-left accent stripes. ASCII-only.
     <h2 class="uk-h3 mb-3">Bookings</h2>
     {% if bookings %}
     <div class="table-wrap">
-      <table class="tbl">
+      <table class="tbl tbl--stack">
         <thead>
           <tr>
             <th scope="col">Room</th>
@@ -127,15 +127,15 @@ Faculty/Guard shells. No border-left accent stripes. ASCII-only.
         <tbody>
           {% for b in bookings %}
           <tr data-booking="{{ b.pk }}">
-            <td class="tbl__id">{{ b.room.code }}</td>
-            <td>
+            <td class="tbl__id" data-label="Room">{{ b.room.code }}</td>
+            <td data-label="Booked for">
               {{ b.occupant_name }}
               {% if b.purpose %}<span class="uk-text-small uk-text-muted block">{{ b.purpose }}</span>{% endif %}
             </td>
-            <td class="tbl__meta">
+            <td class="tbl__meta" data-label="Window">
               {{ b.start_datetime|date:"M j, Y" }} &middot;
               {{ b.start_datetime|time:"g:i A" }}&ndash;{{ b.end_datetime|time:"g:i A" }}</td>
-            <td>
+            <td data-label="Status">
               {% if b.status == "active" %}
               <span class="pill pill--ok" data-status="active">
                 <uk-icon icon="circle-check" class="size-4"></uk-icon> Active</span>
@@ -145,7 +145,7 @@ Faculty/Guard shells. No border-left accent stripes. ASCII-only.
                 {{ b.status|capfirst }}</span>
               {% endif %}
             </td>
-            <td>
+            <td data-label="Action">
               {% if b.status == "active" %}
               <form hx-post="/ifo/bookings/{{ b.pk }}/cancel"
                     hx-target="#booking-panel" hx-swap="innerHTML">

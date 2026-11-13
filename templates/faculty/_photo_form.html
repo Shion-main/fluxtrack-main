@@ -1,0 +1,31 @@
+{% comment %}Identity photo upload, shared by the floor and console profile. Pass desk=1 for the console styling. The hx-* attributes are load-bearing (see faculty/profile.html). ASCII-only.{% endcomment %}
+  {% comment %}The small region the upload targets. Rendered server-side on
+  first load so the page is complete without htmx.{% endcomment %}
+  <div id="photo-status" role="status" aria-live="polite">
+    {% include "faculty/_photo_status.html" %}
+  </div>
+
+  {% comment %}hx-encoding is load-bearing -- see the header comment.{% endcomment %}
+  <form class="{% if desk %}ui-fields{% else %}ft-form{% endif %}" hx-post="{% url 'profile_photo_upload' %}"
+        hx-encoding="multipart/form-data"
+        hx-target="#photo-status" hx-swap="innerHTML"
+        hx-indicator="#photo-spinner">
+    {% csrf_token %}
+    <div class="{% if desk %}ui-field{% else %}ft-form__group{% endif %}">
+      <label class="{% if desk %}ui-field__label{% else %}ft-label{% endif %}" for="p-photo">Choose a new photo</label>
+      <input id="p-photo" class="{% if desk %}uk-input{% else %}ft-control{% endif %}" type="file" name="photo" required
+             accept="image/jpeg,image/png"
+             aria-describedby="p-photo-help">
+      <p class="{% if desk %}ui-field__desc{% else %}ft-help{% endif %}" id="p-photo-help">
+        JPEG or PNG, up to {{ max_mb }} MB. It is resized to {{ target_px }}px
+        and re-saved on the server, which also removes any location data your
+        camera stored in the file.
+      </p>
+    </div>
+    <div>
+      <button class="{% if desk %}uk-btn uk-btn-primary{% else %}ft-btn-navy{% endif %}" type="submit">
+        <uk-icon icon="upload"></uk-icon> Upload photo</button>
+      <span id="photo-spinner" class="htmx-indicator {% if desk %}uk-text-muted{% else %}ft-help{% endif %}">
+        <uk-icon icon="loader"></uk-icon> Processing your photo...</span>
+    </div>
+  </form>

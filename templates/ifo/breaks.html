@@ -4,11 +4,11 @@ holidays without Django admin; materialize skips them and the sweep never marks
 their sessions Absent. Console uk-* vocabulary, real labels, ASCII-only.{% endcomment %}
 {% block title %}Holidays - FluxTrack{% endblock %}
 {% block console_title %}Holidays & breaks{% endblock %}
-{% block console %}
-<p class="uk-text-muted mb-6 max-w-2xl">
-  The dates classes do not meet -- regular holidays, term breaks, foundation days.
+{% block page_title %}Holidays & breaks{% endblock %}
+{% block page_desc %}<p class="ui-pagehead__desc">The dates classes do not meet &mdash; regular holidays, term breaks, foundation days.
   New sessions are never created on these dates, and any already created are never
-  marked Absent. Use Suspensions for an emergency, same-day call-off instead.</p>
+  marked Absent. Use Suspensions for an emergency, same-day call-off instead.</p>{% endblock %}
+{% block console %}
 
 {% if flash %}
 <div class="uk-alert uk-alert-success mb-4" role="status">
@@ -57,14 +57,14 @@ their sessions Absent. Console uk-* vocabulary, real labels, ASCII-only.{% endco
 
   <h2 class="uk-h4 mb-3">This term</h2>
   {% if breaks %}
-  <table class="uk-table uk-table-divider uk-table-small">
+  <table class="tbl tbl--stack">
     <thead><tr><th>Dates</th><th>Holiday</th><th></th></tr></thead>
     <tbody>
       {% for b in breaks %}
       <tr>
-        <td>{{ b.start_date|date:"M j" }}{% if b.end_date != b.start_date %} - {{ b.end_date|date:"M j" }}{% endif %}</td>
-        <td>{{ b.reason|default:"(unnamed)" }}</td>
-        <td class="uk-text-right">
+        <td data-label="Dates">{{ b.start_date|date:"M j" }}{% if b.end_date != b.start_date %} - {{ b.end_date|date:"M j" }}{% endif %}</td>
+        <td data-label="Holiday">{{ b.reason|default:"(unnamed)" }}</td>
+        <td class="uk-text-right" data-label="">
           <form method="post" action="/ifo/breaks/{{ b.id }}/delete" style="display:inline">
             {% csrf_token %}
             <button type="submit" class="uk-btn uk-btn-ghost uk-btn-sm">
