@@ -2,9 +2,11 @@
 
 FluxTrack is MMCM's Faculty Attendance and Facility Utilization Information
 System. It is a server-rendered Django 6 application backed exclusively by
-Microsoft SQL Server. The interface uses htmx and Franken UI, includes a PWA
-shell, and requires no React application, Node.js runtime, frontend build, or
-CDN connection.
+Microsoft SQL Server. The interface uses htmx and Franken UI styled as one
+shadcn-style design system tailored to MMCM (phone-first for Faculty, Checker
+and Guard; desktop console for Dean, IFO, HR and System Admin). It includes a
+PWA shell and requires no React application, Node.js runtime, frontend build,
+or CDN connection.
 
 Repository implementation through Phase 16 is complete. The remaining production
 gate is credential-dependent Microsoft Entra UAT plus AWS/RDS/DNS/TLS
@@ -13,7 +15,7 @@ provisioning and the cutover smoke test. See
 
 ## Documentation
 
-- [`FluxTrack_SRS.md`](FluxTrack_SRS.md) — normative SRS v1.3 and requirement traceability
+- [`FluxTrack_SRS.md`](FluxTrack_SRS.md) — normative SRS v1.5 and requirement traceability
 - [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) — software architecture and design rationale
 - [`docs/IT_ARCHITECTURE.md`](docs/IT_ARCHITECTURE.md) — infrastructure and security boundaries
 - [`deploy/README.md`](deploy/README.md) — production deployment, rollback, monitoring, and recovery
@@ -198,6 +200,17 @@ sample session. All demo accounts use the password `devpass123`:
 `seed_demo` creates known-password accounts and must never be run against a
 production database.
 
+For a realistic, populated term (attendance history, a modality mix, and
+activity across MMCM's colleges), import the registrar offerings first (see
+[Load real schedule data](#load-real-schedule-data)), then reshape them:
+
+```powershell
+python manage.py seed_term
+```
+
+`seed_term` rewrites live rows and refuses to run unless `DEBUG=True` (or
+`--force` is given). Use it only on a local or throwaway database.
+
 ### 6. Validate and run
 
 ```powershell
@@ -341,6 +354,19 @@ Building Floor 3. The legacy `/ifo/buildings` list redirects to Directory;
 building detail and mutation links continue to work for bookmarks and
 integrations.
 
+## Correcting mistakes
+
+Records can be corrected without editing the database:
+
+| Who | What they can correct | Limit |
+|---|---|---|
+| Checker | Undo their own Verify, Confirm empty, or flag from the result screen (or by re-scanning the room) | 5 minutes from the tap. An undone flag sends IFO and HR a "Checker flag withdrawn" notice. For online classes, the class and its merged sections are put back as they were, unless something changed them since |
+| Faculty | Review a modality-shift request before submitting, and withdraw it | While the request is still Pending |
+| IFO Admin | Reinstate a class wrongly recorded Absent | A reason is required; the change is audit-logged |
+| IFO Admin | Cancel a booking or a schedule, lift a suspension, reopen an archived term | Each action is audit-logged |
+
+Every correction keeps the original action in the audit log.
+
 ## Project structure
 
 ```text
@@ -368,15 +394,22 @@ must update this section in the same change.
 
 - **Features:** all seven role surfaces, attendance and verification, schedule
   import and operations, campus/term/suspension management, notifications,
-  reports, utilization/lateness/coverage metrics, and scheduler operations are
-  implemented.
+  reports, utilization/lateness/coverage metrics, scheduler operations, and
+  record corrections (including the Checker's 5-minute undo) are implemented.
+- **Interface:** one responsive design system across all roles; long lists are
+  tables on desktop and cards on phones, with filters and a 15-row pager.
 - **Production hardening:** shared SQL Server cache, durable offline replay
   deduplication, secure proxy/HTTPS settings, same-origin vendor assets,
   health/watchdog checks, retention, and the EC2/RDS deployment package are
   implemented.
-- **Verification baseline:** the complete SQL Server suite passed 1,259 tests
-  with two expected skips; production deployment checks, migrations, and static
-  collection passed at the documented baseline.
+- **Verification baseline:** the complete SQL Server suite passed 1,637 tests
+  with two expected skips (2026-11-15); production deployment checks,
+  migrations, and static collection passed at the documented baseline.
 - **External production gate:** institutional Entra callback/UAT and AWS
   production provisioning, restore rehearsal, DNS/TLS, and smoke testing require
-  credentials that are not stored in this repository.
+  credentials that are not stored in this repository. The Entra app currently
+  lives in a sandbox tenant, so each person signing in needs a guest invite until
+  it is registered in MMCM's tenant.
+- **Known open items:** real-phone testing of the QR camera and offline capture;
+  four low-severity audit items (offline batch timestamps, offline page caching,
+  term-activation locking, dropped classes in reports); and a few small UI fixes.

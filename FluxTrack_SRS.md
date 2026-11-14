@@ -18,7 +18,7 @@ IEEE 830 · ISO/IEC/IEEE 29148
 | Document title | FluxTrack — Software Requirements Specification |
 | System | Faculty Attendance and Facility Utilization Information System |
 | Status | For review |
-| Version | 1.4 |
+| Version | 1.5 |
 | Standard basis | IEEE 830 / ISO/IEC/IEEE 29148 |
 
 **Revision History**
@@ -30,6 +30,7 @@ IEEE 830 · ISO/IEC/IEEE 29148
 | 1.2 | 2026-07-03 | Research Team (Mayo, Ong, Sabuero) | Modality-shift approval workflow (MOD-01..06); DEAN-04 added; FAC-07 superseded by MOD approval; CHK-03 amended (Confirm absent removed, actions apply to online sessions); CHK-06 removed; RPT-02 notifies Deans; modality_shift_lead_days added to the policy register. |
 | 1.3 | 2026-07-22 | Research Team (Mayo, Ong, Sabuero) | Reconciled the specification with the completed system: Microsoft SQL Server replaces MySQL; Django sessions replace a backend JWT; instance filesystem storage replaces S3; JOB-02 no longer releases rooms on a timer; CHK-02 includes the online verification path; IFO-07 is a semantic live board rather than a spatial map; MOD-01 uses a single occurrence or next-N-week window; the shadcn design language is delivered through Franken UI; and suspension, holiday, campus-management, schedule-CRUD, and term-lifecycle capabilities are recorded. Adds implementation conformance and traceability in §10. |
 | 1.4 | 2026-11-06 | Research Team (Mayo, Ong, Sabuero) | Recorded behaviour from the November audit: unfinished classes complete automatically, room moves respect bookings and other classes, merged sections move and fail together, late approvals leave running classes unchanged, IFO can end duty postings, and holidays cancel existing sessions. |
+| 1.5 | 2026-11-15 | Research Team (Mayo, Ong, Sabuero) | Added record correction: CHK-09 lets a Checker undo their own Verify, Confirm empty, or flag within 5 minutes (an undone flag notifies IFO and HR that it was withdrawn; online status changes are restored only if nothing changed them since); CHK-05 references the withdrawal; IFO-15 records IFO reinstatement of a wrongly Absent session with a mandatory reason. §10 updated. |
 
 **Approval and Sign-off**
 
@@ -297,9 +298,10 @@ This area governs the request-and-approval workflow for changing a session's mod
 | CHK-02 | The system shall return, on a Checker room scan, the room's current state together with the faculty member's profile photo for identity matching. For Online sessions, the assigned online-duty Checker shall receive a separate list, open the public Teams link, and apply the same Verify/Flag decision without scanning a physical room. | The Checker is on duty for the assigned floor or owns the Online session. | The room state and faculty photo, or the assigned Online session and Teams link, are presented. |
 | CHK-03 | The system shall offer room-state actions: Verify, Flag identity mismatch, Flag not present, and Confirm empty / Verified empty; these actions apply to online sessions as well as to F2F/Blended sessions. A Flag not present on an Online session also marks Absent the merged sections whose presence came from the shared start; a section a Checker activated or verified is unchanged. | A room or online session state has been retrieved. | The selected finding is recorded. |
 | CHK-04 | The system shall mark a session as checker-verified when a Verify finding is recorded. | A Verify finding is submitted. | The session is marked verified by checker. |
-| CHK-05 | The system shall record a Flag identity mismatch as a flag visible to IFO and HR, with no dispute workflow. | A mismatch finding is submitted. | The flag is recorded and surfaced to IFO/HR. |
+| CHK-05 | The system shall record a Flag identity mismatch as a flag visible to IFO and HR, with no dispute workflow for the flagged faculty member. The Checker who recorded the flag may withdraw it under CHK-09. | A mismatch finding is submitted. | The flag is recorded and surfaced to IFO/HR. |
 | CHK-07 | The system shall present a floor view with coverage progress, a priority queue of the oldest unverified active sessions, and color-coded room cards. Cancelled sessions are excluded from the view and from coverage. | The Checker is on duty on the floor. | The floor view reflects current coverage and priorities. |
 | CHK-08 | The system shall queue scans locally when offline and replay them in batch on reconnect, re-validating each on the server before applying or flagging for IFO. | Connectivity is intermittent. | Queued scans are applied or flagged on reconnection. |
+| CHK-09 | The system shall let a Checker undo their own live Verify, Confirm empty, or flag within 5 minutes of the action, from the result screen or from the "Already verified" result of a re-scan. Undo removes the finding and audit-logs both the original action and the undo. Undoing a flag shall notify IFO and HR that the flag was withdrawn. Where the action changed session status (online Verify or Flag not present, including merged sections), undo shall restore each changed session exactly, and shall be refused if any of them changed since. Offline-replayed findings are not undoable; after the window, correction is by IFO. | The finding was recorded live by the same Checker less than 5 minutes ago. | The finding is removed and any session status it changed is restored, or the undo is refused with a reason. |
 
 **4.6 IFO Admin (IFO)**
 
@@ -319,6 +321,7 @@ This area governs the request-and-approval workflow for changing a session's mod
 | IFO-12 | The system shall allow IFO to declare and lift campus-wide or building-scoped class suspensions. Covered materialized sessions shall become Cancelled, faculty shall be notified, and reporting shall exclude those sessions from held/absent denominators. Lifting a suspension restores only sessions not yet past their no-show point; the rest remain Cancelled. Declaring an academic break cancels covered materialized sessions the same way, and removing a break follows the same restore rule. | An Active term exists and the user is an IFO Admin. | Covered sessions are cancelled or restored consistently and the action is audited. |
 | IFO-13 | The system shall allow IFO to manage buildings, floors, rooms, and a room's in-service/out-of-service state with dependency-aware deletion refusals. | The user is an IFO Admin. | Campus structure is maintained without deleting referenced operational records. |
 | IFO-14 | The system shall provide an explicit Draft → Active → Archived academic-term lifecycle with preflight blockers, warnings, typed confirmation, and auditable close/reopen reasons. | The user is an IFO Admin. | Exactly one term is Active and lifecycle changes are atomic and audited. |
+| IFO-15 | The system shall allow IFO to reinstate a session wrongly recorded Absent in the active term as held, with a mandatory reason. The scheduled window is used as the best-effort held time, and the audit record marks it as a manual correction rather than a scan. | The session is Absent and the user is an IFO Admin. | The session counts as held and the correction is audited. |
 
 **4.7 HR Admin (HR)**
 
@@ -512,9 +515,9 @@ Before any production use, all assumption and placeholder values shall be valida
 
 **10.1 Reconciled Architecture Decisions**
 
-Version 1.3 records the implemented repository and approved deployment design rather than preserving superseded implementation assumptions. Live production cutover remains subject to the external gate in Section 10.4.
+Versions 1.3 to 1.5 record the implemented repository and approved deployment design rather than preserving superseded implementation assumptions. Live production cutover remains subject to the external gate in Section 10.4.
 
-| Earlier specification | Version 1.3 conformance decision | Implementation evidence |
+| Earlier specification | Conformance decision (v1.3 onward) | Implementation evidence |
 | :---- | :---- | :---- |
 | MySQL 8.0 / `mysqlclient` | Replaced by Microsoft SQL Server only. Local development and tests use LocalDB/Express; production targets RDS SQL Server Express through ODBC Driver 18. | `config/settings.py`, `requirements.txt`, `campus/migrations/0002_cs_collation_tokens.py` |
 | Application-issued JWT | Replaced by Django server-side sessions after the Entra Authorization Code + PKCE exchange. This matches the server-rendered architecture and preserves CSRF protection. | `config/settings.py`, `accounts/backends.py`, `accounts/pipeline.py` |
@@ -543,6 +546,7 @@ The completed system adds requirements that were absent from versions 1.0–1.2:
 * **Suspensions and holidays (IFO-12):** campus-wide or building-scoped suspension declarations cancel covered sessions, notify faculty, and prevent false Absent records. Academic breaks also suppress both materialization and the no-show sweep, and cancel sessions already created for those dates.
 * **Campus management (IFO-13):** IFO manages buildings, floors, rooms, code rotation, and service state through role-scoped screens with dependency-aware delete refusals.
 * **Term lifecycle (IFO-14):** terms use Draft, Active, and Archived states with one Active term, preflight blockers/warnings, typed confirmation, audit coupling, and term ownership on reports and operational queries.
+* **Record correction (CHK-09, IFO-15):** a Checker can undo their own finding for 5 minutes, with the withdrawal of a flag announced to IFO and HR; IFO reinstates wrongly Absent sessions with a reason. Faculty already review a modality-shift request before submitting and can withdraw it while Pending (MOD workflow). Every correction keeps the original action in the audit log.
 * **Production correctness:** the shared SQL Server cache and durable Checker replay receipts preserve rate limits and exactly-once replay across multiple Gunicorn workers and restarts.
 
 The authoritative executable evidence is the Django model/migration history and automated test suite. `docs/db_schema.sql` is retained as a 2026-07-07 schema snapshot and is not authoritative for later migrations.

@@ -230,6 +230,12 @@ Key properties:
 - **Checker path** (`web/checker.py` → `verification/resolver.resolve_checker_scan`) mirrors this,
   and adds a JSON **`/checker/replay`** endpoint: offline scans queued in the browser (IndexedDB,
   `static/checker/offline_queue.js`) are re-validated **server-side** through the same pure core.
+- **Checker undo (CHK-09):** a live finding can be undone by the same Checker for 5 minutes via
+  `POST /checker/undo/<id>`. Online actions record the exact session rows they changed
+  (`CheckerValidation.restore`, before/after state); undo restores those rows only if every one
+  still matches its "after" state, then deletes the validation and writes a `checker.undone`
+  AuditLog row. An undone flag notifies IFO and HR (`checker_flag_withdrawn`). Undo also clears
+  the per-minute double-tap guard so a corrected tap is recorded.
 
 ---
 

@@ -1,8 +1,8 @@
 # FluxTrack — Current Status
 
-**Last updated:** 2026-07-22
+**Last updated:** 2026-11-15
 
-**Specification:** [`FluxTrack_SRS.md`](../FluxTrack_SRS.md) v1.3
+**Specification:** [`FluxTrack_SRS.md`](../FluxTrack_SRS.md) v1.5
 
 **Repository state:** feature and documentation implementation complete; external
 production cutover pending credentials.
@@ -14,18 +14,18 @@ This page is the short status entry point. The roadmap and per-phase evidence un
 
 | Area | Status | Evidence |
 |---|---|---|
-| Attendance and verification | Complete | Faculty QR/manual/Online flows, Checker physical/Online verification, offline replay |
+| Attendance and verification | Complete | Faculty QR/manual/Online flows, Checker physical/Online verification, offline replay, 5-minute Checker undo |
 | IFO operations | Complete | Imports, individual schedules, campus structure, rooms/codes, bookings, assignments, breaks, suspensions, terms |
 | Oversight and reporting | Complete | IFO/Dean/HR reports, scorecards, lateness, coverage, utilization, exports |
 | Guard and notifications | Complete | Floor monitor, room schedules, locator, in-app/web push, mute controls |
 | Operational trust | Complete | Excused days, corrections, room service state, term lifecycle, concurrency guards |
 | Production package | Complete in repository | HTTPS settings, shared cache, Nginx/Gunicorn/systemd, watchdog, health, retention, backup/rollback runbook |
 | Live Entra/AWS cutover | Pending external access | Institutional callback/UAT, AWS/RDS/DNS/TLS provisioning, restore drill, smoke test |
-| SRS/documentation | Complete | SRS v1.3, restored traceability, current project/architecture/status docs |
+| SRS/documentation | Complete | SRS v1.5, restored traceability, current project/architecture/status docs |
 
 ## Verification baseline
 
-- Full Microsoft SQL Server suite: **1,259 tests passed**, **2 expected skips**.
+- Full Microsoft SQL Server suite: **1,637 tests passed**, **2 expected skips** (2026-11-15).
 - `manage.py migrate --check`: no unapplied model changes at the Phase 15 baseline.
 - Production `manage.py check --deploy`: no issues with a complete production-like
   environment.

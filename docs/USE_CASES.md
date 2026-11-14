@@ -3,7 +3,7 @@
 > **Superseded historical planning snapshot (2026-07-02).** The status counts,
 > gaps, and build order below describe the repository before Phases 2–16 and must
 > not be used as current implementation status. Use
-> [`FluxTrack_SRS.md`](../FluxTrack_SRS.md) v1.3 for normative requirements,
+> [`FluxTrack_SRS.md`](../FluxTrack_SRS.md) v1.5 for normative requirements,
 > [`README.md`](../README.md) and [`docs/PROGRESS.md`](./PROGRESS.md) for current
 > repository status, and [`.planning/ROADMAP.md`](../.planning/ROADMAP.md) for
 > phase evidence. This file remains unchanged below this notice because it records

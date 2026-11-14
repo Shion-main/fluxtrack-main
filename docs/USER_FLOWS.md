@@ -82,7 +82,7 @@ flowchart TD
 
 ## 2. Checker
 
-No persistent nav — always returns to `/` (home launcher) between surfaces.
+Phone layout with a bottom tab bar: Floor, Scan, Online.
 
 ```mermaid
 flowchart TD
@@ -92,15 +92,16 @@ flowchart TD
 
     ScanC --> CamC["Scan room QR / manual code"]
     CamC --> ResolveC["POST /checker/resolve<br/>→ shows faculty expected in this room now"]
-    ResolveC --> ActionC["Choose action: confirm present / mark absent /<br/>force handover / note"]
+    ResolveC --> ActionC["Choose action: Verify present / Confirm empty /<br/>Report a problem (different person or<br/>not present, note required)"]
     ActionC --> ApplyC["POST /checker/action"]
-    ApplyC --> OutC["HTMX fragment: outcome"]
+    ApplyC --> OutC["HTMX fragment: outcome<br/>(with Undo for 5 minutes)"]
     OutC --> Floor
+    OutC -->|wrong tap| UndoC["POST /checker/undo/&lt;id&gt;<br/>Undone / Flag withdrawn<br/>or Can't undo: ask IFO"]
 
     Floor -->|row action| ActionC
 
     Online --> OnlineOpen["Open a session<br/>/checker/online/&lt;id&gt;<br/>join the Teams link, verify attendance"]
-    OnlineOpen --> OnlineAction["Mark present/absent for that online session"]
+    OnlineOpen --> OnlineAction["Verify present, or flag not present (note required)<br/>Undo available for 5 minutes"]
     OnlineAction --> Online
 
     subgraph Offline["Offline (spotty floor wifi)"]
@@ -118,6 +119,9 @@ flowchart TD
   resolves *who's expected in this room right now* rather than the checker's own schedule.
 - **Online to verify** (`checker/online_list.html` → `online_open.html`) — for checkers on
   *online-duty* assignment: a list of online sessions to confirm via Teams instead of a room walk.
+- **Undo** — every live result (Verify, Confirm empty, flag) shows Undo for 5 minutes, and a
+  re-scan that finds the Checker's own Verify offers it again. An undone flag tells IFO and HR it
+  was withdrawn. After 5 minutes the screen says "Can't undo" and IFO corrects the record.
 - **Offline replay** is invisible as a "screen" — it's the same Scan UI, but failed submits queue
   locally and flush to `/checker/replay` later; the user experience is "it just works" even with
   no signal.
