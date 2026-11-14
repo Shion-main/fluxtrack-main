@@ -54,6 +54,34 @@ WHICH room/session only; the server never trusts them for gating. Navy family:
 </div>
 {% endif %}
 
+{% elif undone %}
+<div class="ft-outcome ft-outcome--neutral" data-outcome="undone">
+  <div class="ft-outcome__head">
+    <span class="ft-outcome__icon"><uk-icon icon="rotate-ccw"></uk-icon></span>
+    <div class="ft-outcome__title">{% if undone_action == "flag_identity_mismatch" or undone_action == "flag_not_present" %}Flag withdrawn{% else %}Undone{% endif %}</div>
+  </div>
+  <p class="ft-outcome__body">
+    {% if undone_action == "flag_identity_mismatch" or undone_action == "flag_not_present" %}Your flag for {{ room.code }} was removed, and IFO and HR were told to disregard it.
+    {% elif undone_action == "verified_empty" %}{{ room.code }} is no longer recorded as empty.
+    {% else %}Your verification of {{ session.schedule.course_code }}-{{ session.schedule.section }} was removed.{% endif %}
+    Check the class again to record the right result.</p>
+  {% if undo_online %}
+  <a class="ft-btn-ghost-sm" href="{% url 'checker_online_open' session_id=session.pk %}"><uk-icon icon="video"></uk-icon> Open the class again</a>
+  {% endif %}
+</div>
+
+{% elif undo_refused %}
+<div class="ft-outcome ft-outcome--neutral" role="alert" data-outcome="undo-refused">
+  <div class="ft-outcome__head">
+    <span class="ft-outcome__icon"><uk-icon icon="lock"></uk-icon></span>
+    <div class="ft-outcome__title">Can't undo</div>
+  </div>
+  <p class="ft-outcome__body">
+    {% if undo_refused == "changed" %}This class has changed since you checked it (for example, the faculty ended it).
+    {% else %}The 5-minute undo has passed.{% endif %}
+    Ask IFO to correct the record.</p>
+</div>
+
 {% elif resolution.outcome == "off-duty" %}
 <div class="ft-outcome ft-outcome--neutral" data-outcome="off-duty">
   <div class="ft-outcome__head">
@@ -160,4 +188,14 @@ WHICH room/session only; the server never trusts them for gating. Navy family:
     </form>
   </details>
 </div>
+{% endif %}
+
+{% if undo_cv %}
+{% comment %}Checker undo (checklist 3.3): offered after a tap, and on "Already
+verified" when it was this Checker's own tap. The server allows it for 5 minutes.{% endcomment %}
+<form class="ft-outcome__form ft-undo" hx-post="/checker/undo/{{ undo_cv.pk }}" hx-target="#outcome" hx-swap="innerHTML">
+  {% csrf_token %}
+  <p class="ft-help">Tapped the wrong one? You can undo for 5 minutes.</p>
+  <button class="ft-btn-ghost-sm" type="submit"><uk-icon icon="rotate-ccw"></uk-icon> Undo</button>
+</form>
 {% endif %}

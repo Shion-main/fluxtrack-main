@@ -88,6 +88,11 @@ class CheckerValidation(models.Model):
     scanned_at = models.DateTimeField(null=True, blank=True)
     validated_at = models.DateTimeField(auto_now_add=True)
     offline_queued = models.BooleanField(default=False)
+    # Checker undo (checklist 3.3): the class rows this action changed, as
+    # {session_pk: {"before": state, "after": state}}. Empty for room-scan
+    # actions, which only record. Undo restores "before" only while every row
+    # still matches "after".
+    restore = models.JSONField(default=dict, blank=True)
 
     class Meta:
         ordering = ["-validated_at"]

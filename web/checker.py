@@ -14,6 +14,7 @@ is no longer on duty for is refused and writes nothing (T-03-03/05).
 """
 import json
 import re
+from datetime import timedelta
 from functools import wraps
 from urllib.parse import parse_qs, urlparse
 from uuid import UUID
@@ -37,7 +38,8 @@ from campus.models import Room
 from ops.models import AuditLog, Notification
 from ops.notify import notify
 from ops.policy import get_policy
-from scheduling.merge import (propagate_merged_absent,
+from scheduling.merge import (merged_group_session_ids,
+                              propagate_merged_absent,
                               propagate_merged_present)
 from scheduling.models import CheckinMethod, Modality, Session, SessionStatus
 from scheduling.resolver import is_no_show_past_grace
@@ -333,6 +335,8 @@ def _apply_action(request, session, room, action, *, note="", identity_match=Non
     # SCHEDULED. A genuine online attendee made ACTIVE is precisely what lets the
     # sweep safely include online (scheduling/jobs.py exclusion removed in lockstep).
     if online and session is not None:
+        group_ids = merged_group_session_ids(session)
+        before = _class_states(group_ids)
         if action == ValidationAction.VERIFIED:
             # One online Verify covers the whole online merged group present
             # (D-04/D-06 online). Anchor write + sibling fill share ONE
@@ -360,6 +364,12 @@ def _apply_action(request, session, room, action, *, note="", identity_match=Non
                 session.status = SessionStatus.ABSENT  # authoritative (Open Q2)
                 session.save(update_fields=["status"])
                 propagate_merged_absent(session, actor=request.user)
+        # Remember exactly which class rows this action changed, so an undo can
+        # put back those rows and nothing else.
+        after = _class_states(group_ids)
+        cv.restore = {pk: {"before": before[pk], "after": after[pk]}
+                      for pk in before if after.get(pk) != before[pk]}
+        cv.save(update_fields=["restore"])
 
     if action in _FLAG_ACTIONS:
         # Consequential: reaches IFO + HR permanently, no dispute. The note is
@@ -370,6 +380,112 @@ def _apply_action(request, session, room, action, *, note="", identity_match=Non
         notify(role=Role.HR_ADMIN, type="checker_flag", title="Checker flag",
                body=f"{room.code}: {action}. {note}")
     return cv
+
+
+# --- undo (checklist 3.3, decided 2026-11-14) -------------------------------
+# A Checker who taps the wrong result can take it back for UNDO_WINDOW, from the
+# result screen. Only their own live taps: an offline replay arrives late and is
+# not offered. Undo deletes the CheckerValidation (so every report and board that
+# reads validations is right at once); the AuditLog keeps both the tap and the
+# undo. A flag already reached IFO and HR, so they get a "Flag withdrawn" notice.
+UNDO_WINDOW = timedelta(minutes=5)
+_CLASS_STATE_FIELDS = ("status", "actual_start", "checkin_method")
+
+
+def _class_states(session_ids, *, lock=False):
+    """{str(pk): {status, actual_start (ISO or None), checkin_method}}."""
+    qs = Session.objects.filter(pk__in=session_ids)
+    if lock:
+        qs = qs.select_for_update()
+    out = {}
+    for row in qs.values("pk", *_CLASS_STATE_FIELDS):
+        start = row["actual_start"]
+        out[str(row["pk"])] = {
+            "status": row["status"],
+            "actual_start": start.isoformat() if start else None,
+            "checkin_method": row["checkin_method"]}
+    return out
+
+
+def _acted_at(cv):
+    # scanned_at is the server clock at the tap for live actions.
+    return cv.scanned_at or cv.validated_at
+
+
+def _idem_key(user_pk, scope_pk, action, at):
+    """The per-minute double-tap guard key `action` and `_online_action` set."""
+    return f"checker-idem:{user_pk}:{scope_pk}:{action}:{at:%Y%m%d%H%M}"
+
+
+def _undo_target(user, session, room, action, now):
+    """This Checker's still-undoable live tap for this result, if any.
+
+    Looked up rather than taken from the write, so a double tap (whose second
+    request writes nothing) still gets the Undo button on the screen it shows.
+    """
+    qs = CheckerValidation.objects.filter(
+        checker=user, room=room, action=action, offline_queued=False)
+    qs = qs.filter(session=session) if session else qs.filter(session__isnull=True)
+    cv = qs.order_by("-validated_at").first()
+    if cv is None or now > _acted_at(cv) + UNDO_WINDOW:
+        return None
+    return cv
+
+
+def _own_verify_to_undo(user, resolution, session, room, now):
+    """On "Already verified", this Checker's own Verify if still undoable."""
+    if getattr(resolution, "outcome", None) != R.ALREADY_VERIFIED:
+        return None
+    return _undo_target(user, session, room, ValidationAction.VERIFIED, now)
+
+
+@checker_required
+@require_http_methods(["POST"])
+@serialized_write
+def undo(request, pk):
+    cv = (CheckerValidation.objects
+          .select_related("room", "session__schedule")
+          .filter(pk=pk, checker=request.user).first())
+    if cv is None:
+        raise Http404("No such check of yours.")
+    now = timezone.now()
+    ctx = {"room": cv.room, "session": cv.session, "undone_action": cv.action,
+           "undo_online": bool(cv.session
+                               and cv.session.online_checker_id == request.user.pk)}
+    if cv.offline_queued or now > _acted_at(cv) + UNDO_WINDOW:
+        return render(request, "checker/_outcome.html",
+                      {**ctx, "undo_refused": "too-late"})
+
+    restore = cv.restore or {}
+    with transaction.atomic():
+        current = _class_states(restore.keys(), lock=True)
+        if any(current.get(k) != v["after"] for k, v in restore.items()):
+            return render(request, "checker/_outcome.html",
+                          {**ctx, "undo_refused": "changed"})
+        for k, v in restore.items():
+            b = v["before"]
+            Session.objects.filter(pk=int(k)).update(
+                status=b["status"], checkin_method=b["checkin_method"],
+                actual_start=parse_datetime(b["actual_start"])
+                if b["actual_start"] else None)
+        AuditLog.objects.create(
+            actor=request.user, event_type="checker.undone",
+            target_type="session" if cv.session_id else "room",
+            target_id=str(cv.session_id or cv.room_id),
+            payload={"action": cv.action, "note": cv.note, "room": cv.room.code,
+                     "acted_at": _acted_at(cv).isoformat(),
+                     "restored": sorted(int(k) for k in restore)})
+        if cv.action in _FLAG_ACTIONS:
+            who = request.user.get_full_name() or request.user.username
+            body = (f"{cv.room.code}: the {cv.get_action_display().lower()} "
+                    f"sent by {who} was withdrawn by them. Please disregard it.")
+            for role in (Role.IFO_ADMIN, Role.HR_ADMIN):
+                notify(role=role, type="checker_flag_withdrawn",
+                       title="Checker flag withdrawn", body=body)
+        cache.delete(_idem_key(request.user.pk, cv.session_id or cv.room_id,
+                               cv.action, _acted_at(cv)))
+        cv.delete()
+    return render(request, "checker/_outcome.html", {**ctx, "undone": True})
 
 
 # --- views -----------------------------------------------------------------
@@ -390,7 +506,8 @@ def resolve(request):
     resolution = R.resolve_checker_scan(
         _active_floor_ids(request.user, now), room.floor_id, state, now)
     return render(request, "checker/_outcome.html", {
-        "resolution": resolution, "room": room, "session": session})
+        "resolution": resolution, "room": room, "session": session,
+        "undo_cv": _own_verify_to_undo(request.user, resolution, session, room, now)})
 
 
 @checker_required
@@ -440,7 +557,9 @@ def action(request):
             target_type="room", target_id=str(room.pk),
             payload={"outcome": resolution.outcome, "action": action_val})
         return render(request, "checker/_outcome.html", {
-            "resolution": resolution, "room": room, "session": session})
+            "resolution": resolution, "room": room, "session": session,
+            "undo_cv": _own_verify_to_undo(request.user, resolution, session,
+                                           room, now)})
 
     # Congruence gate (CR-02): the action must be the one this outcome permits —
     # an actionable room is not a blank cheque. An incongruent action (e.g.
@@ -471,7 +590,7 @@ def action(request):
     # non-atomic get-then-set left open (two overlapping requests both reading the
     # cache before either writes). Only the request that wins the add() applies.
     scope_pk = session.pk if session else room.pk
-    idem = f"checker-idem:{request.user.pk}:{scope_pk}:{action_val}:{now:%Y%m%d%H%M}"
+    idem = _idem_key(request.user.pk, scope_pk, action_val, now)
     if cache.add(idem, True, timeout=120):
         try:
             _apply_action(request, session, room, action_val, note=note,
@@ -482,7 +601,8 @@ def action(request):
 
     return render(request, "checker/_outcome.html", {
         "resolution": resolution, "room": room, "session": session,
-        "applied": True, "applied_action": action_val})
+        "applied": True, "applied_action": action_val,
+        "undo_cv": _undo_target(request.user, session, room, action_val, now)})
 
 
 # --- offline replay (CHK-08) ------------------------------------------------
@@ -716,7 +836,7 @@ def _online_action(request, session_id, action_val, note, now):
     identity_match = True if action_val == ValidationAction.VERIFIED else None
     # Idempotency: same checker + session + action + minute applies once. Atomic
     # cache.add (WR-01) closes the double-apply/double-notify TOCTOU race.
-    idem = f"checker-idem:{request.user.pk}:{session.pk}:{action_val}:{now:%Y%m%d%H%M}"
+    idem = _idem_key(request.user.pk, session.pk, action_val, now)
     if cache.add(idem, True, timeout=120):
         # room=session.room: online sessions still carry their scheduled room, so
         # the NOT-NULL CheckerValidation.room is satisfied without a schema change.
@@ -729,7 +849,8 @@ def _online_action(request, session_id, action_val, note, now):
 
     return render(request, "checker/_outcome.html", {
         "session": session, "room": session.room,
-        "applied": True, "applied_action": action_val})
+        "applied": True, "applied_action": action_val,
+        "undo_cv": _undo_target(request.user, session, session.room, action_val, now)})
 
 
 @checker_required

@@ -116,6 +116,12 @@ def _materialize_candidates(anchor):
     return candidates
 
 
+def merged_group_session_ids(anchor):
+    """The sessions of ``anchor``'s whole merged group, its own included."""
+    candidates = _materialize_candidates(anchor)
+    return {anchor.pk} | merged_sibling_ids(anchor, candidates)
+
+
 def merged_schedule_ids(anchor):
     """The schedules of ``anchor``'s whole merged group, its own included."""
     candidates = _materialize_candidates(anchor)
